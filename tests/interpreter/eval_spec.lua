@@ -1,4 +1,5 @@
 local LANG = require("util.eval")
+require("model.interpreter.eval.evaluator")
 
 --- @param expr string
 --- @param result any?
@@ -119,4 +120,14 @@ describe('extracts error message info', function()
       assert.same(eln, ln)
     end)
   end
+end)
+
+describe('Lua editor eval', function()
+  it('rejects overlong lines', function()
+    local line = string.rep('a', 65) .. ' = 1'
+    local ok, errors = LuaEditorEval:apply({ line })
+
+    assert.is_false(ok)
+    assert.truthy(string.find(tostring(errors[1]), 'line too long!', 1, true))
+  end)
 end)

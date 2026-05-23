@@ -185,7 +185,7 @@ LuaEditorEval = (function()
   local line_length = max_length(64)
 
   local ft = {
-    validators = { line_length },
+    line_validators = { line_length },
     astValidators = { test },
   }
   return LuaEval(nil, ft)
