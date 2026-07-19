@@ -391,9 +391,12 @@ function EditorController:get_input()
 end
 
 --- @param buf BufferModel
+--- @return boolean ok --- the write reached the OS
+--- @return string? err
 function EditorController:save(buf)
   local ok, err = buf:save()
   if not ok then Log.error("can't save: ", err) end
+  return ok, err
 end
 
 ---------------------------
@@ -729,11 +732,21 @@ function EditorController:accept_block()
       self:_reject_oversized(newtext, oversized)
       return false
     end
-    self:record_write(buf, function()
+    local saved = self:record_write(buf, function()
       local _, n = buf:replace_content(newtext)
-      self:save(buf)
+      local ok = self:save(buf)
       self.accepted_n = n
+      return ok
     end)
+    if not saved then
+      --- a failed write must not read as accepted (2.6);
+      --- keep the block open so the edit is not lost
+      self:refuse({
+        'Could not save the file.'
+        .. ' Check the storage and try again.'
+      })
+      return false
+    end
     self.view:refresh()
     bufv:follow_selection()
     self:leave_edit()

@@ -955,8 +955,14 @@ function ConsoleController:edit(name, state)
     love.state.prev_state = love.state.app_state
     love.state.app_state = 'editor'
   end
+  --- Editor accept path: a save is durable before the
+  --- editor reports acceptance (spec 2.6), so a force-stop
+  --- after an accepted edit cannot lose it. fsync only
+  --- here — writefile and bulk paths stay async.
   local save = function(newcontent)
-    return self:_writefile(filename, newcontent)
+    local ok, err = self:_writefile(filename, newcontent)
+    if ok then FS.fsync(fpath) end
+    return ok, err
   end
 
   self.editor:open(filename, text, save)

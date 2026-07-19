@@ -202,6 +202,64 @@ if love and not TESTING then
     return FS.read(path, true) or FS.read(path)
   end
 
+  --- Durability helpers (bionic/glibc via LuaJIT FFI).
+  --- FS.write is async (see its contract below); the
+  --- editor accept path opts into durability with
+  --- FS.fsync, and lifecycle handlers use FS.sync as a
+  --- cheap whole-filesystem net.
+  local _durable = (function()
+    local ffi_ok, ffi = pcall(require, 'ffi')
+    if not ffi_ok then return nil end
+    pcall(ffi.cdef, [[
+      int open(const char* path, int flags);
+      int close(int fd);
+      int fsync(int fd);
+      void sync(void);
+    ]])
+    local O_RDONLY = 0
+    return {
+      file = function(path)
+        local fd = ffi.C.open(path, O_RDONLY)
+        if fd < 0 then return false end
+        local r = ffi.C.fsync(fd)
+        ffi.C.close(fd)
+        return r == 0
+      end,
+      all = function() ffi.C.sync() end,
+    }
+  end)()
+
+  --- Flush one file's data through to stable storage.
+  --- The editor accept path calls this after a save
+  --- (spec 2.6 "written immediately"). Do NOT add it to
+  --- FS.write: bulk deploy/clone and the user-facing
+  --- writefile must stay async. Best-effort — returns
+  --- false when the platform lacks the syscall or the
+  --- path cannot be opened.
+  --- @param path string
+  --- @return boolean durable
+  function FS.fsync(path)
+    if not _durable then return false end
+    local ok, res = pcall(_durable.file, path)
+    return (ok and res) or false
+  end
+
+  --- Flush all pending writes filesystem-wide in one
+  --- syscall. Cheap broad net for background/quit; does
+  --- not cover a force-stop mid-edit (that is FS.fsync).
+  --- @return boolean ran
+  function FS.sync()
+    if not _durable then return false end
+    return pcall(_durable.all)
+  end
+
+  --- Write data to path, overwriting. Async by default:
+  --- the bytes reach the OS but are NOT flushed to stable
+  --- storage, so a power-cut or SIGKILL can lose them
+  --- while an (exfat dirsync) directory entry persists.
+  --- Callers needing durability opt in via FS.fsync(path)
+  --- after a successful write — the editor accept path
+  --- does; bulk deploy/clone and writefile do not.
   --- @param path string
   --- @param data string
   --- @return boolean success
