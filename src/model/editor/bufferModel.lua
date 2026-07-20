@@ -533,6 +533,11 @@ function BufferModel:delete_selected_text()
     self.content:remove(sel)
   end
   self:_text_change()
+  --- the content shrank under the selection, so the
+  --- active line still points into the block that was
+  --- just removed; left stale it drags the cursor
+  --- outside whatever is opened next
+  self:clamp_active_line()
 end
 
 --- @param t string[]|Block[]

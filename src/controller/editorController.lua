@@ -580,6 +580,13 @@ function EditorController:open_block()
       end
     end
   end
+  --- the active line can sit outside the block being
+  --- opened (a deletion leaves the selection on the
+  --- trailing gap); row 0 detaches the cursor
+  local n = #input:get_text()
+  if n < 1 then n = 1 end
+  if row < 1 then row = 1 end
+  if row > n then row = n end
   input:set_cursor(Cursor(row, 1))
   self:set_mode('edit')
 end
@@ -591,9 +598,18 @@ end
 --- the input stays empty and acceptance inserts.
 function EditorController:start_typing()
   local buf = self:get_active_buffer()
+  if buf.content_type ~= 'lua' then
+    self:set_mode('edit')
+    return
+  end
   local block = buf:_get_selected_block()
   if not block or block:is_empty() then
-    self:set_mode('edit')
+    --- an empty block -- including the gap a deletion
+    --- leaves behind -- still has to be opened. Setting
+    --- the mode alone anchors the input to no block, so
+    --- the typing goes into a detached widget and the
+    --- accept drops it on the floor
+    self:open_block()
     return
   end
 
@@ -604,6 +620,7 @@ function EditorController:start_typing()
 
   local t = self.input:get_text()
   --- the format on opening may have reshaped the block
+  if row < 1 then row = 1 end
   if row > #t then row = #t + 1 end
   table.insert(t, row, '')
   self.input:set_text(t)
