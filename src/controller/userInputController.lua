@@ -281,21 +281,21 @@ function UserInputController:keypressed(k)
       input:cursor_right()
     end
 
-    if not Key.alt()
-        and k == "home" then
-      input:jump_home()
+    --- spec 2.7: bare Home/End are line-scoped; the
+    --- jump over the whole block is Ctrl+Home/End
+    if k == "home" then
+      if Key.ctrl() then
+        input:jump_home()
+      else
+        input:jump_line_start()
+      end
     end
-    if not Key.alt()
-        and k == "end" then
-      input:jump_end()
-    end
-    if Key.alt()
-        and k == "home" then
-      input:jump_line_start()
-    end
-    if Key.alt()
-        and k == "end" then
-      input:jump_line_end()
+    if k == "end" then
+      if Key.ctrl() then
+        input:jump_end()
+      else
+        input:jump_line_end()
+      end
     end
   end
   local function newline()
