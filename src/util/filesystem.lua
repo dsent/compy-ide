@@ -122,13 +122,21 @@ if love and not TESTING then
   --- @param path string
   --- @param filtertype love.FileType?
   --- @param vfs boolean?
+  --- @return {type: love.FileType, size: number, modtime: number}?
+  function FS.getInfo(path, filtertype, vfs)
+    if vfs then
+      return LFS.getInfo(path, filtertype)
+    else
+      return _fs.getInfo(path, filtertype)
+    end
+  end
+
+  --- @param path string
+  --- @param filtertype love.FileType?
+  --- @param vfs boolean?
   --- @return boolean
   function FS.exists(path, filtertype, vfs)
-    if vfs then
-      return LFS.getInfo(path, filtertype) and true or false
-    else
-      return _fs.getInfo(path, filtertype) and true or false
-    end
+    return FS.getInfo(path, filtertype, vfs) and true or false
   end
 
   --- @param path string
@@ -465,14 +473,32 @@ else
   end
 
   --- @param path string
+  --- @param filtertype love.FileType?
+  --- @return {type: love.FileType, size: number, modtime: number}?
+  function FS.getInfo(path, filtertype)
+    local attrs = lfs.attributes(path)
+    if not attrs then return end
+
+    local types = {
+      file = 'file',
+      directory = 'directory',
+      link = 'symlink',
+    }
+    local filetype = types[attrs.mode] or 'other'
+    if filtertype and filtertype ~= filetype then return end
+
+    return {
+      type = filetype,
+      size = attrs.size,
+      modtime = attrs.modification,
+    }
+  end
+
+  --- @param path string
+  --- @param filtertype love.FileType?
   --- @return boolean exists
-  function FS.exists(path)
-    local f = io.open(path, 'r')
-    if f then
-      io.close(f)
-      return true
-    end
-    return false
+  function FS.exists(path, filtertype)
+    return FS.getInfo(path, filtertype) and true or false
   end
 
   --- @param path string
