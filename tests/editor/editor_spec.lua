@@ -4,6 +4,8 @@ require("controller.editorController")
 require("view.editor.editorView")
 require("view.editor.visibleContent")
 
+local FS = require("util.filesystem")
+
 local mock, TU
 
 describe('Editor #editor', function()
@@ -610,6 +612,45 @@ describe('Editor #editor', function()
       it('first checkpoint writes without asking', function()
         mock.keystroke('C-k', press)
         assert.same({ 'write:main.lua' }, calls)
+        assert.is_false(inter:has_error())
+      end)
+
+      --- The only checkpoint test that does not mock the console.
+      --- Every other test here asserts that a write was *requested*;
+      --- this one asserts a file exists afterwards with the right
+      --- bytes, so a broken path adapter, a broken FS.cp or a
+      --- getInfo returning nil cannot pass unnoticed.
+      it('crosses the console filesystem adapter', function()
+        require("controller.consoleController")
+        local source_path = os.tmpname()
+        local checkpoint_path = source_path .. '.~save'
+        finally(function()
+          os.remove(source_path)
+          os.remove(checkpoint_path)
+        end)
+        assert.is_true(FS.write(source_path, 'x = 1\n'))
+
+        local project = {
+          get_path = function(_, name)
+            if name == 'main.lua' then return source_path end
+            return checkpoint_path
+          end,
+        }
+        controller.console = setmetatable({
+          model = { projects = { current = project } },
+        }, ConsoleController)
+
+        mock.keystroke('C-k', press)
+
+        assert.is_true(FS.exists(checkpoint_path))
+        assert.is_number(
+          controller.console:checkpoint_modtime('main.lua'))
+        local source_ok, source = FS.read(source_path)
+        local checkpoint_ok, checkpoint = FS.read(checkpoint_path)
+        assert.is_true(source_ok)
+        assert.is_true(checkpoint_ok)
+        assert.same('x = 1\n', source)
+        assert.same(source, checkpoint)
         assert.is_false(inter:has_error())
       end)
 
