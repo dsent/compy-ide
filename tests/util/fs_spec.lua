@@ -52,4 +52,24 @@ describe("FS utils", function()
       assert.are.equal('a/b/c', FS.join_path('a', 'b', 'c'))
     end)
   end)
+
+  describe('gets file information', function()
+    local path
+
+    after_each(function()
+      if path then os.remove(path) end
+    end)
+
+    it('returns metadata and applies the type filter', function()
+      path = os.tmpname()
+      local ok = FS.write(path, 'x = 1\n')
+      assert.is_true(ok)
+
+      local info = assert(FS.getInfo(path, 'file'))
+      assert.same('file', info.type)
+      assert.same(6, info.size)
+      assert.is_number(info.modtime)
+      assert.is_nil(FS.getInfo(path, 'directory'))
+    end)
+  end)
 end)
