@@ -103,7 +103,6 @@ function UserInputView:render_input(input, status, time)
   local apparentHeight = inHeight
 
   local wrap_forward = vc.wrap_forward
-  local wrap_reverse = vc.wrap_reverse
 
 
   local vpH = gfx.getHeight()
@@ -169,7 +168,6 @@ function UserInputView:render_input(input, status, time)
         local char = string.usub(s, c, c)
         local color = colors.fg
 
-        local hl_li = wrap_reverse[ln]
         local tlc = vc:translate_from_visible(Cursor(l, c))
 
         if tlc then
@@ -207,11 +205,6 @@ function UserInputView:render_input(input, status, time)
             end
           end
         end)()
-        local of = calc_overflow(w, text, cursorInfo.cursor)
-        --- push any further lines down to display phantom line
-        if ofpos and hl_li > cl then
-          of = of - 1
-        end
         local dy = (l) * fh
         local dx = (c - 1) * fw
         ViewUtils.write_token(dy, dx,

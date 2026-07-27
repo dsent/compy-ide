@@ -36,7 +36,7 @@ end
 --- @param selected boolean
 local write_token = function(dy, dx, token,
                              color, bgcolor, selected)
-  gfx.push('all')
+  local r, g, b, a = gfx.getColor()
   if selected then
     gfx.setColor(color)
     local back = string.rep('█', string.ulen(token))
@@ -46,7 +46,7 @@ local write_token = function(dy, dx, token,
     gfx.setColor(color)
   end
   gfx.print(token, dx, dy)
-  gfx.pop()
+  gfx.setColor(r, g, b, a)
 end
 
 --- Hide elements for debugging
