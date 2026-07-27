@@ -55,6 +55,7 @@ end
 function CanvasModel:write(text)
   if string.is_non_empty_string(text) then
     self.terminal:print(text)
+    self.terminal.dirty = true
   end
 end
 
@@ -70,9 +71,11 @@ end
 function CanvasModel:reset()
   self.terminal:clear()
   self.terminal:move_to(1, 1)
+  self.terminal.dirty = true
 end
 
 function CanvasModel:invalidate_terminal()
+  self.terminal.dirty = true
 end
 
 function CanvasModel:update(dt)

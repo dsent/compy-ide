@@ -9,7 +9,7 @@ local function terminal_draw(terminal, canvas, overlay)
   local char_width, char_height =
       terminal.char_width, terminal.char_height
 
-  -- if terminal.dirty or overlay then
+  if terminal.dirty or overlay then
   gfx.push('all')
 
   gfx.setCanvas(canvas)
@@ -61,7 +61,7 @@ local function terminal_draw(terminal, canvas, overlay)
   end
   terminal.dirty = false
   gfx.pop()
-  -- end
+  end
 
 
   if terminal.show_cursor then
