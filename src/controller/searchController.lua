@@ -48,7 +48,15 @@ end
 
 function SearchController:update_results()
   local kws = self.input:get_text()[1]
+  local had = #(self.model.resultset)
   self.model:narrow(kws)
+  --- resultset, not get_results(): the latter is only
+  --- the visible slice
+  if #(self.model.resultset) == 0 and had > 0 then
+    --- the search text matches nothing (spec 2.4.3:
+    --- one sound for every refused action)
+    require("util.audio").knock()
+  end
 end
 
 ---------------------------

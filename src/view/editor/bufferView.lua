@@ -122,7 +122,9 @@ end
 
 --- @return integer
 function BufferView:get_max_size()
-  return self.LINES
+  --- the block limit is the input view height (spec: 14),
+  --- not the buffer viewport height
+  return self.cfg.input_max
 end
 
 --- @param moved integer?
@@ -268,6 +270,35 @@ function BufferView:follow_selection()
   end
 end
 
+--- Source line at a vertical pixel position, if any
+--- @param y number
+--- @return integer? ln
+function BufferView:line_at(y)
+  local fh = self.cfg.fh
+  local row = math.floor(y / fh) + 1
+  local wrapped = self.content.offset + row
+  if not self.content.range:inc(wrapped) then
+    return nil
+  end
+  local rev = self.content.wrap_reverse
+  return rev and rev[wrapped]
+end
+
+--- Scroll just enough to keep the active line visible
+function BufferView:follow_line()
+  local al = self.buffer:get_active_line()
+  local wl = self.content.wrap_forward[al]
+  if not wl then return end
+  local r = self.content.range
+  local first = wl[1]
+  local last = wl[#wl]
+  if first < r.start then
+    self:scroll('up', r.start - first)
+  elseif last > r.fin then
+    self:scroll('down', last - r.fin)
+  end
+end
+
 --------------
 ---  draw  ---
 --------------
@@ -326,6 +357,19 @@ function BufferView:draw(special)
           else
             highlight_line(v - off)
           end
+        end
+      end
+    end
+
+    --- the active line, a shade brighter inside the block
+    local al = self.buffer:get_active_line()
+    local wl = self.content.wrap_forward[al]
+    if wl then
+      gfx.setColor(Color.with_alpha(colors.fg, .125))
+      for _, v in ipairs(wl) do
+        if self.content.range:inc(v) then
+          local l_y = (v - off - 1) * fh
+          gfx.rectangle('fill', 0, l_y, width, fh)
         end
       end
     end

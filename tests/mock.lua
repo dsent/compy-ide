@@ -24,7 +24,11 @@ local W = 1024
 local H = 600
 
 --- @param t love
+--- sounds played since the last mock_love()
+local played = {}
+
 local function mock_love(t)
+  played = {}
   local love = {
     keyboard = {
       isDown = function(k) return held[k] end
@@ -37,6 +41,17 @@ local function mock_love(t)
       newCanvas = function() end,
       setCanvas = function() end,
       clear = function() end,
+    },
+    audio = {
+      mock = true,
+      --- util.audio builds its sources on require
+      newSource = function(name)
+        return { name = name }
+      end,
+      stop = function() end,
+      play = function(source)
+        table.insert(played, source and source.name)
+      end,
     },
   }
   for k, v in pairs(t) do
@@ -73,6 +88,7 @@ end
 
 return {
   mock_love = mock_love,
+  played_sounds = function() return played end,
   keystroke = keystroke,
   release_keys = release_keys,
 }

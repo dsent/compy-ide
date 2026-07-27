@@ -251,6 +251,16 @@ function UserInputView:render_error(err_text)
   drawBackground()
 
   gfx.setColor(colors.input.error)
+  if self.controller.model.editing then
+    --- the refusal frame is the editor's 2.4.3; the
+    --- console and project inputs keep their plain
+    --- error text
+    gfx.rectangle("line",
+      1,
+      fh + 1,
+      drawableWidth - 2,
+      apparentHeight * fh - 2)
+  end
 
   for l, str in ipairs(err_text) do
     local breaks = 0 -- starting height is already calculated

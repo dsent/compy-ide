@@ -30,13 +30,13 @@ a project must be selected first.
 | Command                                                           | Combination                                   |
 | :---------------------------------------------------------------- | :-------------------------------------------- |
 | Clear terminal                                                    | <kbd>Ctrl</kbd>+<kbd>L</kbd>                  |
-| Stop project                                                      | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> |
+| Stop project                                                      | <kbd>Ctrl</kbd>+<kbd>S</kbd>                  |
 | Quit project (stop and close)                                     | <kbd>Ctrl</kbd>+<kbd>Q</kbd>                  |
 | Reset application to initial state                                | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> |
-| Reset project to initial state                                    | <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>R</kbd>   |
+| Restart project                                                   | <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>R</kbd>   |
 | Exit application                                                  | <kbd>Ctrl</kbd>+<kbd>Esc</kbd>                |
 | Pause project                                                     | <kbd>Ctrl</kbd>+<kbd>Pause</kbd>              |
-| Toggle edit/run                                                   | <kbd>F8</kbd>                                 |
+| Toggle edit/run                                                   | <kbd>Ctrl</kbd>+<kbd>T</kbd>                  |
 | **Input**                                                         |                                               |
 | Move cursor horizontally                                          | <kbd>⇦</kbd>/<kbd>⇨</kbd>                     |
 | Move cursor vertically                                            | <kbd>⇧</kbd>/<kbd>⇩</kbd>                     |
@@ -50,42 +50,52 @@ a project must be selected first.
 | Insert newline                                                    | <kbd>Shift</kbd>+<kbd>Enter ⏎</kbd>           |
 | Delete current line                                               | <kbd>Ctrl</kbd>+<kbd>Y</kbd>                  |
 | Duplicate current line                                            | <kbd>Ctrl</kbd>+<kbd>D</kbd>                  |
+| Copy                                                              | <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>Insert</kbd> |
+| Cut                                                               | <kbd>Ctrl</kbd>+<kbd>X</kbd> / <kbd>Shift</kbd>+<kbd>Delete</kbd> |
+| Paste                                                             | <kbd>Ctrl</kbd>+<kbd>V</kbd> / <kbd>Shift</kbd>+<kbd>Insert</kbd> |
+| Select text                                                       | <kbd>Shift</kbd>+<kbd>⇦</kbd>/<kbd>⇨</kbd>/<kbd>⇧</kbd>/<kbd>⇩</kbd> |
 | Evaluate input                                                    | <kbd>Enter ⏎</kbd>                            |
 | **Editor**                                                        |                                               |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; _same as Input, except for:_ |                                               |
-| Scroll up                                                         | <kbd>PageUp</kbd>                             |
-| Scroll down                                                       | <kbd>PageDown</kbd>                           |
-| Move selection (if in first/last line)                            | <kbd>⇧</kbd>/<kbd>⇩</kbd>                     |
-| Move selection                                                    | <kbd>Ctrl</kbd>+<kbd>⇧</kbd>/<kbd>⇩</kbd>     |
+| Move the active line by one line (nav)                            | <kbd>⇧</kbd>/<kbd>⇩</kbd>                     |
+| Move the active line by a page (nav)                              | <kbd>PageUp</kbd>/<kbd>PageDown</kbd>         |
+| Move the cursor through the block (editing)                       | <kbd>⇧</kbd>/<kbd>⇩</kbd>                     |
+| Jump block-wise (nav) / accept and jump (editing)                 | <kbd>Ctrl</kbd>+<kbd>⇧</kbd>/<kbd>⇩</kbd>     |
 | Replace selection with input                                      | <kbd>Enter ⏎</kbd>                            |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; _additionally_               |                                               |
+| Open selected block for editing (nav, empty input)                | <kbd>Enter ⏎</kbd>                            |
 | Insert input contents before selection                            | <kbd>Ctrl</kbd>+<kbd>Enter ⏎</kbd>            |
-| Insert empty block before current (if input is empty)             | <kbd>Shift</kbd>+<kbd>Enter ⏎</kbd>           |
+| Insert empty block (if input is empty)                            | <kbd>Shift</kbd>+<kbd>Enter ⏎</kbd>           |
+| Move the block (nav)                                              | <kbd>Alt</kbd>+<kbd>⇧</kbd>/<kbd>⇩</kbd>      |
+| Peek-scroll one line, keep the selection (nav)                    | <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>⇧</kbd>/<kbd>⇩</kbd> |
+| Peek-scroll one page (nav)                                        | <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>PageUp</kbd>/<kbd>PageDown</kbd> or <kbd>⇦</kbd>/<kbd>⇨</kbd> |
+| Copy block                                                        | <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>Insert</kbd> |
+| Cut block                                                         | <kbd>Ctrl</kbd>+<kbd>X</kbd> / <kbd>Shift</kbd>+<kbd>Delete</kbd> |
+| Paste                                                             | <kbd>Ctrl</kbd>+<kbd>V</kbd> / <kbd>Shift</kbd>+<kbd>Insert</kbd> |
 | Delete selected block                                             | <kbd>Ctrl</kbd>+<kbd>Delete</kbd>             |
-| Delete selected block (if input is empty)                         | <kbd>Ctrl</kbd>+<kbd>Y</kbd>                  |
-| Wipe input                                                        | <kbd>Ctrl</kbd>+<kbd>W</kbd>                  |
-| Load selected content to input (discards previous content)        | <kbd>Esc</kbd>                                |
-| Insert selected content into input                                | <kbd>Shift</kbd>+<kbd>Esc</kbd>               |
+| Checkpoint the file                                               | <kbd>Ctrl</kbd>+<kbd>K</kbd>                  |
+| Restore from checkpoint                                           | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> |
+| Drop the edit, return to navigation                               | <kbd>Ctrl</kbd>+<kbd>W</kbd>                  |
+| Discard the edit (editing) / leave the editor (nav)               | <kbd>Shift</kbd>+<kbd>Esc</kbd>               |
+| Follow the require under selection                                | <kbd>Ctrl</kbd>+<kbd>J</kbd>                  |
 | Scroll to start                                                   | <kbd>Ctrl</kbd>+<kbd>PageUp</kbd>             |
 | Scroll to end                                                     | <kbd>Ctrl</kbd>+<kbd>PageDown</kbd>           |
 | Scroll up by one line                                             | <kbd>Shift</kbd>+<kbd>PageUp</kbd>            |
 | Scroll down by one line                                           | <kbd>Shift</kbd>+<kbd>PageDown</kbd>          |
 | Move selection to start                                           | <kbd>Ctrl</kbd>+<kbd>Home</kbd>               |
-| Move selecion to end                                              | <kbd>Ctrl</kbd>+<kbd>End</kbd>                |
-| Close editor buffer                                               | <kbd>Ctrl</kbd>+<kbd>S</kbd>                  |
-| Stop editor (close all buffers)                                   | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> |
+| Move selection to end                                             | <kbd>Ctrl</kbd>+<kbd>End</kbd>                |
+| Leave editor (close all buffers)                                  | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; _move mode_                  |                                               |
 | Switch to moving ("pick up" selection)                            | <kbd>Ctrl</kbd>+<kbd>M</kbd>                  |
 | Move selection                                                    | <kbd>⇧</kbd>/<kbd>⇩</kbd>                     |
 | Move selection to start                                           | <kbd>Ctrl</kbd>+<kbd>Home</kbd>               |
-| Move selecion to end                                              | <kbd>Ctrl</kbd>+<kbd>End</kbd>                |
+| Move selection to end                                             | <kbd>Ctrl</kbd>+<kbd>End</kbd>                |
 | Cancel moving                                                     | <kbd>Esc</kbd>                                |
-| Move line/block to selection and return to normal mode            | <kbd>Enter ⏎</kbd>                            |
+| Place block and return to normal mode                             | <kbd>Enter ⏎</kbd>                            |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; _search mode_                |                                               |
 | Search definitions                                                | <kbd>Ctrl</kbd>+<kbd>F</kbd>                  |
 | Exit search                                                       | <kbd>Esc</kbd>                                |
 | Jump to selected definition                                       | <kbd>Enter ⏎</kbd>                            |
-| Edit required file under highlight                                | <kbd>Ctrl</kbd>+<kbd>O</kbd>                  |
 
 ## Projects
 
@@ -212,9 +222,10 @@ Paths will be searched in the following order:
 
 ## Keys
 
-| Command                        | Combination                                 |
-| :----------------------------- | :------------------------------------------ |
-| Reset project to initial state | <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>R</kbd> |
+| Command          | Combination                                 |
+| :--------------- | :------------------------------------------ |
+| Restart project  | <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>R</kbd> |
+| Exit application | <kbd>Ctrl</kbd>+<kbd>Esc</kbd>              |
 
 #
 

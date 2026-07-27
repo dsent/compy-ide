@@ -53,7 +53,7 @@ local function new(
     if _content:last() ~= '' then
       _content:push('')
     end
-    sel = #_content
+    sel = 1
   end
   --- only passing this around so the linter shuts up about nil
   --- @param chk function
@@ -61,8 +61,7 @@ local function new(
     ct = 'lua'
     local ok, blocks = chk(lines)
     if ok then
-      local len = #blocks
-      sel = len
+      sel = 1
     else
       readonly = true
       sel = 1
@@ -91,7 +90,10 @@ local function new(
     revmap = {},
     semantic = semantic,
     selection = sel,
-    readonly = readonly
+    active_line = 1,
+    readonly = readonly,
+    history = {},
+    redo_history = {}
   }
   local id = tostring(self):gsub('table: ', '')
   self.id = id
@@ -109,6 +111,7 @@ end
 --- @field content_type ContentType
 --- @field save_file function
 --- @field selection integer
+--- @field active_line integer --- source line inside the selection
 --- @field loaded integer?
 --- @field readonly boolean
 --- @field semantic BufferSemanticInfo?
@@ -128,6 +131,108 @@ BufferModel = class.create(new, lateinit)
 
 function BufferModel:get_id()
   return self.id
+end
+
+--- The block-level undo (1.1): a 32-step ring of file
+--- operations. A step is a trimmed diff — the common
+--- prefix and suffix of the file before/after are cut,
+--- so what remains is exactly the affected line range,
+--- whatever the operation was (accept, move, delete,
+--- insert, discard pair). Applying a step is a splice;
+--- the caller re-chunks and saves, the same path every
+--- write takes.
+BLOCK_HISTORY_CAP = 32
+
+--- @param before string[] --- file lines pre-operation
+--- @param after string[] --- file lines post-operation
+--- @param sel_b integer --- selection before
+--- @param sel_a integer --- selection after
+--- @return table? --- nil when nothing changed
+local function make_step(before, after, sel_b, sel_a)
+  local nb, na = #before, #after
+  local head = 0
+  while head < nb and head < na
+      and before[head + 1] == after[head + 1] do
+    head = head + 1
+  end
+  local tail = 0
+  while tail < nb - head and tail < na - head
+      and before[nb - tail] == after[na - tail] do
+    tail = tail + 1
+  end
+  if head + tail == nb and nb == na then return end
+  local removed, inserted = {}, {}
+  for i = head + 1, nb - tail do
+    table.insert(removed, before[i])
+  end
+  for i = head + 1, na - tail do
+    table.insert(inserted, after[i])
+  end
+  return {
+    start = head + 1,
+    removed = removed,
+    inserted = inserted,
+    sel_before = sel_b,
+    sel_after = sel_a,
+  }
+end
+
+--- @param before string[]
+--- @param after string[]
+--- @param sel_b integer
+--- @param sel_a integer
+function BufferModel:push_history(before, after, sel_b, sel_a)
+  local step = make_step(before, after, sel_b, sel_a)
+  if not step then return end
+  table.insert(self.history, step)
+  if #self.history > BLOCK_HISTORY_CAP then
+    table.remove(self.history, 1)
+  end
+  self.redo_history = {}
+end
+
+--- @private
+--- Splice a step's lines into the content and re-chunk
+--- @param start integer
+--- @param n_out integer --- lines to remove
+--- @param lines_in string[]
+function BufferModel:_splice(start, n_out, lines_in)
+  local lines = string.lines(
+    string.unlines(self:get_text_content()))
+  for _ = 1, n_out do
+    table.remove(lines, start)
+  end
+  for i = #lines_in, 1, -1 do
+    table.insert(lines, start, lines_in[i])
+  end
+  if self.content_type == 'lua' then
+    local _, blocks = self.chunker(lines)
+    self.content = blocks
+  else
+    self.content = Dequeue(lines)
+  end
+end
+
+--- @return table? --- the applied step, nil when empty
+function BufferModel:undo()
+  local n = #self.history
+  if n == 0 then return end
+  local step = self.history[n]
+  table.remove(self.history, n)
+  self:_splice(step.start, #step.inserted, step.removed)
+  table.insert(self.redo_history, step)
+  return step
+end
+
+--- @return table? --- the applied step, nil when empty
+function BufferModel:redo()
+  local n = #self.redo_history
+  if n == 0 then return end
+  local step = self.redo_history[n]
+  table.remove(self.redo_history, n)
+  self:_splice(step.start, #step.removed, step.inserted)
+  table.insert(self.history, step)
+  return step
 end
 
 function BufferModel:analyze()
@@ -214,10 +319,12 @@ function BufferModel:move_selection(dir, by, warp, move)
   if warp then
     if dir == 'up' then
       self.selection = 1
+      self:clamp_active_line()
       return true
     end
     if dir == 'down' then
       self.selection = last
+      self:clamp_active_line()
       return true
     end
     return false
@@ -228,12 +335,14 @@ function BufferModel:move_selection(dir, by, warp, move)
   if dir == 'up' then
     if (cur - by) >= 1 then
       self.selection = cur - by
+      self:clamp_active_line()
       return true
     end
   end
   if dir == 'down' then
     if (cur + by) <= last + 1 then
       self.selection = cur + by
+      self:clamp_active_line()
       return true
     end
   end
@@ -246,6 +355,7 @@ function BufferModel:set_selection(sel)
   if not sel or sel < 1 then sel = 1 end
   if sel > max then sel = max end
   self.selection = sel
+  self:clamp_active_line()
 end
 
 --- Get index of selected line/block
@@ -279,6 +389,98 @@ function BufferModel:get_selection_start_line()
     end
   end
   return self.selection
+end
+
+--- Source-line span of the selected block
+--- @return Range
+function BufferModel:get_selection_lines()
+  if self.content_type == 'lua' then
+    local b = self:_get_selected_block()
+    if b and b.pos then return b.pos end
+  end
+  return Range.singleton(self.selection)
+end
+
+--- @return integer
+function BufferModel:get_active_line()
+  return self.active_line
+end
+
+--- The block owning a source line
+--- @param ln integer
+--- @return integer? block index
+function BufferModel:block_at_line(ln)
+  if self.content_type ~= 'lua' then
+    if ln >= 1 and ln <= self:get_content_length() then
+      return ln
+    end
+    return nil
+  end
+  for i, b in ipairs(self.content) do
+    if b.pos and b.pos:inc(ln) then return i end
+  end
+  return nil
+end
+
+--- @param ln integer
+function BufferModel:set_active_line(ln)
+  self.active_line = ln
+  self:clamp_active_line()
+end
+
+--- Pull the active line into the selected block
+function BufferModel:clamp_active_line()
+  local span = self:get_selection_lines()
+  local ln = self.active_line
+  if ln < span.start or ln > span.fin then
+    self.active_line = span.start
+  end
+end
+
+--- Block-wise movement of the active line (spec 2.2):
+--- down lands on the next block's first line; up lands
+--- on the current block's first line, or on the
+--- previous block's when already there
+--- @param dir VerticalDir
+--- @return boolean moved
+function BufferModel:jump_block(dir)
+  local span = self:get_selection_lines()
+  if dir == 'up' and self.active_line > span.start then
+    self.active_line = span.start
+    return true
+  end
+  if not self:move_selection(dir) then return false end
+  self.active_line = self:get_selection_lines().start
+  return true
+end
+
+--- Move the active line, crossing block boundaries
+--- @param dir VerticalDir
+--- @return boolean moved
+function BufferModel:move_line(dir)
+  local span = self:get_selection_lines()
+  local ln = self.active_line
+  if dir == 'up' then
+    if ln > span.start then
+      self.active_line = ln - 1
+      return true
+    end
+    if self:move_selection('up') then
+      self.active_line = self:get_selection_lines().fin
+      return true
+    end
+  end
+  if dir == 'down' then
+    if ln < span.fin then
+      self.active_line = ln + 1
+      return true
+    end
+    if self:move_selection('down') then
+      self.active_line = self:get_selection_lines().start
+      return true
+    end
+  end
+  return false
 end
 
 --- Return the selection as string array
@@ -331,6 +533,11 @@ function BufferModel:delete_selected_text()
     self.content:remove(sel)
   end
   self:_text_change()
+  --- the content shrank under the selection, so the
+  --- active line still points into the block that was
+  --- just removed; left stale it drags the cursor
+  --- outside whatever is opened next
+  self:clamp_active_line()
 end
 
 --- @param t string[]|Block[]

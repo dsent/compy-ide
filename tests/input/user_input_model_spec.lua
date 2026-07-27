@@ -27,6 +27,26 @@ describe("input model spec #input", function()
   }
   mock.mock_love(love)
 
+  describe('the plain widget stays plain', function()
+    --- the console, project inputs and search construct
+    --- the model without the editing flag; the editor's
+    --- 1.1 extras must not leak into them
+    it('records no edit history', function()
+      local model = UserInputModel(mockConf, luaEval)
+      model:add_text('one two three')
+      model:add_text(' four')
+      assert.same({}, model.edit_history.steps)
+    end)
+
+    it('records with the editing flag on', function()
+      local model = UserInputModel(
+        mockConf, luaEval, false, nil, true)
+      model:add_text('one ')
+      model:add_text('two')
+      assert.is_true(#model.edit_history.steps > 0)
+    end)
+  end)
+
   -----------------
   --   ASCII     --
   -----------------

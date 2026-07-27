@@ -82,8 +82,9 @@ function EditorSession:select_block(n, target_content)
     local jumpkey = dir == "up" and "home" or "end"
     self.mock.keystroke(jumpkey, self.press)
   end
+  --- blocks move with Ctrl (bare arrows are line-wise)
   for i = 1, steps do
-    self.mock.keystroke(dir, self.press)
+    self.mock.keystroke('C-' .. dir, self.press)
   end
 
   assert.same(
@@ -105,7 +106,8 @@ end
 --- @param target_content string?
 function EditorSession:select_and_open_block(n, target_content)
   self:select_block(n, target_content)
-  self.mock.keystroke("escape", self.press)
+  --- Enter on an empty input opens the block (Esc is inert)
+  self.mock.keystroke("return", self.press)
 
   assert.same(n, self.buffer.loaded, fmt("loaded block #%s", n))
   if target_content then
@@ -119,8 +121,15 @@ function EditorSession:select_and_open_block(n, target_content)
 end
 
 --- @param newtext string
+--- Compose text as if it had been typed: the editor is
+--- editing whenever the input holds anything (2.1), so
+--- putting text in without the mode is not a real state
+--- @param newtext string
 function EditorSession:alter_input(newtext)
   local newlines = string.lines(newtext)
+  if self.controller:get_mode() == 'nav' then
+    self.controller:set_mode('edit')
+  end
   self.input:set_text(newlines)
   assert.same(newlines, self.input:get_text(), "input altered")
 end

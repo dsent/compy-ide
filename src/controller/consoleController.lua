@@ -136,6 +136,52 @@ end
 --- @private
 --- @param name string
 --- @return string?
+--- @param name string
+--- @return string
+local function checkpoint_name(name)
+  return name .. '.~save'
+end
+
+--- Modification time of a project file, nil if absent
+--- @param name string
+--- @return integer? modtime
+function ConsoleController:file_modtime(name)
+  local p = self.model.projects.current
+  if not p then return end
+  local info = FS.getInfo(p:get_path(name))
+  return info and info.modtime
+end
+
+--- @param name string
+--- @return integer? modtime of the checkpoint
+function ConsoleController:checkpoint_modtime(name)
+  return self:file_modtime(checkpoint_name(name))
+end
+
+--- Copy the file to its checkpoint (spec 2.6)
+--- @param name string
+--- @return boolean ok
+function ConsoleController:write_checkpoint(name)
+  local p = self.model.projects.current
+  if not p then return false end
+  local ok = FS.cp(
+    p:get_path(name),
+    p:get_path(checkpoint_name(name)))
+  return ok and true or false
+end
+
+--- Write the checkpoint back over the file (spec 2.6)
+--- @param name string
+--- @return boolean ok
+function ConsoleController:restore_checkpoint(name)
+  local p = self.model.projects.current
+  if not p then return false end
+  local cp = p:get_path(checkpoint_name(name))
+  if not FS.exists(cp) then return false end
+  local ok = FS.cp(cp, p:get_path(name))
+  return ok and true or false
+end
+
 function ConsoleController:_readfile(name)
   local PS              = self.model.projects
   local p               = PS.current
@@ -499,6 +545,14 @@ function ConsoleController.prepare_project_env(cc)
 
   --- @param name string
   --- @return string?
+  --- Restore a file from its checkpoint; no prompt
+  --- @param name string? --- default main.lua
+  --- @return boolean
+  project_env.revert          = function(name)
+    name = name or ProjectService.MAIN
+    return cc:restore_checkpoint(name)
+  end
+
   project_env.readfile        = function(name)
     --- @diagnostic disable-next-line: invisible
     return cc:_readfile(name)
@@ -901,8 +955,14 @@ function ConsoleController:edit(name, state)
     love.state.prev_state = love.state.app_state
     love.state.app_state = 'editor'
   end
+  --- Editor accept path: a save is durable before the
+  --- editor reports acceptance (spec 2.6), so a force-stop
+  --- after an accepted edit cannot lose it. fsync only
+  --- here — writefile and bulk paths stay async.
   local save = function(newcontent)
-    return self:_writefile(filename, newcontent)
+    local ok, err = self:_writefile(filename, newcontent)
+    if ok then FS.fsync(fpath) end
+    return ok, err
   end
 
   self.editor:open(filename, text, save)
@@ -1041,7 +1101,7 @@ function ConsoleController:mousepressed(
     x, y, btn, touch, presses)
   if love.state.app_state == 'editor' then
     if self.cfg.editor.mouse_enabled then
-      self.editor.input:mousepressed(x, y, btn, touch, presses)
+      self.editor:mousepressed(x, y, btn, touch, presses)
     end
   else
     self.input:mousepressed(x, y, btn, touch, presses)

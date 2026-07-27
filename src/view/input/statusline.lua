@@ -152,7 +152,6 @@ function Statusline:draw(status, start_y)
         gfx.setColor(colors.fg)
         gfx.print(more_b, s_mb, start_text.y)
         -- filename
-        gfx.setColor(Color[Color.white])
         gfx.print(custom.name, s_n, start_text.y)
       else
         --- normal statusline

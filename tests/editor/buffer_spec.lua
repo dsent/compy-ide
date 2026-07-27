@@ -177,6 +177,8 @@ print(sierpinski(4))]])
         ''
       }
       it('insert newline', function()
+        --- buffers open at the top; this test works the end
+        buffer:move_selection('down', nil, true)
         assert.same(#turtle_doc + 1, buffer:get_selection())
         buffer:replace_content({ qed })
         assert.same(#turtle_doc + 1, buffer:get_selection())
@@ -235,9 +237,109 @@ print(sierpinski(4))]])
 
         assert.same(turtle, buffer:get_text_content())
 
-        assert.same(n_blocks, buffer:get_selection())
+        assert.same(1, buffer:get_selection())
         local ln = buffer:get_selection_start_line()
-        assert.same(68, ln)
+        assert.same(1, ln)
+        buffer:move_selection('down', nil, true)
+        assert.same(n_blocks, buffer:get_selection())
+        assert.same(68, buffer:get_selection_start_line())
+      end)
+
+      describe('line navigation', function()
+        local lnbuf
+        lazy_setup(function()
+          lnbuf = BufferModel('main.lua', turtle,
+            noop, chunker, hl)
+        end)
+
+        it('starts at the top', function()
+          assert.same(1, lnbuf:get_selection())
+          assert.same(1, lnbuf:get_active_line())
+        end)
+
+        it('walks lines within a block', function()
+          local span = lnbuf:get_selection_lines()
+          for _ = span.start, span.fin - 1 do
+            assert.is_true(lnbuf:move_line('down'))
+          end
+          --- still inside block 1, on its last line
+          assert.same(1, lnbuf:get_selection())
+          assert.same(span.fin, lnbuf:get_active_line())
+        end)
+
+        it('crosses the boundary downwards', function()
+          assert.is_true(lnbuf:move_line('down'))
+          assert.same(2, lnbuf:get_selection())
+          local span = lnbuf:get_selection_lines()
+          assert.same(span.start, lnbuf:get_active_line())
+        end)
+
+        it('crosses back upwards', function()
+          assert.is_true(lnbuf:move_line('up'))
+          assert.same(1, lnbuf:get_selection())
+          local span = lnbuf:get_selection_lines()
+          assert.same(span.fin, lnbuf:get_active_line())
+        end)
+
+        it('clamps on block jumps', function()
+          lnbuf:move_selection('down', nil, true)
+          local span = lnbuf:get_selection_lines()
+          assert.same(span.start, lnbuf:get_active_line())
+          lnbuf:set_selection(3)
+          span = lnbuf:get_selection_lines()
+          assert.same(span.start, lnbuf:get_active_line())
+        end)
+
+        it('jumps blocks per 2.2', function()
+          local jb = BufferModel('main.lua', turtle,
+            noop, chunker, hl)
+          --- down: the next block's first line
+          assert.is_true(jb:jump_block('down'))
+          assert.same(2, jb:get_selection())
+          local sp = jb:get_selection_lines()
+          assert.same(sp.start, jb:get_active_line())
+
+          --- inside a multi-line block, up returns to
+          --- its first line
+          local multi
+          for i = 1, jb:get_content_length() do
+            jb:set_selection(i)
+            if jb:get_selection_lines():len() > 1 then
+              multi = i
+              break
+            end
+          end
+          assert.truthy(multi, 'fixture has a big block')
+          jb:set_selection(multi)
+          local spm = jb:get_selection_lines()
+          jb:set_active_line(spm.fin)
+          assert.is_true(jb:jump_block('up'))
+          assert.same(multi, jb:get_selection())
+          assert.same(spm.start, jb:get_active_line())
+
+          --- already there: up goes to the block before
+          assert.is_true(jb:jump_block('up'))
+          assert.same(multi - 1, jb:get_selection())
+          assert.same(jb:get_selection_lines().start,
+            jb:get_active_line())
+
+          --- walking up bottoms out at the first block
+          while jb:jump_block('up') do end
+          assert.same(1, jb:get_selection())
+          assert.same(1, jb:get_active_line())
+        end)
+
+        it('plaintext follows the selection', function()
+          local pb = BufferModel('notes.txt',
+            { 'one', 'two', 'three' }, noop)
+          assert.same(1, pb:get_active_line())
+          assert.is_true(pb:move_line('down'))
+          assert.same(2, pb:get_selection())
+          assert.same(2, pb:get_active_line())
+          assert.is_true(pb:move_line('up'))
+          assert.same(1, pb:get_selection())
+          assert.same(1, pb:get_active_line())
+        end)
       end)
 
       it('dropping blocks', function()
