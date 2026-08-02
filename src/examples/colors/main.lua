@@ -1,7 +1,6 @@
--- Every color Compy can draw, one name per line: the plain
--- color on the left, the same name plus Color.bright on the
--- right. Each entry is printed in the color it names, so the
--- two black ones are invisible against the background.
+-- Every color Compy can draw. Each cell is filled with the
+-- color it names and labelled with its number; the cell to
+-- its right is the same color plus Color.bright.
 -- Press Space for a picture painted only with named colors.
 gfx = love.graphics
 
@@ -44,11 +43,17 @@ NAMES = {
   "slategray",
 }
 
--- list geometry
-TOP = 20
-LINE_H = (HEIGHT - TOP) / 32
-LEFT_X = 96
-RIGHT_X = 440
+-- list geometry: 11 rows of 3 names. Cell height follows the
+-- font rather than a guess, so rows cannot overlap.
+CELL_H = gfx.getFont():getHeight() + 6
+TEXT_DY = 3
+TOP = CELL_H + 2
+ROWS = 11
+ROW_STEP = (HEIGHT - TOP - 4) / ROWS
+NAME_W = 244
+CHIP_W = 48
+BLOCK_STEP = 330
+BLOCK_X0 = 16
 
 -- picture geometry
 HORIZON = 350
@@ -70,21 +75,44 @@ function indexOf(row)
   return tier * 16 + row % 8
 end
 
-function drawRow(row)
-  local i = indexOf(row)
-  local y = TOP + row * LINE_H
-  local name = NAMES[row + 1]
+function labelFor(i)
+  local c = Color[i]
+  local lum = 0.299 * c[1] + 0.587 * c[2] + 0.114 * c[3]
+  if lum > 0.55 then
+    return Color[Color.black]
+  end
+  return Color[Color.white + Color.bright]
+end
+
+function drawNameCell(i, text, x, y)
   gfx.setColor(Color[i])
-  gfx.print(i .. " " .. name, LEFT_X, y)
-  gfx.setColor(Color[i + 8])
-  gfx.print(i + 8 .. " bright+" .. name, RIGHT_X, y)
+  gfx.rectangle("fill", x, y, NAME_W, CELL_H)
+  gfx.setColor(labelFor(i))
+  gfx.print(text, x + 7, y + TEXT_DY)
+end
+
+function drawChip(i, x, y)
+  gfx.setColor(Color[i])
+  gfx.rectangle("fill", x, y, CHIP_W, CELL_H)
+  gfx.setColor(labelFor(i))
+  gfx.print(tostring(i), x + 7, y + TEXT_DY)
+end
+
+function drawBlock(hue, col, row)
+  local i = indexOf(hue)
+  local x = BLOCK_X0 + col * BLOCK_STEP
+  local y = TOP + row * ROW_STEP
+  drawNameCell(i, i .. " " .. NAMES[hue + 1], x, y)
+  drawChip(i + 8, x + NAME_W + 6, y)
 end
 
 function drawList()
+  local hint = "space: picture"
+  local hint_w = gfx.getFont():getWidth(hint)
   gfx.setColor(Color[Color.white + Color.bright])
-  gfx.print("space: picture", 830, 2)
-  for row = 0, 31 do
-    drawRow(row)
+  gfx.print(hint, WIDTH - hint_w - BLOCK_X0, 2)
+  for hue = 0, 31 do
+    drawBlock(hue, hue % 3, math.floor(hue / 3))
   end
 end
 

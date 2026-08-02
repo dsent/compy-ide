@@ -36,15 +36,13 @@ gfx.setColor(Color[Color.red + Color.bright])  -- a vivid red
 
 This works because a name is a number, so you really are doing
 arithmetic: `Color.bright` is `8`, and `Color.red` is `2`, so
-`Color.red + Color.bright` is `10`. That is why the list screen shows
-two numbers on each line — `2 red` on the left and `10 bright+red` on
-the right are the same hue at two strengths.
+`Color.red + Color.bright` is `10`. That is why every entry on the
+list screen carries a small square to its right: the wide block is
+`2 red`, and the square beside it is `10`, the same red gone bright.
 
 The plain version is the bright one at three quarters strength. Black
 is the one color where this changes nothing, so `0` and `8` are both
-black — and because this program prints each name in its own color, on
-a black background those two lines look empty. That is the palette
-telling the truth about itself.
+black.
 
 ### Groups of sixteen
 
