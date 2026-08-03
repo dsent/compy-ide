@@ -50,7 +50,7 @@ Color = {
   __index = function(t, c)
     local rc = rawget(Color, c)
     if rc then return rc end
-    if type(c) ~= 'number' then return end
+    if not Color.valid(c) then return end
     if c >= 16 then
       local color = palette_color(c)
       Color[c] = color
