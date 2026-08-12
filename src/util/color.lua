@@ -56,6 +56,13 @@ Color = {
       Color[c] = color
       return color
     end
+    -- Three quarters of black is black, so the one slot the
+    -- scaling rule cannot fill is set by hand. + Color.bright
+    -- now reaches a different color from every slot.
+    if c == Color.bright then
+      Color[c] = { 64 / 255, 64 / 255, 64 / 255, 1 }
+      return Color[c]
+    end
     local bright = c > 7 and 1 or 0.75
     local oc = c
     local b = c % 2
@@ -67,7 +74,7 @@ Color = {
     return Color[oc]
   end,
 
-  black = 0,   -- #000000
+  black = 0,   -- #000000 #404040
   blue = 1,    -- #0000BF #0000FF
   red = 2,     -- #BF0000 #FF0000
   magenta = 3, -- #BF00BF #FF00FF

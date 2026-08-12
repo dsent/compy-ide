@@ -71,11 +71,11 @@ return {
   input = {
     console = {
       bg = Color[Color.white],
-      fg = Color[Color.black + Color.bright],
+      fg = Color[Color.black],
     },
     user = {
       bg = Color[Color.white],
-      fg = Color[Color.black + Color.bright],
+      fg = Color[Color.black],
     },
     inspect = {
       bg = Color[Color.white],

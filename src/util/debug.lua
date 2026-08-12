@@ -503,7 +503,7 @@ local debug = function(...)
   local args = { ... }
   local ts = string.format("%.3f ", os.clock())
   local s = annot(ts .. 'DEBUG ',
-    (Color.black + Color.bright), args)
+    (Color.black), args)
   printer(s)
 end
 local once = function(...)

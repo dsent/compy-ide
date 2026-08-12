@@ -40,9 +40,9 @@ arithmetic: `Color.bright` is `8`, and `Color.red` is `2`, so
 list screen carries a small square to its right: the wide block is
 `2 red`, and the square beside it is `10`, the same red gone bright.
 
-The plain version is the bright one at three quarters strength. Black
-is the one color where this changes nothing, so `0` and `8` are both
-black.
+The plain version is the bright one at three quarters strength. Three
+quarters of black is still black, so `8` is a dark grey picked by
+hand, and adding `Color.bright` always takes you somewhere new.
 
 ### Groups of sixteen
 
