@@ -1,6 +1,33 @@
 local tc = require("util.termcolor")
 
 --- @diagnostic disable param-type-mismatch
+describe('to_control #debug', function()
+  it('names the basic slots', function()
+    assert.same('\27[34m', tc.to_control(Color.blue))
+    assert.same('\27[1;94m',
+      tc.to_control(Color.blue + Color.bright))
+  end)
+
+  it('spells the extended slots out in full', function()
+    assert.same('\27[38;2;191;124;0m',
+      tc.to_control(Color.orange))
+    assert.same('\27[38;2;255;165;0m',
+      tc.to_control(Color.orange + Color.bright))
+    assert.same('\27[38;2;191;161;0m',
+      tc.to_control(Color.gold))
+    assert.same('\27[38;2;84;96;108m',
+      tc.to_control(Color.slategray))
+  end)
+
+  it('resets what Color.valid rejects', function()
+    assert.same(tc.reset, tc.to_control(-1))
+    assert.same(tc.reset, tc.to_control(1.5))
+    assert.same(tc.reset, tc.to_control(64))
+    assert.same(tc.reset, tc.to_control('7'))
+    assert.same(tc.reset, tc.to_control(nil))
+  end)
+end)
+
 describe('colorize_memaddress #debug', function()
   local frame = function(s)
     return tc.reset

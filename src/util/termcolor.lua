@@ -2,11 +2,26 @@ require("util.color")
 
 local reset = '\27[0m'
 
+--- Slots 16-63 are absolute RGB with no basic-SGR
+--- equivalent, so they go out as truecolor.
+---@param c number[]
+---@return string
+local rgb_control = function(c)
+  local byte = function(v)
+    return math.floor(v * 255 + 0.5)
+  end
+  return string.format('\27[38;2;%d;%d;%dm',
+    byte(c[1]), byte(c[2]), byte(c[3]))
+end
+
 ---@param ci number
 ---@return string
 local to_control = function(ci)
-  if type(ci) ~= 'number' or ci < 0 or ci > 15 then
+  if not Color.valid(ci) then
     return reset
+  end
+  if ci > 15 then
+    return rgb_control(Color[ci])
   end
   local bright = ''
   if ci > Color.bright then
