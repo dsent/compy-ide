@@ -24,3 +24,7 @@ local.just
 *.swo
 *~
 docker-data
+*.jks
+*.keystore
+*.p12
+*.pfx
