@@ -7,6 +7,7 @@ require("controller.projectInputController")
 local class = require('util.class')
 local LANG = require("util.eval")
 local FS = require('util.filesystem')
+local Application = require('util.application')
 require("util.key")
 require("util.table")
 local TerminalTest = require("util.test_terminal")
@@ -1486,7 +1487,7 @@ function ConsoleController.prepare_env(cc)
   end
 
   prepared.quit             = function()
-    love.event.quit()
+    Application.request_exit()
   end
 end
 
