@@ -5,6 +5,7 @@ require("util.string.string")
 require("util.key")
 local LANG = require("util.eval")
 local FS = require("util.filesystem")
+local Application = require("util.application")
 
 local messages = {
   user_break = "BREAK into program",
@@ -456,7 +457,12 @@ Controller = {
       --- (spec 2.6): a graceful quit loses nothing. One
       --- syscall; force-stop is covered by per-accept fsync
       FS.sync()
+      if Application.consume_application_exit_request() then
+        Application.return_home_before_exit()
+        return false
+      end
       if love.state.app_state == 'shutdown' then
+        Application.return_home_before_exit()
         return false
       end
 
@@ -472,6 +478,7 @@ Controller = {
         CC:stop_project_run()
         return true
       end
+      Application.return_home_before_exit()
     end
     love.quit = quit
   end,
@@ -675,7 +682,7 @@ Controller = {
     handlers.keyreleased = function(k)
       if Key.ctrl() then
         if k == "escape" then
-          love.event.quit()
+          Application.request_application_exit()
         end
       end
       local user_input = get_user_input()
