@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir=$(CDPATH='' cd -- "${BASH_SOURCE[0]%/*}" && pwd) || {
+  printf 'Cannot locate the Compy IDE test runner.\n' >&2
+  exit 1
+}
+
+found_lua51=0
+for candidate in luajit lua5.1 lua; do
+  interpreter=$(command -v "$candidate" 2>/dev/null) || continue
+  version=$("$interpreter" -e 'io.write(_VERSION)' 2>/dev/null) || continue
+  [[ $version == "Lua 5.1" ]] || continue
+  found_lua51=1
+  if "$interpreter" -e 'require("busted.runner")' >/dev/null 2>&1; then
+    exec "$interpreter" "$script_dir/busted-runner.lua" "$@"
+  fi
+done
+
+if ((found_lua51)); then
+  printf '%s\n' \
+    'Busted for Lua 5.1 is required to run the Compy IDE tests.' \
+    'Install it with: luarocks --lua-version=5.1 install busted' >&2
+else
+  printf '%s\n' \
+    'LuaJIT or Lua 5.1 is required to run the Compy IDE tests.' >&2
+fi
+exit 1
