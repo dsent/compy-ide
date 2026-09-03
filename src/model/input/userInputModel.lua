@@ -24,11 +24,11 @@ require("util.lua")
 --- @field selection InputSelection
 --- @field cfg Config
 --- @field custom_status CustomStatus?
---- @field custom_label string?
+--- @field custom_label PromptLabel?
 --- @field _memo table
 --- methods
 --- @field new function
---- @field get_label fun(self): string?
+--- @field get_label fun(self): PromptLabel?
 --- @field init_visible function
 --- @field add_text fun(self, string)
 --- @field set_text fun(self, string, boolean)
@@ -45,7 +45,7 @@ UserInputModel = class.create()
 --- @param cfg Config
 --- @param eval Evaluator
 --- @param oneshot boolean?
---- @param custom_label string?
+--- @param custom_label PromptLabel?
 --- @param editing boolean? --- the editor's rich input:
 --- word deletion (2.7) and the text-level undo (1.1).
 --- Off everywhere else — the console, project inputs and
@@ -74,7 +74,7 @@ function UserInputModel.new(cfg, eval, oneshot, custom_label,
   return self
 end
 
---- @return string?
+--- @return PromptLabel?
 function UserInputModel:get_label()
   local cl = self.custom_label
   if cl then return cl end

@@ -146,6 +146,24 @@ local android_storage_find = function()
   return false
 end
 
+--- Prove that the removable project root supports the writes the IDE needs.
+--- @param storage_path string
+--- @return boolean success
+--- @return string? error
+local storage_projects_writable = function(storage_path)
+  local projects = FS.join_path(storage_path, 'projects')
+  local ok, err = FS.mkdirp(projects)
+  if not ok then return false, err end
+
+  local probe = FS.join_path(projects, '.compy-write-probe')
+  ok, err = FS.write(probe, 'Compy IDE storage probe\n')
+  if not ok then return false, err end
+
+  ok, err = FS.rm(probe)
+  if not ok then return false, err end
+  return true
+end
+
 --- @param mode Mode
 --- @return PathInfo
 --- @return boolean
@@ -153,7 +171,7 @@ local setup_storage = function(mode)
   local id = love.filesystem.getIdentity()
   local harmony = love.harmony
   local storage_path = ''
-  local has_removable = false
+  local has_removable
 
   if harmony then
     id = id .. '-harmony'
@@ -170,13 +188,23 @@ local setup_storage = function(mode)
       if mode == 'play' then
         --- initializing directory moved to app code
       else
-        local ok, sd_path = android_storage_find()
-        if not ok then
-          print('WARN: SD card not found')
-          sd_path = '/storage/emulated/0'
+        local found, sd_path = android_storage_find()
+        if found then
+          local candidate = string.format("%s/Documents/%s", sd_path, id)
+          local writable, write_err = storage_projects_writable(candidate)
+          if writable then
+            storage_path = candidate
+            has_removable = true
+          else
+            print('WARN: SD card is not writable: ' .. tostring(write_err))
+          end
         end
-        has_removable = true
-        storage_path = string.format("%s/Documents/%s", sd_path, id)
+        if not has_removable then
+          if not found then print('WARN: SD card not found') end
+          storage_path = string.format("%s/Documents/%s",
+            '/storage/emulated/0', id)
+          has_removable = false
+        end
         print('INFO: Project path: ' .. storage_path)
       end
     elseif OS.get_name() == 'Web' then

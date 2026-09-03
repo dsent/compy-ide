@@ -94,6 +94,22 @@ describe("input model spec #input", function()
     it('initializes', function()
       assert.are.equal(getmetatable(model), UserInputModel)
     end)
+
+    it('preserves plain prompt labels', function()
+      local prompt_model = UserInputModel(
+        mockConf, luaEval, false, 'console')
+      assert.same('console', prompt_model:get_status().label)
+    end)
+
+    it('preserves styled prompt labels', function()
+      local label = {
+        text = '[no sd card] console',
+        tone = 'warning',
+      }
+      local prompt_model = UserInputModel(
+        mockConf, luaEval, false, label)
+      assert.same(label, prompt_model:get_status().label)
+    end)
     local test1 = 'asdf'
     local test_char1 = 'd'
     local test_char2 = 'n'
