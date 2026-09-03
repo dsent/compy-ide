@@ -80,8 +80,16 @@
 
 --- @alias More {up: boolean, down: boolean}
 
+--- @alias PromptTone 'default'|'warning'|'error'|'special'
+
+--- @class StyledPromptLabel table
+--- @field text string
+--- @field tone PromptTone?
+
+--- @alias PromptLabel string|StyledPromptLabel
+
 --- @class Status table
---- @field label string
+--- @field label PromptLabel?
 --- @field cursor Cursor?
 --- @field n_lines integer
 --- @field input_more More

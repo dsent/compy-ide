@@ -36,9 +36,13 @@ require("util.color")
 --- @field fg2 RGB?
 --- @field indicator RGB
 --- @field special RGB
+--- @field warning RGB
+--- @field error RGB
 
 local indicator = Color[Color.cyan + Color.bright]
 local special = Color[Color.cyan]
+local warning = Color[Color.orange]
+local error = Color[Color.red]
 
 local lua_i = require('conf.lua')
 local md_i = require('conf.md')
@@ -111,18 +115,24 @@ return {
       bg = Color[Color.black],
       indicator = indicator,
       special = special,
+      warning = warning,
+      error = error,
     },
     user = {
       bg = Color[Color.blue],
       fg = Color[Color.white],
       indicator = indicator,
       special = special,
+      warning = warning,
+      error = error,
     },
     inspect = {
       bg = Color[Color.red],
       fg = Color[Color.black],
       indicator = indicator,
       special = special,
+      warning = warning,
+      error = error,
     },
     editor = {
       fg = Color[Color.white + Color.bright],
@@ -130,6 +140,8 @@ return {
       bg = Color[Color.blue],
       indicator = indicator,
       special = special,
+      warning = warning,
+      error = error,
     },
   },
 }
