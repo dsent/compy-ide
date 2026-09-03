@@ -49,7 +49,7 @@ jobs:
           luarocks install luafilesystem
 
       - name: run unit tests
-        run: busted tests -o utfTerminal
+        run: ./util/run-busted tests -o utfTerminal
 
   build-love:
     runs-on: ubuntu-latest

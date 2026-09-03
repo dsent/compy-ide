@@ -12,15 +12,16 @@ FAVI := "favicon.ico"
 DIST := "dist"
 WEBDIST := "./dist/web"
 WEBDIST-c := "./dist/web-c"
+BUSTED := "./util/run-busted"
 
 # run unit tests on file change
 unit_test:
-  @{{MON}} -e 'lua' --exec 'echo -en "\n\n\n\n------------- BUSTED -------------\n"; busted tests'
+  @{{MON}} -e 'lua' --exec 'echo -en "\n\n\n\n------------- BUSTED -------------\n"; {{BUSTED}} tests'
 unit_test_brief:
-  @{{MON}} -e 'lua' --exec 'echo -en "\n\n\n\n------------- BUSTED -------------\n"; busted tests -o tests/brief_output.lua'
+  @{{MON}} -e 'lua' --exec 'echo -en "\n\n\n\n------------- BUSTED -------------\n"; {{BUSTED}} tests -o tests/brief_output.lua'
 unit_test_tag TAG:
   @{{MON}} -e lua \
-    --exec 'echo -en "\n\n\n\n------------- BUSTED -------------\n" ; busted tests --defer-print --tags="{{TAG}}"'
+    --exec 'echo -en "\n\n\n\n------------- BUSTED -------------\n" ; {{BUSTED}} tests --defer-print --tags="{{TAG}}"'
 unit_test_ast:
   @just unit_test_tag ast
 unit_test_src:
@@ -32,9 +33,9 @@ unit_test_analyzer:
 
 # run unit tests of this tag once
 ut TAG:
-  @busted tests --tags {{TAG}}
+  @{{BUSTED}} tests --tags {{TAG}}
 ut_all:
-  @busted tests
+  @{{BUSTED}} tests
 
 # run app on file change
 dev:
