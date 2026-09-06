@@ -1936,6 +1936,47 @@ describe('Editor #editor', function()
         end)
       end)
 
+      describe("a comment trailing code", function()
+        local first = 'robot_move(40, 40, 1)'
+        local code = 'robot_move(40, -40, 1)'
+        local comment = '-- and back again'
+        local commented = code .. '  ' .. comment
+
+        --- opening a block pretty-prints it into the input, which
+        --- gives the comment a line of its own below the code;
+        --- accepting writes it back as any two blocks
+        local opened = src(code, comment)
+        local accepted = src(first, code, '', comment, '')
+
+        it("is shown as written and accepted on its own line",
+          function()
+            local input = session:open(src(first, commented), 2)
+
+            session:select_block(2, commented)
+            session:select_and_open_block(2)
+            assert.same(string.lines(opened), input:get_text(),
+                        "the comment moves to its own line in the input")
+
+            session:submit(opened)
+            assert.same(accepted, savefile(), "one copy of the comment")
+          end)
+
+        it("stays put when the block is accepted again", function()
+          session:open(src(first, commented), 2)
+          session:select_and_open_block(2)
+          session:submit(opened)
+          assert.same(accepted, savefile())
+
+          --- reopen the file and accept the same code again
+          session:open(accepted)
+          session:select_and_open_block(2, code)
+          session:submit(code)
+
+          assert.same(accepted, savefile(),
+                      "second accept leaves the file alone")
+        end)
+      end)
+
       describe("insertion of", function()
         setup(function()
           some_func = mock_func_snippet('some')
