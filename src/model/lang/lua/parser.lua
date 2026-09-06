@@ -334,6 +334,24 @@ return function(lib)
           comment_ids[c.idl] = true
           comment_lines[c.first.l] = true
         end
+        --- Take ownership of the comments the statement's own chunk
+        --- already carries. The chunk is sliced from the source
+        --- lines, so a comment starting inside its range is on
+        --- screen already; a block of its own would draw over the
+        --- code and grow the file on every render.
+        --- @param comments Comment[]
+        --- @param sfl integer --- statement's first line
+        --- @param sll integer --- statement's last line
+        local claim_own_comments = function(comments, sfl, sll)
+          for _, c in ipairs(comments) do
+            local cfl = c.first.l
+            if cfl >= sfl and cfl <= sll then
+              comment_ids[c.idf] = true
+              comment_ids[c.idl] = true
+              comment_lines[cfl] = true
+            end
+          end
+        end
         --- @param comments Comment[]
         --- @param pos CommentPos
         local get_comments = function(comments, pos)
@@ -401,6 +419,7 @@ return function(lib)
 
           local comments = ast_extract_comments(v, {}, wrap)
 
+          claim_own_comments(comments, fl, ll)
           get_comments(comments, 'first')
           --- account for empty lines, including the zeroth
           if fl > last + 1 then

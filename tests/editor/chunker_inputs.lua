@@ -216,6 +216,43 @@ end]], {
       Range(2, 5)
     ),
     Empty(6),
+  }),
+
+  --- a comment trailing code belongs to the statement's own chunk
+  prep(
+    "x = 1 -- trailing",
+    { Chunk({ 'x = 1 -- trailing' }, Range.singleton(1)),
+      Empty(2) }
+  ),
+  prep([[x = 1 -- one
+y = 2]], {
+    Chunk({ 'x = 1 -- one' }, Range.singleton(1)),
+    Chunk({ 'y = 2' }, Range.singleton(2)),
+    Empty(3),
+  }),
+  prep([[function f()
+  return 1
+end -- tail]], {
+    Chunk({
+        'function f()',
+        '  return 1',
+        'end -- tail'
+      },
+      Range(1, 3)
+    ),
+    Empty(4),
+  }),
+  prep([[function f()
+  return 1 -- inner
+end]], {
+    Chunk({
+        'function f()',
+        '  return 1 -- inner',
+        'end'
+      },
+      Range(1, 3)
+    ),
+    Empty(4),
   })
 
 }
