@@ -18,30 +18,7 @@ Evaluator = class.create()
 --- @param self Evaluator
 --- @param s string[]
 local function validate(self, s)
-  local errors = {}
-  local valid = true
-
-  for _, fv in ipairs(self.line_validators or {}) do
-    if #s == 1 then
-      local ok, verr = fv(s[1])
-      if not ok and verr then
-        valid = false
-        local e = Error.wrap(verr)
-        table.insert(errors, e)
-      end
-    else
-      for i, l in ipairs(s) do
-        local ok, verr = fv(l)
-        if not ok and verr then
-          valid = false
-          local e = Error.wrap(verr)
-          if e and not e.l then e.l = i end
-          table.insert(errors, e)
-        end
-      end
-    end
-  end
-  return valid, errors
+  return Filters.validate(self.line_validators, s)
 end
 
 --- @param self Evaluator
@@ -189,27 +166,13 @@ ValidatedTextEval = function(filter)
 end
 
 LuaEditorEval = (function()
-  --- AST validations
-  local test = function(ast)
-    -- Log.info('AST', Debug.terse_ast(ast, true, 'lua'))
-    -- return false, Error('test', 1, 1)
-    return true
-  end
-
-  --- text validations
-  local max_length = function(n)
-    return function(s)
-      if string.len(s) <= n then
-        return true
-      end
-      return false, 'line too long!'
-    end
-  end
-  local line_length = max_length(64)
+  --- The rules live in model.lang.lua.check, so the linter checks
+  --- what the editor checks.
+  local check = require('model.lang.lua.check')
 
   local ft = {
-    line_validators = { line_length },
-    astValidators = { test },
+    line_validators = check.line_validators,
+    astValidators = check.ast_validators,
   }
   return LuaEval(nil, ft)
 end)()
