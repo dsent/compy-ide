@@ -8,6 +8,11 @@ that turns an AST back into source.
 
 - Upstream: `https://github.com/compy-toys/metalua.git`, branch `dev`
 - Imported at commit `d0dbd0d982f87512b806949ea697ea71f39cd0b4`
+- That commit is `refs/pull/3/head`. PR #3 was merged into `dev` by
+  rebase, so `dev` carries the same five commits under different
+  hashes and its head `a42b3918` has an identical tree
+  (`5e4d41cc483fad980d742b92a1ab44cd05b93665`). The import is `dev`'s
+  content, reached by the hash the IDE was pinned at.
 - Upstream of that fork: Eclipse Koneki Metalua 0.7.2
 
 ## What is here
