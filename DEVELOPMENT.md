@@ -1,22 +1,15 @@
 ## Cloning
 
-Clone this project recursively, because libraries are included
-as submodules:
+A plain clone gives you everything:
 
 ```shell
-git clone --recurse-submodules
-# or
-git clone --recurse-submodules --shallow-submodules
+git clone
 ```
 
-If it's already cloned without, and you don't want to start over,
-they can be initialized with:
-
-```shell
-git submodule update --init
-# or
-git submodule update --init --depth 1
-```
+The libraries under `src/lib/` are tracked files, so there is
+nothing to initialize afterwards. Each carries its own `README.md`
+recording where it came from and at which commit; edit those copies
+here rather than upstream.
 
 ## Installing
 

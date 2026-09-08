@@ -4,15 +4,7 @@ local FS = require("util.filesystem")
 require("util.color")
 require("util.debug")
 
-local inputs = (function()
-  local ok, i = pcall(require, "lib.metalua.spec.ast_inputs")
-  if ok then
-    return i
-  else
-    Log.warn('AST inputs missing, are submodules checked out?')
-    return {}
-  end
-end)()
+local inputs = require("tests.interpreter.ast_inputs")
 
 if not orig_print then
   _G.orig_print = print
