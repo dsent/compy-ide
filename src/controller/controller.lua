@@ -312,11 +312,67 @@ local function hook_draw(userlove)
   end
 end
 
--- `userlove` = the project's sandboxed `love` table 
--- (also used in occupy_* and hook_* above); 
+local click_delay = 0.4
+local drift_tolerance = 2.5
+local click_timer = 0
+local click_pos
+local press_pos
+local press_dragged = false
+local click_generation = 0
+
+local function no_drift(a, b)
+  return a and b
+    and math.abs(a.x - b.x) < drift_tolerance
+    and math.abs(a.y - b.y) < drift_tolerance
+end
+
+local function reset_click_state()
+  click_generation = click_generation + 1
+  click_timer, click_pos, press_pos = 0, nil, nil
+  press_dragged = false
+end
+
+local function emit_pending_click()
+  local pos = click_pos
+  click_timer, click_pos = 0, nil
+  if pos then love.handlers.singleclick(pos.x, pos.y) end
+end
+
+local function track_click_motion(x, y)
+  local pos = { x = x, y = y }
+  if press_pos and not no_drift(press_pos, pos) then
+    press_dragged = true
+  end
+  if click_pos and not no_drift(click_pos, pos) then
+    emit_pending_click()
+  end
+end
+
+local function finish_click(x, y)
+  local pos = { x = x, y = y }
+  local valid = press_pos and not press_dragged
+    and no_drift(press_pos, pos)
+  press_pos = nil
+  if not valid then return end
+  if click_pos and click_timer > 0 and no_drift(click_pos, pos) then
+    click_timer, click_pos = 0, nil
+    love.handlers.doubleclick(x, y)
+  else
+    -- An unrelated second click leaves the first one valid.
+    -- Finish it before starting the next pairing window.
+    local generation = click_generation
+    if click_pos then emit_pending_click() end
+    if generation ~= click_generation then return end
+    click_pos, click_timer = pos, click_delay
+  end
+end
+
+-- `userlove` = the project's sandboxed `love` table
+-- (also used in occupy_* and hook_* above);
 --- @param userlove table
 --- @param CC ConsoleController
 local set_handlers = function(userlove, CC)
+  reset_click_state()
   occupy_input(userlove, CC)
   mark_pointer_liveness(userlove, CC)
   hook_update(userlove)
@@ -353,33 +409,6 @@ local function reset_compy_input(CC)
     wipe_table(input.shortcuts[ev])
   end
   for _, ev in ipairs(HOOK_EVENTS) do input.hooks[ev] = nil end
-end
-
-local click_delay = 0.4
-local drift_tolerance = 2.5
-
-local click_count = 0
-local click_timer = 0
---- @type Point?
-local click_pos = nil
-
---- @param prev Point?
---- @param cur Point?
---- @return boolean
-local function no_drift(prev, cur)
-  if prev and cur
-  then
-    local px, py = prev.x, prev.y
-    local cx, cy = cur.x, cur.y
-    if px and cx and math.abs(px - cx) < drift_tolerance
-    then
-      if py and cy and math.abs(py - cy) < drift_tolerance
-      then
-        return true
-      end
-    end
-  end
-  return false
 end
 
 -- Shared l/r modifier-fold table (see util/key.lua
@@ -567,33 +596,9 @@ Controller = {
             tostring(f.err))
         end
       end
-      if click_timer > 0 then
+      if click_pos then
         click_timer = click_timer - dt
-      end
-      if click_timer <= 0 then
-        -- Synthesis only: decide WHICH derived event the raw
-        -- presses amount to, then emit it through the gateway
-        -- like any native one. Who receives it, whether it is
-        -- error-wrapped and whether anyone consumes it are the
-        -- route's business, not this timer's.
-        local derived
-        if click_count == 1 then
-          derived = 'singleclick'
-        elseif click_count >= 2 then
-          derived = 'doubleclick'
-        end
-        -- Drift discards the click outright rather than
-        -- degrading it to presses: moving between the two
-        -- invalidates both (doc/input_api.md, "Pointer and
-        -- click hooks"). A project that wants the raw
-        -- presses binds mousereleased, which is untouched.
-        if derived then
-          local x, y = love.mouse.getPosition()
-          if no_drift(click_pos, { x = x, y = y }) then
-            love.handlers[derived](x, y)
-          end
-        end
-        click_count = 0
+        if click_timer <= 0 then emit_pending_click() end
       end
 
       local ddr = View.prev_draw
@@ -778,6 +783,7 @@ Controller = {
   --- "Dispatch chain").
   --- @param CC ConsoleController
   release_keyboard_route = function(CC)
+    reset_click_state()
     Controller.project_input:deactivate()
     Controller.set_love_keypressed(CC)
     for _, k in ipairs(_console_channels) do
@@ -802,6 +808,7 @@ Controller = {
     -- below. The only console/PIC tie is this restore ordering
     -- + inspect suppression (doc/development/decisions/input.md
     -- #11/#12) — not a special-case beyond that.
+    reset_click_state()
     Controller.project_input:deactivate()
 
     -- SKIPPED textedited - IME support, TODO?
@@ -993,6 +1000,9 @@ Controller = {
     -- the slot. Under a project run that is the project
     -- route's chain; otherwise the console's own handler.
     handlers.mousepressed = function(x, y, btn, touch, presses)
+      if btn == 1 then
+        press_pos, press_dragged = { x = x, y = y }, false
+      end
       if love.mousepressed then
         return love.mousepressed(x, y, btn, touch, presses)
       end
@@ -1004,14 +1014,12 @@ Controller = {
     --- @param touch boolean
     --- @param presses number
     handlers.mousereleased = function(x, y, btn, touch, presses)
-      if btn == 1 then
-        click_count = click_count + 1
-        click_timer = click_delay
-        click_pos = { x = x, y = y }
-      end
+      local result
       if love.mousereleased then
-        return love.mousereleased(x, y, btn, touch, presses)
+        result = love.mousereleased(x, y, btn, touch, presses)
       end
+      if btn == 1 then finish_click(x, y) end
+      return result
     end
 
     --- @param x number
@@ -1020,6 +1028,7 @@ Controller = {
     --- @param dy number
     --- @param touch boolean
     handlers.mousemoved = function(x, y, dx, dy, touch)
+      track_click_motion(x, y)
       if love.mousemoved then
         return love.mousemoved(x, y, dx, dy, touch)
       end

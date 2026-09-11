@@ -877,9 +877,17 @@ compy.input.hooks.singleclick = function(x, y) place(x, y) end
 compy.input.hooks.doubleclick = function(x, y) remove(x, y) end
 ```
 
-A single click is only confirmed after the double-click window has passed,
-so it arrives slightly late — that wait is what makes the two
-distinguishable. Moving the pointer between the presses invalidates both.
+A single click waits up to 0.4 seconds after release so the framework can
+recognize a double-click. Moving 2.5 pixels or more on either axis after
+release confirms the single immediately at its saved release position. A second valid release within that window and
+within 2.5 pixels on each axis delivers a double-click immediately; each
+pair is consumed separately. Clicks at separate positions remain singles.
+
+Moving 2.5 pixels or more on either axis while holding the button cancels
+that gesture, including moving away and back. Once you release the button,
+moving the pointer confirms the completed click once it crosses the
+tolerance. Handlers receive the
+saved release position. Stopping a project clears its pending gestures.
 
 Being ordinary chain participants, pointer hooks **consume on a truthy
 return** like keyboard ones: return truthy and a shown input widget does not see

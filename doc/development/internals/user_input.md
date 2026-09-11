@@ -686,14 +686,22 @@ pointer handler asks the device for it, the same way the matcher above does.
 
 ### Framework-level click handling
 
-Single/double click detection still lives entirely in the framework's own click timer
-(`controller.lua`'s `set_love_update`), not in a project. On each mouse release of button 1,
-`click_count` increments and `click_timer` (re)arms to 0.4s (`controller.lua:1075-1084`); a drift
-tolerance of 2.5px between press and release position suppresses the click. When `click_timer`
-next expires (`controller.lua:685-704`): `click_count == 1` synthesises a single click,
-`click_count >= 2` a double — and the timer **emits the derived event through the gateway like a
-native one**, `love.handlers.singleclick(x, y)` / `love.handlers.doubleclick(x, y)`
-(`controller.lua:700`). From there it runs the same route as every other pointer channel above.
+Click detection is framework-owned in `controller.lua`. The mouse gateway
+tracks button 1 from press to release, rejecting movement of 2.5 pixels or
+more on either axis while held. A valid release starts one fixed 0.4-second
+pairing window. A second nearby valid release within that window emits
+`love.handlers.doubleclick(x, y)` immediately and consumes the pair.
+An unrelated second release completes the first single and starts its own
+window. Otherwise `set_love_update` expires the pending single through
+`love.handlers.singleclick(x, y)` using its saved release position.
+
+Pointer motion of 2.5 pixels or more on either axis after release confirms
+the pending single immediately at its saved release position. Raw
+release delivery precedes a derived double-click. Route activation and
+teardown clear pending press and click state, so a gesture stays with its
+project. These derived events use the same gateway and route as native
+pointer events. The public contract is in
+[`Pointer and click hooks`](../../input_api.md#pointer-and-click-hooks).
 
 
 `compy.singleclick` and `compy.doubleclick` — fields on the project's `compy` table that the old
@@ -711,7 +719,9 @@ Keeping three hand-maintained subsets in step is precisely what failed before �
 writing `love.singleclick` got nothing while the same project writing `love.mousepressed` got a
 seeded hook — which is why seeding, teardown and dispatch now read one list.
 
-The 0.4s delay means single clicks are always confirmed after a short wait — there is no "instant single click" path. This is a deliberate tradeoff for double-click detection consistency.
+Single-click confirmation waits for the pairing window, pointer motion
+beyond the tolerance, or a subsequent click at another position. Double-click confirmation occurs on the second
+release.
 
 ### Direct mouse events
 

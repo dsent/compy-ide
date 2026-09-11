@@ -191,52 +191,118 @@ describe('input surface: inbound events — shortcuts and clicks'
   -- (default no-ops). The 0.4s / 2.5px constants are mechanism;
   -- this is a regression surface, not a routing rule.
   describe('framework click detection', function()
+    local seen
+    local function release(x, y)
+      F.session.mousepressed(x, y, 1, false, 1)
+      F.session.mousereleased(x, y, 1, false, 1)
+    end
+    before_each(function()
+      seen = {}
+      local input = F.activate_project()
+      input.hooks.singleclick = function(x, y)
+        seen[#seen + 1] = { 'single', x, y }
+      end
+      input.hooks.doubleclick = function(x, y)
+        seen[#seen + 1] = { 'double', x, y }
+      end
+    end)
 
-    it('a single click confirms after the window',
-      function()
-        local hit = 0
-        local input = F.activate_project()
-        input.hooks.singleclick = function() hit = hit + 1 end
-        F.set_mouse_pos(10, 540)
-        F.session.mousereleased(10, 540, 1, false, 1)
-        F.love_update(0.1)
-        assert.equal(0, hit)
-        F.love_update(0.5)
-        assert.equal(1, hit)
-      end)
+    it('waits for a single and retains its release position', function()
+      release(10, 540)
+      F.love_update(0.1)
+      assert.equal(0, #seen)
+      F.set_mouse_pos(400, 400)
+      F.session.mousemoved(400, 400, 390, -140, false)
+      assert.same({ { 'single', 10, 540 } }, seen)
+      F.love_update(0.31)
+      assert.same({ { 'single', 10, 540 } }, seen)
+    end)
 
-    it('pointer drift suppresses the single click',
-      function()
-        local hit = 0
-        local input = F.activate_project()
-        input.hooks.singleclick = function() hit = hit + 1 end
-        F.session.mousereleased(10, 540, 1, false, 1)
-        F.set_mouse_pos(400, 400)
-        F.love_update(0.5)
-        assert.equal(0, hit)
-      end)
+    it('keeps a nearby release eligible for a double', function()
+      release(10, 540)
+      F.session.mousemoved(12, 540, 2, 0, false)
+      assert.equal(0, #seen)
+      release(12, 540)
+      assert.same({ { 'double', 12, 540 } }, seen)
+    end)
 
-    it('a double click calls the project handler',
-      function()
-        local hit = 0
-        local input = F.activate_project()
-        input.hooks.doubleclick = function() hit = hit + 1 end
-        F.set_mouse_pos(10, 540)
-        F.session.mousereleased(10, 540, 1, false, 1)
-        F.session.mousereleased(10, 540, 1, false, 1)
-        F.love_update(0.5)
-        assert.equal(1, hit)
-      end)
+    it('does not pair after moving out and back', function()
+      release(10, 540)
+      F.session.mousemoved(13, 540, 3, 0, false)
+      F.session.mousemoved(10, 540, -3, 0, false)
+      release(10, 540)
+      F.love_update(0.5)
+      assert.same({ { 'single', 10, 540 }, { 'single', 10, 540 } }, seen)
+    end)
 
-    -- The derived events travel the gateway like native ones,
-    -- so with no project route holding the slot the emit is a
-    -- no-op, not an error. The console does not use them.
-    it('a click with no project route is silently dropped',
-      function()
-        F.set_mouse_pos(10, 540)
-        F.session.mousereleased(10, 540, 1, false, 1)
-        assert.has_no.errors(function() F.love_update(0.5) end)
-      end)
+    it('rejects movement while held even if it returns', function()
+      F.session.mousepressed(10, 540, 1, false, 1)
+      F.session.mousemoved(13, 540, 3, 0, false)
+      F.session.mousemoved(10, 540, -3, 0, false)
+      F.session.mousereleased(10, 540, 1, false, 1)
+      F.love_update(0.5)
+      assert.equal(0, #seen)
+    end)
+
+    it('checks press/release displacement without motion events', function()
+      F.session.mousepressed(10, 540, 1, false, 1)
+      F.session.mousereleased(13, 540, 1, false, 1)
+      F.love_update(0.5)
+      assert.equal(0, #seen)
+    end)
+
+    it('delivers a double immediately on the second release', function()
+      release(10, 540)
+      F.love_update(0.2)
+      F.session.mousepressed(11, 540, 1, false, 2)
+      assert.equal(0, #seen)
+      F.session.mousereleased(11, 540, 1, false, 2)
+      assert.same({ { 'double', 11, 540 } }, seen)
+      F.love_update(0.5)
+      assert.equal(1, #seen)
+    end)
+
+    it('pairs a rapid series without swallowing later pairs', function()
+      for i = 1, 6 do
+        release(10, 540)
+        F.love_update(0.08)
+      end
+      assert.equal(3, #seen)
+      for _, event in ipairs(seen) do assert.equal('double', event[1]) end
+    end)
+
+    it('keeps two separate positions as two singles', function()
+      release(10, 540)
+      F.love_update(0.1)
+      release(40, 540)
+      F.love_update(0.5)
+      assert.same({ { 'single', 10, 540 }, { 'single', 40, 540 } }, seen)
+    end)
+
+    it('does not pair clicks outside the window', function()
+      release(10, 540)
+      F.love_update(0.41)
+      release(10, 540)
+      F.love_update(0.41)
+      assert.same({ { 'single', 10, 540 }, { 'single', 10, 540 } }, seen)
+    end)
+
+    it('drops pending clicks when the project stops', function()
+      release(10, 540)
+      F.cc:stop_project_run()
+      F.love_update(0.5)
+      assert.equal(0, #seen)
+    end)
+
+    it('does not transfer a press into a newly activated project', function()
+      F.session.mousepressed(10, 540, 1, false, 1)
+      F.cc:stop_project_run()
+      local input = F.activate_project()
+      input.hooks.singleclick = function() seen[#seen + 1] = true end
+      F.session.mousereleased(10, 540, 1, false, 1)
+      F.love_update(0.5)
+      assert.equal(0, #seen)
+    end)
   end)
 
   -- Project stop returns input to the console
