@@ -398,6 +398,7 @@ function ConsoleController:run_project(name)
       -- The program speaks for the board from here on; the
       -- console's own listeners wait until it has stopped.
       SerialPort:programStarted()
+      gfx.setFont(self.cfg.view.font)
       local rok, run_err = run_user_code(f, self, path)
       if not rok then
         -- Top-level code raised, so the route was never

@@ -50,6 +50,13 @@ lives in a global subsystem nobody snapshots.
 | **T2 — `compy.*`** | `compy.terminal`, `compy.audio`, `compy.graphics`, `compy.input` **(supported since 1.0.0-rc20260712)**… injected into the env (`get_compy_namespace`, `consoleController.lua:360`) | **Yes — framework wrappers.** The project calls a controlled surface; the framework owns the underlying object. No leak. |
 | **T3 — raw `love.*` imperative calls** | `love.keyboard.setKeyRepeat`/`setTextInput`, `love.mouse.setRelativeMode`/`setVisible`, raw `love.audio.newSource`/`play`, cursor… called (not defined) by the project | **No.** These invoke the shared C functions → mutate **real global SDL/LÖVE subsystem state**. Nothing snapshots or restores them across run boundaries. **They leak into the IDE/console after the project exits.** |
 
+### Font at project startup
+
+`ConsoleController:run_project` selects the configured Compy font, including
+its icon and CJK fallbacks, immediately before executing project code. Every
+run starts with that font, including restarts and runs after another project
+selected a custom font. A project can select its own font during execution.
+
 ## Why this matters
 
 - **T1 isolation is what makes the IDE survive a project** — a project that defines `love.draw` doesn't
