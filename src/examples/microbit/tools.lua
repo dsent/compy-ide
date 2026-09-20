@@ -146,6 +146,19 @@ function embed(hex_name, lua_name)
   print("wrote " .. hex_name)
 end
 
+--- Put a hex file on the board. The board takes it as new
+--- firmware the moment it lands, so nothing but a finished
+--- file ever reaches it: the platform writes it aside first
+--- and gives it its name once it is all there.
+--- @param filename string?
+function upload(filename)
+  local name = filename or HEX
+  local ok, err = flash_microbit(assert(readfile(name),
+    "no " .. name))
+  assert(ok, err)
+  print("flashed " .. name)
+end
+
 --- What a file has to say: its lines, less the blank ones
 --- and the comments. A directive is a comment too, and is
 --- left in for the caller to recognise.
@@ -231,6 +244,7 @@ local COMMANDS = {
   "extract(hex, lua)       its script out to a file",
   "embed(hex, lua)         a script into a new hex",
   "compile(lua, hex)       files into one, then into a hex",
+  "upload(hex)             a hex file onto the board",
 }
 
 function help()
