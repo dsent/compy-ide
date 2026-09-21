@@ -11,6 +11,13 @@ local ROW = 16
 -- "LUA1", least significant byte first
 local MAGIC = "\49\65\85\76"
 
+--- Two hex digits as the byte they spell
+--- @param pair string
+--- @return string
+local function unhex(pair)
+  return string.char(tonumber(pair, 16))
+end
+
 --- Bytes of one record, or nil if the line is not one
 --- @param line string
 --- @return integer? kind
@@ -22,12 +29,8 @@ local function record(line)
   local addr = tonumber(line:sub(4, 7), 16)
   local kind = tonumber(line:sub(8, 9), 16)
   assert(count and addr and kind, "bad hex record")
-  local body = {}
-  for i = 1, count do
-    local at = 10 + (i - 1) * 2
-    body[i] = string.char(tonumber(line:sub(at, at + 1), 16))
-  end
-  return kind, addr, table.concat(body)
+  local body = line:sub(10, 9 + count * 2):gsub("%x%x", unhex)
+  return kind, addr, body
 end
 
 --- The address a type 02 or 04 record sets
@@ -40,36 +43,54 @@ local function base_of(kind, body)
   return n * 16
 end
 
---- Bytes onto the block they continue, or onto a new one
---- @param blocks table[]
+--- Bytes onto the run they continue, or onto a new one. A
+--- run keeps its pieces apart and its length as it goes;
+--- settle joins them.
+--- @param gathered table[]
 --- @param last table?
 --- @param at integer
 --- @param body string
---- @return table the block they went to
-local function add(blocks, last, at, body)
-  if last and last.addr + #last.data == at then
-    last.data = last.data .. body
+--- @return table the run they went to
+local function add(gathered, last, at, body)
+  if last and last.addr + last.len == at then
+    last.parts[#last.parts + 1] = body
+    last.len = last.len + #body
     return last
   end
-  local block = { addr = at, data = body }
-  blocks[#blocks + 1] = block
-  return block
+  local run = { addr = at, parts = { body }, len = #body }
+  gathered[#gathered + 1] = run
+  return run
+end
+
+--- The blocks, each with its pieces joined into what it
+--- holds. They are gathered as they come and joined once: a
+--- block grows by a dozen bytes at a time, and rebuilding
+--- the whole string each time would take the length of the
+--- firmware squared.
+--- @param gathered table[]
+--- @return table[] blocks
+local function settle(gathered)
+  local blocks = {}
+  for i, g in ipairs(gathered) do
+    blocks[i] = { addr = g.addr, data = table.concat(g.parts) }
+  end
+  return blocks
 end
 
 --- The blocks of a hex file, in the order they appear
 --- @param text string
 --- @return table[] blocks
 function hex.parse(text)
-  local blocks, base, last = {}, 0, nil
+  local gathered, base, last = {}, 0, nil
   for line in text:gmatch("[^\r\n]+") do
     local kind, addr, body = record(line)
     if kind == 2 or kind == 4 then
       base = base_of(kind, body)
     elseif kind == 0 then
-      last = add(blocks, last, base + addr, body)
+      last = add(gathered, last, base + addr, body)
     end
   end
-  return blocks
+  return settle(gathered)
 end
 
 --- The checksum byte of a record
@@ -83,21 +104,23 @@ local function sum_of(addr, kind, body)
   return (-sum) % 256
 end
 
+-- Every byte as the two digits that spell it, looked up
+-- rather than formatted: a firmware image is a quarter of a
+-- million of them.
+local DIGITS = {}
+for i = 0, 255 do
+  DIGITS[string.char(i)] = string.format("%02X", i)
+end
+
 --- One record as a line
 --- @param addr integer
 --- @param kind integer
 --- @param body string
 --- @return string
 local function line_of(addr, kind, body)
-  local out = {
-    string.format(":%02X%04X%02X", #body, addr, kind)
-  }
-  for i = 1, #body do
-    out[#out + 1] = string.format("%02X", body:byte(i))
-  end
-  out[#out + 1] =
-    string.format("%02X", sum_of(addr, kind, body))
-  return table.concat(out)
+  return string.format(":%02X%04X%02X", #body, addr, kind)
+    .. (body:gsub(".", DIGITS))
+    .. DIGITS[string.char(sum_of(addr, kind, body))]
 end
 
 --- The block holding an address, and where in it
