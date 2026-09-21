@@ -16,6 +16,10 @@ local hex = require("hex")
 
 local HEX = "MICROBIT.hex"
 local LUA = "MICROBIT.lua"
+-- How much of the script hexmap shows, as hextract's
+-- structure does: enough to tell which script it is, and
+-- that the metadata points at one at all
+local PEEK = 256
 
 local EXEC_PREFIX = "assert(loadstring [[\r"
 local EXEC_SUFFIX = "]])()\r"
@@ -83,6 +87,15 @@ local function blocksOf(filename)
     "no " .. filename))
 end
 
+--- The start of a script, up to PEEK bytes, in whole lines
+--- @param script string
+--- @return string
+local function head(script)
+  local cut = script:sub(1, PEEK)
+  local whole = cut:match("^(.*)\n") or cut
+  return (whole:gsub("\n+$", ""))
+end
+
 --- Where a hex file's data sits
 --- @param blocks table[]
 local function regions(blocks)
@@ -106,7 +119,7 @@ function hexmap(filename)
   end
   print(string.format("script %08X - %08X  %d of %d",
     meta.start, meta.stop, meta.size, meta.space))
-  print(hex.script(blocks):sub(1, 60))
+  print(head(hex.script(blocks)))
 end
 
 --- Take the Lua script out of a hex file and keep it
