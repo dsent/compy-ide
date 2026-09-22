@@ -146,10 +146,9 @@ function embed(hex_name, lua_name)
   print("wrote " .. hex_name)
 end
 
---- Put a hex file on the board. The board takes it as new
---- firmware the moment it lands, so nothing but a finished
---- file ever reaches it: the platform writes it aside first
---- and gives it its name once it is all there. The board is
+--- Put a hex file on the board. The platform returns only
+--- once the file has reached the device, and the board takes
+--- it as new firmware and restarts on its own. The board is
 --- looked for each time: it is usually plugged in after
 --- Compy has started.
 --- @param filename string?
@@ -159,7 +158,7 @@ function upload(filename)
   local ok, err = flash_microbit(assert(readfile(name),
     "no " .. name))
   assert(ok, err)
-  print("flashed " .. name)
+  print(name .. " is on the board, it restarts with it")
 end
 
 --- What a file has to say: its lines, less the blank ones
