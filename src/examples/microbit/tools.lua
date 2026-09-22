@@ -149,10 +149,13 @@ end
 --- Put a hex file on the board. The board takes it as new
 --- firmware the moment it lands, so nothing but a finished
 --- file ever reaches it: the platform writes it aside first
---- and gives it its name once it is all there.
+--- and gives it its name once it is all there. The board is
+--- looked for each time: it is usually plugged in after
+--- Compy has started.
 --- @param filename string?
 function upload(filename)
   local name = filename or HEX
+  detect_microbit()
   local ok, err = flash_microbit(assert(readfile(name),
     "no " .. name))
   assert(ok, err)
