@@ -36,13 +36,14 @@ local M = {}
 --- What compyfmt says about one file's text, and the text the
 --- file should hold
 --- @param lines string[]
---- @return string[] text --- formatted, with a final newline
+--- @return string[] text --- formatted, with a final newline;
+--- the text as it was when it does not format
 --- @return string[] reports --- `line: what`, in line order
 --- @return boolean formatted --- the text formatted
 function M.inspect(lines)
   local verdict = check.gate(lines, display.columns)
   local text = verdict.lines
-  if text[#text] ~= '' then
+  if verdict.formatted and text[#text] ~= '' then
     text = table.clone(text)
     table.insert(text, '')
   end
@@ -80,23 +81,30 @@ function M.inspect(lines)
 end
 
 --- @param path string
---- @return string[]?
+--- @return string[]? --- nil when the file cannot be read
 local function read_lines(path)
   local f = io.open(path, 'rb')
   if not f then return end
   local s = f:read('*a')
   f:close()
-  return string.lines(s)
+  if s then return string.lines(s) end
 end
 
+--- Write beside the file, then put that in its place, so a
+--- write that fails leaves the file as it was
 --- @param path string
 --- @param lines string[]
 --- @return boolean
 local function write_lines(path, lines)
-  local f = io.open(path, 'wb')
+  local tmp = path .. '.compyfmt~'
+  local f = io.open(tmp, 'wb')
   if not f then return false end
-  f:write(string.unlines(lines))
-  f:close()
+  local written = f:write(string.unlines(lines))
+  local closed = f:close()
+  if not (written and closed and os.rename(tmp, path)) then
+    os.remove(tmp)
+    return false
+  end
   return true
 end
 
@@ -145,7 +153,8 @@ function M.main(args)
   return status
 end
 
-if ... ~= 'util.compyfmt' then
+--- run as a script, not required as a module
+if arg and arg[0] and string.match(arg[0], 'compyfmt%.lua$') then
   os.exit(M.main(arg))
 end
 return M

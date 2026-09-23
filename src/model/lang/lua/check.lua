@@ -99,14 +99,16 @@ end
 --- formatted, or as given when it does not format
 --- @field formatted boolean
 --- @field errors Error[] --- line and parse rules, on `lines`
---- @field blocks Block[]? --- `lines` chunked, once they pass
+--- @field blocks Block[]? --- `lines` chunked, when they parse
 --- @field oversized integer[] --- every block over the limit
 --- @field max_block integer
 
 --- The editor's verdict on accepting a block: format it, check
 --- the formatted text, then chunk it and measure every block.
 --- The checks read the formatted text, so a long line the
---- formatter wraps is no refusal.
+--- formatter wraps is no refusal. Blocks are measured whenever
+--- the text parses, so a report can name them beside a long
+--- line; the editor refuses the line first.
 --- @param lines string[]
 --- @param width integer? --- format width; a Compy's by default
 --- @param max_block integer? --- a Compy's limit by default
@@ -125,10 +127,10 @@ function M.gate(lines, width, max_block)
     oversized = {},
     max_block = max_block,
   }
-  if not ok then return verdict end
-  local _, blocks = get_parser().chunker(text, width, true)
+  local parsed, blocks = get_parser().chunker(text, width, true)
+  if not parsed then return verdict end
   verdict.blocks = blocks
-  for i, b in ipairs(blocks) do
+  for i in ipairs(blocks) do
     if M.excess(verdict, i) > 0 then
       verdict.ok = false
       table.insert(verdict.oversized, i)
