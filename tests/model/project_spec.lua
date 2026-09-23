@@ -91,6 +91,8 @@ describe('ProjectService #project', function()
     require('util.table')
     require('util.dequeue')
     package.loaded['model.project.project'] = nil
+    --- the flasher looks for the board through this FS too
+    package.loaded['util.usb'] = nil
     require('model.project.project')
     --- ProjectService:remove uses FS.rm, which the web FS branch
     --- gets from love.filesystem.remove — provide it via rm_rf
@@ -204,6 +206,55 @@ describe('ProjectService #project', function()
   end)
 
   describe('flash_microbit', function()
+    --- the instance setup loaded, which the flasher holds
+    local usb, now, pause
+
+    before_each(function()
+      usb = require('util.usb')
+      now, pause = usb.now, usb.pause
+    end)
+
+    after_each(function()
+      usb.now, usb.pause = now, pause
+    end)
+
+    --- A board on a folder. It holds DETAILS.TXT; once a file
+    --- is on it, it takes the drive away, keeping what it took,
+    --- and brings it back, with FAIL.TXT if asked to refuse.
+    --- `never` stops it at 'take' or at 'back'.
+    --- @return function what the board took, and what else
+    ---   was on its drive then
+    local function board(ddir, fail, never)
+      lfs.mkdir(ddir)
+      local function put(name, text)
+        local f = assert(io.open(ddir .. '/' .. name, 'w'))
+        f:write(text)
+        f:close()
+      end
+      put('DETAILS.TXT', 'Unique ID: 9904')
+      local clock, took, beside = 0, nil, {}
+      usb.now = function() return clock end
+      usb.pause = function(seconds)
+        clock = clock + seconds
+        if not took then
+          if never == 'take' then return end
+          for entry in lfs.dir(ddir) do
+            if entry ~= '.' and entry ~= '..' then
+              beside[#beside + 1] = entry
+            end
+          end
+          took = FS.combined_read(ddir .. '/microbit.hex')
+          rm_rf(ddir)
+          return
+        end
+        if never == 'back' then return end
+        lfs.mkdir(ddir)
+        put('DETAILS.TXT', 'Unique ID: 9904')
+        if fail then put('FAIL.TXT', fail) end
+      end
+      return function() return took, beside end
+    end
+
     it('refuses empty data #project', function()
       PS:opreate(ProjectService.DEFAULT)
       love.paths.microbit_path = tmp .. '/microbit'
@@ -214,25 +265,56 @@ describe('ProjectService #project', function()
 
     it('writes microbit.hex to the detected device root #project', function()
       local ddir = tmp .. '/microbit'
-      lfs.mkdir(ddir)
+      local taken = board(ddir)
       love.paths.microbit_path = ddir
       PS:opreate(ProjectService.DEFAULT)
       local ok, err = PS.current:flash_microbit(':firmware:data:')
       assert.is_true(ok)
       assert.is_nil(err)
-      local hex = FS.join_path(ddir, 'microbit.hex')
-      assert.is_true(FS.exists(hex))
-      local content = FS.combined_read(hex)
+      local content, beside = taken()
       assert.are.equal(':firmware:data:', content)
       --- no temp file left behind (temp has no extension, so it
       --- can't be mistaken for a hex flash by the micro:bit)
-      for entry in lfs.dir(ddir) do
-        if entry ~= '.' and entry ~= '..' then
-          assert.is_true(entry == 'microbit.hex',
-            'unexpected leftover: ' .. entry)
-        end
+      for _, entry in ipairs(beside) do
+        assert.is_true(entry == 'microbit.hex'
+          or entry == 'DETAILS.TXT',
+          'unexpected leftover: ' .. entry)
       end
     end)
+
+    it('says why the board refused the file #project', function()
+      local ddir = tmp .. '/microbit'
+      board(ddir, 'error: The hex file cannot be decoded.\r\n'
+        .. 'type: user\r\n')
+      love.paths.microbit_path = ddir
+      PS:opreate(ProjectService.DEFAULT)
+      local ok, err = PS.current:flash_microbit(':firmware:data:')
+      assert.is_false(ok)
+      assert.are.equal(usb.messages.refused(
+        'The hex file cannot be decoded.'), err)
+    end)
+
+    it('says when the board does not take the file #project',
+      function()
+        local ddir = tmp .. '/microbit'
+        board(ddir, nil, 'take')
+        love.paths.microbit_path = ddir
+        PS:opreate(ProjectService.DEFAULT)
+        local ok, err = PS.current:flash_microbit(':data:')
+        assert.is_false(ok)
+        assert.are.equal(usb.messages.not_taken, err)
+      end)
+
+    it('says when the board does not come back #project',
+      function()
+        local ddir = tmp .. '/microbit'
+        board(ddir, nil, 'back')
+        love.paths.microbit_path = ddir
+        PS:opreate(ProjectService.DEFAULT)
+        local ok, err = PS.current:flash_microbit(':data:')
+        assert.is_false(ok)
+        assert.are.equal(usb.messages.not_back, err)
+      end)
 
     it('reports when no device is present #project', function()
       love.paths.microbit_path = nil

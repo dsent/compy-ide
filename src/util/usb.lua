@@ -203,4 +203,71 @@ function usb.detect()
   return nil
 end
 
+--- Whether the drive is there at a root: its own file is
+--- @param root string
+--- @return boolean
+function usb.present(root)
+  return marker_present(root)
+end
+
+--- Waiting for the board to answer: the clock and a pause,
+--- which tests replace with a board of their own
+usb.now = function() return love.timer.getTime() end
+usb.pause = function(seconds) love.timer.sleep(seconds) end
+
+--- Seconds the board may take to start writing a file, and
+--- to come back once it has, and how often to look
+usb.TAKE_TIME = 30
+usb.BACK_TIME = 30
+usb.LOOK_EVERY = 0.25
+
+usb.messages = {
+  not_taken = 'The micro:bit got the file but did not start'
+      .. ' writing it. Unplug it, plug it back in, and'
+      .. ' upload again.',
+  not_back = 'The micro:bit wrote the file but has not come'
+      .. ' back. Unplug it and plug it back in; if it still'
+      .. ' runs the old program, upload again.',
+  refused = function(reason)
+    return 'The micro:bit did not take the file: ' .. reason
+        .. ' Upload a firmware file made for this micro:bit.'
+  end,
+}
+
+--- Wait until the drive is there, or gone
+--- @param root string
+--- @param there boolean
+--- @param seconds number
+--- @return boolean in_time
+local function wait_for(root, there, seconds)
+  local deadline = usb.now() + seconds
+  while usb.present(root) ~= there do
+    if usb.now() > deadline then return false end
+    usb.pause(usb.LOOK_EVERY)
+  end
+  return true
+end
+
+--- What the board made of a file put on its drive. It takes
+--- the drive away while it writes the file into its memory,
+--- and brings it back when it is done, with FAIL.TXT at its
+--- root if it could not.
+--- @param root string the drive's root
+--- @return boolean written
+--- @return string? why_not
+function usb.flash_result(root)
+  if not wait_for(root, false, usb.TAKE_TIME) then
+    return false, usb.messages.not_taken
+  end
+  if not wait_for(root, true, usb.BACK_TIME) then
+    return false, usb.messages.not_back
+  end
+  local fail = read_small(FS.join_path(root, 'FAIL.TXT'))
+  if fail then
+    local reason = fail:gsub('^error:%s*', ''):gsub('%s+$', '')
+    return false, usb.messages.refused(reason)
+  end
+  return true
+end
+
 return usb

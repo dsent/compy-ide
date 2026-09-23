@@ -2,6 +2,7 @@ require("util.lua")
 require("util.string.string")
 local FS = require("util.filesystem")
 local OS = require("util.os")
+local usb = require("util.usb")
 local class = require('util.class')
 
 local function error_annot(base)
@@ -159,7 +160,8 @@ end
 --- Uses the device path detected at startup (or refreshed
 --- on-demand via project_env.detect_microbit). Writes to a temp
 --- file (no extension) on the device root, syncs, then atomically
---- renames to microbit.hex.
+--- renames to microbit.hex, and waits for the board to write it
+--- into its memory and say how that went.
 --- @param data string
 --- @return boolean success
 --- @return string? error
@@ -188,11 +190,13 @@ function Project:flash_microbit(data)
 
   local hexpath = FS.join_path(path, 'microbit.hex')
   local rok, rerr = FS.rename(tmppath, hexpath)
-  if not rok then
+  --- a board that took the file before the rename has taken
+  --- its drive away with it
+  if not rok and usb.present(path) then
     FS.rm(tmppath)
     return false, rerr
   end
-  return true
+  return usb.flash_result(path)
 end
 
 local newps = function()
