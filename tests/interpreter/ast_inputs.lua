@@ -514,6 +514,17 @@ local comments = {
   })
 }
 
+--- code after a comment in the middle of an expression
+--- starts a line of its own, or the comment would swallow it
+comments[#comments + 1] = prep({
+  'x = a -- why',
+  '  + b',
+}, {
+  'x = a',
+  '-- why',
+  '    + b',
+})
+
 local emptylines = {
 
   -- standalone comment
@@ -1238,6 +1249,28 @@ local wrapping = {
 }
 
 local functions = {
+  --- only a chain of `.name` steps becomes `function a.b()`
+  prep({
+    'keys["1"] = function()',
+    '  go()',
+    'end',
+  }),
+  prep({
+    'actions.start["1"] = function()',
+    '  go()',
+    'end',
+  }),
+  prep({
+    'make().done = function()',
+    '  go()',
+    'end',
+  }),
+  --- and only a `.name` key becomes a method
+  prep({
+    'T[event] = function(self, x)',
+    '  return x',
+    'end',
+  }),
   prep({ 'fun(1)' }),
   prep({ 'fun(1)', 'fun(3)' }),
   prep({

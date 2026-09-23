@@ -53,7 +53,10 @@ function M.new(seen_comments, w)
     _last_nonempty_src_line = 0,
     -- Nothing emitted yet in the indented body just opened;
     -- a kept blank line never goes there
-    _body_start = false
+    _body_start = false,
+    -- The current line ends in a comment, so code must not
+    -- follow on it
+    _in_comment = false
   }
   return setmetatable(self, M)
 end
@@ -108,9 +111,15 @@ end
 ----------------------------------------------------------------
 function M:acc(x)
   if x then
+    if self._in_comment and string.find(x, "%S")
+        and not string.match(x, "^\n") then
+      --- code after a comment would be commented out
+      self:nltempindent(2)
+      x = (string.gsub(x, "^[ \t]+", ""))
+    end
     if string.find(x, "%S") then self._body_start = false end
     local clen = self._line_len
-    local l = string.ulen(x)
+    local l = string.ulen(x) or string.len(x)
     local lines = string.lines(x)
     local n_l = #lines
     local prev = self._acc[#self._acc]
@@ -147,7 +156,7 @@ end
 function M:fits(s)
   if type(s) == 'string' then
     local clen = self._line_len
-    local l = string.ulen(s)
+    local l = string.ulen(s) or string.len(s)
     local lines = string.lines(s)
     local n_l = #lines
     if n_l == 1 then return l + clen < self.wrap end
@@ -163,6 +172,7 @@ function M:nl()
   self:acc("\n" .. ind)
   self._line_len = string.len(ind)
   self._lines = self._lines + 1
+  self._in_comment = false
 end
 
 ----------------------------------------------------------------
@@ -299,10 +309,11 @@ end
 local function is_idx_stack(ast)
   local tag = ast.tag
   if tag == "Index" then
-    if ast[2] then
-      return ast[2].tag == "Id" or ast[2].tag == "String"
-    end
-    return is_idx_stack(ast[1])
+    --- every step must be a `.name`: `function t["1"]()`
+    --- and `function f().x()` are not Lua
+    local key = ast[2]
+    return key.tag == "String" and is_ident(key[1])
+        and is_idx_stack(ast[1])
   elseif tag == "Id" then
     return true
   else
@@ -553,6 +564,8 @@ function M:node(node, stmt)
         end
         --- comes _before_ the next expression
         if co.position == 'first' then self:nl() end
+        --- whatever follows a trailing one starts a line
+        if co.position == 'last' then self._in_comment = true end
         --- advance non-empty source line tracker to this comment's last line
         self:emptyline_gap_reset(co.last)
       end
@@ -729,6 +742,8 @@ function M:Set(node)
       and rhs[1].tag == "Function"
       and rhs[1][1][1] and rhs[1][1][1][1] == "self"
       and is_idx_stack(lhs[1][1])
+      --- `t[k] = function(self) end` is no method `t:k`
+      and lhs[1][2].tag == "String"
       and is_ident(lhs[1][2][1])
   then
     --- block 1
@@ -971,7 +986,8 @@ end
 function M:String(_, str)
   local fl        = string.len('"" ..' .. self.indent_step)
   local wl        = self.wrap - fl
-  local multiline = string.ulen(str) > wl
+  --- bytes that are not UTF-8 have no length in characters
+  local multiline = (string.ulen(str) or string.len(str)) > wl
   local rendered  = ''
   --- format "%q" prints '\n' in an umpractical way IMO,
   --- so this is fixed with the :gsub( ) call.
