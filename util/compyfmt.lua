@@ -1,95 +1,151 @@
-local home = os.getenv("HOME")
-package.path = package.path .. ";" ..
-    home .. "/.luarocks/share/lua/5.1/?.lua;" ..
-    home .. "/.luarocks/share/lua/5.1/?/init.lua" .. ";" ..
-    "./src/?.lua"
-package.cpath = package.cpath .. ";" ..
-    home .. "/.luarocks/lib/lua/5.1/?.so"
+--- compyfmt: the editor's formatting, gates and lints for Lua
+--- files, from the command line. Run it from the repository root
+--- with Lua 5.1 or LuaJIT:
+---
+---   luajit util/compyfmt.lua [--check] <file.lua>...
+---
+--- Fix (the default) formats each file in place, the way the
+--- editor writes code on a Compy, then reports what formatting
+--- could not resolve: the editor's gates (a line too long, an
+--- error, a block too large) and the lints.
+---
+--- --check changes no file. It reports every file that
+--- formatting would change, then the gates and lints of the
+--- formatted text; their line numbers are those of the file as
+--- it would be formatted.
+---
+--- A report line reads `file:line: what`. Both modes exit 1
+--- when they report anything and 2 when a file cannot be read.
 
+local home = os.getenv("HOME") or ''
+package.path = "./src/?.lua;./src/?/init.lua;" .. package.path
+    .. ";" .. home .. "/.luarocks/share/lua/5.1/?.lua"
+    .. ";" .. home .. "/.luarocks/share/lua/5.1/?/init.lua"
+package.cpath = package.cpath .. ";"
+    .. home .. "/.luarocks/lib/lua/5.1/?.so"
+
+require("util.string.string")
+require("util.table")
 local parser = require("model.lang.lua.parser")()
-local FS = require("util.filesystem")
+local check = require("model.lang.lua.check")
+local lint = require("model.lang.lua.lint")
+local display = require("conf.display")
 
-local files = {}
-local write = false
+local M = {}
 
-for _, a in ipairs(arg) do
-  if a == '--write'
-      or a == '-w'
-  then
-    write = true
-  elseif a:match("%.lua$")
-  then
-    table.insert(files, a)
+--- What compyfmt says about one file's text, and the text the
+--- file should hold
+--- @param lines string[]
+--- @return string[] text --- formatted, with a final newline
+--- @return string[] reports --- `line: what`, in line order
+--- @return boolean formatted --- the text formatted
+function M.inspect(lines)
+  local verdict = check.gate(lines, display.columns)
+  local text = verdict.lines
+  if text[#text] ~= '' then
+    text = table.clone(text)
+    table.insert(text, '')
   end
-end
-
-if #files == 0 then
-  print('Usage: ')
-  print('util/compyfmt [] <file1> <file2> ... <fileN> [-w]')
-  print('      -w, --write')
-  print('            Overwrite files with the formatted content')
-  print('            If not specified, it will be dumped to stdout instead')
-  os.exit(3)
-end
-
-local function debug(...)
-  io.stderr:write(..., "\n")
-end
-
-local function do_code(ast, seen_comments)
-  local w = 64
-  local code, comments = parser.ast_to_src(ast, seen_comments, w)
-  local seen = seen_comments or {}
-  for k, v in pairs(comments) do
-    --- if a table was passed in, this modifies it
-    seen[k] = v
+  local found = {}
+  local function add(l, what)
+    table.insert(found, { l = l or 1, what = what })
   end
-  return code, seen_comments
+
+  if not verdict.formatted and parser.parse(lines) then
+    add(1, 'cannot be formatted without changing what the'
+      .. ' code does; left as it is')
+  end
+  for _, e in ipairs(verdict.errors) do
+    add(e.l, e.msg)
+  end
+  for _, i in ipairs(verdict.oversized) do
+    local b = verdict.blocks[i]
+    add(b.pos.start, string.format(
+      'block of %d lines, %d over the limit of %d',
+      b.pos:len(), check.excess(verdict, i), verdict.max_block))
+  end
+  if #verdict.errors == 0 then
+    local _, _, ast = check.check(text)
+    for _, f in ipairs(lint.lint(text, ast)) do
+      add(f.l, f.msg .. ' (' .. f.rule .. ')')
+    end
+  end
+
+  table.sort(found, function(a, b) return a.l < b.l end)
+  local reports = {}
+  for _, f in ipairs(found) do
+    table.insert(reports, f.l .. ': ' .. f.what)
+  end
+  return text, reports, verdict.formatted
 end
 
-for _, f in ipairs(files) do
-  local result = {}
-  local rok, cont = FS.read(f)
-  if rok then
-    local ok, r = parser.parse(cont or '')
-    if ok then
-      local has_lines = false
-      local seen_comments = {}
-      for _i, v in ipairs(r) do
-        local li = v.lineinfo
-        local lfl = li.first.line
-        local lffl = li.first.facing.line
-        local d = lfl - (lffl + 1)
-        for _ = 1, d do
-          --- insert extra lines
-          table.insert(result, '')
-        end
+--- @param path string
+--- @return string[]?
+local function read_lines(path)
+  local f = io.open(path, 'rb')
+  if not f then return end
+  local s = f:read('*a')
+  f:close()
+  return string.lines(s)
+end
 
-        has_lines = true
-        local ct, _ = do_code(v, seen_comments)
-        for _, cl in ipairs(string.lines(ct) or {}) do
-          table.insert(result, cl)
-        end
-      end
-      --- corner case, e.g comments only
-      --- it is valid code, but gets parsed a bit differently
-      if not has_lines then
-        result = string.lines(do_code(r)) or {}
-      end
-      --- remove trailing newline
-      -- if result[#result] == '' then
-      --   table.remove(result)
-      -- end
+--- @param path string
+--- @param lines string[]
+--- @return boolean
+local function write_lines(path, lines)
+  local f = io.open(path, 'wb')
+  if not f then return false end
+  f:write(string.unlines(lines))
+  f:close()
+  return true
+end
 
-      if write then
-        local bak = f .. '.bak'
-        FS.cp(f, bak)
-        FS.write(f, string.unlines(result))
-        FS.unlink(bak)
-      else
-        print('==> ' .. f .. ' <==')
-        print(string.unlines(result))
+--- @param args string[]
+--- @return integer --- the exit status
+function M.main(args)
+  local fix = true
+  local files = {}
+  for _, a in ipairs(args) do
+    if a == '--check' then
+      fix = false
+    else
+      table.insert(files, a)
+    end
+  end
+  if #files == 0 then
+    io.stderr:write('Usage: luajit util/compyfmt.lua'
+      .. ' [--check] <file.lua>...\n')
+    return 2
+  end
+
+  local status = 0
+  for _, path in ipairs(files) do
+    local lines = read_lines(path)
+    if not lines then
+      io.stderr:write(path .. ': cannot be read\n')
+      status = 2
+    else
+      local text, reports = M.inspect(lines)
+      local changed = string.unlines(text) ~= string.unlines(lines)
+      if changed and fix and not write_lines(path, text) then
+        io.stderr:write(path .. ': cannot be written\n')
+        status = 2
+      end
+      if changed and not fix then
+        print(path .. ': not formatted')
+      end
+      for _, r in ipairs(reports) do
+        print(path .. ':' .. r)
+      end
+      if status == 0 and (#reports > 0 or changed and not fix) then
+        status = 1
       end
     end
   end
+  return status
 end
+
+if ... ~= 'util.compyfmt' then
+  os.exit(M.main(arg))
+end
+return M

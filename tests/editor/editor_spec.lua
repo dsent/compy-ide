@@ -2191,6 +2191,26 @@ describe('Editor #editor', function()
                         "the selection stays on its statement")
           end)
 
+        --- compyfmt formats at a Compy's width, and the test
+        --- editor's window is a Compy's
+        describe("gives compyfmt's result on", function()
+          local compyfmt = require("util.compyfmt")
+          local ls = assert(io.popen(
+            "find src/examples -name '*.lua' | sort"))
+          for path in ls:lines() do
+            it(path, function()
+              local f = assert(io.open(path))
+              local text = f:read('*a')
+              f:close()
+              session:open(text)
+              mock.keystroke('C-S-f', press)
+              local want = compyfmt.inspect(string.lines(text))
+              assert.same(string.unlines(want), savefile())
+            end)
+          end
+          ls:close()
+        end)
+
         it("leaves a file it cannot format safely as it is",
           function()
             local file = string.unlines({
