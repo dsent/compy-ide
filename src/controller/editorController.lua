@@ -782,14 +782,15 @@ end
 --- @param verdict GateVerdict?
 --- @return boolean refused
 function EditorController:_reject_oversized(verdict)
-  if not verdict or not verdict.oversized then return false end
-  local block = verdict.blocks[verdict.oversized]
+  local first = verdict and verdict.oversized[1]
+  if not first then return false end
+  local block = verdict.blocks[first]
   --- the wording follows 1.4: say what to do, not what
   --- the machine measured
   self:refuse({ string.format(
     'Too many lines in a block. Remove %d to save,'
     .. ' or press Shift+Esc to cancel',
-    verdict.excess
+    check.excess(verdict, first)
   ) })
   self.input.model:move_cursor(block.pos.start, 1)
   self.input:update_view()

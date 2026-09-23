@@ -93,8 +93,8 @@ describe('lua check #check', function()
         local verdict = check.gate(lines)
         assert.is_false(verdict.ok)
         assert.same({}, verdict.errors)
-        assert.equal(2, verdict.oversized)
-        assert.equal(1, verdict.excess)
+        assert.same({ 2 }, verdict.oversized)
+        assert.equal(1, check.excess(verdict, 2))
       end)
 
     it('gives back text that does not parse, with the error',

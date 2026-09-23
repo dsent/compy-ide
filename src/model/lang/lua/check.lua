@@ -100,8 +100,8 @@ end
 --- @field formatted boolean
 --- @field errors Error[] --- line and parse rules, on `lines`
 --- @field blocks Block[]? --- `lines` chunked, once they pass
---- @field oversized integer? --- the first block over the limit
---- @field excess integer? --- lines too many in that block
+--- @field oversized integer[] --- every block over the limit
+--- @field max_block integer
 
 --- The editor's verdict on accepting a block: format it, check
 --- the formatted text, then chunk it and measure every block.
@@ -122,20 +122,29 @@ function M.gate(lines, width, max_block)
     lines = text,
     formatted = formatted,
     errors = errors,
+    oversized = {},
+    max_block = max_block,
   }
   if not ok then return verdict end
   local _, blocks = get_parser().chunker(text, width, true)
   verdict.blocks = blocks
   for i, b in ipairs(blocks) do
-    local n = b.pos and b.pos:len() or 0
-    if n > max_block then
+    if M.excess(verdict, i) > 0 then
       verdict.ok = false
-      verdict.oversized = i
-      verdict.excess = n - max_block
-      break
+      table.insert(verdict.oversized, i)
     end
   end
   return verdict
+end
+
+--- Lines a block of the verdict has over the limit
+--- @param verdict GateVerdict
+--- @param i integer --- the block
+--- @return integer
+function M.excess(verdict, i)
+  local b = verdict.blocks[i]
+  local n = b and b.pos and b.pos:len() or 0
+  return n - verdict.max_block
 end
 
 return M
