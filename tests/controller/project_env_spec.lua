@@ -196,6 +196,15 @@ describe('ConsoleController project env #project', function()
     assert.is_table(env.gfx)
   end)
 
+  it('tidy formats a file of the open project #project', function()
+    CC:open_project(ProjectService.DEFAULT)
+    local env = CC:get_project_env()
+    assert.is_true(FS.write(tmp .. '/' .. ProjectService.DEFAULT
+      .. '/tidy_me.lua', 'a  =  1\n\n\n\nb = 2'))
+    assert.is_true(env.tidy('tidy_me.lua'))
+    assert.same('a = 1\n\nb = 2\n', env.readfile('tidy_me.lua'))
+  end)
+
   it('get_effective_env is always the project env #project', function()
     assert.are.equal(CC:get_project_env(), CC:get_effective_env())
     love.state.app_state = 'running'

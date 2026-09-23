@@ -319,6 +319,11 @@ function ConsoleController:tidy(name)
   local lines = self:_readlines(name)
   if not lines then return false end
   local out, formatted = format.format(lines, display.columns)
+  --- a file ends with a newline, as the editor and compyfmt
+  --- write it
+  if formatted and out[#out] ~= '' then
+    table.insert(out, '')
+  end
   if not formatted then
     local parsed, err = lua_parser().parse(lines)
     if not parsed and err and err.l then
