@@ -617,6 +617,22 @@ function BufferModel:replace_content(t, coord)
   end
 end
 
+--- Turn the empty block at `bn` into the given blocks: text
+--- typed on a blank line becomes that line (spec 2.1)
+--- @param t Block[]
+--- @param bn integer
+--- @return integer --- how many blocks the text now takes
+function BufferModel:fill_empty(t, bn)
+  local last = t[#t]
+  self:replace_content(t, bn)
+  --- the blank line may be the one after the final newline;
+  --- re-chunking puts that back
+  self:rechunk()
+  local after = self:block_at_line(last.pos.fin + 1)
+      or self:get_content_length() + 1
+  return after - bn
+end
+
 --- Insert a new line or empty block _before_ the selection
 --- Returns true if a block/line was inserted
 --- @param i integer?

@@ -638,7 +638,7 @@ describe('Editor #editor', function()
 
         controller:textinput('y')
         assert.same('edit', controller:get_mode())
-        --- nothing was loaded: the text composes fresh
+        --- the blank line holds no text: it composes fresh
         assert.same({ 'y' }, inter:get_text())
       end)
 
@@ -2049,9 +2049,12 @@ describe('Editor #editor', function()
           function()
             session:open('\n\n\n', 4)
             session:select_block(1)
-            session:submit('a = 1')
-            assert.same('a = 1\n\n\n\n', savefile(),
-                        "the three blank lines stay below it")
+            for ch in ('a = 1'):gmatch('.') do
+              controller:textinput(ch)
+            end
+            mock.keystroke('return', press)
+            assert.same('a = 1\n\n\n', savefile(),
+                        "the line typed on became the code")
           end)
 
         it("do not grow an empty function body", function()
@@ -2119,6 +2122,63 @@ describe('Editor #editor', function()
                             fmt("block #%d accepted again", n))
               end
             end
+          end)
+      end)
+
+      --- spec 2.1: on a blank line the typed text turns that
+      --- line into the new block
+      describe("typing on a blank line", function()
+        --- @param text string
+        local function type_text(text)
+          for ch in text:gmatch('.') do
+            controller:textinput(ch)
+          end
+          mock.keystroke('return', press)
+        end
+
+        it("between two blocks turns that line into the block",
+          function()
+            session:open('a = 1\n\nb = 2\n\n\nc = 3\n', 7)
+            session:select_block(2)
+            type_text('x = 0')
+            assert.same('a = 1\nx = 0\nb = 2\n\n\nc = 3\n',
+                        savefile())
+          end)
+
+        it("that is the last of the file turns it into the block",
+          function()
+            session:open('a = 1\n\n', 3)
+            session:select_block(2)
+            type_text('b = 2')
+            assert.same('a = 1\nb = 2\n', savefile())
+          end)
+
+        it("after the final newline adds the block there",
+          function()
+            session:open('a = 1\n\n', 3)
+            session:select_block(3)
+            type_text('b = 2')
+            assert.same('a = 1\n\nb = 2\n', savefile())
+          end)
+
+        it("moves on past the new block, so typing goes on below",
+          function()
+            local _, buffer = session:open('', 1)
+            session:select_block(1)
+            type_text('x = 1')
+            assert.same(2, buffer:get_selection())
+            type_text('y = 2')
+            assert.same('x = 1\ny = 2\n', savefile())
+          end)
+
+        it("leaves a new block opened above it alone (2.7)",
+          function()
+            session:open('a = 1\n\nb = 2\n', 4)
+            session:select_block(1)
+            mock.keystroke('C-return', press)
+            type_text('x = 0')
+            assert.same('a = 1\nx = 0\n\nb = 2\n', savefile(),
+                        "the blank line below stays")
           end)
       end)
 

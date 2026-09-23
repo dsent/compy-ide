@@ -643,7 +643,7 @@ function EditorController:open_block()
   local row = buf:get_active_line() - span.start + 1
 
   local t = buf:get_selected_text()
-  if string.is_non_empty(t) then
+  if string.is_non_empty(t) or self:_on_blank_line() then
     buf:set_loaded()
   else
     buf:clear_loaded()
@@ -676,8 +676,8 @@ end
 --- Typing in navigation starts editing at the active
 --- line: its block opens and a blank line appears there
 --- to type into, pushing the rest down (spec 2.1). On a
---- blank line the text becomes a new block instead, so
---- the input stays empty and acceptance inserts.
+--- blank line the input starts empty, and acceptance
+--- turns that line into the new block.
 function EditorController:start_typing()
   local buf = self:get_active_buffer()
   if buf.content_type ~= 'lua' then
@@ -796,9 +796,22 @@ function EditorController:_reject_oversized(verdict)
   return true
 end
 
+--- @private
+--- The selection is a blank line of the file, a Lua empty
+--- block, as opposed to the open place past its end
+--- @return boolean
+function EditorController:_on_blank_line()
+  local buf = self:get_active_buffer()
+  if buf.content_type ~= 'lua' then return false end
+  local block = buf:get_content()[buf:get_selection()]
+  return block ~= nil and block:is_empty()
+end
+
 --- Accept the open block into the file: validate, size
 --- check, re-chunk, write (spec 2.4.2). Acceptance in
---- place keeps the block and scrolls back to it.
+--- place keeps the block and scrolls back to it. Text
+--- typed on a blank line becomes that line (2.1), and the
+--- selection moves past it, so typing goes on below.
 --- @return boolean accepted
 function EditorController:accept_block()
   return self:_handle_submit(function(newtext, verdict)
@@ -816,8 +829,16 @@ function EditorController:accept_block()
     if self:_reject_oversized(verdict) then
       return false
     end
+    local blank = self:_on_blank_line()
     local saved = self:record_write(buf, function()
-      local _, n = buf:replace_content(newtext)
+      local n
+      if blank then
+        local sel = buf:get_selection()
+        n = buf:fill_empty(newtext, sel)
+        buf:set_selection(sel + n)
+      else
+        n = select(2, buf:replace_content(newtext))
+      end
       local ok = self:save(buf)
       self.accepted_n = n
       return ok
