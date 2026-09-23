@@ -44,7 +44,7 @@ The `LuaEditorEval` evaluator (`src/model/interpreter/eval/evaluator.lua:168`) i
 
 **`input_max` vs `LINES`** — two separate height limits. `input_max = 14` is the input strip height, used as the `VisibleContent` `size_max` in `UserInputModel` and to calculate the physical pixel height of the input widget. `LINES = 16` is the buffer viewport height. `input_max = 14` was deliberately chosen to match the code convention (function body ≤ 14 lines): a conforming block fills the input view exactly, with no scrolling needed.
 
-The monster block fix (`2ff95f03`) uses `bufv:get_max_size()` — which returns `LINES = 16` — as the submission rejection threshold. This means the editor currently accepts blocks of up to 16 lines, which is inconsistent with the convention and with `input_max`: a 15- or 16-line block passes the oversize check but violates the style limit and cannot be fully seen in the input strip without scrolling. The correct threshold would be `input_max` (14). `BufferView` has access to `self.cfg` so `get_max_size()` could return `self.cfg.input_max` instead of `self.LINES`.
+The block size limit is `input_max`: `bufv:get_max_size()` returns it, and the editor passes it to the gate. A Compy's values for both limits, the 64-column line and the 14-line block, live in `src/conf/display.lua`, where tools that format away from a Compy read them.
 
 ---
 
@@ -62,15 +62,14 @@ Source: `BufferModel:set_loaded`, `loaded_is_sel`, `select_loaded` (bufferModel.
 
 ## The Submit Pipeline (Lua Mode)
 
-Pressing `Enter` on non-empty input goes through `_handle_submit` (editorController.lua:321), which is more involved than it looks:
+Pressing `Enter` on non-empty input goes through `_handle_submit`, which asks the gate in `src/model/lang/lua/check.lua` for its verdict. `check.gate(lines, width, max_block)` is the editor's whole verdict on accepting a block, and every other tool that wants that verdict calls the same function:
 
-1. **Pretty-print** — the raw input text is passed through `parser.ast_to_src` (metalua's printer). The displayed result may differ from what was typed (spacing, indentation, end-placement). If pprint fails, the original is used as fallback. `ast_to_src` behaviour is covered by `tests/interpreter/analyzer_spec.lua`, which is its primary specification. Where the source has one or more blank lines before a statement or an own-line comment, at any nesting depth, the printer emits exactly one empty line. The start of an indented body keeps none, so the indented placeholder line of an empty function body is regenerated and never read as a typed blank line.
-2. **Re-chunk** — the pretty-printed result is chunked again to get the actual block structure that will be stored.
-3. **Trailing blank lines** — blank lines ending the input follow no token the printer could measure from, so it drops them; if the raw input ends with an `Empty` and the pretty-printed version does not, one `Empty` is restored there.
-4. **No blank line of the editor's own** — the pipeline adds no `Empty` beyond what steps 1 and 3 keep. Blank lines outside the accepted block stay as they are: the chunker makes one `Empty` per blank line, so re-chunking the whole file after the write keeps every run.
-5. **Oversize check** — if any resulting block exceeds the size limit (currently `bufv:get_max_size()` = `LINES` = 16, though the intended limit is `input_max` = 14 — see Monster Blocks section), the submit is rejected. The cursor moves to line 1 of the offending block; no error message.
-6. **Replace or Insert** — `replace_content` or `insert_content` updates the buffer, adjusting all subsequent block positions via `Range:translate`.
-7. **Auto-save** — `buf:save()` is called immediately. Every accepted submit writes to disk.
+1. **Format** — `format.format(lines, width)` (`src/model/lang/lua/format.lua`) rewrites the text through metalua's printer (`ast_to_src`). The result may differ from what was typed (spacing, indentation, end-placement). Where the source has one or more blank lines before a statement or an own-line comment, at any nesting depth, the printer emits exactly one empty line. The start of an indented body keeps none, so the indented placeholder line of an empty function body is regenerated and never read as a typed blank line. Blank lines ending the text follow no token the printer measures from; `format` keeps one there. The formatted text must parse to the same program, with the same comment text, and must come out unchanged when formatted again; otherwise, and when the text does not parse, `format` returns it as it was. The printer's own behaviour is covered by `tests/interpreter/ast_spec.lua`, `format`'s by `tests/interpreter/format_spec.lua`.
+2. **Line and parse rules** — `check.check` runs on the formatted text: line length (the Compy's 64 columns), then a parse. The input shows the formatted text, and a refusal moves the cursor to the error. A long line the formatter wraps is no refusal.
+3. **Chunk and measure** — the formatted text is chunked into the blocks that will be stored, and a block longer than `max_block` (the input's height, `input_max` = 14) makes the verdict name that block and how many lines it has too many. The editor refuses it with a message after its own visibility checks, and moves the cursor to the block's first line.
+4. **No blank line of the editor's own** — nothing adds an `Empty` beyond what step 1 keeps. Blank lines outside the accepted block stay as they are: the chunker makes one `Empty` per blank line, so re-chunking the whole file after the write keeps every run.
+5. **Replace or Insert** — `replace_content` or `insert_content` updates the buffer, adjusting all subsequent block positions via `Range:translate`.
+6. **Auto-save** — `buf:save()` is called immediately. Every accepted submit writes to disk.
 
 `Ctrl+Enter` inserts the new block(s) before the selection rather than replacing it.
 
@@ -85,9 +84,7 @@ A block with more source lines than the editor's size limit is a **monster block
 - **Visibility tolerance** — the submit handler uses `bufv:is_selection_visible(true)` (the oversize-tolerant variant) when checking whether to proceed. A monster block whose start line is at the top of the visible range is considered "visible enough" to edit, even though it extends beyond the bottom.
 - **Submitting** — the submitted content is chunked. If all resulting chunks are within the size limit, they replace the monster block (effectively splitting it). If any chunk is still oversized, that chunk is rejected and the cursor moves to its first line (`reject_oversized`).
 
-The practical editing pattern: load the monster block, edit it into valid code that chunks into conforming-size pieces, submit. Multiple resulting chunks each become their own block in the buffer, separated by the blank lines typed between them and no others (steps 1 and 3 of the submit pipeline).
-
-**Note on the current size limit:** the oversize check calls `bufv:get_max_size()` which returns `LINES = 16` (buffer viewport height). The intended limit is `input_max = 14` (input view height, matching the code convention). This means the editor currently accepts blocks of 15–16 lines that violate the convention and require input scrolling to view fully. See the `input_max` vs `LINES` note in the Input Widget section above.
+The practical editing pattern: load the monster block, edit it into valid code that chunks into conforming-size pieces, submit. Multiple resulting chunks each become their own block in the buffer, separated by the blank lines typed between them and no others (step 1 of the submit pipeline).
 
 Source: commit `2ff95f03b8f8` ("Split monster block"); logic in `editorController.lua:_handle_submit` and `bufferView.lua:is_selection_visible`.
 
@@ -184,4 +181,6 @@ The buffer ID ensures the view can retrieve the right `BufferView` even after th
 | `src/view/editor/visibleBlock.lua` | Per-block wrap + highlight remapping |
 | `src/util/wrapped_text.lua` | Core wrap tables (forward/reverse/rank) |
 | `src/model/lang/lua/analyze.lua` | AST walker producing SemanticInfo |
+| `src/model/lang/lua/format.lua` | Formatting: the text as the editor writes it |
+| `src/model/lang/lua/check.lua` | Gates: line, parse and block-size rules, and `gate`, the editor's verdict |
 | `src/model/interpreter/eval/evaluator.lua` | Evaluator types including LuaEditorEval |
