@@ -4,7 +4,7 @@
 
 ## The Core Concept: Block-Centric Editing
 
-The editor does not operate on lines. For Lua files, it operates on **blocks** — top-level syntactic units produced by the metalua chunker. A block is either a `Chunk` (one or more source lines forming a complete top-level statement/expression) or an `Empty` (a blank separator line). The selection highlight, navigation, submit, delete, insert, and move operations all act on blocks, not on individual lines.
+The editor does not operate on lines. For Lua files, it operates on **blocks** — top-level syntactic units produced by the metalua chunker. A block is either a `Chunk` (one or more source lines forming a complete top-level statement/expression) or an `Empty` (one blank line; a run of blank lines is a run of `Empty` blocks). The selection highlight, navigation, submit, delete, insert, and move operations all act on blocks, not on individual lines.
 
 For plain text and Markdown files, the model falls back to line-level editing — each line is its own "block".
 
@@ -64,10 +64,10 @@ Source: `BufferModel:set_loaded`, `loaded_is_sel`, `select_loaded` (bufferModel.
 
 Pressing `Enter` on non-empty input goes through `_handle_submit` (editorController.lua:321), which is more involved than it looks:
 
-1. **Pretty-print** — the raw input text is passed through `parser.ast_to_src` (metalua's printer). The displayed result may differ from what was typed (spacing, indentation, end-placement). If pprint fails, the original is used as fallback. `ast_to_src` behaviour is covered by `tests/interpreter/analyzer_spec.lua`, which is its primary specification.
+1. **Pretty-print** — the raw input text is passed through `parser.ast_to_src` (metalua's printer). The displayed result may differ from what was typed (spacing, indentation, end-placement). If pprint fails, the original is used as fallback. `ast_to_src` behaviour is covered by `tests/interpreter/analyzer_spec.lua`, which is its primary specification. Where the source has one or more blank lines before a statement or an own-line comment, at any nesting depth, the printer emits exactly one empty line. The start of an indented body keeps none, so the indented placeholder line of an empty function body is regenerated and never read as a typed blank line.
 2. **Re-chunk** — the pretty-printed result is chunked again to get the actual block structure that will be stored.
-3. **Empty preservation** — if the raw input had a leading or trailing `Empty` block but the pretty-printed version does not, those empties are restored. This preserves the user's intentional blank-line spacing.
-4. **Empty injection** — if two consecutive non-empty chunks emerged from the pretty-print, an `Empty` is inserted between them. Enforces the "at most one blank line" format rule at the model level.
+3. **Trailing blank lines** — blank lines ending the input follow no token the printer could measure from, so it drops them; if the raw input ends with an `Empty` and the pretty-printed version does not, one `Empty` is restored there.
+4. **No blank line of the editor's own** — the pipeline adds no `Empty` beyond what steps 1 and 3 keep. Blank lines outside the accepted block stay as they are: the chunker makes one `Empty` per blank line, so re-chunking the whole file after the write keeps every run.
 5. **Oversize check** — if any resulting block exceeds the size limit (currently `bufv:get_max_size()` = `LINES` = 16, though the intended limit is `input_max` = 14 — see Monster Blocks section), the submit is rejected. The cursor moves to line 1 of the offending block; no error message.
 6. **Replace or Insert** — `replace_content` or `insert_content` updates the buffer, adjusting all subsequent block positions via `Range:translate`.
 7. **Auto-save** — `buf:save()` is called immediately. Every accepted submit writes to disk.
@@ -85,7 +85,7 @@ A block with more source lines than the editor's size limit is a **monster block
 - **Visibility tolerance** — the submit handler uses `bufv:is_selection_visible(true)` (the oversize-tolerant variant) when checking whether to proceed. A monster block whose start line is at the top of the visible range is considered "visible enough" to edit, even though it extends beyond the bottom.
 - **Submitting** — the submitted content is chunked. If all resulting chunks are within the size limit, they replace the monster block (effectively splitting it). If any chunk is still oversized, that chunk is rejected and the cursor moves to its first line (`reject_oversized`).
 
-The practical editing pattern: load the monster block, edit it into valid code that chunks into conforming-size pieces, submit. Multiple resulting chunks each become their own block in the buffer, with empty separators injected between consecutive non-empty ones (step 4 of the submit pipeline).
+The practical editing pattern: load the monster block, edit it into valid code that chunks into conforming-size pieces, submit. Multiple resulting chunks each become their own block in the buffer, separated by the blank lines typed between them and no others (steps 1 and 3 of the submit pipeline).
 
 **Note on the current size limit:** the oversize check calls `bufv:get_max_size()` which returns `LINES = 16` (buffer viewport height). The intended limit is `input_max = 14` (input view height, matching the code convention). This means the editor currently accepts blocks of 15–16 lines that violate the convention and require input scrolling to view fully. See the `input_max` vs `LINES` note in the Input Widget section above.
 
