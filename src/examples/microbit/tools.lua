@@ -8,8 +8,9 @@
 -- terminal: it ends its lines with CR, and it echoes every
 -- character it receives.
 --
--- Typing to the board is the "terminal" project; these are
--- the commands around it — feed it a file, run one.
+-- Typing to the board is the "terminal" project. These are
+-- the commands around it: feeding it a file or running one,
+-- and working with the firmware it is flashed with.
 
 local serial = compy.serial
 local hex = require("hex")
@@ -21,9 +22,16 @@ local LUA = "MICROBIT.lua"
 -- that the metadata points at one at all
 local PEEK = 256
 
-local EXEC_PREFIX = "assert(loadstring [[\r"
-local EXEC_SUFFIX = "]])()\r"
-local EXEC_MARKER = "]])()"
+-- A chunk of its own, so what the code declares stays in it
+local WRAP = "assert(loadstring[["
+local UNWRAP = "]])()"
+
+--- A project file, or a stop saying there is none
+--- @param filename string
+--- @return string
+local function read(filename)
+  return assert(readfile(filename), "no " .. filename)
+end
 
 -- send, exec --------------------------------------------------
 
@@ -32,7 +40,7 @@ local EXEC_MARKER = "]])()"
 --- @param filename string
 --- @return string
 local function fileForBoard(filename)
-  local text = assert(readfile(filename), "no " .. filename)
+  local text = read(filename)
   local cr = text:gsub("\r\n", "\n"):gsub("\n", "\r")
   if cr:sub(-1) ~= "\r" then cr = cr .. "\r" end
   return cr
@@ -58,7 +66,10 @@ local function silentUntil(marker)
     heard = heard .. chunk
     local _, at = heard:find(marker, 1, true)
     if not at then return end
-    if not showing then return echo(false) end
+    if not showing then
+      echo(false)
+      return
+    end
     echo()
     serial.onBytes(heard:sub(at + 1))
   end
@@ -71,9 +82,9 @@ end
 --- @param filename string
 function exec(filename)
   local body = fileForBoard(filename)
-  local code = EXEC_PREFIX .. body .. EXEC_SUFFIX
+  local code = WRAP .. "\r" .. body .. UNWRAP .. "\r"
   showing = serial.onBytes ~= nil
-  serial.onBytes = silentUntil(EXEC_MARKER)
+  serial.onBytes = silentUntil(UNWRAP)
   assert(serial.send(code))
 end
 
@@ -83,8 +94,7 @@ end
 --- @param filename string
 --- @return table[]
 local function blocksOf(filename)
-  return hex.parse(assert(readfile(filename),
-    "no " .. filename))
+  return hex.parse(read(filename))
 end
 
 --- The start of a script, up to PEEK bytes, in whole lines
@@ -139,27 +149,10 @@ end
 function embed(hex_name, lua_name)
   assert(hex_name, "name the hex file to write")
   assert(hex_name ~= HEX, HEX .. " cannot be overwritten")
-  local name = lua_name or LUA
   local blocks = blocksOf(HEX)
-  hex.embed(blocks, assert(readfile(name), "no " .. name))
+  hex.embed(blocks, read(lua_name or LUA))
   writefile(hex_name, hex.write(blocks))
   print("wrote " .. hex_name)
-end
-
---- Put a hex file on the board. The board is looked for each
---- time, since it usually goes in after Compy has started.
---- Writing takes a few seconds and the screen does not move
---- until it is done, so a sound says the writing has begun:
---- it plays on while the file goes out.
---- @param filename string?
-function upload(filename)
-  local name = filename or HEX
-  local data = assert(readfile(name), "no " .. name)
-  assert(detect_microbit(), "No micro:bit is plugged in")
-  compy.audio.hyperjump()
-  local ok, err = flash_microbit(data)
-  assert(ok, err)
-  print(name .. " is on the board, it restarts with it")
 end
 
 --- What a file has to say: its lines, less the blank ones
@@ -169,8 +162,7 @@ end
 --- @return string[]
 local function linesOf(filename)
   local kept = {}
-  local text = assert(readfile(filename), "no " .. filename)
-  for line in text:gmatch("[^\r\n]*") do
+  for line in read(filename):gmatch("[^\r\n]*") do
     local code = line:find("%S") and not line:find("^%s*%-%-")
     if code or line:find("^%s*%-%->>?%s+%S+%s*$") then
       kept[#kept + 1] = line
@@ -208,9 +200,9 @@ local function expand(out, line)
   if not name then
     out[#out + 1] = line
   elseif wrapped then
-    out[#out + 1] = "assert(loadstring[["
+    out[#out + 1] = WRAP
     bring(out, name)
-    out[#out + 1] = "]])()"
+    out[#out + 1] = UNWRAP
   else
     bring(out, name)
   end
@@ -231,6 +223,22 @@ function compile(lua_name, hex_name)
   end
   writefile(LUA, table.concat(out, "\n") .. "\n")
   embed(hex_name or (lua_name:gsub("%.lua$", "") .. ".hex"))
+end
+
+--- Put a hex file on the board. The board is looked for each
+--- time, since it usually goes in after Compy has started.
+--- Writing takes a few seconds and the screen does not move
+--- until it is done, so a sound says the writing has begun:
+--- it plays on while the file goes out.
+--- @param filename string?
+function upload(filename)
+  local name = filename or HEX
+  local data = read(name)
+  assert(detect_microbit(), "no micro:bit plugged in")
+  compy.audio.hyperjump()
+  local ok, err = flash_microbit(data)
+  assert(ok, err)
+  print(name .. " is on the board, it restarts with it")
 end
 
 -- help --------------------------------------------------------
