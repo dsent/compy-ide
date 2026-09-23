@@ -1780,13 +1780,10 @@ describe('Editor #editor', function()
                        buffer:get_selected_text(),
                        "first block injected first")
           session:select_block(2)
-          assert.same({}, buffer:get_selected_text(),
-                      "empty line injected after first")
-          session:select_block(3)
           assert.same( string.lines(f2),
                        buffer:get_selected_text(),
-                       "second block injected second")
-          assert.same(src(f1,'',f2,''), savefile(),
+                       "second block follows, no empty line added")
+          assert.same(src(f1, f2, ''), savefile(),
                       "old block replaced in saved content")
 
         end)
@@ -1870,7 +1867,6 @@ describe('Editor #editor', function()
 
           local expected  = src(emptyline,
                                 comment,
-                                emptyline,
                                 single_loc,
                                 emptyline)
 
@@ -1893,7 +1889,6 @@ describe('Editor #editor', function()
 
           local expected  = src(emptyline,
                                 comment,
-                                emptyline,
                                 block,
                                 emptyline)
 
@@ -1944,9 +1939,10 @@ describe('Editor #editor', function()
 
         --- opening a block pretty-prints it into the input, which
         --- gives the comment a line of its own below the code;
-        --- accepting writes it back as any two blocks
+        --- accepting writes it back as two blocks, no blank
+        --- line between them
         local opened = src(code, comment)
-        local accepted = src(first, code, '', comment, '')
+        local accepted = src(first, code, comment, '')
 
         it("is shown as written and accepted on its own line",
           function()
@@ -1975,6 +1971,146 @@ describe('Editor #editor', function()
           assert.same(accepted, savefile(),
                       "second accept leaves the file alone")
         end)
+      end)
+
+      --- The editor adds no blank line; blank lines typed in
+      --- the accepted block stay, a run collapsed to one; blank
+      --- lines outside it are never changed
+      describe("blank lines on acceptance", function()
+        --- open the block, accept it as the input shows it
+        local function accept_as_is(n)
+          session:select_and_open_block(n)
+          mock.keystroke('return', press)
+        end
+
+        it("are not added between typed statements", function()
+          session:open('a = 1\n', 2)
+          session:select_and_open_block(1, 'a = 1')
+          session:submit('a = 1\nb = 2')
+          assert.same('a = 1\nb = 2\n', savefile())
+        end)
+
+        it("typed at top level stay, a run collapsed to one",
+          function()
+            session:open('x = 0\ny = 0\n', 3)
+            session:select_and_open_block(1, 'x = 0')
+            session:submit('\n\n\nx = 1\n\n\n\na = 1\nb = 1\n\n')
+            assert.same('\nx = 1\n\na = 1\nb = 1\n\ny = 0\n',
+                        savefile())
+          end)
+
+        it("typed inside a function body stay, one per run",
+          function()
+            session:open('a = 1\n', 2)
+            session:select_and_open_block(1, 'a = 1')
+            session:submit(string.unlines({
+              'function f()',
+              '  local x = 1',
+              '',
+              '',
+              '  -- note',
+              '',
+              '  return x',
+              'end',
+            }))
+            assert.same(string.unlines({
+              'function f()',
+              '  local x = 1',
+              '',
+              '  -- note',
+              '',
+              '  return x',
+              'end',
+              '',
+            }), savefile())
+          end)
+
+        it("outside the block are left alone", function()
+          local file = 'a = 1\n\n\n\nb = 2\n\nc = 3\n'
+          session:open(file, 8)
+          session:select_and_open_block(7, 'c = 3')
+          session:submit('c = 4')
+          assert.same('a = 1\n\n\n\nb = 2\n\nc = 4\n', savefile(),
+                      "the run of three is still three")
+        end)
+
+        it("before a comment leave the blocks after it in place",
+          function()
+            local file = 'a = 1\n\n\n\n-- note\nb = 2\n'
+            session:open(file, 7)
+            session:select_block(5, '-- note')
+            session:select_and_open_block(6, 'b = 2')
+            session:submit('b = 3')
+            assert.same('a = 1\n\n\n\n-- note\nb = 3\n',
+                        savefile())
+          end)
+
+        it("do not grow an empty function body", function()
+          local placeholder = 'function g()\n  \nend\n'
+          session:open('function g() end\n', 2)
+          session:select_and_open_block(1)
+          session:submit('function g() end')
+          assert.same(placeholder, savefile(), "indented slot")
+
+          accept_as_is(1)
+          assert.same(placeholder, savefile(), "accepted again")
+
+          session:select_and_open_block(1)
+          session:submit('function g()\n\n\nend')
+          assert.same(placeholder, savefile(), "emptied slot")
+
+          --- code typed below the slot leaves the slot behind;
+          --- it is no blank line of the user's
+          session:select_and_open_block(1)
+          session:submit('function g()\n  \n  x()\nend')
+          assert.same('function g()\n  x()\nend\n', savefile(),
+                      "slot left behind")
+        end)
+
+        it("leave the file byte-identical on a second accept",
+          function()
+            session:open('local a = 1\n', 2)
+            session:select_and_open_block(1)
+            session:submit(string.unlines({
+              'local a = 1',
+              '',
+              '',
+              '-- note',
+              '',
+              'function f()',
+              '  local x = 1',
+              '',
+              '',
+              '  return x',
+              'end',
+              'function g() end',
+            }))
+            local once = savefile()
+            assert.same(string.unlines({
+              'local a = 1',
+              '',
+              '-- note',
+              '',
+              'function f()',
+              '  local x = 1',
+              '',
+              '  return x',
+              'end',
+              'function g()',
+              '  ',
+              'end',
+              '',
+            }), once)
+
+            local buffer = session.buffer
+            for n = 1, buffer:get_content_length() do
+              if not buffer:get_content()[n]:is_empty() then
+                accept_as_is(n)
+                assert.same(once, savefile(),
+                            fmt("block #%d accepted again", n))
+              end
+            end
+          end)
       end)
 
       describe("insertion of", function()
@@ -2027,10 +2163,10 @@ describe('Editor #editor', function()
           session:submit(new_code, true)
 
           assert.is_true(input:is_empty(), "input cleared")
-          assert.same(n_blocks+3, buffer:get_content_length(),
-                      "buffer size increased by 3 blocks")
-          assert.same(n_blocks+3, buffer.selection,
-                      "selection moved down by 3")
+          assert.same(n_blocks+2, buffer:get_content_length(),
+                      "buffer size increased by 2 blocks")
+          assert.same(n_blocks+2, buffer.selection,
+                      "selection moved down by 2")
           assert.same( {},
                        buffer:get_selected_text(),
                        "trailing empty line is selected")
@@ -2040,13 +2176,10 @@ describe('Editor #editor', function()
                        buffer:get_selected_text(),
                        "first block injected first")
           session:select_block(n_blocks+1)
-          assert.same({}, buffer:get_selected_text(),
-                      "empty line injected after first")
-          session:select_block(n_blocks+2)
           assert.same( string.lines(f2),
                        buffer:get_selected_text(),
-                       "second block injected second")
-          assert.same( src(existing_src..f1,'',f2,''),
+                       "second block follows, no empty line added")
+          assert.same( src(existing_src..f1, f2, ''),
                        savefile(),
                        "saved file contains updates")
         end)

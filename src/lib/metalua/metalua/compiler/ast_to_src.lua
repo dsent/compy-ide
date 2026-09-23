@@ -50,7 +50,10 @@ function M.new(seen_comments, w)
     -- wrap length
     wrap = w or 80,
     -- Last source line number emitted (used to detect blank-line gaps)
-    _last_nonempty_src_line = 0
+    _last_nonempty_src_line = 0,
+    -- Nothing emitted yet in the indented body just opened;
+    -- a kept blank line never goes there
+    _body_start = false
   }
   return setmetatable(self, M)
 end
@@ -70,6 +73,7 @@ function M:run(ast, seen_comments, w)
     self, ast = M.new(seen_comments, w), self
   end
   self._acc = {}
+  self._root = ast
   self:node(ast)
   return self:render()
 end
@@ -105,17 +109,22 @@ end
 ----------------------------------------------------------------
 function M:acc(x)
   if x then
+    if string.find(x, "%S") then self._body_start = false end
     local clen = self._line_len
     local l = string.ulen(x)
     local lines = string.lines(x)
     local n_l = #lines
+    local prev = self._acc[#self._acc]
+    local line_start = clen == 0
+        or (prev and string.match(prev, "\n[ \t]*$"))
     if l + clen > self.wrap
         --- if the string has multiple lines,
         --- handle it elsewhere
         and n_l < 2
-        --- don't create a leading empty line
-        --- for an overlong token
-        and clen > 0
+        --- don't leave a line holding only indentation
+        --- for an overlong token; the next pass would
+        --- read it as a typed blank line
+        and not line_start
     then
       --- The formatter already emits a newline plus
       --- continuation indent here; keep separator spacing from
@@ -163,6 +172,7 @@ end
 function M:nlindent()
   self.current_indent = self.current_indent + 1
   self:nl()
+  self._body_start = true
 end
 
 ----------------------------------------------------------------
@@ -209,6 +219,30 @@ function M:emptyline_gap_before(pos)
     return line - self._last_nonempty_src_line
   end
   return 0
+end
+
+----------------------------------------------------------------
+--- Keep one empty line where the source had one or more
+--- before `pos'. Called at the start of the output or on the
+--- fresh line nl() just started, which it pushes down; the
+--- empty line carries no indent. The start of an indented
+--- body keeps none, so the placeholder line of an empty body
+--- never reads as a typed blank line.
+--- @param pos position|{line: integer}|{l: integer}
+----------------------------------------------------------------
+function M:keep_gap(pos)
+  if self._body_start then return end
+  if self:emptyline_gap_before(pos) < 2 then return end
+  local n = #self._acc
+  local fresh = self._acc[n]
+  if n == 0 then
+    table.insert(self._acc, "\n")
+  elseif string.match(fresh, "^\n[ \t]*$") then
+    self._acc[n] = "\n" .. fresh
+  else
+    return
+  end
+  self._lines = self._lines + 1
 end
 
 ----------------------------------------------------------------
@@ -434,14 +468,20 @@ end
 --- the method having the name of the AST tag.
 --- If something can't be converted to normal sources, it's
 --- instead dumped as a `-{ ... }' splice in the source accumulator.
+--- A statement keeps one empty line wherever the source had a
+--- gap before it; a statement, a statement list (a tagless
+--- block), or the node being rendered keeps one before each
+--- comment it puts on a line of its own.
 --- @param node token
+--- @param stmt boolean? --- an item of a statement list
 ----------------------------------------------------------------
-function M:node(node)
+function M:node(node, stmt)
   assert(self ~= M and self._acc)
   if node == nil then
     self:acc("<<error>>")
     return
   end
+  local keeps_gaps = stmt or not node.tag or node == self._root
   local comments = self:extract_comments(node)
   --- @param pos 'first'|'last'
   local function show_comments(pos)
@@ -450,13 +490,7 @@ function M:node(node)
       if co.position == pos then
         --- comes _after_ a previous expression
         if co.position == 'last' then self:nl() end
-        --- if there was a 'gap' preceding the comment,
-        --- we preserve it by emitting exactly one empty line
-        if co.position == 'first' then
-          if self:emptyline_gap_before(co.first) >= 2 then
-            self:nl()
-          end
-        end
+        if keeps_gaps then self:keep_gap(co.first) end
         --- preserve existing newlines
         local lines = string.lines(co.text)
         if co.multiline then
@@ -528,9 +562,14 @@ function M:node(node)
   end
 
   show_comments('first')
-  -- advance non-empty source line tracker, 
-  -- used for detecting emptyline gaps in the source
-  if node.lineinfo and node.lineinfo.first then
+  if stmt and node.lineinfo then
+    self:keep_gap(node.lineinfo.first)
+  end
+  -- advance non-empty source line tracker,
+  -- used for detecting emptyline gaps in the source;
+  -- a statement list leaves that to its statements, or
+  -- the gap before the first one would vanish
+  if node.tag and node.lineinfo and node.lineinfo.first then
     self:emptyline_gap_reset(node.lineinfo.first)
   end
   if not node.tag then --- tagless block.
@@ -568,8 +607,9 @@ end
 --- the begining of a list.
 ----------------------------------------------------------------
 function M:list(list, sep, start)
+  local stmts = sep == M.nl
   for i = start or 1, #list do
-    self:node(list[i])
+    self:node(list[i], stmts)
     if list[i + 1] then
       if not sep then
       elseif type(sep) == "function" then

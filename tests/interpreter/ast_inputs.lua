@@ -138,7 +138,7 @@ local meta_res = {
   '  local lfi = node.lineinfo.first',
   '  local lla = node.lineinfo.last',
   '  local comments = { }',
-  -- '',
+  '',
   '  --- @param c table',
   "  --- @param pos 'first'|'last'",
   '  local function add_comment(c, pos)',
@@ -192,7 +192,7 @@ local meta_res = {
   '      add_comment(c, "last")',
   '    end',
   '  end',
-  -- '',
+  '',
   '  return comments',
   'end',
 }
@@ -541,9 +541,10 @@ local emptylines = {
     '',
     '',
     '',
-    'print("standalone expression eliminates emptylines before it")'
+    'print("standalone expression keeps one emptyline before it")'
   }, {
-    'print("standalone expression eliminates emptylines before it")'
+    '',
+    'print("standalone expression keeps one emptyline before it")'
   }),
 
   --- expression+comment
@@ -571,27 +572,24 @@ local emptylines = {
     'print("expecting: no emptyline should be injected")'
   }),
   prep({
-    'print("rule: gap between adjacent statements is eliminated")',
+    'print("rule: gap between adjacent statements shrinks to one")',
     '',
     '',
     '',
-    'print("expecting: no emptylines preserved")'
+    'print("expecting: exactly one emptyline is preserved")'
   }, {
-    'print("rule: gap between adjacent statements is eliminated")',
-    'print("expecting: no emptylines preserved")'
+    'print("rule: gap between adjacent statements shrinks to one")',
+    '',
+    'print("expecting: exactly one emptyline is preserved")'
   }),
 
   -- expressions (multiple)  + comment
 
   prep({
-    'print("rule: comment between statements does not preserve gap")',
+    'print("rule: comment between statements keeps the gap")',
     '',
-    '-- comment between statements does not preserve gap',
-    'print("expecting: emptyline is not preserved")'
-  }, {
-    'print("rule: comment between statements does not preserve gap")',
-    '-- comment between statements does not preserve gap',
-    'print("expecting: emptyline is not preserved")'
+    '-- comment between statements keeps the gap',
+    'print("expecting: emptyline is preserved")'
   }),
 
   -- standalone block
@@ -606,11 +604,12 @@ local emptylines = {
     '',
     '',
     'function rule()',
-    '  return ("standalone block erases emptylines before it")',
+    '  return ("standalone block keeps one emptyline before it")',
     'end'
   }, {
+    '',
     'function rule()',
-    '  return ("standalone block erases emptylines before it")',
+    '  return ("standalone block keeps one emptyline before it")',
     'end'
   }),
 
@@ -651,23 +650,85 @@ local emptylines = {
   }),
   prep({
     'function rule()',
-    '  return ("no gaps between blocks are preserved")',
+    '  return ("gaps between blocks are preserved")',
     'end',
+    '',
     '',
     '-- comment in between',
     '',
     'function expectation()',
-    '  return ("no emptylines are kept")',
+    '  return ("one emptyline is kept for each gap")',
     'end',
   }, {
     'function rule()',
-    '  return ("no gaps between blocks are preserved")',
+    '  return ("gaps between blocks are preserved")',
     'end',
+    '',
     '-- comment in between',
+    '',
     'function expectation()',
-    '  return ("no emptylines are kept")',
+    '  return ("one emptyline is kept for each gap")',
     'end',
-  })
+  }),
+
+  -- function bodies
+
+  prep({
+    'function rule()',
+    '  local gap = "statements in a body keep one emptyline"',
+    '',
+    '',
+    '  -- and so do comments',
+    '',
+    '  return gap',
+    'end',
+  }, {
+    'function rule()',
+    '  local gap = "statements in a body keep one emptyline"',
+    '',
+    '  -- and so do comments',
+    '',
+    '  return gap',
+    'end',
+  }),
+  prep({
+    'function rule()',
+    '',
+    '  return "a body starts and ends without an emptyline"',
+    '',
+    'end',
+  }, {
+    'function rule()',
+    '  return "a body starts and ends without an emptyline"',
+    'end',
+  }),
+  prep({
+    'function rule()',
+    '  if true then',
+    '    local deeper = "nested bodies keep them too"',
+    '',
+    '    return deeper',
+    '  end',
+    'end',
+  }),
+
+  -- the placeholder line of an empty body is not a gap
+
+  prep({
+    'function empty()',
+    '  ',
+    'end',
+  }),
+  prep({
+    'function empty()',
+    '',
+    '',
+    'end',
+  }, {
+    'function empty()',
+    '  ',
+    'end',
+  }),
 }
 
 local wrapping = {

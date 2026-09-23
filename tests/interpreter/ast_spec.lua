@@ -64,7 +64,12 @@ describe('parser #ast', function()
             it('matches ' .. i, function()
               local has_lines = false
               local seen_comments = {}
-              for _, v in ipairs(r) do
+              --- blank lines between statements belong to the
+              --- chunk, so that set prints it whole, as the
+              --- editor does
+              local statements = r
+              if tag == 'emptylines' then statements = {} end
+              for _, v in ipairs(statements) do
                 if show_ast then
                   local fn = string.format('%s_input_%d', tag, i)
 

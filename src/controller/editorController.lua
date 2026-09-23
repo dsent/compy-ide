@@ -463,34 +463,13 @@ function EditorController:_handle_submit(go)
       local ok, res = inter:evaluate()
       local _, chunks = buf.chunker(pretty, true)
       if ok then
-        local newlines_injection_needed = (#chunks > 1)
-        if #chunks < #raw_chunks then
-          local rc = raw_chunks
-          if rc[1]:is_empty() then
-            --- Leading empty in raw may be editor padding before the
-            --- first real block; do not restore it when pprint already
-            --- starts with content.
-            local has_leading_content = chunks[1]
-                and chunks[1]:is_empty()
-            if not has_leading_content then
-              table.insert(chunks, 1, Empty(rc[1].pos.start))
-            end
-          end
-          if rc[#rc]:is_empty() then
-            local li = chunks[#chunks].pos.fin
-            table.insert(chunks, Empty(li + 1))
-          end
-        end
-        if newlines_injection_needed then
-          for i = #chunks, 2, -1 do
-            local ch=chunks
-            local this_nonempty = not(ch[i]:is_empty())
-            local prev_nonempty = not(ch[i-1]:is_empty())
-            if this_nonempty and prev_nonempty then
-              local prev_pos = ch[i-1].pos.fin
-              table.insert(ch, i, Empty(prev_pos+1))
-            end
-          end
+        --- the printer keeps one blank line wherever the
+        --- input had some before or between statements;
+        --- blank lines ending the input follow no token it
+        --- could measure from, so one comes back here
+        local rl, cl = raw_chunks[#raw_chunks], chunks[#chunks]
+        if rl and rl:is_empty() and cl and not cl:is_empty() then
+          table.insert(chunks, Empty(cl.pos.fin + 1))
         end
         return go(chunks)
       else
