@@ -6,7 +6,7 @@ require("util.dequeue")
 --- @class InputText: Dequeue
 --- @field new function
 --- @field traverse function
---- @field render fun(): string
+--- @field render fun(self): string
 InputText = class.create()
 
 --- @param values string[]?

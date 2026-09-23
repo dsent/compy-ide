@@ -21,7 +21,7 @@
 -- console instead of quitting the app. With neither, there is
 -- nothing to return FROM and Ctrl+Esc quits.
 --
--- 'project_open' is the state name for "the project's code has
+-- 'ready' is the state name for "the project's code has
 -- finished but the project has not been stopped".
 
 local F = require('tests.helpers.input_fixture')
@@ -63,7 +63,7 @@ describe('input surface: inbound events — a project stays live'
   it('Ctrl+Esc returns to the console while a widget is shown',
     function()
       local calls = stub_stop()
-      love.state.app_state = 'project_open'
+      love.state.app_state = 'ready'
       love.state.user_input = {}
       local aborted = love.quit()
       assert.are.equal(1, calls.n)
@@ -73,7 +73,7 @@ describe('input surface: inbound events — a project stays live'
   it('Ctrl+Esc quits the app when nothing is left to go back to',
     function()
       local calls = stub_stop()
-      love.state.app_state = 'project_open'
+      love.state.app_state = 'ready'
       love.state.user_input = nil
       local aborted = love.quit()
       assert.are.equal(0, calls.n)
@@ -98,7 +98,7 @@ describe('input surface: inbound events — a project stays live'
       local calls = stub_stop()
       F.activate_project({ mousepressed = function() end })
       love.state.user_input = nil
-      love.state.app_state = 'project_open'
+      love.state.app_state = 'ready'
       assert.is_truthy(Controller.user_is_interactive())
       local aborted = love.quit()
       assert.are.equal(1, calls.n)
@@ -116,7 +116,7 @@ describe('input surface: inbound events — a project stays live'
       text = 'x',
       on_text_entered = function(t) seen = t end,
     })
-    love.state.app_state = 'project_open' -- route NOT released
+    love.state.app_state = 'ready' -- route NOT released
     F.session.press('return')
     assert.equal('x', seen)
   end)

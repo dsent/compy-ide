@@ -93,6 +93,10 @@ contains at least a `main.lua` file. Projects can be loaded and
 ran. At any time, pressing <kbd>Ctrl-Q</kbd> quits and
 returns to the console
 
+There is always a project open: the application starts on the
+default `scratch` project, which can be used to persist files.
+Closing a project returns to `scratch`.
+
 - `list_projects()`
 
   List available projects.
@@ -118,7 +122,13 @@ returns to the console
 
 - `close_project()`
 
-  Close currently opened project.
+  Close currently opened project and return to the default
+  `scratch` project.
+
+- `reset_scratch()`
+
+  Delete the default `scratch` project and recreate it with
+  factory contents.
 
 - `edit(file)`
 

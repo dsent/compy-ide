@@ -44,7 +44,7 @@ describe('input surface: inbound events — route lifetime #input',
 
     describe('connection at the running boundary', function()
       -- The route is held by an OPEN project, not only by a
-      -- running one: a non-blocking run reaching 'project_open'
+      -- running one: a non-blocking run reaching 'ready'
       -- keeps every channel until the project actually stops.
       -- That is the pre-feature lifecycle — at the PR base
       -- nothing was released before suspend or stop. It is what
@@ -59,7 +59,7 @@ describe('input surface: inbound events — route lifetime #input',
       -- different claim and has its own file
       -- (tests/input/input_console_fallthrough_spec.lua). What
       -- proves the route is still held is `got`.
-      it('keyboard stays on the route in project_open',
+      it('keyboard stays on the route in ready',
         function()
           local input = F.activate_project()
           local got = 0
@@ -67,7 +67,7 @@ describe('input surface: inbound events — route lifetime #input',
             got = got + 1
             return true
           end
-          love.state.app_state = 'project_open'
+          love.state.app_state = 'ready'
           F.session.type('a')
           assert.equal(1, got)
           assert.same({ '' }, F.console:get_text())
@@ -77,13 +77,13 @@ describe('input surface: inbound events — route lifetime #input',
       -- otherwise idle. It used to need an explicit exemption
       -- from a keyboard-only release; with one lifetime for all
       -- channels there is nothing to exempt.
-      it('pointer stays on the route in project_open',
+      it('pointer stays on the route in ready',
         function()
           local got = 0
           F.activate_project({
             mousepressed = function() got = got + 1 end,
           })
-          love.state.app_state = 'project_open'
+          love.state.app_state = 'ready'
           F.session.mousepressed(10, 10, 1, false, 1)
           assert.equal(1, got)
         end)
@@ -320,14 +320,14 @@ describe('input surface: inbound events — route lifetime #input',
         assert.is_nil(love.state.user_input_controller)
       end)
 
-      -- A pen-and-paper project settles in 'project_open' and
+      -- A pen-and-paper project settles in 'ready' and
       -- keeps running there (sapper). The widget belongs to the
       -- RUN, so that transition must not take it — the trap
       -- D-ROUTE-LIFETIME's amendment exists to keep deleted.
-      it('a non-blocking run keeps its widget at project_open',
+      it('a non-blocking run keeps its widget at ready',
         function()
           F.run_project()
-          assert.equal('project_open', love.state.app_state)
+          assert.equal('ready', love.state.app_state)
           assert.is_not_nil(love.state.user_input_controller)
         end)
     end)
@@ -668,7 +668,7 @@ describe('input surface: inbound events — route lifetime #input',
         F.cc:stop_project_run()
         assert.equal(
           Controller._defaults.keypressed, love.keypressed)
-        assert.equal('project_open', love.state.app_state)
+        assert.equal('ready', love.state.app_state)
       end)
 
       -- Fires exactly once per stop. The framework owns the

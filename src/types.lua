@@ -14,6 +14,7 @@
 --- @field storage_path string
 --- @field project_path string
 --- @field play_path string
+--- @field microbit_path string?
 
 --- @class CursorInfo table
 --- @field cursor Cursor
@@ -130,7 +131,6 @@
 --- | 'starting'
 --- | 'title'
 --- | 'ready'
---- | 'project_open'
 --- | 'editor'
 --- | 'running'
 --- | 'inspect'

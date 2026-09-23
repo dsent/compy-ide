@@ -78,6 +78,10 @@ function love.conf(t)
   t.identity = 'compy'
   t.window.resizable = false
 
+  --- micro:bit USB mass-storage identification
+  love.microbit_vid = 0x0d28
+  love.microbit_pid = 0x0204
+
   local width = 1024
   local height = 600
   if start.mode ~= 'play' then

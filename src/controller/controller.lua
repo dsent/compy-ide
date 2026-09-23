@@ -43,7 +43,7 @@ local user_pointer
 -- One lifetime, several names for subsets of it. Every channel
 -- installs the same way, runs the same chain, and is released
 -- at the same moment: the project's stop. The split that
--- existed here (keyboard released at running->project_open,
+-- existed here (keyboard released at running->ready,
 -- pointer exempted so pen-and-paper projects survived it) came
 -- with this feature and is gone: at the PR base nothing was
 -- released before suspend or stop. The subsets below name what
@@ -268,7 +268,7 @@ local function occupy_input(userlove, CC)
 end
 
 --- `user_pointer` marks a non-blocking project as still
---- interactive, so it keeps the route in 'project_open'
+--- interactive, so it keeps the route in 'ready'
 --- (doc/development/technical_debt/input.md, ruling (a)). Set
 --- from the project's own pointer handlers and its click hooks.
 --- @param userlove table
@@ -720,10 +720,10 @@ Controller = {
       -- handlers installed —
       -- doc/development/technical_debt/input.md, "Input-only /
       -- pointer-only projects stay live in `project_open`
-      -- (RESOLVED, ruling a)"). An idle console in project_open
+      -- (RESOLVED, ruling a)"). An idle console in ready
       -- falls through: the app quits.
       if love.state.app_state == 'running'
-          or (love.state.app_state == 'project_open'
+          or (love.state.app_state == 'ready'
               and Controller.user_is_interactive()) then
         CC:stop_project_run()
         return true
@@ -766,7 +766,7 @@ Controller = {
   --- slots. The caller pairs it with clear_user_handlers for
   --- the rest.
   --- NOT a lifecycle step, despite the name: the
-  --- 'running' -> 'project_open' transition releases nothing,
+  --- 'running' -> 'ready' transition releases nothing,
   --- and every channel shares ONE lifetime that ends at the
   --- project's stop (doc/development/decisions/input.md,
   --- D-ROUTE-LIFETIME as amended — the keyboard-only release
@@ -864,7 +864,7 @@ Controller = {
       if playback then return end
       local st = love.state.app_state
       if st == 'running' or st == 'inspect'
-          or st == 'project_open' then
+          or st == 'ready' then
         CC:stop_project_run()
         local ed = love.state.editor
         if ed then CC:edit(ed.buffer.filename, ed)

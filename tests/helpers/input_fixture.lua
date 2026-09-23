@@ -213,10 +213,27 @@ end
 -- require-cached class globals cannot be un-required, and
 -- busted 2's per-file insulation reverts _G/package.loaded
 -- anyway — so we only undo the fixture's own semantic state and
--- the two globals mock_love writes.
+-- the two globals mock_love writes. NOT reverted by that
+-- insulation is `package.loaders`: the merged controller keeps a
+-- project open at all times and installs its loader there, so
+-- this CC must remove the loaders it cached, or the next file's
+-- first require trips a stale project loader (get_loader logs
+-- unconditionally) with no `Log` global in sight.
 function F.teardown()
   if Controller and Controller.project_input then
     Controller.project_input:deactivate()
+  end
+  if CC then
+    for _, lf in pairs(CC.loaders) do
+      local i = 1
+      while i <= #package.loaders do
+        if package.loaders[i] == lf then
+          table.remove(package.loaders, i)
+        else
+          i = i + 1
+        end
+      end
+    end
   end
   _G.love, _G.TESTING = nil, nil
   cfg, CC, widget, session = nil, nil, nil, nil

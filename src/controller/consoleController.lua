@@ -8,6 +8,7 @@ local class = require('util.class')
 local LANG = require("util.eval")
 local FS = require('util.filesystem')
 local Application = require('util.application')
+local usb = require('util.usb')
 require("util.key")
 require("util.table")
 local TerminalTest = require("util.test_terminal")
@@ -22,7 +23,6 @@ local messages = {
 --- @field time number
 --- @field model Model
 --- @field main_ctrl table
---- @field main_env LuaEnv
 --- @field pre_env LuaEnv
 --- @field base_env LuaEnv
 --- @field project_env LuaEnv
@@ -38,8 +38,7 @@ ConsoleController = class.create()
 
 --- @param M Model
 function ConsoleController.new(M, main_ctrl)
-  local env = getfenv()
-  local pre_env = table.clone(env)
+  local pre_env = table.clone(getfenv())
   local config = M.cfg
   pre_env.font = config.view.font
   local IC = UserInputController(M.input)
@@ -64,8 +63,6 @@ function ConsoleController.new(M, main_ctrl)
     model       = M,
     main_ctrl   = main_ctrl,
     input       = IC,
-    -- console runner env
-    main_env    = env,
     -- copy of the application's env before the prep
     pre_env     = pre_env,
     -- the project env where we make the API available
@@ -83,8 +80,7 @@ function ConsoleController.new(M, main_ctrl)
   --- the editor has to know about us
   local EC = EditorController(M.editor, self)
   self.editor = EC
-  -- initialize the stub env tables
-  ConsoleController.prepare_env(self)
+  -- initialize the user environment
   ConsoleController.prepare_project_env(self)
 
   return self
@@ -228,8 +224,8 @@ end
 --- Down THROUGH the widget first: `hide()` lowers its own shown
 --- flag and clears the published handle, and only then is the
 --- widget itself dropped. Bound to the STOP, never to the
---- 'running' → 'project_open' transition — a non-blocking
---- project lives in `project_open` and still owns its widget
+--- 'running' → 'ready' transition — a non-blocking
+--- project lives idle and still owns its widget
 --- there (D-ROUTE-LIFETIME, and the asymmetry its amendment
 --- deleted).
 local function destroy_input_widget()
@@ -345,12 +341,36 @@ function ConsoleController:writefile(name, content)
   end
 end
 
+--- @param content any
+--- @return boolean success
+--- @return string? err
+function ConsoleController:flash_microbit(content)
+  local P = self.model.projects
+  local p = P.current
+  if not p then
+    return false
+  end
+  return p:flash_microbit(content)
+end
+
+--- Re-run USB device detection (e.g. after plugging a micro:bit
+--- in later than startup). Stores the result in
+--- love.paths.microbit_path.
+--- @return string? path nil if no device found
+function ConsoleController:detect_microbit()
+  local path = usb.detect()
+  if type(love) == 'table' and love.paths then
+    love.paths.microbit_path = path
+  end
+  return path
+end
+
 _G.o_loadfile = _G.loadfile
 --- @param name string
 --- @return function?
 function ConsoleController:loadfile(name)
-  local PS               = self.model.projects
-  local p                = PS.current
+  local PS    = self.model.projects
+  local p     = PS.current
   local chunk = p:load_file(name)
   return chunk
 end
@@ -422,12 +442,12 @@ function ConsoleController:run_project(name)
         -- Its serial handlers go the same way, by the same
         -- invariant, and the console is heard again.
         SerialPort:programEnded()
-        love.state.app_state = 'project_open'
+        love.state.app_state = 'ready'
         print('Error: ', run_err)
       else
         if not self.main_ctrl.user_is_blocking() then
           -- The route is NOT released here. A non-blocking run
-          -- reaching 'project_open' keeps every channel until
+          -- reaching the idle state keeps every channel until
           -- the project actually stops. That is the pre-feature
           -- lifecycle: at the PR base nothing was released
           -- before suspend or stop, and the keyboard-only
@@ -440,7 +460,7 @@ function ConsoleController:run_project(name)
           -- stopped, so its handlers stay, but it is no longer
           -- the one speaking and the console listens again.
           SerialPort:programIdle()
-          love.state.app_state = 'project_open'
+          love.state.app_state = 'ready'
         end
       end
     else
@@ -1327,18 +1347,29 @@ local get_compy_namespace = function(terminal, with_input,
   })
 end
 
-function ConsoleController.prepare_env(cc)
-  local prepared            = cc.main_env
-  prepared.gfx              = love.graphics
+--- Prepare the unified user environment: console commands and
+--- project API both live here. The console the user types into is
+--- simply the currently open project's environment.
+--- @param cc ConsoleController
+function ConsoleController.prepare_project_env(cc)
+  require("controller.userInputController")
+  require("model.input.userInputModel")
+  require("view.input.userInputView")
+  local cfg                    = cc.model.cfg
+  ---@type table
+  local project_env            = cc:get_pre_env_c()
 
-  local P                   = cc.model.projects
+  local P                      = cc.model.projects
 
-  prepared.require          = function(name)
-    return project_require(name)
-  end
+  project_env.gfx              = love.graphics
+  -- The env the old prepare_env wired was the global environment,
+  -- so its `gfx` write surfaced as the global the console core
+  -- (use_canvas) and the projects read; main.lua sets the same
+  -- global for the app. Keep that alias on the unified prep.
+  gfx                          = love.graphics
 
   --- @param f function
-  local check_open_pr       = function(f, ...)
+  local check_open_pr          = function(f, ...)
     if not P.current then
       print(P.messages.no_open_project)
     else
@@ -1346,15 +1377,27 @@ function ConsoleController.prepare_env(cc)
     end
   end
 
-  prepared.require          = project_require
+  --- @param f function
+  local check_microbit_path    = function(f, ...)
+    if not love.paths.microbit_path then
+      print(P.messages.no_microbit_board)
+    else
+      return f(...)
+    end
+  end
 
-  prepared.dofile           = function(name)
+  project_env.require          = function(name)
+    return project_require(name)
+  end
+  project_env.dofile           = function(name)
     return check_open_pr(function()
-      return project_dofile(cc, name)
+      return project_dofile(cc, name, cc:get_project_env())
     end)
   end
 
-  prepared.list_projects    = function()
+  --- project management
+
+  project_env.list_projects    = function()
     local ps = P:list()
     if ps:is_empty() then
       -- no projects, display a message about it
@@ -1370,17 +1413,15 @@ function ConsoleController.prepare_env(cc)
   end
 
   --- @param name string
-  local open_project        = function(name)
+  project_env.project          = function(name)
     return cc:open_project(name)
   end
 
-  prepared.project          = open_project
-
-  prepared.close_project    = function()
+  project_env.close_project    = function()
     close_project(cc)
   end
 
-  prepared.current_project  = function()
+  project_env.current_project  = function()
     if P.current and P.current.name then
       print('Currently open project: ' .. P.current.name)
     else
@@ -1388,21 +1429,27 @@ function ConsoleController.prepare_env(cc)
     end
   end
 
-  prepared.example_projects = function()
+  project_env.example_projects = function()
     local ok, err = P:deploy_examples()
     if not ok then
       print('err: ' .. err)
     end
   end
 
-  prepared.clone            = function(old, new)
+  project_env.clone            = function(old, new)
     local ok, err = P:clone(old, new)
     if not ok then
       print(err)
     end
   end
 
-  prepared.list_contents    = function()
+  project_env.reset_scratch    = function()
+    cc:reset_scratch()
+  end
+
+  --- file access
+
+  project_env.list_contents    = function()
     return check_open_pr(function()
       local p = P.current
       local items = p:contents()
@@ -1415,38 +1462,82 @@ function ConsoleController.prepare_env(cc)
 
   --- @param name string
   --- @return string?
-  prepared.readfile         = function(name)
+  project_env.readfile         = function(name)
+    --- @diagnostic disable-next-line: invisible
     return check_open_pr(cc._readfile, cc, name)
   end
 
   --- @param name string
-  --- @return function? chunk
-  prepared.loadfile         = function(name)
-    return check_open_pr(cc.loadfile, cc, name)
-  end
-
-  --- @param name string
   --- @return string[]?
-  prepared.readlines        = function(name)
+  project_env.readlines        = function(name)
+    --- @diagnostic disable-next-line: invisible
     return check_open_pr(cc._readlines, cc, name)
   end
 
   --- @param name string
   --- @param content string[]
-  prepared.writefile        = function(name, content)
+  project_env.writefile        = function(name, content)
     return check_open_pr(cc.writefile, cc, name, content)
   end
 
+  --- @param content string
+  project_env.flash_microbit   = function(content)
+    return check_microbit_path(cc.flash_microbit, cc, content)
+  end
+
+  --- re-run USB device detection (hot-plug after startup)
+  --- @return string? path
+  project_env.detect_microbit  = function()
+    return cc.detect_microbit(cc)
+  end
+
   --- @param name string
-  prepared.edit             = function(name)
+  --- @return function? chunk
+  project_env.loadfile         = function(name)
+    return check_open_pr(cc.loadfile, cc, name)
+  end
+
+  --- @param name string
+  project_env.edit             = function(name)
     return check_open_pr(cc.edit, cc, name)
   end
 
-  prepared.run_project      = function(name)
-    cc:run_project(name)
+  --- @param name string
+  --- @return string?
+  --- Restore a file from its checkpoint; no prompt
+  --- @param name string? --- default main.lua
+  --- @return boolean
+  project_env.revert          = function(name)
+    name = name or ProjectService.MAIN
+    return cc:restore_checkpoint(name)
   end
 
-  local terminal            = cc.model.output.terminal
+  --- execution control
+
+  --- @param name string?
+  project_env.run_project      = function(name)
+    cc:run_project(name)
+  end
+  project_env.run              = project_env.run_project
+
+  --- @param msg string?
+  project_env.pause            = function(msg)
+    cc:suspend_run(msg)
+  end
+  project_env.stop             = function()
+    cc:stop_project_run()
+  end
+  project_env.continue         = function()
+    if love.state.app_state == 'inspect' then
+      -- resume
+      love.state.app_state = 'running'
+      cc.main_ctrl.restore_user_handlers(cc)
+    else
+      print('No project halted')
+    end
+  end
+
+local terminal              = cc.model.output.terminal
   require('model.serial.init')
   if love.system.getOS() == 'Android' then
     require('model.serial.backend_android')
@@ -1459,7 +1550,7 @@ function ConsoleController.prepare_env(cc)
   --- Show what the board sends, or stop showing it. Off
   --- until something asks for it.
   --- @param on boolean?
-  prepared.echo             = function(on)
+  project_env.echo            = function(on)
     local port = SerialPort:table_for('console')
     if on == false then
       SerialPort.echo:off()
@@ -1472,120 +1563,10 @@ function ConsoleController.prepare_env(cc)
     end
   end
 
-  local compy_namespace     = get_compy_namespace(terminal,
-    false, cc, SerialPort:table_for('console'))
-  prepared.compy            = compy_namespace
-  prepared.tty              = compy_namespace.terminal
-
-  prepared.run              = prepared.run_project
-
-  prepared.eval             = LANG.eval
-  prepared.print_eval       = LANG.print_eval
-
-  prepared.appver           = function()
-    local ver = FS.read('ver.txt', true)
-    if ver then print(ver) end
-  end
-
-  prepared.quit             = function()
-    Application.request_exit()
-  end
-end
-
---- API functions for the user
---- @param cc ConsoleController
-function ConsoleController.prepare_project_env(cc)
-  require("controller.userInputController")
-  require("model.input.userInputModel")
-  require("view.input.userInputView")
-  local cfg                   = cc.model.cfg
-  ---@type table
-  local project_env           = cc:get_pre_env_c()
-
-  project_env.require         = function(name)
-    return project_require(name)
-  end
-  project_env.dofile          = function(name)
-    return project_dofile(cc, name, cc:get_project_env())
-  end
-  -- project_env.require         = function(name)
-  --   return project_require(name, 'run')
-  -- end
-
-  --- @param name string
-  --- @return string?
-  --- Restore a file from its checkpoint; no prompt
-  --- @param name string? --- default main.lua
-  --- @return boolean
-  project_env.revert          = function(name)
-    name = name or ProjectService.MAIN
-    return cc:restore_checkpoint(name)
-  end
-
-  project_env.readfile        = function(name)
-    --- @diagnostic disable-next-line: invisible
-    return cc:_readfile(name)
-  end
-
-  --- @param name string
-  --- @return string[]?
-  project_env.readlines       = function(name)
-    --- @diagnostic disable-next-line: invisible
-    return cc:_readlines(name)
-  end
-
-  --- @param name string
-  --- @param content string[]
-  project_env.writefile = function(name, content)
-    return cc:writefile(name, content)
-  end
-
-  --- @param name string
-  --- @return function? chunk
-  project_env.loadfile         = function(name)
-    return cc:loadfile(name)
-  end
-
-  --- @param msg string?
-  project_env.pause           = function(msg)
-    cc:suspend_run(msg)
-  end
-  project_env.stop            = function()
-    cc:stop_project_run()
-  end
-  project_env.run             = function()
-    if love.state.app_state == 'inspect' then
-      cc:stop_project_run()
-      cc:run_project()
-    end
-  end
-  project_env.run_project     = project_env.run
-
-  project_env.continue        = function()
-    if love.state.app_state == 'inspect' then
-      -- resume
-      love.state.app_state = 'running'
-      cc.main_ctrl.restore_user_handlers(cc)
-    else
-      print('No project halted')
-    end
-  end
-
-  project_env.close_project   = function()
-    close_project(cc)
-  end
-
-  --- @param name string
-  project_env.edit           = function(name)
-    return cc:edit(name)
-  end
-
-  project_env.gfx            = love.graphics
-
-  local terminal             = cc.model.output.terminal
   local compy_namespace      = get_compy_namespace(terminal,
     true, cc, SerialPort:table_for('program'))
   project_env.compy          = compy_namespace
+  project_env.tty            = compy_namespace.terminal
 
   project_env.LuaHighlighter = LuaHighlighter
   project_env.LuaSyntaxValidator = LuaSyntaxValidator
@@ -1608,6 +1589,15 @@ function ConsoleController.prepare_project_env(cc)
 
   project_env.eval           = LANG.eval
   project_env.print_eval     = LANG.print_eval
+
+  project_env.appver         = function()
+    local ver = FS.read('ver.txt', true)
+    if ver then print(ver) end
+  end
+
+  project_env.quit           = function()
+    Application.request_exit()
+  end
 
   local base                 = table.clone(project_env)
   local project              = table.clone(project_env)
@@ -1642,12 +1632,7 @@ function ConsoleController:evaluate_input()
   if eval and eval.parser then
     if eval_ok then
       local code = string.unlines(text)
-      local run_env = (function()
-        if love.state.app_state == 'inspect' then
-          return self:get_project_env()
-        end
-        return self:get_console_env()
-      end)()
+      local run_env = self:get_project_env()
       local f, load_err = codeload(code, run_env)
       if f then
         local _, err = run_user_code(f, self)
@@ -1689,11 +1674,6 @@ function ConsoleController:get_pre_env_c()
 end
 
 ---@return LuaEnv
-function ConsoleController:get_console_env()
-  return self.main_env
-end
-
----@return LuaEnv
 function ConsoleController:get_project_env()
   return self.project_env
 end
@@ -1705,14 +1685,7 @@ end
 
 ---@return LuaEnv
 function ConsoleController:get_effective_env()
-  if
-      love.state.app_state == 'running'
-      or love.state.app_state == 'inspect'
-  then
-    return self:get_project_env()
-  else
-    return self:get_console_env()
-  end
+  return self:get_project_env()
 end
 
 ---@param t LuaEnv
@@ -1755,7 +1728,7 @@ function ConsoleController:suspend_run(msg)
 end
 
 --- @param name string
---- @param play boolean
+--- @param play boolean?
 --- @return boolean success
 function ConsoleController:open_project(name, play)
   local P = self.model.projects
@@ -1765,7 +1738,9 @@ function ConsoleController:open_project(name, play)
   end
   local cur = P.current
   if cur then
-    self:close_project()
+    --- close directly: no redirect to the default project here,
+    --- otherwise its loader would be inserted and leak
+    self:_close_project()
   end
 
   local open, create, err = P:opreate(name, play)
@@ -1781,7 +1756,8 @@ function ConsoleController:open_project(name, play)
     then
       table.insert(package.loaders, 1, project_loader)
     end
-    love.state.app_state = 'project_open'
+    --- env resets on every project switch
+    self:_reset_executor_env()
   end
   if open then
     print('Project ' .. name .. ' opened')
@@ -1793,6 +1769,7 @@ function ConsoleController:open_project(name, play)
   return ok
 end
 
+--- Close the current project without opening another.
 --- @return boolean success
 --- Closing ends the project, so it ends the project's widget:
 --- reachable from a running project's own env and from the
@@ -1809,7 +1786,7 @@ end
 --- established, so this does the narrow correct thing rather
 --- than guess. See doc/development/technical_debt/input.md,
 --- "`close_project` bypasses the run's exit path".
-function ConsoleController:close_project()
+function ConsoleController:_close_project()
   destroy_input_widget()
   local P = self.model.projects
   local open = P.current
@@ -1820,13 +1797,21 @@ function ConsoleController:close_project()
     if lf then
       table.delete_by_value(package.loaders, lf)
     end
-    self:_reset_executor_env()
     self.model.output:clear_canvas()
     View.clear_snapshot()
-    love.state.app_state = 'ready'
     return ok
   end
   return true
+end
+
+--- Close the current project and return to the default project.
+--- @return boolean success
+function ConsoleController:close_project()
+  local ok = self:_close_project()
+  if ok then
+    return self:open_project(ProjectService.DEFAULT)
+  end
+  return ok
 end
 
 --- @return Project?
@@ -1868,7 +1853,7 @@ function ConsoleController:stop_project_run()
   -- a stopped project must not keep hearing the board.
   SerialPort:programEnded()
   self.main_ctrl.report()
-  love.state.app_state = 'project_open'
+  love.state.app_state = 'ready'
 end
 
 function ConsoleController:quit_project()
@@ -1876,6 +1861,24 @@ function ConsoleController:quit_project()
   self:close_project()
   self.model.output:reset()
   self.input:reset()
+end
+
+--- Delete the default project and recreate it with factory contents.
+--- @return boolean success
+function ConsoleController:reset_scratch()
+  local P = self.model.projects
+  local name = ProjectService.DEFAULT
+  if P.current and P.current.name == name then
+    self:_close_project()
+  else
+    self:close_project()  --- lands on scratch
+    self:_close_project() --- close it directly (no redirect)
+  end
+  local ok, err = P:remove(name)
+  if not ok then
+    print(err)
+  end
+  return self:open_project(name)
 end
 
 --- @param name string

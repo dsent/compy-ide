@@ -91,7 +91,7 @@ describe('input surface: inbound events — global platform'
           end
           F.session.press('lctrl')
           F.session.press('q')
-          assert.equal('project_open', love.state.app_state)
+          assert.equal('ready', love.state.app_state)
           assert.is_false(project_ran)
         end)
     end)
@@ -188,7 +188,7 @@ describe('input surface: inbound events — global platform'
         love.state.app_state = 'running'
         F.session.press('lctrl')
         F.session.press('s')
-        assert.equal('project_open', love.state.app_state)
+        assert.equal('ready', love.state.app_state)
       end)
 
       it('ctrl+alt+s no longer stops the run; the project'

@@ -1152,19 +1152,21 @@ describe('input surface: inbound events — dispatch #input',
       assert.has_error(function() compy.input = { } end)
     end)
 
-    -- The surface is the PROJECT's, and the console
-    -- environment does not get one: the console's own
-    -- `compy.input` resolved the same widget a running project
-    -- holds, so a command typed at the prompt could
-    -- reconfigure it (doc/development/technical_debt/input.md,
-    -- T-CONSOLE-SURFACE-INTERFERES, paid by deletion). The
-    -- refusal to assign stays in both namespaces, so a
-    -- console-side write fails loudly rather than creating a
-    -- fake surface that dispatches to nobody.
-    it('the console environment has no input surface',
+    -- The env is unified: the console the user types into IS the
+    -- open project's environment — there is no second console
+    -- namespace whose own `compy.input` member could shadow the
+    -- widget a running project holds (T-CONSOLE-SURFACE-
+    -- INTERFERES, retired by the fusion; project_env_spec pins
+    -- get_console_env nil). The refusal to assign is the
+    -- surviving guard, stated as HEAD's asymmetry had it: a
+    -- console-side write replaces the whole container and fails
+    -- loudly rather than creating a fake surface that dispatches
+    -- to nobody.
+    it('the unified console env cannot seed a shadow surface',
       function()
-        local compy = F.cc:get_console_env().compy
-        assert.is_nil(compy.input)
+        local compy = F.cc:get_project_env().compy
+        assert.are.equal(compy,
+          F.cc:get_effective_env().compy)
         assert.has_error(function() compy.input = { } end)
       end)
 

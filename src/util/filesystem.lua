@@ -440,6 +440,13 @@ else
     end
   end
 
+  --- @param path string
+  --- @return boolean ok
+  --- @return string content|error
+  function FS.combined_read(path)
+    return FS.read(path)
+  end
+
   --- @param source string
   --- @param target string
   --- @return boolean success
@@ -506,6 +513,29 @@ else
     return FS.getInfo(path, filtertype) and true or false
   end
 
+  --- Directory listing for the unit-test branch. The LÖVE
+  --- branch lists through love.filesystem; here lfs stands in,
+  --- returning the same FileInfo-shaped entries (.name, .type,
+  --- .size, .modtime) the project service and the console's
+  --- list_contents/evacuate_required read.
+  --- @param path string
+  --- @param filtertype love.FileType?
+  --- @return table FileInfo[]
+  function FS.dir(path, filtertype)
+    local items = {}
+    local iter, state = lfs.dir(path)
+    for entry in iter, state do
+      if entry ~= '.' and entry ~= '..' then
+        local fi = FS.getInfo(FS.join_path(path, entry))
+        if fi and (not filtertype or fi.type == filtertype) then
+          fi.name = entry
+          table.insert(items, fi)
+        end
+      end
+    end
+    return items
+  end
+
   --- @param path string
   --- @return boolean success
   --- @return string? error
@@ -553,6 +583,18 @@ else
     end
     return ok
   end
+end
+
+--- Atomic rename on the same filesystem.
+--- Uses the standard `os.rename` (rename(2)) so the target
+--- only ever appears complete.
+--- @param source string
+--- @param target string
+--- @return boolean success
+--- @return string? error
+function FS.rename(source, target)
+  local ok, err = os.rename(source, target)
+  return ok or false, err
 end
 
 
