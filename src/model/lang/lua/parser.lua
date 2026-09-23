@@ -288,7 +288,13 @@ return function(lib)
     if ok then
       --- @diagnostic disable-next-line: param-type-mismatch
       local src = ast_to_src(r, {}, w)
-      return string.lines(src)
+      local lines = string.lines(src)
+      --- a comment closing the code leaves the newline meant
+      --- for a statement after it; that is no blank line
+      while #lines > 1 and string.match(lines[#lines], '^%s*$') do
+        table.remove(lines)
+      end
+      return lines
     end
   end
 
@@ -352,6 +358,15 @@ return function(lib)
             end
           end
         end
+        --- One empty block per blank line before `ln', so a
+        --- run of blank lines stays a run
+        --- @param ln integer
+        local add_empties_before = function(ln)
+          for el = last + 1, ln - 1 do
+            ret:insert(Empty(el), idx)
+            idx = idx + 1
+          end
+        end
         --- @param comments Comment[]
         --- @param pos CommentPos
         local get_comments = function(comments, pos)
@@ -363,14 +378,7 @@ return function(lib)
                     or comment_lines[c.first.l])
             then
               local cfl, cll = c.first.l, c.last.l
-              -- account for empty lines
-              if cfl > last + 1 then
-                ret:insert(Empty(last + 1), idx)
-                idx = idx + 1
-                comment_ids[c.idf] = true
-                comment_ids[c.idl] = true
-                comment_lines[cfl] = true
-              end
+              add_empties_before(cfl)
               if cfl == cll then
                 local ctext = '--' .. c.text
                 add_comment_block(ctext, c, Range.singleton(cfl))
@@ -410,8 +418,6 @@ return function(lib)
           end
         end
 
-        --- multiline empty collapse offset
-        local of = 0
         for _, v in ipairs(r) do
           has_lines = true
           local li = v.lineinfo
@@ -421,15 +427,9 @@ return function(lib)
 
           claim_own_comments(comments, fl, ll)
           get_comments(comments, 'first')
-          --- account for empty lines, including the zeroth
-          if fl > last + 1 then
-            ret:insert(Empty(last + 1 - of), idx)
-            idx = idx + 1
-            last = last + 1
-            of = of + (fl - last - 1)
-          end
+          add_empties_before(fl)
           local tex = table.slice(text or {}, fl, ll)
-          local chunk = Chunk(tex, Range(fl - of, ll - of))
+          local chunk = Chunk(tex, Range(fl, ll))
           ret:insert(chunk, idx)
           idx = idx + 1
           last = ll
@@ -443,6 +443,11 @@ return function(lib)
           get_comments(single_comment, 'first')
         end
 
+        if not single then
+          --- the blank lines ending the file, and the empty
+          --- line after its final newline
+          add_empties_before(#text + 1)
+        end
         if
             ret:last().tag ~= 'empty' and (
             --- no empty line at EOF
@@ -451,7 +456,7 @@ return function(lib)
               or single and (#string.lines(text) > last)
             )
         then
-          ret:push_back(Empty(last + 1 - of))
+          ret:push_back(Empty(last + 1))
         end
         return true, ret, r
       else

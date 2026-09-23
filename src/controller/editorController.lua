@@ -690,11 +690,6 @@ function EditorController:open_block()
     if string.is_non_empty_string_array(raw) then
       local pretty = buf.printer(raw)
       if pretty then
-        --- the printer may append a trailing empty
-        --- line; that is noise, not formatting
-        while #pretty > 1 and pretty[#pretty] == '' do
-          table.remove(pretty)
-        end
         input:set_text(pretty)
       end
     end

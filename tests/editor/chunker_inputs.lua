@@ -59,6 +59,15 @@ end]]), Range(1, 13)),
   Empty(16)
 }
 
+--- every blank line is an empty block of its own
+local sierp_res_2 = {
+  sierp_res[1],
+  Empty(14),
+  Empty(15),
+  Chunk({ 'print(sierpinski(4))' }, Range.singleton(16)),
+  Empty(17)
+}
+
 local chonk_1 = Chunk({
     'function chonky()',
     '  return {"big", "chungus"}',
@@ -98,7 +107,10 @@ return {
   prep(
     "local x = 1\n\n\n\n",
     { Chunk({ 'local x = 1' }, Range.singleton(1)),
-      Empty(2) }
+      Empty(2),
+      Empty(3),
+      Empty(4),
+      Empty(5) }
   ),
   prep(
     "\nlocal x = 1\n",
@@ -109,12 +121,16 @@ return {
   prep(
     "\n\n\nlocal x = 1\n\n\n",
     { Empty(1),
-      Chunk({ 'local x = 1' }, Range.singleton(2)),
-      Empty(3) }
+      Empty(2),
+      Empty(3),
+      Chunk({ 'local x = 1' }, Range.singleton(4)),
+      Empty(5),
+      Empty(6),
+      Empty(7) }
   ),
 
   prep(sierp_code, sierp_res),
-  prep(sierp_code_2, sierp_res),
+  prep(sierp_code_2, sierp_res_2),
 
   prep([[function chonky()
   return {"big", "chungus"}
@@ -139,20 +155,11 @@ print(string.unlines(chonky()))]],
 end
 
 
-print(string.unlines(chonky()))]], chonk_res),
-
-  prep([[function chonky()
-  return {"big", "chungus"}
-end
-
-
-print(string.unlines(chonky()))
-print(1)]], {
+print(string.unlines(chonky()))]], {
     chonk_1,
     Empty(4),
+    Empty(5),
     Chunk({ 'print(string.unlines(chonky()))' },
-      Range.singleton(5)),
-    Chunk({ 'print(1)' },
       Range.singleton(6)),
     Empty(7),
   }),
@@ -163,19 +170,37 @@ end
 
 
 print(string.unlines(chonky()))
+print(1)]], {
+    chonk_1,
+    Empty(4),
+    Empty(5),
+    Chunk({ 'print(string.unlines(chonky()))' },
+      Range.singleton(6)),
+    Chunk({ 'print(1)' },
+      Range.singleton(7)),
+    Empty(8),
+  }),
+
+  prep([[function chonky()
+  return {"big", "chungus"}
+end
+
+
+print(string.unlines(chonky()))
 print(1)
 
 x = 1
 y = 2]], {
     chonk_1,
     Empty(4),
+    Empty(5),
     Chunk({ 'print(string.unlines(chonky()))' },
-      Range.singleton(5)),
-    Chunk({ 'print(1)' }, Range.singleton(6)),
-    Empty(7),
-    Chunk({ 'x = 1' }, Range.singleton(8)),
-    Chunk({ 'y = 2' }, Range.singleton(9)),
-    Empty(10),
+      Range.singleton(6)),
+    Chunk({ 'print(1)' }, Range.singleton(7)),
+    Empty(8),
+    Chunk({ 'x = 1' }, Range.singleton(9)),
+    Chunk({ 'y = 2' }, Range.singleton(10)),
+    Empty(11),
   }),
 
   prep([[function chonky()
@@ -191,14 +216,15 @@ x = 1
 y = 2]], {
     chonk_1,
     Empty(4),
+    Empty(5),
     Chunk({ 'print(string.unlines(chonky()))' },
-      Range.singleton(5)),
-    Chunk({ 'print(1)' }, Range.singleton(6)),
-    Empty(7),
-    Chunk({ 'x = 1' }, Range.singleton(8)),
-    Empty(9),
-    Chunk({ 'y = 2' }, Range.singleton(10)),
-    Empty(11),
+      Range.singleton(6)),
+    Chunk({ 'print(1)' }, Range.singleton(7)),
+    Empty(8),
+    Chunk({ 'x = 1' }, Range.singleton(9)),
+    Empty(10),
+    Chunk({ 'y = 2' }, Range.singleton(11)),
+    Empty(12),
   }),
 
   prep([[--- luadoc comment
@@ -216,6 +242,25 @@ end]], {
       Range(2, 5)
     ),
     Empty(6),
+  }),
+
+  --- a run of blank lines before a comment keeps every
+  --- later block on its own line
+  prep({
+    'local a = 1',
+    '',
+    '',
+    '',
+    '-- note',
+    'local b = 2',
+  }, {
+    Chunk({ 'local a = 1' }, Range.singleton(1)),
+    Empty(2),
+    Empty(3),
+    Empty(4),
+    Chunk({ '-- note' }, Range.singleton(5)),
+    Chunk({ 'local b = 2' }, Range.singleton(6)),
+    Empty(7),
   }),
 
   --- a comment trailing code belongs to the statement's own chunk
