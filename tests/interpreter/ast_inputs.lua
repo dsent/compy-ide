@@ -712,6 +712,25 @@ local emptylines = {
     'end',
   }),
 
+  -- a comment on a line of its own keeps its gap anywhere
+
+  prep({
+    'local t = {',
+    '  1,',
+    '',
+    '',
+    '  -- a comment between fields keeps its gap',
+    '  2',
+    '}',
+  }, {
+    'local t = {',
+    '  1,',
+    '',
+    '  -- a comment between fields keeps its gap',
+    '  2',
+    '}',
+  }),
+
   -- the placeholder line of an empty body is not a gap
 
   prep({

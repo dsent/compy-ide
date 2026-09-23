@@ -73,7 +73,6 @@ function M:run(ast, seen_comments, w)
     self, ast = M.new(seen_comments, w), self
   end
   self._acc = {}
-  self._root = ast
   self:node(ast)
   return self:render()
 end
@@ -223,11 +222,12 @@ end
 
 ----------------------------------------------------------------
 --- Keep one empty line where the source had one or more
---- before `pos'. Called at the start of the output or on the
---- fresh line nl() just started, which it pushes down; the
---- empty line carries no indent. The start of an indented
---- body keeps none, so the placeholder line of an empty body
---- never reads as a typed blank line.
+--- before `pos'. Acts only at the start of the output or on
+--- the fresh line nl() just started, which it pushes down, so
+--- a comment in the middle of a line keeps none; the empty
+--- line carries no indent. The start of an indented body
+--- keeps none, so the placeholder line of an empty body never
+--- reads as a typed blank line.
 --- @param pos position|{line: integer}|{l: integer}
 ----------------------------------------------------------------
 function M:keep_gap(pos)
@@ -469,9 +469,8 @@ end
 --- If something can't be converted to normal sources, it's
 --- instead dumped as a `-{ ... }' splice in the source accumulator.
 --- A statement keeps one empty line wherever the source had a
---- gap before it; a statement, a statement list (a tagless
---- block), or the node being rendered keeps one before each
---- comment it puts on a line of its own.
+--- gap before it, and so does a comment put on a line of its
+--- own.
 --- @param node token
 --- @param stmt boolean? --- an item of a statement list
 ----------------------------------------------------------------
@@ -481,7 +480,6 @@ function M:node(node, stmt)
     self:acc("<<error>>")
     return
   end
-  local keeps_gaps = stmt or not node.tag or node == self._root
   local comments = self:extract_comments(node)
   --- @param pos 'first'|'last'
   local function show_comments(pos)
@@ -490,7 +488,7 @@ function M:node(node, stmt)
       if co.position == pos then
         --- comes _after_ a previous expression
         if co.position == 'last' then self:nl() end
-        if keeps_gaps then self:keep_gap(co.first) end
+        self:keep_gap(co.first)
         --- preserve existing newlines
         local lines = string.lines(co.text)
         if co.multiline then
