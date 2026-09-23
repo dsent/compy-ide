@@ -860,6 +860,76 @@ function EditorController:accept_block()
   end)
 end
 
+--- The parser is built on first use
+local lua_parser
+--- @return table
+local function get_lua_parser()
+  lua_parser = lua_parser or require('model.lang.lua.parser')()
+  return lua_parser
+end
+
+--- @param lines string[]
+--- @return table? --- the statements, when the text parses
+local function statements(lines)
+  local ok, ast = get_lua_parser().parse(lines)
+  if ok then return ast end
+end
+
+--- Format the whole open file (Ctrl+Shift+F in navigation).
+--- It is the one place blank lines outside a block change:
+--- the user asked, and every run of them becomes one. The
+--- selection stays on the statement it was on; from a blank
+--- line or a comment it moves to the statement below.
+function EditorController:format_file()
+  local buf = self:get_active_buffer()
+  if buf.content_type ~= 'lua' or buf.readonly then
+    return self:refuse()
+  end
+  local before = string.lines(
+    string.unlines(buf:get_text_content()))
+  local after, formatted = format.format(before,
+    self.model.cfg.view.drawableChars)
+  if not formatted then
+    return self:refuse({
+      'The file cannot be tidied without changing what'
+      .. ' it does, so it stays as it is'
+    })
+  end
+  if string.unlines(after) == string.unlines(before) then
+    return
+  end
+
+  --- which statement the active line is on, or above
+  local nth
+  local ln = buf:get_active_line()
+  for i, st in ipairs(statements(before) or {}) do
+    if st.lineinfo.last.line >= ln then
+      nth = i
+      break
+    end
+  end
+
+  local saved = self:record_write(buf, function()
+    buf:replace_text(after)
+    return self:save(buf)
+  end)
+  if not saved then
+    self:refuse({
+      'Could not save the file.'
+      .. ' Check the storage and try again.'
+    })
+  end
+
+  local target = nth and (statements(after) or {})[nth]
+  local sel = target
+      and buf:block_at_line(target.lineinfo.first.line)
+      or buf:get_content_length()
+  buf:set_selection(sel)
+  self.view:refresh()
+  self.view:get_current_buffer():follow_selection()
+  self:update_status()
+end
+
 --- Block-wise movement of the active line (spec 2.2)
 --- @param dir VerticalDir
 function EditorController:_jump_block(dir)
@@ -1511,8 +1581,14 @@ function EditorController:keypressed(k)
     if k == "m" then
       self:set_mode('reorder')
     end
-    if k == "f" then
+    if k == "f" and not Key.shift() then
       self:set_mode('search')
+    end
+    --- formatting the whole file is a navigation command,
+    --- like reordering and search
+    if k == "f" and Key.shift() and mode == 'nav' then
+      self:format_file()
+      return
     end
     self:_leave_keys(k)
   end

@@ -213,6 +213,12 @@ function BufferModel:_splice(start, n_out, lines_in)
   end
 end
 
+--- Replace the whole text and re-chunk it
+--- @param lines string[]
+function BufferModel:replace_text(lines)
+  self:_splice(1, #self:get_text_content(), lines)
+end
+
 --- @return table? --- the applied step, nil when empty
 function BufferModel:undo()
   local n = #self.history

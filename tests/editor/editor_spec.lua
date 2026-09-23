@@ -2125,6 +2125,42 @@ describe('Editor #editor', function()
           end)
       end)
 
+      describe("formatting the whole file", function()
+        it("collapses every blank run, keeping the statement",
+          function()
+            local _, buffer = session:open(string.unlines({
+              'a = 1', '', '', '',
+              'function f()   return 1 end', '', '',
+              'b = 2', '',
+            }), 9)
+            session:select_block(8, 'b = 2')
+            mock.keystroke('C-S-f', press)
+            assert.same('nav', controller:get_mode())
+            assert.same(string.unlines({
+              'a = 1', '',
+              'function f()', '  return 1', 'end', '',
+              'b = 2', '',
+            }), savefile())
+            assert.same({ 'b = 2' }, buffer:get_selected_text(),
+                        "the selection stays on its statement")
+          end)
+
+        it("leaves a file it cannot format safely as it is",
+          function()
+            local file = string.unlines({
+              'local colors = {',
+              '  black = 0, -- #000000',
+              '  white = 1,',
+              '}',
+              '',
+            })
+            session:open(file, 2)
+            mock.keystroke('C-S-f', press)
+            assert.same(file, savefile())
+            assert.is_true(controller.input:has_error())
+          end)
+      end)
+
       --- spec 2.1: on a blank line the typed text turns that
       --- line into the new block
       describe("typing on a blank line", function()
