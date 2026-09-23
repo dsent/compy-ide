@@ -2045,6 +2045,15 @@ describe('Editor #editor', function()
                         savefile())
           end)
 
+        it("of a file holding nothing else stay when code is added",
+          function()
+            session:open('\n\n\n', 4)
+            session:select_block(1)
+            session:submit('a = 1')
+            assert.same('a = 1\n\n\n\n', savefile(),
+                        "the three blank lines stay below it")
+          end)
+
         it("do not grow an empty function body", function()
           local placeholder = 'function g()\n  \nend\n'
           session:open('function g() end\n', 2)

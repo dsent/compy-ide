@@ -464,7 +464,13 @@ return function(lib)
         return false, Dequeue(text, 'string'), r
       end
     else
-      return true, Dequeue({ Empty(1) }, 'block'), r
+      --- a file of blank lines keeps every one of them
+      local empties = Dequeue.typed('block')
+      local n = (not single and type(text) == 'table') and #text or 1
+      for ln = 1, math.max(n, 1) do
+        empties:push_back(Empty(ln))
+      end
+      return true, empties, r
     end
   end
 

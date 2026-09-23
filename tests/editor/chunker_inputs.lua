@@ -90,8 +90,9 @@ return {
       Empty(2) }
   ),
   prep({ '' }, { Empty(1) }),
-  prep({ '', '' }, { Empty(1) }),
-  prep({ '   ', '' }, { Empty(1) }),
+  prep({ '', '' }, { Empty(1), Empty(2) }),
+  prep({ '   ', '' }, { Empty(1), Empty(2) }),
+  prep({ '', '', '', '' }, { Empty(1), Empty(2), Empty(3), Empty(4) }),
 
   prep(
     "\nlocal x = 1",
