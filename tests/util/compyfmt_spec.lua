@@ -66,9 +66,11 @@ describe('compyfmt #compyfmt', function()
     local p = new_file('x = 0\nfunction f()\n'
       .. table.concat(body, '\n') .. '\nend\n')
     assert.equal(1, compyfmt.main({ p }))
-    assert.same(
-      { p .. ':2: block of 16 lines, 2 over the limit of 14' },
-      printed)
+    assert.same({
+      p .. ':2: block of 16 lines, 2 over the limit of 14',
+      p .. ':2: function of 16 lines; keep it to 14'
+      .. ' (function-length)',
+    }, printed)
   end)
 
   it('leaves a file with an error, reporting it', function()
@@ -99,6 +101,62 @@ describe('compyfmt #compyfmt', function()
         p .. ':18: line too long!',
       }, printed)
     end)
+
+  describe('reports the lints of code.md', function()
+    local function reports(text)
+      local _, found = compyfmt.inspect(string.lines(text))
+      return found
+    end
+
+    it('parameters: more than 4, counting ..., not self', function()
+      assert.same({
+        '4: function takes 5 parameters; keep it to 4,'
+        .. ' or pass a table (parameters)',
+      }, reports(table.concat({
+        'function obj:m(a, b, c, d)',
+        'end',
+        'function g(a, b, c, d, ...)',
+        'end',
+      }, '\n')))
+    end)
+
+    it('nesting: deeper than 4, counted afresh in a function',
+      function()
+        local ok_deep = table.concat({
+          'if a then',
+          '  local k = function()',
+          '    if b then',
+          '      if c then',
+          '        if d then',
+          '          if e then',
+          '            print(1)',
+          '          end',
+          '        end',
+          '      end',
+          '    end',
+          '  end',
+          'end',
+        }, '\n')
+        assert.same({}, reports(ok_deep))
+        local too_deep = ok_deep:gsub('  local k = function%(%)',
+          '  while k do')
+        assert.same({
+          '5: 5 levels deep; keep it to 4, or move the inner part'
+          .. ' into a function (nesting)',
+        }, reports(too_deep))
+      end)
+
+    it('function length: more than 14 lines', function()
+      local body = {}
+      for i = 1, 13 do table.insert(body, '    print(' .. i .. ')') end
+      local text = 't = {\n  f = function()\n'
+        .. table.concat(body, '\n') .. '\n  end\n}'
+      assert.same({
+        '1: block of 17 lines, 3 over the limit of 14',
+        '2: function of 15 lines; keep it to 14 (function-length)',
+      }, reports(text))
+    end)
+  end)
 
   it('exits 2 for a file it cannot read', function()
     assert.equal(2, compyfmt.main({ '/nonexistent/compy.lua' }))
