@@ -157,6 +157,13 @@ contents.
   Write to _file_ the text supplied as the _content_ parameter.
   This can be either a string, or an array of strings.
 
+- `tidy(file)`
+
+  Lay out the code in _file_ (`main.lua` if none is given) the
+  way the editor writes it. Returns `true` when the file is
+  tidy; when it cannot be tidied, says why and leaves it as it
+  is.
+
 ## Editor
 
 If a project is open, the files inside can be edited or new ones

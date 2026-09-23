@@ -73,6 +73,7 @@
 | Follow the require under selection                                | <kbd>Ctrl</kbd>+<kbd>J</kbd>                  |
 | Block reorder mode                                                | <kbd>Ctrl</kbd>+<kbd>M</kbd>                  |
 | Search definitions                                                | <kbd>Ctrl</kbd>+<kbd>F</kbd>                  |
+| Format the whole file (nav)                                       | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> |
 | Scroll to start / end                                             | <kbd>Ctrl</kbd>+<kbd>PageUp</kbd> / <kbd>Ctrl</kbd>+<kbd>PageDown</kbd> |
 | Scroll up / down by one line                                      | <kbd>Shift</kbd>+<kbd>PageUp</kbd> / <kbd>Shift</kbd>+<kbd>PageDown</kbd> |
 

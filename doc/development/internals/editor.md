@@ -73,6 +73,8 @@ Pressing `Enter` on non-empty input goes through `_handle_submit`, which asks th
 
 `Ctrl+Enter` inserts the new block(s) before the selection rather than replacing it. Text typed on a blank line (an `Empty` block) replaces that line, and the selection moves to the block after the new text, so typing goes on below it.
 
+`Ctrl+Shift+F` in navigation (`format_file`) formats the whole file with the same `format` function at the window's width. Every run of blank lines in the file becomes one: the one place the editor changes blank lines outside a block, because the user asked. When `format` hands the text back as it was, the editor refuses with a message and the file stays. The selection stays on the statement the active line was on; from a blank line or a comment it moves to the statement below. The REPL's `tidy(name)` and `util/compyfmt.lua` format a file the same way at a Compy's width (`src/conf/display.lua`); compyfmt also reports the gates and the lints (`src/model/lang/lua/lint.lua`).
+
 ---
 
 ## Monster Blocks
@@ -183,4 +185,5 @@ The buffer ID ensures the view can retrieve the right `BufferView` even after th
 | `src/model/lang/lua/analyze.lua` | AST walker producing SemanticInfo |
 | `src/model/lang/lua/format.lua` | Formatting: the text as the editor writes it |
 | `src/model/lang/lua/check.lua` | Gates: line, parse and block-size rules, and `gate`, the editor's verdict |
+| `src/model/lang/lua/lint.lua` | Lints: conventions reported, never refused |
 | `src/model/interpreter/eval/evaluator.lua` | Evaluator types including LuaEditorEval |

@@ -2,14 +2,18 @@
 
 #### compyfmt
 
+The editor's formatting, gates and lints, at a Compy's width.
+
 ```shell
 # run from repo root, use lua 5.1 or luajit
-luajit util/compyfmt [file]
-# overwrite the original file with -w or --write
-luajit util/compyfmt [file] -w
-# example
-luajit util/compyfmt.lua src/examples/tixy/examples.lua -w
+# fix: format the files in place, then report what is left
+luajit util/compyfmt.lua src/examples/tixy/examples.lua
+# check: change nothing, report what fix would change and find
+luajit util/compyfmt.lua --check src/examples/tixy/*.lua
 ```
+
+Reports read `file:line: what`. Both modes exit 1 when they
+report anything, 2 when a file cannot be read.
 
 ## Unit tests
 
