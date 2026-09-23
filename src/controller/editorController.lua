@@ -909,12 +909,14 @@ function EditorController:format_file()
     end
   end
 
-  local saved = self:record_write(buf, function()
-    buf:replace_text(after)
-    return self:save(buf)
-  end)
-  if not saved then
-    self:refuse({
+  local sel_before = buf:get_selection()
+  buf:replace_text(after)
+  if not self:save(buf) then
+    --- the screen keeps showing the file, so trying again
+    --- formats it again
+    buf:replace_text(before)
+    self.view:refresh()
+    return self:refuse({
       'Could not save the file.'
       .. ' Check the storage and try again.'
     })
@@ -925,6 +927,8 @@ function EditorController:format_file()
       and buf:block_at_line(target.lineinfo.first.line)
       or buf:get_content_length()
   buf:set_selection(sel)
+  buf:push_history(before, table.clone(buf:get_text_content()),
+    sel_before, sel)
   self.view:refresh()
   self.view:get_current_buffer():follow_selection()
   self:update_status()

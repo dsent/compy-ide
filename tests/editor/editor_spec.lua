@@ -2211,6 +2211,44 @@ describe('Editor #editor', function()
           ls:close()
         end)
 
+        it("leaves the screen as the file when the save fails",
+          function()
+            local disk = 'a  =  1\n'
+            local failing = true
+            controller:open('test.lua', disk, function(content)
+              if failing then return false, 'no space left' end
+              disk = string.unlines(content)
+              return true
+            end)
+            local buffer = controller:get_active_buffer()
+
+            mock.keystroke('C-S-f', press)
+            assert.same('a  =  1\n', disk)
+            assert.same({ 'a  =  1', '' }, buffer:get_text_content())
+            assert.is_true(controller.input:has_error())
+
+            --- storage back: trying again formats and saves
+            failing = false
+            mock.keystroke('escape', press)
+            mock.keystroke('C-S-f', press)
+            assert.same('a = 1\n', disk)
+          end)
+
+        it("is undone and redone like any write", function()
+          local _, buffer = session:open(string.unlines({
+            'a  =  1', '', '', '', 'b = 2', 'c = 3', 'd = 4',
+            'e = 5', '',
+          }), 9)
+          session:select_block(5, 'b = 2')
+          mock.keystroke('C-S-f', press)
+          assert.same({ 'b = 2' }, buffer:get_selected_text())
+          mock.keystroke('C-z', press)
+          assert.same({ 'b = 2' }, buffer:get_selected_text())
+          mock.keystroke('C-y', press)
+          assert.same({ 'b = 2' }, buffer:get_selected_text(),
+                      "redo lands where the format did")
+        end)
+
         it("leaves a file it cannot format safely as it is",
           function()
             local file = string.unlines({
