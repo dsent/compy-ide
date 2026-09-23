@@ -60,8 +60,15 @@ end
 --- @param path string
 --- @return boolean
 function usb.is_removable_fat(fstype, path)
+  --- Android shows apps a USB drive only through FUSE, at
+  --- /storage/ and its volume id, e.g. /storage/2702-1974;
+  --- internal storage is FUSE too, at /storage/emulated/0
+  if fstype == 'fuse' then
+    return string.matches_r(path,
+      '^/storage/%x%x%x%x%-%x%x%x%x$')
+  end
   if fstype ~= 'vfat' and fstype ~= 'exfat' and fstype ~= 'msdos'
-      and fstype ~= 'fuseblk' and fstype ~= 'fuse' then
+      and fstype ~= 'fuseblk' then
     return false
   end
   return string.matches_r(path, '^/storage/')

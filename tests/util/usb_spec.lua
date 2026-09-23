@@ -36,10 +36,16 @@ describe('usb detection #usb', function()
       assert.is_false(usb.is_removable_fat('ext4', '/mnt/data'))
       assert.is_false(usb.is_removable_fat('vfat', '/'))
       assert.is_false(usb.is_removable_fat('vfat', '/home/user/foo'))
-      --- Android emulated storage is FUSE, not FAT
+      --- Android internal storage is FUSE too
       assert.is_false(usb.is_removable_fat('fuse', '/storage/emulated/0'))
-      --- Android external SD is surfaced via FUSE too
-      assert.is_false(usb.is_removable_fat('fuse', '/storage/ABCD-EFGH'))
+      assert.is_false(usb.is_removable_fat('fuse', '/storage/self/primary'))
+    end)
+
+    it('accepts FUSE only at a USB volume id', function()
+      --- how Android shows apps a micro:bit on a Compy
+      assert.is_true(usb.is_removable_fat('fuse', '/storage/2702-1974'))
+      assert.is_false(usb.is_removable_fat('fuse', '/mnt/media_rw/2702-1974'))
+      assert.is_false(usb.is_removable_fat('fuse', '/storage/2702-1974/x'))
     end)
   end)
 end)
