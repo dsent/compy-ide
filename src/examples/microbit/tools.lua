@@ -146,17 +146,18 @@ function embed(hex_name, lua_name)
   print("wrote " .. hex_name)
 end
 
---- Put a hex file on the board. The platform returns only
---- once the file has reached the device, and the board takes
---- it as new firmware and restarts on its own. The board is
---- looked for each time: it is usually plugged in after
---- Compy has started.
+--- Put a hex file on the board. The board is looked for each
+--- time, since it usually goes in after Compy has started.
+--- Writing takes a few seconds and the screen does not move
+--- until it is done, so a sound says the writing has begun:
+--- it plays on while the file goes out.
 --- @param filename string?
 function upload(filename)
   local name = filename or HEX
-  detect_microbit()
-  local ok, err = flash_microbit(assert(readfile(name),
-    "no " .. name))
+  local data = assert(readfile(name), "no " .. name)
+  assert(detect_microbit(), "No micro:bit is plugged in")
+  compy.audio.hyperjump()
+  local ok, err = flash_microbit(data)
   assert(ok, err)
   print(name .. " is on the board, it restarts with it")
 end
