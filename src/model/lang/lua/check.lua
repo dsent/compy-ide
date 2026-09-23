@@ -1,20 +1,27 @@
 require('model.interpreter.eval.filter')
 require('model.lang.lua.error')
+local display = require('conf.display')
+local format = require('model.lang.lua.format')
 
---- The checks the Compy editor applies to Lua source.
+--- The gates: what the Compy editor refuses in Lua source.
 ---
---- This is the single statement of those rules. The editor reads it
---- through LuaEditorEval; a linter reads it directly and gets the same
---- verdict the editor would give, without restating a rule.
+--- This is the single statement of those rules. check() holds the
+--- rules on text as given, which the editor's input reads through
+--- LuaEditorEval; gate() is the editor's whole verdict on accepting
+--- a block, and what any tool asks to get that verdict.
 ---
 --- @class LuaCheck
 --- @field max_line_length integer
+--- @field max_block_lines integer
 --- @field line_validators ValidatorFilter[]
 --- @field ast_validators AstValidatorFilter[]
 
---- A Compy line is 64 columns wide, and the editor refuses a longer
---- one rather than wrapping it out of sight.
-local MAX_LINE_LENGTH = 64
+--- A Compy line is as wide as its screen, and the editor refuses a
+--- longer one rather than wrapping it out of sight.
+local MAX_LINE_LENGTH = display.columns
+
+--- A block holds no more lines than the input shows at once.
+local MAX_BLOCK_LINES = display.input_lines
 
 --- @param n integer
 --- @return ValidatorFilter
@@ -42,6 +49,7 @@ end
 
 local M = {
   max_line_length = MAX_LINE_LENGTH,
+  max_block_lines = MAX_BLOCK_LINES,
   line_validators = { line_length },
   ast_validators  = { well_formed },
 }
@@ -83,6 +91,51 @@ function M.check(s)
     return false, errors, ast
   end
   return true, errors, ast
+end
+
+--- @class GateVerdict
+--- @field ok boolean
+--- @field lines string[] --- the text as the editor writes it:
+--- formatted, or as given when it does not format
+--- @field formatted boolean
+--- @field errors Error[] --- line and parse rules, on `lines`
+--- @field blocks Block[]? --- `lines` chunked, once they pass
+--- @field oversized integer? --- the first block over the limit
+--- @field excess integer? --- lines too many in that block
+
+--- The editor's verdict on accepting a block: format it, check
+--- the formatted text, then chunk it and measure every block.
+--- The checks read the formatted text, so a long line the
+--- formatter wraps is no refusal.
+--- @param lines string[]
+--- @param width integer? --- format width; a Compy's by default
+--- @param max_block integer? --- a Compy's limit by default
+--- @return GateVerdict
+function M.gate(lines, width, max_block)
+  width = width or display.columns
+  max_block = max_block or MAX_BLOCK_LINES
+  local text, formatted = format.format(lines, width)
+  local ok, errors = M.check(text)
+  --- @type GateVerdict
+  local verdict = {
+    ok = ok,
+    lines = text,
+    formatted = formatted,
+    errors = errors,
+  }
+  if not ok then return verdict end
+  local _, blocks = get_parser().chunker(text, width, true)
+  verdict.blocks = blocks
+  for i, b in ipairs(blocks) do
+    local n = b.pos and b.pos:len() or 0
+    if n > max_block then
+      verdict.ok = false
+      verdict.oversized = i
+      verdict.excess = n - max_block
+      break
+    end
+  end
+  return verdict
 end
 
 return M

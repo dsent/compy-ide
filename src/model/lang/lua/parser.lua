@@ -298,6 +298,36 @@ return function(lib)
     end
   end
 
+  --- The text of every comment in the code, in order
+  --- @param code str
+  --- @return string[]?
+  local comments = function(code)
+    local ok, tokens = pcall(tokenize, code)
+    if not ok then return end
+    local found, seen = {}, {}
+    local function add(list)
+      for _, c in ipairs(list or {}) do
+        local id = c.lineinfo.first.id
+        if not seen[id] then
+          seen[id] = true
+          table.insert(found, c)
+        end
+      end
+    end
+    for _, t in ipairs(tokens) do
+      add(t.lineinfo.first.comments)
+      add(t.lineinfo.last.comments)
+    end
+    table.sort(found, function(a, b)
+      local fa, fb = a.lineinfo.first, b.lineinfo.first
+      if fa.line ~= fb.line then return fa.line < fb.line end
+      return fa.column < fb.column
+    end)
+    local texts = {}
+    for _, c in ipairs(found) do table.insert(texts, c[1]) end
+    return texts
+  end
+
   --- Highlight string array
   --- @param code str
   --- @return SyntaxColoring
@@ -489,6 +519,7 @@ return function(lib)
   return {
     parse       = parse,
     pprint      = pprint,
+    comments    = comments,
     highlighter = highlighter,
     ast_to_src  = ast_to_src,
     chunker     = chunker,

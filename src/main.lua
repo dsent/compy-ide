@@ -9,6 +9,7 @@ require("view.view")
 require("view.consoleView")
 
 local colors = require("conf.colors")
+local display = require("conf.display")
 local hostconf = prequire('host')
 
 require("util.lua")
@@ -65,7 +66,7 @@ local config_view = function(flags)
   -- this should lead to 16 lines visible by default on the
   -- console and the editor
   local lines = 16
-  local input_max = 14
+  local input_max = display.input_lines
 
   local font_labels = gfx.newFont(fonts.main, label_size)
   local w = love.fixWidth or gfx.getWidth()

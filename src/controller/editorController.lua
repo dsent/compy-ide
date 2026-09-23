@@ -5,6 +5,8 @@ require("view.input.customStatus")
 require("model.input.cursor")
 
 local class = require('util.class')
+local check = require('model.lang.lua.check')
+local format = require('model.lang.lua.format')
 
 --- @param M EditorModel
 --- @oaram CC ConsoleController
@@ -98,7 +100,8 @@ function EditorController:open(name, content, save)
       return parser.chunker(t, w, single)
     end
     pp = function(t)
-      return parser.pprint(t, w)
+      local out, formatted = format.format(t, w)
+      if formatted then return out end
     end
     tr = function(code)
       return parser.trunc(code, self.model.cfg.view.fold_lines)
@@ -436,8 +439,11 @@ end
 ---------------------------
 
 --- @private
---- @param go fun(nt: string[]|Block[])
---- @param go fun(newtext: Block[]|string[]): boolean
+--- The gate (model.lang.lua.check) gives the verdict; the
+--- input shows the text as it will be written, and a line
+--- or parse refusal lands the cursor on the error. A block
+--- too large is go's to refuse, after its own checks.
+--- @param go fun(newtext: Block[]|string[], verdict: GateVerdict?): boolean
 --- @return boolean accepted --- go's verdict, or false
 --- when the input does not evaluate
 function EditorController:_handle_submit(go)
@@ -452,41 +458,24 @@ function EditorController:_handle_submit(go)
       local block = buf:get_content():get(sel)
       if not block then return true end
     else
-      local _, raw_chunks = buf.chunker(raw, true)
-      local pretty = buf.printer(raw)
-      if pretty then
-        inter:set_text(pretty)
-      else
-        --- fallback to original in case of unparse-able input
-        pretty = raw
+      local verdict = check.gate(raw,
+        self.model.cfg.view.drawableChars, self:_size_limit())
+      if verdict.formatted then
+        inter:set_text(verdict.lines)
       end
-      local ok, res = inter:evaluate()
-      local _, chunks = buf.chunker(pretty, true)
-      if ok then
-        --- the printer keeps one blank line wherever the
-        --- input had some before or between statements;
-        --- blank lines ending the input follow no token it
-        --- could measure from, so one comes back here
-        local rl, cl = raw_chunks[#raw_chunks], chunks[#chunks]
-        if rl and rl:is_empty() and cl and not cl:is_empty() then
-          table.insert(chunks, Empty(cl.pos.fin + 1))
-        end
-        return go(chunks)
-      else
-        local eval_err = res
-        if eval_err then
-          self:refuse()
-          inter:set_error(eval_err)
-          --- spec 2.4.3: the cursor moves to the error
-          local first = Error.get_first(eval_err)
-              or eval_err
-          if type(first) == 'table' and first.l then
-            inter.model:move_cursor(first.l, first.c or 1)
-            inter:update_view()
-          end
-        end
-        return false
+      if #verdict.errors == 0 then
+        return go(verdict.blocks, verdict)
       end
+      local eval_err = verdict.errors
+      self:refuse()
+      inter:set_error(eval_err)
+      --- spec 2.4.3: the cursor moves to the error
+      local first = Error.get_first(eval_err) or eval_err
+      if type(first) == 'table' and first.l then
+        inter.model:move_cursor(first.l, first.c or 1)
+        inter:update_view()
+      end
+      return false
     end
   else
     return go(raw)
@@ -788,36 +777,23 @@ function EditorController:_size_limit()
   return self.view:get_current_buffer():get_max_size()
 end
 
---- @param chunks Block[]
---- @return integer? --- index of the first block over
---- the limit, nil when all fit
-function EditorController:_first_oversized(chunks)
-  if self.view:get_current_buffer().content_type
-      ~= 'lua' then
-    return
-  end
-  local limit = self:_size_limit()
-  return table.find_by(chunks, function(v)
-    return (v and v.pos and v.pos:len() > limit)
-  end)
-end
-
---- Refuse an oversized block and point at it (9.6)
---- @param chunks Block[]
---- @param idx integer
-function EditorController:_reject_oversized(chunks, idx)
-  local block = chunks[idx]
-  if not block or not block.pos then return end
-  local n = block.pos:len()
+--- Refuse a block the gate found too large, and point
+--- at it (9.6)
+--- @param verdict GateVerdict?
+--- @return boolean refused
+function EditorController:_reject_oversized(verdict)
+  if not verdict or not verdict.oversized then return false end
+  local block = verdict.blocks[verdict.oversized]
   --- the wording follows 1.4: say what to do, not what
   --- the machine measured
   self:refuse({ string.format(
     'Too many lines in a block. Remove %d to save,'
     .. ' or press Shift+Esc to cancel',
-    n - self:_size_limit()
+    verdict.excess
   ) })
   self.input.model:move_cursor(block.pos.start, 1)
   self.input:update_view()
+  return true
 end
 
 --- Accept the open block into the file: validate, size
@@ -825,7 +801,7 @@ end
 --- place keeps the block and scrolls back to it.
 --- @return boolean accepted
 function EditorController:accept_block()
-  return self:_handle_submit(function(newtext)
+  return self:_handle_submit(function(newtext, verdict)
     local buf = self:get_active_buffer()
     local bufv = self.view:get_current_buffer()
     if not bufv:is_selection_visible(true) then
@@ -837,9 +813,7 @@ function EditorController:accept_block()
       bufv:follow_selection()
       return false
     end
-    local oversized = self:_first_oversized(newtext)
-    if oversized then
-      self:_reject_oversized(newtext, oversized)
+    if self:_reject_oversized(verdict) then
       return false
     end
     local saved = self:record_write(buf, function()
@@ -1114,16 +1088,15 @@ function EditorController:_normal_mode_keys(k)
 
     --- Insert freshly composed text as new block(s)
     --- @param newtext Block[]
+    --- @param verdict GateVerdict?
     --- @return boolean accepted
-    local function add(newtext)
+    local function add(newtext, verdict)
       if not bufv:is_selection_visible() then
         bufv:follow_selection()
         return false
       end
 
-      local oversized = self:_first_oversized(newtext)
-      if oversized then
-        self:_reject_oversized(newtext, oversized)
+      if self:_reject_oversized(verdict) then
         return false
       end
 

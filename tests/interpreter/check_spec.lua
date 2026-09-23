@@ -64,4 +64,60 @@ describe('lua check #check', function()
     assert.is_false(ok)
     assert.equal('line too long!', errors[1].msg)
   end)
+
+  describe('the gate', function()
+    it('checks the text as formatted, so a wrapped line passes',
+      function()
+        local long = 'local t = { ' .. string.rep('"abcd", ', 8)
+            .. '"abcd" }'
+        assert.is_true(#long > check.max_line_length)
+        assert.is_false((check.check({ long })))
+
+        local verdict = check.gate({ long })
+        assert.is_true(verdict.ok)
+        assert.is_true(verdict.formatted)
+        assert.is_true(#verdict.lines > 1)
+        assert.is_true((check.check(verdict.lines)))
+      end)
+
+    it('refuses a block over the limit, naming it and the excess',
+      function()
+        local body = {}
+        for i = 1, check.max_block_lines - 1 do
+          table.insert(body, '  x' .. i .. ' = ' .. i)
+        end
+        local lines = { 'x = 0', 'function f()' }
+        for _, l in ipairs(body) do table.insert(lines, l) end
+        table.insert(lines, 'end')
+
+        local verdict = check.gate(lines)
+        assert.is_false(verdict.ok)
+        assert.same({}, verdict.errors)
+        assert.equal(2, verdict.oversized)
+        assert.equal(1, verdict.excess)
+      end)
+
+    it('gives back text that does not parse, with the error',
+      function()
+        local lines = { 'function f(', '  return 1' }
+        local verdict = check.gate(lines)
+        assert.is_false(verdict.ok)
+        assert.is_false(verdict.formatted)
+        assert.equal(lines, verdict.lines)
+        assert.equal(1, #verdict.errors)
+        assert.is_number(verdict.errors[1].l)
+      end)
+
+    it('chunks what passes into the blocks the editor writes',
+      function()
+        local verdict = check.gate({ 'a = 1', '', '', 'b = 2', '' })
+        assert.is_true(verdict.ok)
+        assert.same({ 'a = 1', '', 'b = 2', '' }, verdict.lines)
+        local kinds = {}
+        for _, b in ipairs(verdict.blocks) do
+          table.insert(kinds, b:is_empty() and 'empty' or 'code')
+        end
+        assert.same({ 'code', 'empty', 'code', 'empty' }, kinds)
+      end)
+  end)
 end)
