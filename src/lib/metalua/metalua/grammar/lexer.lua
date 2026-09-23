@@ -251,7 +251,7 @@ lexer.patterns = {
    short_comment = "^%-%-([^\n]*)\n?()",
    --final_short_comment = "^%-%-([^\n]*)()$",
    long_comment = "^%-%-%[(=*)%[\n?(.-)%]%1%]()",
-   long_string = "^%[(=*)%[\n?(.-)%]%1%]()",
+   long_string = "^%[(=*)%[(.-)%]%1%]()",
    number_mantissa = { "^%d+%.?%d*()", "^%d*%.%d+()" },
    number_mantissa_hex = { "^%x+%.?%x*()", "^%x*%.%x+()" }, --Lua5.1 and Lua5.2
    number_exponant = "^[eE][%+%-]?%d+()",
@@ -499,13 +499,33 @@ function lexer:extract_number()
    return "Number", n
 end
 
+---A line break in a long string is `\n`, whether the source
+---wrote it `\n`, `\r`, `\r\n` or `\n\r`, and a break right
+---after the opening bracket is dropped, as Lua reads it.
+---@param content string
+---@return string
+local function long_string_value(content)
+   local value = content:gsub("[\r\n]+", function(run)
+      --- each break is one character, or two when the
+      --- second is the other of `\r` and `\n`
+      local breaks, i = 0, 1
+      while i <= #run do
+         local c, d = run:sub(i, i), run:sub(i + 1, i + 1)
+         i = i + ((d ~= "" and d ~= c) and 2 or 1)
+         breaks = breaks + 1
+      end
+      return string.rep("\n", breaks)
+   end)
+   return (value:gsub("^\n", ""))
+end
+
 ---Extract long string.
 ---@return string?, string?
 function lexer:extract_long_string()
    local _, content, j = self.src:match(self.patterns.long_string, self.i)
    if j then
       self.i = j
-      return "String", content
+      return "String", long_string_value(content)
    end
 end
 

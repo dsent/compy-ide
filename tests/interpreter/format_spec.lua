@@ -55,12 +55,26 @@ describe('lua format #format', function()
       assert.equal('Op', ast[1][2][1].tag)
     end)
 
-  it('formats a string of bytes that are not UTF-8', function()
+  --- the editor's input keeps only UTF-8, so a raw byte would
+  --- be gone the next time the block is opened
+  it('writes bytes that are not UTF-8 as escapes', function()
     local out, ok = format.format({ 's = "\\255"' }, W)
     assert.is_true(ok)
+    assert.same({ 's = "\\255"' }, out)
     local _, ast = parser.parse(out)
     assert.equal('\255', ast[1][2][1][1])
   end)
+
+  it('reads a long string the way Lua does, whatever its breaks',
+    function()
+      local text = { 'return [[\r\nabc\rdef\n\rghi]]' }
+      local out, ok = format.format(text, W)
+      assert.is_true(ok)
+      local run = function(lines)
+        return assert(loadstring(table.concat(lines, '\n')))()
+      end
+      assert.equal(run(text), run(out))
+    end)
 
   it('refuses to drop a comment the printer cannot place', function()
     local text = {

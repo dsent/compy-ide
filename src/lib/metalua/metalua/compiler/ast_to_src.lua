@@ -983,6 +983,33 @@ function M:Number(_, n)
   self:acc(tostring(n))
 end
 
+----------------------------------------------------------------
+--- Write the bytes of quoted source that are not UTF-8 as
+--- `\ddd` escapes: the value stays, and so does the text in an
+--- editor that keeps only UTF-8.
+--- @param s string
+--- @return string
+----------------------------------------------------------------
+local function escape_non_utf8(s)
+  if utf8.len(s) then return s end
+  local out, i, n = {}, 1, #s
+  while i <= n do
+    local c = string.byte(s, i)
+    local len = c < 0x80 and 1
+        or c >= 0xF0 and 4 or c >= 0xE0 and 3 or c >= 0xC0 and 2
+        or 0
+    local ch = string.sub(s, i, i + len - 1)
+    if len > 0 and #ch == len and utf8.len(ch) == 1 then
+      table.insert(out, ch)
+      i = i + len
+    else
+      table.insert(out, string.format('\\%03d', c))
+      i = i + 1
+    end
+  end
+  return table.concat(out)
+end
+
 function M:String(_, str)
   local fl        = string.len('"" ..' .. self.indent_step)
   local wl        = self.wrap - fl
@@ -1013,7 +1040,7 @@ function M:String(_, str)
   else
     rendered = string.format("%q", str):gsub("\\\n", [[\n]])
   end
-  self:acc(rendered)
+  self:acc(escape_non_utf8(rendered))
 end
 
 function M:Function(_, params, body, annots)
