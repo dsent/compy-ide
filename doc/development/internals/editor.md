@@ -71,7 +71,7 @@ Pressing `Enter` on non-empty input goes through `_handle_submit`, which asks th
 5. **Replace or Insert** — `replace_content` or `insert_content` updates the buffer, adjusting all subsequent block positions via `Range:translate`.
 6. **Auto-save** — `buf:save()` is called immediately. Every accepted submit writes to disk.
 
-`Ctrl+Enter` inserts the new block(s) before the selection rather than replacing it.
+`Ctrl+Enter` inserts the new block(s) before the selection rather than replacing it. Text typed on a blank line (an `Empty` block) replaces that line, and the selection moves to the block after the new text, so typing goes on below it.
 
 ---
 
