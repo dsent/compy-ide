@@ -523,6 +523,9 @@ end
 
 function BufferModel:delete_selected_text()
   local sel = self.selection
+  --- the block open in the input is gone; what the input
+  --- holds now is new text for this place
+  if self.loaded == sel then self:clear_loaded() end
   if self.content_type == 'lua' then
     local sb = self.content[sel]
     if not sb then return end
@@ -623,12 +626,14 @@ end
 --- @param bn integer
 --- @return integer --- how many blocks the text now takes
 function BufferModel:fill_empty(t, bn)
-  local last = t[#t]
+  --- the text's lines, counted before replace_content moves
+  --- the blocks' positions
+  local next_line = self.content[bn].pos.start + t[#t].pos.fin
   self:replace_content(t, bn)
   --- the blank line may be the one after the final newline;
   --- re-chunking puts that back
   self:rechunk()
-  local after = self:block_at_line(last.pos.fin + 1)
+  local after = self:block_at_line(next_line)
       or self:get_content_length() + 1
   return after - bn
 end

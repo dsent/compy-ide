@@ -2171,6 +2171,32 @@ describe('Editor #editor', function()
             assert.same('x = 1\ny = 2\n', savefile())
           end)
 
+        it("lands past all the blocks the text makes", function()
+          local _, buffer =
+              session:open('a = 1\n\nb = 2\nc = 3\nd = 4\n', 6)
+          session:select_and_open_block(2)
+          session:submit(string.unlines({
+            'x = 1',
+            'function f()',
+            '  a = 1',
+            'end',
+          }))
+          assert.same({ 'b = 2' }, buffer:get_selected_text())
+        end)
+
+        it("once cut, gives what is typed there a new block",
+          function()
+            local system = love.system
+            love.system = { setClipboardText = function() end }
+            session:open('\nb = 2\n', 3)
+            session:select_and_open_block(1)
+            mock.keystroke('C-x', press)
+            love.system = system
+            type_text('x = 1')
+            assert.same('x = 1\nb = 2\n', savefile(),
+                        "the block below is not replaced")
+          end)
+
         it("leaves a new block opened above it alone (2.7)",
           function()
             session:open('a = 1\n\nb = 2\n', 4)
