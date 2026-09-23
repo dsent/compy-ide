@@ -45,12 +45,14 @@ array = {
 
 ## Structural Limits
 
-| Rule | Limit |
-|---|---|
-| Line length | 64 characters (fits the Compy screen) |
-| Function length | 14 lines |
-| Parameters per function | 4 |
-| Nesting depth | 4 levels |
+| Rule | Limit | Checked by |
+|---|---|---|
+| Line length | 64 characters (fits the Compy screen) | the editor refuses a longer line |
+| Function length | 14 lines | compyfmt reports it |
+| Parameters per function | 4 (`self` aside) | compyfmt reports it |
+| Nesting depth | 4 levels, counted in each function | compyfmt reports it |
+
+The editor also refuses a block of more than 14 lines. `util/compyfmt.lua` formats a file and reports what the editor would refuse and what these limits flag.
 
 ---
 
