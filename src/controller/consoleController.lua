@@ -7,6 +7,8 @@ require("controller.projectInputController")
 local class = require('util.class')
 local LANG = require("util.eval")
 local FS = require('util.filesystem')
+local format = require('model.lang.lua.format')
+local display = require('conf.display')
 local Application = require('util.application')
 local usb = require('util.usb')
 require("util.key")
@@ -290,6 +292,54 @@ function ConsoleController:restore_checkpoint(name)
   if not FS.exists(cp) then return false end
   local ok = FS.cp(cp, p:get_path(name))
   return ok and true or false
+end
+
+--- The parser is built on first use
+local parser
+local function lua_parser()
+  parser = parser or require('model.lang.lua.parser')()
+  return parser
+end
+
+--- Format a project file the way the editor writes code on
+--- a Compy: the REPL's `tidy(name)`. It writes only when the
+--- text changes, and says why when it leaves the file alone.
+--- @param name string
+--- @return boolean tidy --- the file is formatted now
+function ConsoleController:tidy(name)
+  local p = self.model.projects.current
+  if not p then
+    print('Open a project first')
+    return false
+  end
+  if not FS.exists(p:get_path(name)) then
+    print('There is no ' .. name .. ' in this project')
+    return false
+  end
+  local lines = self:_readlines(name)
+  if not lines then return false end
+  local out, formatted = format.format(lines, display.columns)
+  if not formatted then
+    local parsed, err = lua_parser().parse(lines)
+    if not parsed and err and err.l then
+      print(string.format(
+        '%s has an error on line %d, so it stays as it is',
+        name, err.l))
+    else
+      print(name .. ' cannot be tidied without changing'
+        .. ' what it does, so it stays as it is')
+    end
+    return false
+  end
+  if string.unlines(out) == string.unlines(lines) then
+    return true
+  end
+  local ok, err = self:_writefile(name, out)
+  if not ok then
+    print(err)
+    return false
+  end
+  return true
 end
 
 function ConsoleController:_readfile(name)
@@ -1510,6 +1560,13 @@ function ConsoleController.prepare_project_env(cc)
   project_env.revert          = function(name)
     name = name or ProjectService.MAIN
     return cc:restore_checkpoint(name)
+  end
+
+  --- Format a file the way the editor writes code
+  --- @param name string? --- default main.lua
+  --- @return boolean
+  project_env.tidy             = function(name)
+    return cc:tidy(name or ProjectService.MAIN)
   end
 
   --- execution control

@@ -1396,6 +1396,52 @@ describe('Editor #editor', function()
       end)
     end)
 
+    --- the REPL's tidy(name): the editor's formatting, at a
+    --- Compy's width, on a project file
+    describe('tidy() in the REPL', function()
+      require("controller.consoleController")
+      local path, console, printed
+
+      before_each(function()
+        path = os.tmpname()
+        local project = {
+          get_path = function() return path end,
+          readfile = function() return FS.read(path) end,
+          writefile = function(_, _, text)
+            return FS.write(path, text)
+          end,
+        }
+        console = setmetatable({
+          model = { projects = { current = project } },
+        }, ConsoleController)
+        printed = {}
+        stub(_G, 'print', function(s) table.insert(printed, s) end)
+      end)
+
+      after_each(function()
+        _G.print:revert()
+        os.remove(path)
+      end)
+
+      it('formats the file, blank runs and all', function()
+        assert.is_true(FS.write(path,
+          'a  =  1\n\n\n\nfunction f()   return 1 end\n'))
+        assert.is_true(console:tidy('main.lua'))
+        local _, text = FS.read(path)
+        assert.same('a = 1\n\nfunction f()\n  return 1\nend\n', text)
+      end)
+
+      it('leaves a file with an error, saying on which line',
+        function()
+          local broken = 'a = 1\nfunction f(\n'
+          assert.is_true(FS.write(path, broken))
+          assert.is_false(console:tidy('main.lua'))
+          local _, text = FS.read(path)
+          assert.same(broken, text)
+          assert.truthy(string.find(printed[1], 'line', 1, true))
+        end)
+    end)
+
     --- Shift+Esc is the rework's documented way out
     --- (spec 2.3). It is the ONLY exit that consults the
     --- discard guard, and the guarantee below is what makes
