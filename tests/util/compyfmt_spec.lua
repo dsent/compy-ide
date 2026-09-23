@@ -98,6 +98,8 @@ describe('compyfmt #compyfmt', function()
       assert.equal(1, compyfmt.main({ p }))
       assert.same({
         p .. ':1: block of 17 lines, 3 over the limit of 14',
+        p .. ':1: function of 17 lines; keep it to 14'
+        .. ' (function-length)',
         p .. ':18: line too long!',
       }, printed)
     end)
@@ -145,6 +147,15 @@ describe('compyfmt #compyfmt', function()
           .. ' into a function (nesting)',
         }, reports(too_deep))
       end)
+
+    it('beside a line the gate refuses', function()
+      assert.same({
+        '1: line too long!',
+        '3: function takes 5 parameters; keep it to 4,'
+        .. ' or pass a table (parameters)',
+      }, reports(string.rep('a', 65) .. ' = 1\n'
+        .. 'function f(a, b, c, d, e)\nend'))
+    end)
 
     it('function length: more than 14 lines', function()
       local body = {}

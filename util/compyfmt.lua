@@ -49,7 +49,7 @@ function M.inspect(lines)
   end
   local found = {}
   local function add(l, what)
-    table.insert(found, { l = l or 1, what = what })
+    table.insert(found, { l = l or 1, n = #found, what = what })
   end
 
   if not verdict.formatted and parser.parse(lines) then
@@ -65,14 +65,19 @@ function M.inspect(lines)
       'block of %d lines, %d over the limit of %d',
       b.pos:len(), check.excess(verdict, i), verdict.max_block))
   end
-  if #verdict.errors == 0 then
-    local _, _, ast = check.check(text)
+  --- lints read any text that parses, beside the gates
+  local parsed, ast = parser.parse(text)
+  if parsed then
     for _, f in ipairs(lint.lint(text, ast)) do
       add(f.l, f.msg .. ' (' .. f.rule .. ')')
     end
   end
 
-  table.sort(found, function(a, b) return a.l < b.l end)
+  --- by line; on one line, gates before lints, as added
+  table.sort(found, function(a, b)
+    if a.l ~= b.l then return a.l < b.l end
+    return a.n < b.n
+  end)
   local reports = {}
   for _, f in ipairs(found) do
     table.insert(reports, f.l .. ': ' .. f.what)
