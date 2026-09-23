@@ -29,7 +29,10 @@ local function record(line)
   local addr = tonumber(line:sub(4, 7), 16)
   local kind = tonumber(line:sub(8, 9), 16)
   assert(count and addr and kind, "bad hex record")
-  local body = line:sub(10, 9 + count * 2):gsub("%x%x", unhex)
+  local digits = line:sub(10, 9 + count * 2)
+  assert(#digits == count * 2 and not digits:find("%X"),
+    "bad hex record")
+  local body = digits:gsub("%x%x", unhex)
   return kind, addr, body
 end
 
