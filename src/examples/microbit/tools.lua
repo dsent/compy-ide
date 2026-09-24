@@ -264,6 +264,8 @@ function help()
   print("micro:bit tools")
   for _, line in ipairs(COMMANDS) do print("  " .. line) end
   print("")
+  print("upload() with no file sends MICROBIT.hex, the")
+  print("firmware for the TPBot robots.")
   print("Write the files with edit(filename), type to the")
   print("board in the \"terminal\" project.")
 end
