@@ -42,7 +42,7 @@ The workflow is:
 
 The `LuaEditorEval` evaluator (`src/model/interpreter/eval/evaluator.lua:168`) is set on the editor input for Lua files. It adds a 64-character line length validator — the same limit as the code conventions — enforced live as you type.
 
-**`input_max` vs `LINES`** — two separate height limits. `input_max = 14` is the input strip height, used as the `VisibleContent` `size_max` in `UserInputModel` and to calculate the physical pixel height of the input widget. `LINES = 16` is the buffer viewport height. `input_max = 14` was deliberately chosen to match the code convention (function body ≤ 14 lines): a conforming block fills the input view exactly, with no scrolling needed.
+**`input_max` vs `LINES`** — two separate height limits. `input_max = 14` is the input strip height, used as the `VisibleContent` `size_max` in `UserInputModel` and to calculate the physical pixel height of the input widget. `LINES = 16` is the buffer viewport height. `input_max = 14` was deliberately chosen to match the code convention (the whole block, `function` and `end` included, ≤ 14 lines): a conforming block fills the input view exactly, with no scrolling needed.
 
 The block size limit is `input_max`: `bufv:get_max_size()` returns it, and the editor passes it to the gate. A Compy's values for both limits, the 64-column line and the 14-line block, live in `src/conf/display.lua`, where tools that format away from a Compy read them.
 
