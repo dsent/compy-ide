@@ -2,20 +2,20 @@
 --- files, from the command line. Run it from the repository root
 --- with Lua 5.1 or LuaJIT:
 ---
----   luajit util/compyfmt.lua [--check] <file.lua>...
+---   luajit util/compyfmt.lua [--fix] <file.lua>...
 ---
---- Fix (the default) formats each file in place, the way the
---- editor writes code on a Compy, then reports what formatting
---- could not resolve: the editor's gates (a line too long, an
---- error, a block too large) and the lints.
+--- By default it changes no file. It reports every file that
+--- formatting would change, then what formatting cannot
+--- resolve: the editor's gates (a line too long, an error, a
+--- block too large) and the lints. Their line numbers are
+--- those of the file as it would be formatted.
 ---
---- --check changes no file. It reports every file that
---- formatting would change, then the gates and lints of the
---- formatted text; their line numbers are those of the file as
---- it would be formatted.
+--- --fix formats each file in place, the way the editor writes
+--- code on a Compy, then reports the gates and lints left.
 ---
 --- A report line reads `file:line: what`. Both modes exit 1
---- when they report anything and 2 when a file cannot be read.
+--- when they report anything and 2 when a file cannot be read
+--- or an argument is an option other than --fix.
 
 local home = os.getenv("HOME") or ''
 package.path = "./src/?.lua;./src/?/init.lua;" .. package.path
@@ -113,21 +113,36 @@ local function write_lines(path, lines)
   return true
 end
 
+local USAGE = 'Usage: luajit util/compyfmt.lua'
+  .. ' [--fix] <file.lua>...\n'
+  .. 'Reports what the editor would change or refuse in each'
+  .. ' file.\nWith --fix, formats the files in place first.\n'
+
 --- @param args string[]
---- @return integer --- the exit status
-function M.main(args)
-  local fix = true
-  local files = {}
+--- @return boolean? fix --- nil when an argument is an option
+--- other than --fix
+--- @return string[] files
+local function options(args)
+  local fix, files = false, {}
   for _, a in ipairs(args) do
-    if a == '--check' then
-      fix = false
+    if a == '--fix' then
+      fix = true
+    elseif string.match(a, '^%-') then
+      io.stderr:write(a .. ' is not an option.\n')
+      return nil, files
     else
       table.insert(files, a)
     end
   end
-  if #files == 0 then
-    io.stderr:write('Usage: luajit util/compyfmt.lua'
-      .. ' [--check] <file.lua>...\n')
+  return fix, files
+end
+
+--- @param args string[]
+--- @return integer --- the exit status
+function M.main(args)
+  local fix, files = options(args)
+  if fix == nil or #files == 0 then
+    io.stderr:write(USAGE)
     return 2
   end
 

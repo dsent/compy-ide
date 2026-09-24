@@ -6,10 +6,10 @@ The editor's formatting, gates and lints, at a Compy's width.
 
 ```shell
 # run from repo root, use lua 5.1 or luajit
+# report what formatting would change and what it cannot resolve
+luajit util/compyfmt.lua src/examples/tixy/*.lua
 # fix: format the files in place, then report what is left
-luajit util/compyfmt.lua src/examples/tixy/examples.lua
-# check: change nothing, report what fix would change and find
-luajit util/compyfmt.lua --check src/examples/tixy/*.lua
+luajit util/compyfmt.lua --fix src/examples/tixy/examples.lua
 ```
 
 Reports read `file:line: what`. Both modes exit 1 when they
