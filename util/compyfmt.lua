@@ -2,7 +2,7 @@
 --- files, from the command line. Run it from the repository root
 --- with Lua 5.1 or LuaJIT:
 ---
----   luajit util/compyfmt.lua [--fix] <file.lua>...
+---   luajit util/compyfmt.lua [--fix] [--strict] <file.lua>...
 ---
 --- By default it changes no file. It reports every file that
 --- formatting would change, then what formatting cannot
@@ -13,9 +13,12 @@
 --- --fix formats each file in place, the way the editor writes
 --- code on a Compy, then reports the gates and lints left.
 ---
+--- --strict reports the strict lints as well: conventions much
+--- existing code breaks.
+---
 --- A report line reads `file:line: what`. Both modes exit 1
 --- when they report anything and 2 when a file cannot be read
---- or an argument is an option other than --fix.
+--- or an argument is an option other than --fix and --strict.
 
 local home = os.getenv("HOME") or ''
 package.path = "./src/?.lua;./src/?/init.lua;" .. package.path
@@ -36,11 +39,12 @@ local M = {}
 --- What compyfmt says about one file's text, and the text the
 --- file should hold
 --- @param lines string[]
+--- @param strict boolean? --- report the strict lints too
 --- @return string[] text --- formatted, with a final newline;
 --- the text as it was when it does not format
 --- @return string[] reports --- `line: what`, in line order
 --- @return boolean formatted --- the text formatted
-function M.inspect(lines)
+function M.inspect(lines, strict)
   local verdict = check.gate(lines, display.columns)
   local text = verdict.lines
   if verdict.formatted and text[#text] ~= '' then
@@ -68,7 +72,7 @@ function M.inspect(lines)
   --- lints read any text that parses, beside the gates
   local parsed, ast = parser.parse(text)
   if parsed then
-    for _, f in ipairs(lint.lint(text, ast)) do
+    for _, f in ipairs(lint.lint(text, ast, strict)) do
       add(f.l, f.msg .. ' (' .. f.rule .. ')')
     end
   end
@@ -114,37 +118,42 @@ local function write_lines(path, lines)
 end
 
 local USAGE = 'Usage: luajit util/compyfmt.lua'
-  .. ' [--fix] <file.lua>...\n'
+  .. ' [--fix] [--strict] <file.lua>...\n'
   .. 'Reports what the editor would change or refuse in each'
   .. ' file.\nWith --fix, formats the files in place first.\n'
+  .. 'With --strict, also reports the strict lints.\n'
+
+--- @class CompyfmtOptions
+--- @field fix boolean
+--- @field strict boolean
+--- @field files string[]
 
 --- @param args string[]
---- @return boolean? fix --- nil when an argument is an option
---- other than --fix
---- @return string[] files
+--- @return CompyfmtOptions? --- nil for any other option
 local function options(args)
-  local fix, files = false, {}
+  local o = { fix = false, strict = false, files = {} }
   for _, a in ipairs(args) do
-    if a == '--fix' then
-      fix = true
+    if a == '--fix' or a == '--strict' then
+      o[string.sub(a, 3)] = true
     elseif string.match(a, '^%-') then
       io.stderr:write(a .. ' is not an option.\n')
-      return nil, files
+      return
     else
-      table.insert(files, a)
+      table.insert(o.files, a)
     end
   end
-  return fix, files
+  return o
 end
 
 --- @param args string[]
 --- @return integer --- the exit status
 function M.main(args)
-  local fix, files = options(args)
-  if fix == nil or #files == 0 then
+  local o = options(args)
+  if not o or #o.files == 0 then
     io.stderr:write(USAGE)
     return 2
   end
+  local fix, files = o.fix, o.files
 
   local status = 0
   for _, path in ipairs(files) do
@@ -153,7 +162,7 @@ function M.main(args)
       io.stderr:write(path .. ': cannot be read\n')
       status = 2
     else
-      local text, reports = M.inspect(lines)
+      local text, reports = M.inspect(lines, o.strict)
       local changed = string.unlines(text) ~= string.unlines(lines)
       if changed and fix and not write_lines(path, text) then
         io.stderr:write(path .. ': cannot be written\n')

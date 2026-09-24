@@ -52,7 +52,7 @@ array = {
 | Parameters per function | 4 (`self` aside) | compyfmt reports it |
 | Nesting depth | 4 levels, counted in each function | compyfmt reports it |
 
-The editor also refuses a block of more than 14 lines. `util/compyfmt.lua` reports what the editor would change or refuse in a file and what these limits flag; `--fix` formats the file first.
+The editor also refuses a block of more than 14 lines. `util/compyfmt.lua` reports what the editor would change or refuse in a file and what these limits flag; `--fix` formats the file first. Its other lints are the conventions of Compy programs, such as the examples.
 
 ---
 
