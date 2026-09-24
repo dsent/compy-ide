@@ -1861,9 +1861,10 @@ end
 
 function ConsoleController:quit_project()
   self:stop_project_run()
-  self:close_project()
+  --- a clean console first, so what closing says stays on it
   self.model.output:reset()
   self.input:reset()
+  self:close_project()
 end
 
 --- Delete the default project and recreate it with factory contents.
