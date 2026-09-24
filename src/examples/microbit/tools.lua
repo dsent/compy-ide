@@ -227,9 +227,10 @@ end
 
 --- Put a hex file on the board. The board is looked for each
 --- time, since it usually goes in after Compy has started.
---- Writing takes a few seconds and the screen does not move
---- until it is done, so a sound says the writing has begun:
---- it plays on while the file goes out.
+--- Copying takes a few seconds and the screen does not move
+--- until it is done, so a sound says the copying has begun.
+--- The board then writes the file into its memory by itself
+--- and restarts; the Compy cannot see whether it took it.
 --- @param filename string?
 function upload(filename)
   local name = filename or HEX
@@ -238,7 +239,8 @@ function upload(filename)
   compy.audio.hyperjump()
   local ok, err = flash_microbit(data)
   assert(ok, err)
-  print(name .. " is on the board, it restarts with it")
+  print(name .. " is sent. The micro:bit's light blinks")
+  print("while it writes it, then it restarts with it.")
 end
 
 -- help --------------------------------------------------------

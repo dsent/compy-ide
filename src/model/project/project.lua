@@ -168,8 +168,9 @@ end
 --- Uses the device path detected at startup (or refreshed
 --- on-demand via project_env.detect_microbit). Writes to a temp
 --- file (no extension) on the device root, syncs, then atomically
---- renames to microbit.hex, and waits for the board to write it
---- into its memory and say how that went.
+--- renames to microbit.hex. The board writes the file into its
+--- memory by itself afterwards; Android keeps showing the drive as
+--- it was, so the board's answer cannot be read from it.
 --- @param data string
 --- @return boolean success
 --- @return string? error
@@ -204,7 +205,7 @@ function Project:flash_microbit(data)
     FS.rm(tmppath)
     return false, rerr
   end
-  return usb.flash_result(path)
+  return true
 end
 
 local newps = function()
