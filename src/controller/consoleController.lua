@@ -235,10 +235,10 @@ end
 
 --- @param cc ConsoleController
 local function close_project(cc)
-  local ok = cc:close_project()
-  if ok then
+  local ok = cc:close_project(function()
     print('Project closed')
-  else
+  end)
+  if not ok then
     Log.err('error in closing')
   end
 end
@@ -1805,10 +1805,13 @@ function ConsoleController:_close_project()
 end
 
 --- Close the current project and return to the default project.
+--- @param closed function? called once the project is closed,
+---   before the default one opens
 --- @return boolean success
-function ConsoleController:close_project()
+function ConsoleController:close_project(closed)
   local ok = self:_close_project()
   if ok then
+    if closed then closed() end
     return self:open_project(ProjectService.DEFAULT)
   end
   return ok
@@ -1874,9 +1877,12 @@ function ConsoleController:reset_scratch()
     self:close_project()  --- lands on scratch
     self:_close_project() --- close it directly (no redirect)
   end
-  local ok, err = P:remove(name)
-  if not ok then
-    print(err)
+  --- the old scratch is kept, never deleted
+  local kept = P:set_aside(name)
+  if kept then
+    print(P.messages.kept_as(name, kept))
+  else
+    print(P.messages.not_kept(name))
   end
   return self:open_project(name)
 end

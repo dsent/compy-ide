@@ -46,6 +46,14 @@ local messages = {
   no_open_project     = 'No project is open',
   no_microbit_board   = 'No micro:bit is plugged in',
   flash_no_data       = 'No firmware data to flash',
+  kept_as             = function(name, kept)
+    return 'Your old ' .. name .. ' is kept as the project '
+        .. kept .. '.'
+  end,
+  not_kept            = function(name)
+    return 'Could not keep your old ' .. name
+        .. ', so it is left as it is.'
+  end,
 }
 
 --- Determine if the supplied string is a valid filename
@@ -433,6 +441,35 @@ function ProjectService:remove(name)
   end
   -- non-love FS branch lacks recursive delete
   return false, 'remove not supported in this environment'
+end
+
+--- Move a project out of the way under the backup name the
+--- storage contract reserves: <name>.old when it is free,
+--- otherwise <name>.old.<N+1> after the largest N in use.
+--- @param name string
+--- @return string? kept the name it now has
+--- @return string? error
+function ProjectService:set_aside(name)
+  local p_path, p_err = self.is_project(ProjectService.path, name)
+  if not p_path then
+    return nil, p_err
+  end
+  local base = name .. '.old'
+  local numbered = '^' .. base:gsub('%p', '%%%0') .. '%.(%d+)$'
+  local taken, top = false, 0
+  for _, f in pairs(FS.dir(ProjectService.path) or {}) do
+    if f.name == base then taken = true end
+    local n = tonumber(f.name:match(numbered) or '')
+    if n and n > top then top = n end
+  end
+  local kept = base
+  if taken then kept = base .. '.' .. (top + 1) end
+  local ok, err = FS.rename(p_path,
+    FS.join_path(ProjectService.path, kept))
+  if not ok then
+    return nil, err
+  end
+  return kept
 end
 
 --- @param name string

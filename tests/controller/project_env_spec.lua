@@ -247,6 +247,41 @@ describe('ConsoleController project env #project', function()
     assert.are.equal("print('Hello world!')\n", content)
   end)
 
+  it('reset_scratch keeps the old scratch, numbered #project',
+    function()
+      local old = ProjectService.DEFAULT .. '.old'
+      CC:open_project(ProjectService.DEFAULT)
+      CC:get_current_project():writefile('extra.lua', '-- one')
+      assert.is_true(CC:reset_scratch())
+      CC:get_current_project():writefile('extra.lua', '-- two')
+      assert.is_true(CC:reset_scratch())
+      local function kept(name)
+        local f = io.open(FS.join_path(tmp, name, 'extra.lua'))
+        if not f then return nil end
+        local text = f:read('*a')
+        f:close()
+        return text
+      end
+      assert.are.equal('-- one', kept(old))
+      assert.are.equal('-- two', kept(old .. '.1'))
+      assert.is_nil(kept(ProjectService.DEFAULT))
+    end)
+
+  it('close_project says closed before it opens scratch #project',
+    function()
+      CC:open_project(ProjectService.DEFAULT)
+      CC:open_project('clock')
+      local said = { }
+      local print_ = _G.print
+      _G.print = function(s) said[#said + 1] = s end
+      CC:get_project_env().close_project()
+      _G.print = print_
+      assert.are.same({
+        'Project closed',
+        'Project ' .. ProjectService.DEFAULT .. ' opened',
+      }, said)
+    end)
+
   it('reset_scratch from another project keeps that project #project', function()
     CC:open_project('clock')
     assert.is_true(CC:reset_scratch())
