@@ -48,6 +48,19 @@ describe('lua format #format', function()
     assert.same(text, out)
   end)
 
+  it('keeps the spaces ending a comment where a line breaks',
+    function()
+      local text = { 'return a -- why   ',
+        'and ' .. string.rep('b', 59) }
+      local out, ok = format.format(text, W)
+      assert.is_true(ok)
+      local comment
+      for _, l in ipairs(out) do
+        comment = comment or string.match(l, '%-%-.*$')
+      end
+      assert.equal('-- why   ', comment)
+    end)
+
   it('keeps a comment as wide as the line on one line', function()
     local rule = '-- send, exec ' .. string.rep('-', 50)
     local text = { rule, 'x = 1' }
@@ -131,6 +144,16 @@ describe('lua format #format', function()
           local twice = format.format(once, W)
           assert.same(once, twice)
         end)
+      --- a comment keeps what its source line holds
+      it('ends no code line of ' .. path .. ' in a space', function()
+        local once = format.format(read_lines(path), W)
+        for n, l in ipairs(once) do
+          local code = not string.match(l, '^%s*%-%-')
+          if code and string.match(l, '%S%s+$') then
+            error(path .. ':' .. n .. ' ends in a space')
+          end
+        end
+      end)
     end
   end)
 end)

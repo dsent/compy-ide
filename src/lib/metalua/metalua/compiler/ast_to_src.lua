@@ -139,6 +139,7 @@ function M:acc(x)
       --- adding a fifth visual indent column.
       local wrapped_x = x:gsub("^%s+", "")
       local ind = self.indent_step:rep(self.current_indent + 2)
+      self:trim_line_end()
       self:acc("\n" .. ind)
       self._line_len = #ind
       table.insert(self._acc, wrapped_x)
@@ -146,6 +147,31 @@ function M:acc(x)
       self._line_len = clen + l
       table.insert(self._acc, x)
     end
+  end
+end
+
+----------------------------------------------------------------
+--- End a line broken for width at its last visible character:
+--- a separator such as ` .. ` leaves spaces there. A line
+--- holding only indentation is kept whole, and so is one ending
+--- in a comment, whose text is the source's.
+----------------------------------------------------------------
+function M:trim_line_end()
+  if self._in_comment then return end
+  local acc = self._acc
+  local has_text = false
+  for i = #acc, 1, -1 do
+    local line = string.match(acc[i], "[^\n]*$")
+    if string.find(line, "%S") then
+      has_text = true
+      break
+    end
+    if #line < #acc[i] then break end
+  end
+  if not has_text then return end
+  for i = #acc, 1, -1 do
+    acc[i] = string.gsub(acc[i], "[ \t]+$", "")
+    if acc[i] ~= '' then return end
   end
 end
 
@@ -1057,8 +1083,9 @@ function M:String(_, str)
         split[i] = v .. '\\n'
       end
     end
-    --- wrap
+    --- wrap, starting on a line of its own
     local ls = string.wrap_array(split, wl)
+    self:trim_line_end()
     for i, v in ipairs(ls) do
       rendered = rendered .. "\n" .. self.indent_step
       rendered = rendered ..
@@ -1185,6 +1212,7 @@ function M:Op(node, op, a, b)
               b[2].lineinfo.first.line)
           )
       then
+        self:trim_line_end()
         self:nltempindent(2)
       end
     end
@@ -1211,6 +1239,7 @@ end
 function M:Paren(_, content)
   local pre = "(" .. self:prerender(content) .. ")"
   if not self:fits(pre) then
+    self:trim_line_end()
     self:nltempindent()
   end
   self:acc("(")

@@ -782,7 +782,7 @@ local wrapping = {
   prep(
     'local long_string = "яяяяяяяяяяяяяяяяяяя22222222222222222eeeeeeeeeeeeeeeeeee6666666666666666666666666sssssssssss"',
     {
-      'local long_string = ',
+      'local long_string =',
       '  "яяяяяяяяяяяяяяяяяяя22222222222222222eeeeeeeeeeeeeeeeeee66" ..',
       '  "66666666666666666666666sssssssssss"',
     }),
@@ -881,7 +881,7 @@ local wrapping = {
     -- }
     --- " " version
     {
-      'local ms = ',
+      'local ms =',
       [[  "█Bacon ipsum dolor amet ribeye hamburger\n" ..]],
       [[  "c█hislic pork short ribs\n" ..]],
       [[  "po█rchetta. Pork loin meatball ball tip\n" ..]],
@@ -1021,7 +1021,7 @@ local wrapping = {
 
   --- complicated calculations that should probably be broken up
   prep('local longcomp = (3749182734 + 1928340918 - 239420985) * (274927 + 820479 - 2973842)', {
-    'local longcomp = (3749182734 + 1928340918 - 239420985) * ',
+    'local longcomp = (3749182734 + 1928340918 - 239420985) *',
     '  (274927 + 820479 - 2973842)',
   }),
   prep('local longcomp2 = 1001 + 1002 + 1003 + 1004 + 1005 + 1006 + 1007 + 1008 + 1009', {
@@ -1029,9 +1029,17 @@ local wrapping = {
     '    + 1008 + 1009'
   }),
 
+  --- a line broken after an operator ends at the operator
+  prep(
+    [[help = "Hint:\n" .. "left click for next example\n" .. "right click for the previous one\n"]],
+    {
+      [[help = "Hint:\n" .. "left click for next example\n" ..]],
+      [[    "right click for the previous one\n"]],
+    }),
+
   --- multi-assignments that again, probably should be broken up
   prep('local declaring, a, lot, of, variables, in_, one, go = 1, 2, 3, 4, 5, 6, 7, 8', {
-    'local declaring, a, lot, of, variables, in_, one, go = 1, 2, 3, ',
+    'local declaring, a, lot, of, variables, in_, one, go = 1, 2, 3,',
     '    4, 5, 6, 7, 8' }),
   prep({
       'local declaring, a, lot, of, ',
@@ -1040,15 +1048,15 @@ local wrapping = {
     }
     ,
     {
-      'local declaring, a, lot, of, variables, in_, one, go = 1, 2, 3, ',
+      'local declaring, a, lot, of, variables, in_, one, go = 1, 2, 3,',
       '    4, 5, 6, 7, 8' }
   ),
 
   prep(
     'local assigning, an, amount, of, variables, that, cannot, possibly, fit, on, one, line  = 101, 102, 103, 4, 5, 6, 7, 8, 9, 10, 11, 12'
     , {
-      'local assigning, an, amount, of, variables, that, cannot, ',
-      '    possibly, fit, on, one, line = 101, 102, 103, 4, 5, 6, 7, 8, 9, 10, ',
+      'local assigning, an, amount, of, variables, that, cannot,',
+      '    possibly, fit, on, one, line = 101, 102, 103, 4, 5, 6, 7, 8, 9, 10,',
       '    11, 12', }
   ),
   prep({
@@ -1068,7 +1076,7 @@ local wrapping = {
     '  return a, ridiculous, amouns, of, named, values, cannot, possibly, fit',
     'end' }, {
     'function ret_gaming()',
-    '  return a, ridiculous, amouns, of, named, values, cannot, ',
+    '  return a, ridiculous, amouns, of, named, values, cannot,',
     '      possibly, fit',
     'end' }
   ),
@@ -1497,7 +1505,7 @@ local canon = {
     end]]
   }, {
     'function inPaletteRange(x, y)',
-    '  return ',
+    '  return',
     '    (height - pal_h <= y and width - pal_w <= x and x <= width)',
     'end',
   }),
