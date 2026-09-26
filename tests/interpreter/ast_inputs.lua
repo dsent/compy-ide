@@ -1313,6 +1313,15 @@ local functions = {
     'end',
   }),
   prep('x[y][z] = a'),
+  --- a return with no values ends its line at the keyword
+  prep({
+    'function stop(done)',
+    '  if done then',
+    '    return',
+    '  end',
+    '  go()',
+    'end',
+  }),
 }
 local self = {
   prep({

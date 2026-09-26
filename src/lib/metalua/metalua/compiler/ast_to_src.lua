@@ -969,6 +969,10 @@ function M:Invoke(node, f, method)
 end
 
 function M:Return(node)
+  if #node == 0 then
+    self:acc("return")
+    return
+  end
   self:acc("return ")
   self:wrapped_list(node, ", ")
 end

@@ -33,6 +33,14 @@ describe('lua format #format', function()
     assert.same({ 'function f()', '  return 1', 'end' }, out)
   end)
 
+  it('ends a return with no values at the keyword', function()
+    local text = { 'function f(x)', '  if x then', '    return',
+      '  end', 'end' }
+    local out, ok = format.format(text, W)
+    assert.is_true(ok)
+    assert.same(text, out)
+  end)
+
   it('leaves text that does not parse as it is', function()
     local text = { 'function f(', '  return 1' }
     local out, ok = format.format(text, W)
