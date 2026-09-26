@@ -1474,6 +1474,9 @@ function EditorController:_normal_mode_keys(k)
       end
       if k == "end" then
         self:_move_sel('down', nil, true)
+        --- the last line, which may lie below the last
+        --- block's first
+        self.view:get_current_buffer():follow_line()
         block_input()
       end
       --- spec 2.2: bare arrows move by line, bare

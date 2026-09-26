@@ -9,6 +9,7 @@ local LANG = require("util.eval")
 local FS = require('util.filesystem')
 local format = require('model.lang.lua.format')
 local display = require('conf.display')
+local textfile = require('util.textfile')
 local Application = require('util.application')
 local usb = require('util.usb')
 require("util.key")
@@ -316,14 +317,10 @@ function ConsoleController:tidy(name)
     print('There is no ' .. name .. ' in this project')
     return false
   end
-  local lines = self:_readlines(name)
-  if not lines then return false end
+  local text = self:_readfile(name)
+  if not text then return false end
+  local lines = textfile.lines(text)
   local out, formatted = format.format(lines, display.columns)
-  --- a file ends with a newline, as the editor and compyfmt
-  --- write it
-  if formatted and out[#out] ~= '' then
-    table.insert(out, '')
-  end
   if not formatted then
     local parsed, err = lua_parser().parse(lines)
     if not parsed and err and err.l then
@@ -336,10 +333,12 @@ function ConsoleController:tidy(name)
     end
     return false
   end
-  if string.unlines(out) == string.unlines(lines) then
+  --- written as the editor and compyfmt write a file
+  local tidied = textfile.text(out)
+  if tidied == text then
     return true
   end
-  local ok, err = self:_writefile(name, out)
+  local ok, err = self:_writefile(name, tidied)
   if not ok then
     print(err)
     return false
@@ -370,7 +369,7 @@ end
 
 --- @private
 --- @param name string
---- @param content string[]
+--- @param content str --- lines, or the file's text
 --- @return boolean success
 --- @return string? err
 function ConsoleController:_writefile(name, content)

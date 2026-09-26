@@ -474,17 +474,12 @@ return function(lib)
         end
 
         if not single then
-          --- the blank lines ending the file, and the empty
-          --- line after its final newline
+          --- the blank lines ending the file; its final
+          --- newline ends its last line and is no block
           add_empties_before(#text + 1)
-        end
-        if
-            ret:last().tag ~= 'empty' and (
-            --- no empty line at EOF
-              not single
-              --- there is an empty line at the end
-              or single and (#string.lines(text) > last)
-            )
+        elseif ret:last().tag ~= 'empty'
+            --- blank lines typed at the end of the block
+            and #string.lines(text) > last
         then
           ret:push_back(Empty(last + 1))
         end

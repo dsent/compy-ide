@@ -55,10 +55,7 @@ describe('parser.chunker #chunk', function()
 
     it('is drawn once, where it was written', function()
       for _, text in ipairs({ single, multi, inner }) do
-        --- the editor keeps one empty line at the end
-        local expected = table.clone(text)
-        table.insert(expected, '')
-        assert.same(expected, render(text))
+        assert.same(text, render(text))
       end
     end)
 

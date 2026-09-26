@@ -5,6 +5,7 @@ require("view.editor.editorView")
 require("view.editor.visibleContent")
 
 local FS = require("util.filesystem")
+local textfile = require("util.textfile")
 
 local mock, TU
 
@@ -690,7 +691,8 @@ describe('Editor #editor', function()
         assert.same('nav', controller:get_mode())
         assert.same(orig, string.unlines(
           buffer:get_text_content()))
-        assert.same(orig, savefile())
+        --- the file ends with the newline after its last line
+        assert.same(orig .. '\n', savefile())
         --- redo returns the accepted state
         mock.keystroke('C-y', press)
         assert.truthy(string.find(
@@ -1691,7 +1693,7 @@ describe('Editor #editor', function()
 
       assert.same('lua', buffer.content_type)
       assert.same('block', cont:type())
-      assert.same(4, buffer:get_content_length())
+      assert.same(3, buffer:get_content_length())
       local modified = table.clone(sierpinski)
       local new_print = 'print(sierpinski(3))'
       mock.keystroke('C-down', press)
@@ -1800,7 +1802,7 @@ describe('Editor #editor', function()
           assert.same(string.lines(f_modified),
                       buffer:get_selected_text(),
                       "selection replaced with modified block")
-          assert.same(string.lines(src_exp),
+          assert.same(textfile.lines(src_exp),
                       buffer:get_text_content(),
                       "buffer contains expected altered content")
           assert.same(src_exp, savefile(),
@@ -2030,7 +2032,7 @@ describe('Editor #editor', function()
         end
 
         it("are not added between typed statements", function()
-          session:open('a = 1\n', 2)
+          session:open('a = 1\n', 1)
           session:select_and_open_block(1, 'a = 1')
           session:submit('a = 1\nb = 2')
           assert.same('a = 1\nb = 2\n', savefile())
@@ -2038,7 +2040,7 @@ describe('Editor #editor', function()
 
         it("typed at top level stay, a run collapsed to one",
           function()
-            session:open('x = 0\ny = 0\n', 3)
+            session:open('x = 0\ny = 0\n', 2)
             session:select_and_open_block(1, 'x = 0')
             session:submit('\n\n\nx = 1\n\n\n\na = 1\nb = 1\n\n')
             assert.same('\nx = 1\n\na = 1\nb = 1\n\ny = 0\n',
@@ -2047,7 +2049,7 @@ describe('Editor #editor', function()
 
         it("typed inside a function body stay, one per run",
           function()
-            session:open('a = 1\n', 2)
+            session:open('a = 1\n', 1)
             session:select_and_open_block(1, 'a = 1')
             session:submit(string.unlines({
               'function f()',
@@ -2073,7 +2075,7 @@ describe('Editor #editor', function()
 
         it("outside the block are left alone", function()
           local file = 'a = 1\n\n\n\nb = 2\n\nc = 3\n'
-          session:open(file, 8)
+          session:open(file, 7)
           session:select_and_open_block(7, 'c = 3')
           session:submit('c = 4')
           assert.same('a = 1\n\n\n\nb = 2\n\nc = 4\n', savefile(),
@@ -2083,7 +2085,7 @@ describe('Editor #editor', function()
         it("before a comment leave the blocks after it in place",
           function()
             local file = 'a = 1\n\n\n\n-- note\nb = 2\n'
-            session:open(file, 7)
+            session:open(file, 6)
             session:select_block(5, '-- note')
             session:select_and_open_block(6, 'b = 2')
             session:submit('b = 3')
@@ -2093,7 +2095,7 @@ describe('Editor #editor', function()
 
         it("of a file holding nothing else stay when code is added",
           function()
-            session:open('\n\n\n', 4)
+            session:open('\n\n\n', 3)
             session:select_block(1)
             for ch in ('a = 1'):gmatch('.') do
               controller:textinput(ch)
@@ -2105,7 +2107,7 @@ describe('Editor #editor', function()
 
         it("do not grow an empty function body", function()
           local placeholder = 'function g()\n  \nend\n'
-          session:open('function g() end\n', 2)
+          session:open('function g() end\n', 1)
           session:select_and_open_block(1)
           session:submit('function g() end')
           assert.same(placeholder, savefile(), "indented slot")
@@ -2127,7 +2129,7 @@ describe('Editor #editor', function()
 
         it("leave the file byte-identical on a second accept",
           function()
-            session:open('local a = 1\n', 2)
+            session:open('local a = 1\n', 1)
             session:select_and_open_block(1)
             session:submit(string.unlines({
               'local a = 1',
@@ -2178,7 +2180,7 @@ describe('Editor #editor', function()
               'a = 1', '', '', '',
               'function f()   return 1 end', '', '',
               'b = 2', '',
-            }), 9)
+            }), 8)
             session:select_block(8, 'b = 2')
             mock.keystroke('C-S-f', press)
             assert.same('nav', controller:get_mode())
@@ -2204,8 +2206,9 @@ describe('Editor #editor', function()
               f:close()
               session:open(text)
               mock.keystroke('C-S-f', press)
-              local want = compyfmt.inspect(string.lines(text))
-              assert.same(string.unlines(want), savefile())
+              local lines = textfile.lines(text)
+              local want = compyfmt.inspect(lines)
+              assert.same(textfile.text(want), savefile())
             end)
           end
           ls:close()
@@ -2224,7 +2227,8 @@ describe('Editor #editor', function()
 
             mock.keystroke('C-S-f', press)
             assert.same('a  =  1\n', disk)
-            assert.same({ 'a  =  1', '' }, buffer:get_text_content())
+            assert.same({ 'a  =  1' },
+              buffer:get_text_content())
             assert.is_true(controller.input:has_error())
 
             --- storage back: trying again formats and saves
@@ -2238,7 +2242,7 @@ describe('Editor #editor', function()
           local _, buffer = session:open(string.unlines({
             'a  =  1', '', '', '', 'b = 2', 'c = 3', 'd = 4',
             'e = 5', '',
-          }), 9)
+          }), 8)
           session:select_block(5, 'b = 2')
           mock.keystroke('C-S-f', press)
           assert.same({ 'b = 2' }, buffer:get_selected_text())
@@ -2258,11 +2262,91 @@ describe('Editor #editor', function()
               '}',
               '',
             })
-            session:open(file, 2)
+            session:open(file, 1)
             mock.keystroke('C-S-f', press)
             assert.same(file, savefile())
             assert.is_true(controller.input:has_error())
           end)
+      end)
+
+      --- the newline ending a file's last line belongs to that
+      --- line: no block stands for it
+      describe("a file's final newline", function()
+        it("is no block, and a save writes it back", function()
+          for _, case in ipairs({
+            { 'x = 1\n', 1, 'x = 1\n' },
+            { 'x = 1', 1, 'x = 1\n' },
+            { 'x = 1\n\n', 2, 'x = 1\n\n' },
+          }) do
+            local text, blocks = case[1], case[2]
+            local saved = case[3]
+            local _, buffer = session:open(text, blocks)
+            --- past the last block, the append row
+            session:select_block(blocks + 1)
+            assert.same({}, buffer:get_selected_text())
+            assert.is_true(buffer:save())
+            assert.same(saved, savefile(), text)
+          end
+        end)
+
+        --- End reaches the last line of the file, which is the
+        --- last block's last line (spec 2.7), and shows it
+        it("leaves End on the last line, on screen", function()
+          local body = string.rep('  print(1)\n', 30)
+          local _, buffer =
+              session:open('function f()\n' .. body .. 'end\n', 1)
+          mock.keystroke('end', press)
+          assert.same(32, buffer:get_active_line())
+          local bv = controller.view:get_current_buffer()
+          local r = bv.content:get_range()
+          local wl = bv.content.wrap_forward[32]
+          assert.is_true(wl[1] >= r.start and wl[#wl] <= r.fin)
+        end)
+
+        it("is written the same by an accept, Ctrl+Shift+F,"
+          .. " tidy and compyfmt --fix", function()
+          require("controller.consoleController")
+          local compyfmt = require("util.compyfmt")
+          stub(_G, 'print')
+          for _, case in ipairs({
+            { 'x  =  1', 'x = 1\n' },
+            { 'x  =  1\n', 'x = 1\n' },
+            { 'x  =  1\n\n', 'x = 1\n\n' },
+          }) do
+            local text, want = case[1], case[2]
+            session:open(text, #textfile.lines(text))
+            session:select_and_open_block(1)
+            session:submit('x  =  1')
+            assert.same(want, savefile(), 'accept: ' .. text)
+
+            session:open(text)
+            mock.keystroke('C-S-f', press)
+            assert.same(want, savefile(),
+              'Ctrl+Shift+F: ' .. text)
+
+            local path = os.tmpname()
+            assert.is_true(FS.write(path, text))
+            local console = setmetatable({
+              model = { projects = { current = {
+                get_path = function() return path end,
+                readfile = function() return FS.read(path) end,
+                writefile = function(_, _, t)
+                  return FS.write(path, t)
+                end,
+              } } },
+            }, ConsoleController)
+            assert.is_true(console:tidy('main.lua'))
+            assert.same(want, select(2, FS.read(path)),
+              'tidy: ' .. text)
+
+            assert.is_true(FS.write(path, text))
+            compyfmt.main({ '--fix', path })
+            assert.same(want, select(2, FS.read(path)),
+              'compyfmt --fix: ' .. text)
+            os.remove(path)
+          end
+          _G.print:revert()
+        end)
       end)
 
       --- spec 2.1: on a blank line the typed text turns that
@@ -2278,7 +2362,7 @@ describe('Editor #editor', function()
 
         it("between two blocks turns that line into the block",
           function()
-            session:open('a = 1\n\nb = 2\n\n\nc = 3\n', 7)
+            session:open('a = 1\n\nb = 2\n\n\nc = 3\n', 6)
             session:select_block(2)
             type_text('x = 0')
             assert.same('a = 1\nx = 0\nb = 2\n\n\nc = 3\n',
@@ -2287,15 +2371,17 @@ describe('Editor #editor', function()
 
         it("that is the last of the file turns it into the block",
           function()
-            session:open('a = 1\n\n', 3)
+            session:open('a = 1\n\n', 2)
             session:select_block(2)
             type_text('b = 2')
             assert.same('a = 1\nb = 2\n', savefile())
           end)
 
-        it("after the final newline adds the block there",
+        --- the file's final newline is no line to type on: past
+        --- its last block comes the append row
+        it("past the last block adds the block after it",
           function()
-            session:open('a = 1\n\n', 3)
+            session:open('a = 1\n\n', 2)
             session:select_block(3)
             type_text('b = 2')
             assert.same('a = 1\n\nb = 2\n', savefile())
@@ -2311,9 +2397,24 @@ describe('Editor #editor', function()
             assert.same('x = 1\ny = 2\n', savefile())
           end)
 
+        it("joins the statement below when the text runs into it",
+          function()
+            local _, buffer =
+                session:open('do end\n\n(print)(1)\n', 3)
+            session:select_block(2)
+            type_text('f = print')
+            assert.same('do end\nf = print\n(print)(1)\n',
+              savefile())
+            --- one statement as Lua reads it, so one block
+            assert.same(2, buffer:get_content_length())
+            session:select_block(2)
+            assert.same({ 'f = print', '(print)(1)' },
+              buffer:get_selected_text())
+          end)
+
         it("lands past all the blocks the text makes", function()
           local _, buffer =
-              session:open('a = 1\n\nb = 2\nc = 3\nd = 4\n', 6)
+              session:open('a = 1\n\nb = 2\nc = 3\nd = 4\n', 5)
           session:select_and_open_block(2)
           session:submit(string.unlines({
             'x = 1',
@@ -2328,7 +2429,7 @@ describe('Editor #editor', function()
           function()
             local system = love.system
             love.system = { setClipboardText = function() end }
-            session:open('\nb = 2\n', 3)
+            session:open('\nb = 2\n', 2)
             session:select_and_open_block(1)
             mock.keystroke('C-x', press)
             love.system = system
@@ -2339,7 +2440,7 @@ describe('Editor #editor', function()
 
         it("leaves a new block opened above it alone (2.7)",
           function()
-            session:open('a = 1\n\nb = 2\n', 4)
+            session:open('a = 1\n\nb = 2\n', 3)
             session:select_block(1)
             mock.keystroke('C-return', press)
             type_text('x = 0')
@@ -2361,15 +2462,17 @@ describe('Editor #editor', function()
             ''
           }
           existing_src = src(unpack(base_blocks))
-          n_blocks = #base_blocks
+          --- the last '' is the file's final newline, no block
+          n_blocks = #base_blocks - 1
           input = nil
           buffer = nil
         end)
 
         before_each(function()
           input, buffer = session:open(existing_src, n_blocks)
-          --- files open at the top; these insert at the end
-          session:select_block(n_blocks)
+          --- files open at the top; these insert at the end,
+          --- on the append row past the last block
+          session:select_block(n_blocks + 1)
         end)
 
         it("single normal block", function()
@@ -2379,10 +2482,10 @@ describe('Editor #editor', function()
           assert.is_true(input:is_empty(), "input cleared")
           assert.same(n_blocks+1, buffer:get_content_length(),
                       "buffer size increased by 1 block")
-          assert.same(n_blocks+1, buffer.selection,
+          assert.same(n_blocks+2, buffer.selection,
                       "selection moved down by 1")
 
-          session:select_block(n_blocks)
+          session:select_block(n_blocks+1)
           assert.same( string.lines(new_func),
                        buffer:get_selected_text(),
                        "content added as new block")
@@ -2400,17 +2503,17 @@ describe('Editor #editor', function()
           assert.is_true(input:is_empty(), "input cleared")
           assert.same(n_blocks+2, buffer:get_content_length(),
                       "buffer size increased by 2 blocks")
-          assert.same(n_blocks+2, buffer.selection,
+          assert.same(n_blocks+3, buffer.selection,
                       "selection moved down by 2")
           assert.same( {},
                        buffer:get_selected_text(),
-                       "trailing empty line is selected")
+                       "the append row is selected")
 
-          session:select_block(n_blocks)
+          session:select_block(n_blocks+1)
           assert.same( string.lines(f1),
                        buffer:get_selected_text(),
                        "first block injected first")
-          session:select_block(n_blocks+1)
+          session:select_block(n_blocks+2)
           assert.same( string.lines(f2),
                        buffer:get_selected_text(),
                        "second block follows, no empty line added")
@@ -2458,7 +2561,7 @@ describe('Editor #editor', function()
           assert.same( string.lines(f_oversized),
                        input:get_text(),
                        "text remains in the input")
-          assert.same(n_blocks, buffer.selection,
+          assert.same(n_blocks+1, buffer.selection,
                        "selection not moved")
           assert.same(n_blocks, buffer:get_content_length(),
                        "buffer length not changed")

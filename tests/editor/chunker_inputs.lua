@@ -56,7 +56,6 @@ local sierp_res = {
 end]]), Range(1, 13)),
   Empty(14),
   Chunk({ 'print(sierpinski(4))' }, Range.singleton(15)),
-  Empty(16)
 }
 
 --- every blank line is an empty block of its own
@@ -65,7 +64,6 @@ local sierp_res_2 = {
   Empty(14),
   Empty(15),
   Chunk({ 'print(sierpinski(4))' }, Range.singleton(16)),
-  Empty(17)
 }
 
 local chonk_1 = Chunk({
@@ -80,14 +78,12 @@ local chonk_res = {
   Empty(4),
   Chunk({ 'print(string.unlines(chonky()))' },
     Range.singleton(5)),
-  Empty(6),
 }
 
 return {
   prep(
     "local x = 1",
-    { Chunk({ 'local x = 1' }, Range.singleton(1)),
-      Empty(2) }
+    { Chunk({ 'local x = 1' }, Range.singleton(1)) }
   ),
   prep({ '' }, { Empty(1) }),
   prep({ '', '' }, { Empty(1), Empty(2) }),
@@ -97,8 +93,7 @@ return {
   prep(
     "\nlocal x = 1",
     { Empty(1),
-      Chunk({ 'local x = 1' }, Range.singleton(2)),
-      Empty(3) }
+      Chunk({ 'local x = 1' }, Range.singleton(2)) }
   ),
   prep(
     "local x = 1\n",
@@ -146,7 +141,6 @@ print(string.unlines(chonky()))]],
       chonk_1,
       Chunk({ 'print(string.unlines(chonky()))' },
         Range.singleton(4)),
-      Empty(5),
     }
   ),
 
@@ -162,7 +156,6 @@ print(string.unlines(chonky()))]], {
     Empty(5),
     Chunk({ 'print(string.unlines(chonky()))' },
       Range.singleton(6)),
-    Empty(7),
   }),
 
   prep([[function chonky()
@@ -179,7 +172,6 @@ print(1)]], {
       Range.singleton(6)),
     Chunk({ 'print(1)' },
       Range.singleton(7)),
-    Empty(8),
   }),
 
   prep([[function chonky()
@@ -201,7 +193,6 @@ y = 2]], {
     Empty(8),
     Chunk({ 'x = 1' }, Range.singleton(9)),
     Chunk({ 'y = 2' }, Range.singleton(10)),
-    Empty(11),
   }),
 
   prep([[function chonky()
@@ -225,7 +216,6 @@ y = 2]], {
     Chunk({ 'x = 1' }, Range.singleton(9)),
     Empty(10),
     Chunk({ 'y = 2' }, Range.singleton(11)),
-    Empty(12),
   }),
 
   prep([[--- luadoc comment
@@ -242,7 +232,6 @@ end]], {
       },
       Range(2, 5)
     ),
-    Empty(6),
   }),
 
   --- a run of blank lines before a comment keeps every
@@ -261,20 +250,17 @@ end]], {
     Empty(4),
     Chunk({ '-- note' }, Range.singleton(5)),
     Chunk({ 'local b = 2' }, Range.singleton(6)),
-    Empty(7),
   }),
 
   --- a comment trailing code belongs to the statement's own chunk
   prep(
     "x = 1 -- trailing",
-    { Chunk({ 'x = 1 -- trailing' }, Range.singleton(1)),
-      Empty(2) }
+    { Chunk({ 'x = 1 -- trailing' }, Range.singleton(1)) }
   ),
   prep([[x = 1 -- one
 y = 2]], {
     Chunk({ 'x = 1 -- one' }, Range.singleton(1)),
     Chunk({ 'y = 2' }, Range.singleton(2)),
-    Empty(3),
   }),
   prep([[function f()
   return 1
@@ -286,7 +272,6 @@ end -- tail]], {
       },
       Range(1, 3)
     ),
-    Empty(4),
   }),
   prep([[function f()
   return 1 -- inner
@@ -298,7 +283,6 @@ end]], {
       },
       Range(1, 3)
     ),
-    Empty(4),
   })
 
 }

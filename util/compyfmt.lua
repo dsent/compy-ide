@@ -33,24 +33,21 @@ local parser = require("model.lang.lua.parser")()
 local check = require("model.lang.lua.check")
 local lint = require("model.lang.lua.lint")
 local display = require("conf.display")
+local textfile = require("util.textfile")
 
 local M = {}
 
---- What compyfmt says about one file's text, and the text the
---- file should hold
+--- What compyfmt says about one file's lines, and the lines
+--- the file should hold (util.textfile)
 --- @param lines string[]
 --- @param strict boolean? --- report the strict lints too
---- @return string[] text --- formatted, with a final newline;
---- the text as it was when it does not format
+--- @return string[] text --- formatted; the lines as they were
+--- when they do not format
 --- @return string[] reports --- `line: what`, in line order
 --- @return boolean formatted --- the text formatted
 function M.inspect(lines, strict)
   local verdict = check.gate(lines, display.columns)
   local text = verdict.lines
-  if verdict.formatted and text[#text] ~= '' then
-    text = table.clone(text)
-    table.insert(text, '')
-  end
   local found = {}
   local function add(l, what)
     table.insert(found, { l = l or 1, n = #found, what = what })
@@ -90,25 +87,25 @@ function M.inspect(lines, strict)
 end
 
 --- @param path string
---- @return string[]? --- nil when the file cannot be read
-local function read_lines(path)
+--- @return string? --- nil when the file cannot be read
+local function read_file(path)
   local f = io.open(path, 'rb')
   if not f then return end
   local s = f:read('*a')
   f:close()
-  if s then return string.lines(s) end
+  return s
 end
 
 --- Write beside the file, then put that in its place, so a
 --- write that fails leaves the file as it was
 --- @param path string
---- @param lines string[]
+--- @param text string
 --- @return boolean
-local function write_lines(path, lines)
+local function write_file(path, text)
   local tmp = path .. '.compyfmt~'
   local f = io.open(tmp, 'wb')
   if not f then return false end
-  local written = f:write(string.unlines(lines))
+  local written = f:write(text)
   local closed = f:close()
   if not (written and closed and os.rename(tmp, path)) then
     os.remove(tmp)
@@ -157,14 +154,19 @@ function M.main(args)
 
   local status = 0
   for _, path in ipairs(files) do
-    local lines = read_lines(path)
-    if not lines then
+    local s = read_file(path)
+    if not s then
       io.stderr:write(path .. ': cannot be read\n')
       status = 2
     else
-      local text, reports = M.inspect(lines, o.strict)
-      local changed = string.unlines(text) ~= string.unlines(lines)
-      if changed and fix and not write_lines(path, text) then
+      local lines = textfile.lines(s)
+      local text, reports, formatted =
+          M.inspect(lines, o.strict)
+      --- written as the editor writes a file; one that does not
+      --- format stays byte for byte
+      local new = formatted and textfile.text(text) or s
+      local changed = new ~= s
+      if changed and fix and not write_file(path, new) then
         io.stderr:write(path .. ': cannot be written\n')
         status = 2
       end

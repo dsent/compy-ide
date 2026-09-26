@@ -7,6 +7,7 @@ require('util.table')
 require('util.range')
 require('util.string.string')
 require('util.dequeue')
+local textfile = require('util.textfile')
 
 --- Convert Blocks to string array
 --- @param blocks Block[]
@@ -27,7 +28,7 @@ end
 --- @alias Content Dequeue<string>|Dequeue<Block>
 
 --- @param name string
---- @param content str
+--- @param content str --- the file's text, or its lines
 --- @param save function
 --- @param chunker Chunker?
 --- @param highlighter Highlighter?
@@ -45,11 +46,9 @@ local function new(
   local _content, sel, ct, semantic
   local readonly = false
 
-  local lines = string.lines(content or '')
-
   local function plaintext()
     ct = 'plain'
-    _content = Dequeue(lines, 'string')
+    _content = Dequeue(string.lines(content or ''), 'string')
     if _content:last() ~= '' then
       _content:push('')
     end
@@ -59,6 +58,9 @@ local function new(
   --- @param chk function
   local function luacontent(chk)
     ct = 'lua'
+    --- a file's text, or lines as they are
+    local lines = type(content) == 'table'
+        and string.lines(content) or textfile.lines(content)
     local ok, blocks = chk(lines)
     if ok then
       sel = 1
@@ -265,10 +267,15 @@ function BufferModel:rechunk()
   self.content = blocks
 end
 
+--- A Lua file is written as its lines, each with its newline
+--- (util.textfile); plain text keeps the empty line it ends in
 function BufferModel:save()
   self:_text_change()
   local text = self:get_text_content()
   self:analyze()
+  if self.content_type == 'lua' then
+    return self.save_file(textfile.text(text))
+  end
   return self.save_file(text)
 end
 
@@ -330,6 +337,8 @@ function BufferModel:move_selection(dir, by, warp, move)
     end
     if dir == 'down' then
       self.selection = last
+      --- the file's last line, which ends its last block
+      self.active_line = self:get_selection_lines().fin
       self:clamp_active_line()
       return true
     end
@@ -636,8 +645,9 @@ function BufferModel:fill_empty(t, bn)
   --- the blocks' positions
   local next_line = self.content[bn].pos.start + t[#t].pos.fin
   self:replace_content(t, bn)
-  --- the blank line may be the one after the final newline;
-  --- re-chunking puts that back
+  --- re-chunking gives the blocks the file's own statements:
+  --- typed text may join the one below it, as `f = print`
+  --- does with a line starting `(print)(1)`
   self:rechunk()
   local after = self:block_at_line(next_line)
       or self:get_content_length() + 1

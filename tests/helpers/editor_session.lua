@@ -1,6 +1,7 @@
 local class = require("util.class")
 local assert = require("luassert")
 local fmt = string.format
+local textfile = require("util.textfile")
 
 --- Drives the editor in tests via mocked keystrokes
 --- (block navigation mode).
@@ -38,29 +39,18 @@ function EditorSession:open(src, nb)
   local input = self.controller.input
   local buffer = self.controller:get_active_buffer()
 
-  local srclines = string.lines(src)
-  local has_trailing_nl = (srclines[#srclines] == "")
-  local expected = (has_trailing_nl and src or src .. "\n")
-
-  assert.same(
-    string.lines(expected),
-    buffer:get_text_content(),
-    "desired content loaded"
-  )
+  --- the file's lines: its final newline ends the last one;
+  --- the empty file is one empty block (spec 2.1)
+  local expected = textfile.lines(src)
+  if #expected == 0 then expected = { '' } end
+  assert.same(expected, buffer:get_text_content(),
+    "desired content loaded")
   if nb then
-    if has_trailing_nl then
-      assert.same(
-        nb,
-        buffer:get_content_length(),
-        fmt("Blocks loaded: %s", nb)
-      )
-    else
-      assert.same(
-        nb + 1,
-        buffer:get_content_length(),
-        fmt("Blocks loaded: %s original +1 extra", nb)
-      )
-    end
+    assert.same(
+      nb,
+      buffer:get_content_length(),
+      fmt("Blocks loaded: %s", nb)
+    )
   end
   self.input = input
   self.buffer = buffer
