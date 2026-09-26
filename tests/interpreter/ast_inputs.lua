@@ -797,6 +797,19 @@ local wrapping = {
     '-- bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
     '-- b',
   }),
+  --- an indented comment wraps within the line as well
+  prep({
+    'function f()',
+    '  -- ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+    '  go()',
+    'end',
+  }, {
+    'function f()',
+    '  -- ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+    '  -- cc',
+    '  go()',
+    'end',
+  }),
   prep(
     '-- яяяяяяяяяяяяяяяяяяя22222222222222222eeeeeeeeeeeeeeeeeee6666666666666666666666666sssssssssss',
     {

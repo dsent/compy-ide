@@ -478,9 +478,11 @@ end
 --- its own leading space or dash, so it takes two columns more;
 --- a piece after it may take a space as well, so three.
 --- @param lines string[]
---- @param w integer
+--- @param w integer --- columns left after the indentation
 --- @return string[]
 local function wrap_comment(lines, w)
+  --- however deep the indentation, every piece holds a character
+  w = math.max(w, 4)
   local res = {}
   for _, l in ipairs(lines) do
     local first = string.sub(l, 1, 1)
@@ -546,7 +548,8 @@ function M:node(node, stmt)
         else
           local ls = co.first.l
           local le = co.last.l
-          local wrapped = wrap_comment(lines, self.wrap)
+          local wrapped =
+              wrap_comment(lines, self.wrap - self._line_len)
           if ls == le then
             --- (originally) single line comment
             if co.text == '' then
