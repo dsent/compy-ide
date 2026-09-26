@@ -6,6 +6,8 @@
 
 The editor does not operate on lines. For Lua files, it operates on **blocks** — top-level syntactic units produced by the metalua chunker. A block is either a `Chunk` (one or more source lines forming a complete top-level statement/expression) or an `Empty` (one blank line; a run of blank lines is a run of `Empty` blocks). The selection highlight, navigation, submit, delete, insert, and move operations all act on blocks, not on individual lines.
 
+The newline ending a file's last line belongs to that line, so no block stands for it: after the last block comes the view's append row. A blank line at the end of the file is an `Empty` like any other.
+
 For plain text and Markdown files, the model falls back to line-level editing — each line is its own "block".
 
 This distinction pervades the entire editor stack. Understanding it is the prerequisite for understanding anything else here.
@@ -22,7 +24,7 @@ This distinction pervades the entire editor stack. Understanding it is the prere
 | `.md` | `md` | markdown highlighter only |
 | anything else | `plain` | none |
 
-A `BufferModel` (`src/model/editor/bufferModel.lua`) is created with these tools and immediately tries to chunk the file content. **If the initial Lua parse fails, the buffer is marked `readonly = true`** and the selection is set to 1. The file is viewable but nothing can be edited or saved — this prevents corrupting a file that the editor cannot parse.
+A `BufferModel` (`src/model/editor/bufferModel.lua`) is created with these tools and immediately tries to chunk the file content. A Lua file is read as its lines (`src/util/textfile.lua`), the final newline part of the last one; a file without one reads the same, and saving gives it one. **If the initial Lua parse fails, the buffer is marked `readonly = true`** and the selection is set to 1. The file is viewable but nothing can be edited or saved — this prevents corrupting a file that the editor cannot parse.
 
 After construction, `lateinit` calls `analyze()` immediately to populate semantic info.
 
@@ -69,11 +71,11 @@ Pressing `Enter` on non-empty input goes through `_handle_submit`, which asks th
 3. **Chunk and measure** — the formatted text is chunked into the blocks that will be stored, and a block longer than `max_block` (the input's height, `input_max` = 14) makes the verdict name that block and how many lines it has too many. The editor refuses it with a message after its own visibility checks, and moves the cursor to the block's first line.
 4. **No blank line of the editor's own** — nothing adds an `Empty` beyond what step 1 keeps. Blank lines outside the accepted block stay as they are: the chunker makes one `Empty` per blank line, so re-chunking the whole file after the write keeps every run.
 5. **Replace or Insert** — `replace_content` or `insert_content` updates the buffer, adjusting all subsequent block positions via `Range:translate`.
-6. **Auto-save** — `buf:save()` is called immediately. Every accepted submit writes to disk.
+6. **Auto-save** — `buf:save()` is called immediately. Every accepted submit writes to disk, a newline after every line, the last one included.
 
 `Ctrl+Enter` inserts the new block(s) before the selection rather than replacing it. Text typed on a blank line (an `Empty` block) replaces that line, and the selection moves to the block after the new text, so typing goes on below it.
 
-`Ctrl+Shift+F` in navigation (`format_file`) formats the whole file with the same `format` function at the window's width. Every run of blank lines in the file becomes one: the one place the editor changes blank lines outside a block, because the user asked. When `format` hands the text back as it was, the editor refuses with a message and the file stays. The selection stays on the statement the active line was on; from a blank line or a comment it moves to the statement below. The REPL's `tidy(name)` and `util/compyfmt.lua --fix` format a file the same way at a Compy's width (`src/conf/display.lua`). compyfmt reports the gates and the lints (`src/model/lang/lua/lint.lua`); without `--fix` it changes nothing and also names each file formatting would change.
+`Ctrl+Shift+F` in navigation (`format_file`) formats the whole file with the same `format` function at the window's width. Every run of blank lines in the file becomes one: the one place the editor changes blank lines outside a block, because the user asked. When `format` hands the text back as it was, the editor refuses with a message and the file stays. The selection stays on the statement the active line was on; from a blank line or a comment it moves to the statement below. The REPL's `tidy(name)` and `util/compyfmt.lua --fix` format a file the same way at a Compy's width (`src/conf/display.lua`) and write the same bytes an accept would. compyfmt reports the gates and the lints (`src/model/lang/lua/lint.lua`); without `--fix` it changes nothing and also names each file formatting would change.
 
 ---
 
