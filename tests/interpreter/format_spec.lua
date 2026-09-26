@@ -48,6 +48,15 @@ describe('lua format #format', function()
     assert.same(text, out)
   end)
 
+  it('keeps a comment as wide as the line on one line', function()
+    local rule = '-- send, exec ' .. string.rep('-', 50)
+    local text = { rule, 'x = 1' }
+    local out, ok = format.format(text, W)
+    assert.is_true(ok)
+    assert.same(text, out)
+    assert.equal(W, #rule)
+  end)
+
   it('leaves text that does not parse as it is', function()
     local text = { 'function f(', '  return 1' }
     local out, ok = format.format(text, W)

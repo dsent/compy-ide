@@ -786,11 +786,22 @@ local wrapping = {
       '  "яяяяяяяяяяяяяяяяяяя22222222222222222eeeeeeeeeeeeeeeeeee66" ..',
       '  "66666666666666666666666sssssssssss"',
     }),
+  --- a comment as wide as the line stays on it, a dash rule
+  --- and a `---` one included; one column more wraps
+  prep({
+    '-- send, exec --------------------------------------------------',
+    '--- aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    'x = 1',
+  }),
+  prep('-- bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', {
+    '-- bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    '-- b',
+  }),
   prep(
     '-- яяяяяяяяяяяяяяяяяяя22222222222222222eeeeeeeeeeeeeeeeeee6666666666666666666666666sssssssssss',
     {
-      '-- яяяяяяяяяяяяяяяяяяя22222222222222222eeeeeeeeeeeeeeeeeee66666',
-      '-- 66666666666666666666sssssssssss',
+      '-- яяяяяяяяяяяяяяяяяяя22222222222222222eeeeeeeeeeeeeeeeeee666666',
+      '-- 6666666666666666666sssssssssss',
     }),
   prep(
     {
@@ -814,10 +825,10 @@ local wrapping = {
       '-- яяяяяяяяяяяяяяяяяяя22222222222222222eeeeeeeeeeeeeeeeeee6666666666666666666666666sssssssssss',
       '-- цэфлаэфцжфдэжафдукзщфкхз2щ3х54з2ьахажщд2хфладжьяхадыхжахдхыжхахдыалджлождлод' },
     {
-      '-- яяяяяяяяяяяяяяяяяяя22222222222222222eeeeeeeeeeeeeeeeeee66666',
-      '-- 66666666666666666666sssssssssss',
-      '-- цэфлаэфцжфдэжафдукзщфкхз2щ3х54з2ьахажщд2хфладжьяхадыхжахдхыж',
-      '-- хахдыалджлождлод',
+      '-- яяяяяяяяяяяяяяяяяяя22222222222222222eeeeeeeeeeeeeeeeeee666666',
+      '-- 6666666666666666666sssssssssss',
+      '-- цэфлаэфцжфдэжафдукзщфкхз2щ3х54з2ьахажщд2хфладжьяхадыхжахдхыжх',
+      '-- ахдыалджлождлод',
     }),
   prep({
     'function fun()',

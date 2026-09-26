@@ -473,6 +473,29 @@ function M:extract_comments(node)
   return comments
 end
 
+--- A `--` comment's text cut into lines that fit `w` columns
+--- once each takes its `--`. The first piece of a line keeps
+--- its own leading space or dash, so it takes two columns more;
+--- a piece after it may take a space as well, so three.
+--- @param lines string[]
+--- @param w integer
+--- @return string[]
+local function wrap_comment(lines, w)
+  local res = {}
+  for _, l in ipairs(lines) do
+    local first = string.sub(l, 1, 1)
+    local pre = (first == ' ' or first == '-') and 2 or 3
+    local head, rest = string.split_at(l, w - pre + 1)
+    table.insert(res, head)
+    if rest ~= '' then
+      for _, piece in ipairs(string.wrap_at(rest, w - 3)) do
+        table.insert(res, piece)
+      end
+    end
+  end
+  return res
+end
+
 ----------------------------------------------------------------
 --- Accumulate the source representation of AST `node' in
 --- the synthetizer. Most of the work is done by delegating to
@@ -523,8 +546,7 @@ function M:node(node, stmt)
         else
           local ls = co.first.l
           local le = co.last.l
-          local wrapped =
-              string.wrap_array(lines, self.wrap - 3)
+          local wrapped = wrap_comment(lines, self.wrap)
           if ls == le then
             --- (originally) single line comment
             if co.text == '' then
