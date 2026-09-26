@@ -552,7 +552,8 @@ function M:node(node, stmt)
               local pre = '--'
               --- add a space if not present already
               --- do not break up '---'-style comments
-              if first == ' ' or first == '-'
+              --- and leave an empty `--` line empty
+              if first == ' ' or first == '-' or l == ''
               then
               else
                 pre = pre .. ' '

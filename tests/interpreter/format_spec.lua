@@ -41,6 +41,13 @@ describe('lua format #format', function()
     assert.same(text, out)
   end)
 
+  it('keeps an empty line in a run of comments empty', function()
+    local text = { '-- first', '--', '-- second', 'x = 1' }
+    local out, ok = format.format(text, W)
+    assert.is_true(ok)
+    assert.same(text, out)
+  end)
+
   it('leaves text that does not parse as it is', function()
     local text = { 'function f(', '  return 1' }
     local out, ok = format.format(text, W)

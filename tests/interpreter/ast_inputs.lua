@@ -340,6 +340,15 @@ local comments = {
     'a = 1'
   }),
 
+  --- an empty line in a run of comments stays empty
+  prep({
+    'x = 0',
+    '-- first paragraph',
+    '--',
+    '-- second paragraph',
+    'a = 1'
+  }),
+
   prep({
     'x = 1',
     '--[[ comment1',
