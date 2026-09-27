@@ -277,6 +277,17 @@ local basics = {
   prep('local str = "asd"'),
   prep("local str = 'asd'", { 'local str = "asd"' }),
   prep('local n = 3.0e2', 'local n = 300'),
+  --- string escapes stay as written: the conventional ones
+  --- by name, other control characters in decimal, three
+  --- digits long only when a digit follows
+  prep([[crlf = "a\r\nb"]]),
+  prep([[tab = "x\ty"]]),
+  prep([[nul = "\0\0001"]]),
+  prep([[esc = "\27[0m"]]),
+  prep([[named = "\a\b\f\v"]]),
+  prep([[quoted = "say \"hi\" \\ back"]]),
+  prep([[del = "\127"]]),
+  prep([[decimal = "\116\101\120\116"]], { [[decimal = "text"]] }),
 }
 
 local operators = {
@@ -887,7 +898,8 @@ local wrapping = {
       [[  "po█rchetta. Pork loin meatball ball tip\n" ..]],
       [[  "por█k chop pork capicola fatback andouille beef sausage s" ..]],
       [[  "hort\n" ..]],
-      [[  "loin█ bresaola venison.\t"]],
+      --- a backslash in the text is written escaped
+      [[  "loin█ bresaola venison.\\t"]],
     }
   ),
   prep({

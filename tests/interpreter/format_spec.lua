@@ -125,15 +125,42 @@ describe('lua format #format', function()
     assert.equal(text, out)
   end)
 
-  it('refuses to change what a string holds', function()
-    local text = {
-      'local s = [[one \\\\n two, and a line long enough that the',
-      'printer splits it into pieces]]',
-    }
+  it('writes escapes as written, and settles on them', function()
+    local text = { [[s = "a\r\nb\t\0\0001\27[0m\a\b\f\v\127"]] }
     local out, ok = format.format(text, W)
-    assert.is_false(ok)
-    assert.equal(text, out)
+    assert.is_true(ok)
+    assert.same(text, out)
   end)
+
+  --- every byte, in a string long enough to be split into
+  --- pieces: the printed literal holds the same bytes
+  it('keeps the value of a string holding every byte', function()
+    local bytes, escaped = {}, {}
+    for b = 0, 255 do
+      table.insert(bytes, string.char(b))
+      table.insert(escaped, string.format('\\%03d', b))
+    end
+    local text = { 'return "' .. table.concat(escaped) .. '"' }
+    local out, ok = format.format(text, W)
+    assert.is_true(ok)
+    assert.are_not.same(text, out)
+    local run = assert(loadstring(table.concat(out, '\n')))
+    assert.equal(table.concat(bytes), run())
+  end)
+
+  it('keeps what a long string holds, backslashes and all',
+    function()
+      local text = {
+        'return [[one \\\\n two, and a line long enough that the',
+        'printer splits it into pieces]]',
+      }
+      local out, ok = format.format(text, W)
+      assert.is_true(ok)
+      local run = function(lines)
+        return assert(loadstring(table.concat(lines, '\n')))()
+      end
+      assert.equal(run(text), run(out))
+    end)
 
   describe('on the bundled examples', function()
     for _, path in ipairs(bundled_examples()) do

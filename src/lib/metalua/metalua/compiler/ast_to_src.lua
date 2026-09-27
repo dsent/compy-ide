@@ -1066,36 +1066,88 @@ local function escape_non_utf8(s)
   return table.concat(out)
 end
 
+--- The escapes a string literal writes by name
+local named_escapes = {
+  ['\\'] = '\\\\', ['"'] = '\\"',
+  ['\n'] = '\\n', ['\r'] = '\\r', ['\t'] = '\\t',
+  ['\a'] = '\\a', ['\b'] = '\\b',
+  ['\f'] = '\\f', ['\v'] = '\\v',
+}
+
+----------------------------------------------------------------
+--- The text between the quotes of a string literal holding
+--- `s`: the conventional escapes by name, any other control
+--- character and DEL as a decimal escape, three digits long
+--- when a digit follows, and every other byte as it is.
+--- @param s string
+--- @return string
+----------------------------------------------------------------
+local function escape_string(s)
+  return (string.gsub(s, '()([%z\1-\31\\"\127])', function(i, c)
+    local name = named_escapes[c]
+    if name then return name end
+    if string.find(s, '^%d', i + 1) then
+      return string.format('\\%03d', string.byte(c))
+    end
+    return '\\' .. string.byte(c)
+  end))
+end
+
+----------------------------------------------------------------
+--- A line of a long string cut to fit `w` columns, the pieces
+--- written as literals. A line that has a newline after it
+--- ends with `\n`, which takes two columns; when the last
+--- piece has no room for it, it becomes a piece of its own.
+--- @param line string
+--- @param w integer
+--- @param nl boolean --- a newline follows the line
+--- @return string[]
+----------------------------------------------------------------
+local function string_pieces(line, w, nl)
+  local chunks = string.wrap_at(line, w)
+  local pieces = {}
+  for i, c in ipairs(chunks) do
+    pieces[i] = escape_string(c)
+  end
+  if nl then
+    local last = chunks[#chunks]
+    local room = w - (string.ulen(last) or #last)
+    if line ~= '' and room < 2 then
+      table.insert(pieces, '\\n')
+    else
+      pieces[#pieces] = pieces[#pieces] .. '\\n'
+    end
+  end
+  return pieces
+end
+
 function M:String(_, str)
   local fl        = string.len('"" ..' .. self.indent_step)
   local wl        = self.wrap - fl
   --- bytes that are not UTF-8 have no length in characters
   local multiline = (string.ulen(str) or string.len(str)) > wl
   local rendered  = ''
-  --- format "%q" prints '\n' in an umpractical way IMO,
-  --- so this is fixed with the :gsub( ) call.
   if multiline then
-    --- split the raw text
-    local split = string.lines(str) or {}
-    --- add newline placeholders
-    for i, v in ipairs(split) do
-      if i ~= #split then
-        split[i] = v .. '\\n'
+    --- a piece per line of the text, cut to the width
+    local lines = string.lines(str) or {}
+    local pieces = {}
+    for i, line in ipairs(lines) do
+      local nl = i ~= #lines
+      for _, piece in ipairs(string_pieces(line, wl, nl)) do
+        table.insert(pieces, piece)
       end
     end
     --- wrap, starting on a line of its own
-    local ls = string.wrap_array(split, wl)
     self:trim_line_end()
-    for i, v in ipairs(ls) do
+    for i, v in ipairs(pieces) do
       rendered = rendered .. "\n" .. self.indent_step
-      rendered = rendered ..
-          string.format("%q", v):gsub("\\\\", [[\]])
-      if i ~= #ls then
+      rendered = rendered .. '"' .. v .. '"'
+      if i ~= #pieces then
         rendered = rendered .. ' ..'
       end
     end
   else
-    rendered = string.format("%q", str):gsub("\\\n", [[\n]])
+    rendered = '"' .. escape_string(str) .. '"'
   end
   self:acc(escape_non_utf8(rendered))
 end
