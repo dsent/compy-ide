@@ -17,20 +17,32 @@ function max_length(n)
   end
 end
 
-function is_upper(s)
+function keepScanning(ret, i, l)
+  return ret and i <= l
+end
+
+function notUpper(s, i)
+  local v = string.usub(s, i, i)
+  return v ~= string.upper(v)
+end
+
+function scanUpper(s)
   local ret = true
   local l = string.ulen(s)
   local err_c
   local i = 1
-  while ret and i <= l do
-    local v = string.usub(s, i, i)
-    if v ~= string.upper(v) then
+  while keepScanning(ret, i, l) do
+    if notUpper(s, i) then
       ret = false
       err_c = i
     end
     i = i + 1
   end
+  return ret, err_c
+end
 
+function is_upper(s)
+  local ret, err_c = scanUpper(s)
   if ret then
     return true
   end
@@ -48,7 +60,7 @@ end
 function is_number(s)
   local sign = string.usub(s, 1, 1)
   local offset = 0
-  if sign == '-' then
+  if sign == "-" then
     offset = 1
   end
   local digits = string.usub(s, 1 + offset)
@@ -77,10 +89,12 @@ end
 -- line validator prevents invalid lines from reaching the
 -- submit callback. No lifecycle flag is configured here: the
 -- defaults are what a continuous prompt wants.
-compy.input.show{
+compy.input.show({
   validator = LineValidators({
     min_length(2),
     is_lower
   }),
-  on_text_entered = function(text) print(text) end,
-}
+  on_text_entered = function(text)
+    print(text)
+  end
+})
