@@ -96,12 +96,33 @@ local function read_file(path)
   return s
 end
 
+--- the error number of a file that is not there
+local ENOENT = 2
+
+--- The copy --fix writes beside a file before the file itself
 --- @param path string
---- @param text string
+--- @return string
+local function copy_path(path)
+  return path .. '.compyfmt~'
+end
+
+--- Whether something is at `path`; what cannot be opened for
+--- another reason than being absent counts as there
+--- @param path string
 --- @return boolean
-local function write_all(path, text)
-  local f = io.open(path, 'wb')
-  if not f then return false end
+local function is_there(path)
+  local f, _, code = io.open(path, 'rb')
+  if f then
+    f:close()
+    return true
+  end
+  return code ~= ENOENT
+end
+
+--- @param f file*
+--- @param text string
+--- @return boolean --- written and closed
+local function write_to(f, text)
   local written = f:write(text)
   local closed = f:close()
   return (written and closed) and true or false
@@ -112,20 +133,23 @@ end
 --- into the file itself, which keeps its mode, owner and inode.
 --- When that second write fails part way, the text stays beside
 --- the file, and while it is there the file is not written again:
---- it may be the only whole copy of the program.
+--- it may be the only whole copy of the program. The copy is
+--- only ever created ('x'), so one that another run made in the
+--- meantime is never written over.
 --- @param path string
 --- @param text string
 --- @return boolean written
 --- @return string? kept --- the copy beside the file, if any
 --- @return 'left'|'partial'|nil --- found there, or left just now
 local function write_file(path, text)
-  local tmp = path .. '.compyfmt~'
-  local found = io.open(tmp, 'rb')
-  if found then
-    found:close()
-    return false, tmp, 'left'
+  local tmp = copy_path(path)
+  --- @diagnostic disable-next-line: param-type-mismatch
+  local c = io.open(tmp, 'wbx')
+  if not c then
+    if is_there(tmp) then return false, tmp, 'left' end
+    return false
   end
-  if not write_all(tmp, text) then
+  if not write_to(c, text) then
     os.remove(tmp)
     return false
   end
@@ -134,11 +158,19 @@ local function write_file(path, text)
     os.remove(tmp)
     return false
   end
-  local written = f:write(text)
-  local closed = f:close()
-  if not (written and closed) then return false, tmp, 'partial' end
+  if not write_to(f, text) then return false, tmp, 'partial' end
   os.remove(tmp)
   return true
+end
+
+--- @param path string
+--- @param kept string
+local function report_left(path, kept)
+  io.stderr:write(path .. ': not written, because ' .. kept
+    .. ' is there from an earlier --fix that did not finish'
+    .. ' and may hold the only whole copy of the program;'
+    .. ' compare the two, keep the whole one as ' .. path
+    .. ', and remove ' .. kept .. '\n')
 end
 
 local USAGE = 'Usage: luajit util/compyfmt.lua'
@@ -182,7 +214,12 @@ function M.main(args)
   local status = 0
   for _, path in ipairs(files) do
     local s = read_file(path)
-    if not s then
+    if fix and is_there(copy_path(path)) then
+      --- whatever the file holds now, even text that needs no
+      --- formatting, it may be cut short
+      report_left(path, copy_path(path))
+      status = 2
+    elseif not s then
       io.stderr:write(path .. ': cannot be read\n')
       status = 2
     else
@@ -198,11 +235,7 @@ function M.main(args)
         written, kept, why = write_file(path, new)
       end
       if why == 'left' then
-        io.stderr:write(path .. ': not written, because ' .. kept
-          .. ' is there from an earlier --fix that failed and may'
-          .. ' hold the only whole copy of the program; compare the'
-          .. ' two, keep the whole one as ' .. path .. ', and remove '
-          .. kept .. '\n')
+        report_left(path, copy_path(path))
         status = 2
       elseif not written then
         io.stderr:write(path .. ': cannot be written'

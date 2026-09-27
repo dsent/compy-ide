@@ -99,7 +99,7 @@ describe('compyfmt #compyfmt', function()
       os.execute('chmod 644 ' .. p)
     end)
 
-  describe('when a write into the file fails part way', function()
+  describe('the copy --fix writes beside a file', function()
     local real_open, real_stderr, errors
 
     before_each(function()
@@ -126,16 +126,17 @@ describe('compyfmt #compyfmt', function()
       end
     end
 
-    it('keeps the copy beside it and names it', function()
-      local p = new_file('a  =  1\nb  =  2\n')
-      local kept = p .. '.compyfmt~'
-      table.insert(paths, kept)
-      failing_write(p)
-      assert.equal(2, compyfmt.main({ '--fix', p }))
-      assert.same('a = 1\nb = 2\n', read(kept))
-      assert.same({ p .. ': cannot be written; its formatted text'
-        .. ' is in ' .. kept .. '\n' }, errors)
-    end)
+    it('stays and is named when the file takes the write part way',
+      function()
+        local p = new_file('a  =  1\nb  =  2\n')
+        local kept = p .. '.compyfmt~'
+        table.insert(paths, kept)
+        failing_write(p)
+        assert.equal(2, compyfmt.main({ '--fix', p }))
+        assert.same('a = 1\nb = 2\n', read(kept))
+        assert.same({ p .. ': cannot be written; its formatted text'
+          .. ' is in ' .. kept .. '\n' }, errors)
+      end)
 
     it('then writes neither file again while the copy is there',
       function()
@@ -154,6 +155,59 @@ describe('compyfmt #compyfmt', function()
         assert.same('a  =  1\n', read(p))
         assert.truthy(string.find(errors[#errors],
           'is there from an earlier --fix', 1, true))
+      end)
+
+    --- @param p string
+    --- @return string --- the copy beside it, holding two lines
+    local function copy_beside(p)
+      local kept = p .. '.compyfmt~'
+      table.insert(paths, kept)
+      local f = assert(real_open(kept, 'wb'))
+      f:write('a = 1\nb = 2\n')
+      f:close()
+      return kept
+    end
+
+    it('is left alone when it cannot be read', function()
+      local p = new_file('a  =  1\n')
+      local kept = copy_beside(p)
+      os.execute('chmod 200 ' .. kept)
+      local status = compyfmt.main({ '--fix', p })
+      os.execute('chmod 600 ' .. kept)
+      assert.equal(2, status)
+      assert.same('a = 1\nb = 2\n', read(kept))
+      assert.same('a  =  1\n', read(p))
+      assert.truthy(string.find(errors[1],
+        kept .. ' is there', 1, true))
+    end)
+
+    it('is named even when the file needs no formatting', function()
+      local p = new_file('a = 1\n')
+      local kept = copy_beside(p)
+      assert.equal(2, compyfmt.main({ '--fix', p }))
+      assert.same('a = 1\nb = 2\n', read(kept))
+      assert.same('a = 1\n', read(p))
+      assert.truthy(string.find(errors[1], kept, 1, true))
+    end)
+
+    it('is not written over when it appears after a look',
+      function()
+        local p = new_file('a  =  1\n')
+        local kept = copy_beside(p)
+        --- another run makes it just after each look
+        local looked = false
+        io.open = function(q, mode)
+          if q == kept and mode == 'rb' then
+            looked = true
+            return nil, q .. ': No such file or directory', 2
+          end
+          return real_open(q, mode)
+        end
+        assert.equal(2, compyfmt.main({ '--fix', p }))
+        io.open = real_open
+        assert.is_true(looked)
+        assert.same('a = 1\nb = 2\n', read(kept))
+        assert.same('a  =  1\n', read(p))
       end)
   end)
 
