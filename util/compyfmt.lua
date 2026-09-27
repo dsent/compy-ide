@@ -111,13 +111,20 @@ end
 --- text fails with the file as it was; then write the same text
 --- into the file itself, which keeps its mode, owner and inode.
 --- When that second write fails part way, the text stays beside
---- the file.
+--- the file, and while it is there the file is not written again:
+--- it may be the only whole copy of the program.
 --- @param path string
 --- @param text string
 --- @return boolean written
---- @return string? kept --- where the text is, when it is kept
+--- @return string? kept --- the copy beside the file, if any
+--- @return 'left'|'partial'|nil --- found there, or left just now
 local function write_file(path, text)
   local tmp = path .. '.compyfmt~'
+  local found = io.open(tmp, 'rb')
+  if found then
+    found:close()
+    return false, tmp, 'left'
+  end
   if not write_all(tmp, text) then
     os.remove(tmp)
     return false
@@ -129,7 +136,7 @@ local function write_file(path, text)
   end
   local written = f:write(text)
   local closed = f:close()
-  if not (written and closed) then return false, tmp end
+  if not (written and closed) then return false, tmp, 'partial' end
   os.remove(tmp)
   return true
 end
@@ -186,11 +193,18 @@ function M.main(args)
       --- format stays byte for byte
       local new = formatted and textfile.text(text) or s
       local changed = new ~= s
-      local written, kept = true, nil
+      local written, kept, why = true, nil, nil
       if changed and fix then
-        written, kept = write_file(path, new)
+        written, kept, why = write_file(path, new)
       end
-      if not written then
+      if why == 'left' then
+        io.stderr:write(path .. ': not written, because ' .. kept
+          .. ' is there from an earlier --fix that failed and may'
+          .. ' hold the only whole copy of the program; compare the'
+          .. ' two, keep the whole one as ' .. path .. ', and remove '
+          .. kept .. '\n')
+        status = 2
+      elseif not written then
         io.stderr:write(path .. ': cannot be written'
           .. (kept and ('; its formatted text is in ' .. kept)
             or '') .. '\n')

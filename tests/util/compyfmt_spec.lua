@@ -99,6 +99,64 @@ describe('compyfmt #compyfmt', function()
       os.execute('chmod 644 ' .. p)
     end)
 
+  describe('when a write into the file fails part way', function()
+    local real_open, real_stderr, errors
+
+    before_each(function()
+      real_open, real_stderr, errors = io.open, io.stderr, {}
+      io.stderr = {
+        write = function(_, s) table.insert(errors, s) end,
+      }
+    end)
+
+    after_each(function()
+      io.open, io.stderr = real_open, real_stderr
+    end)
+
+    --- the file itself takes no write; the copy beside it does
+    local function failing_write(path)
+      io.open = function(p, mode)
+        if p == path and mode == 'wb' then
+          return {
+            write = function() return nil, 'No space left' end,
+            close = function() return true end,
+          }
+        end
+        return real_open(p, mode)
+      end
+    end
+
+    it('keeps the copy beside it and names it', function()
+      local p = new_file('a  =  1\nb  =  2\n')
+      local kept = p .. '.compyfmt~'
+      table.insert(paths, kept)
+      failing_write(p)
+      assert.equal(2, compyfmt.main({ '--fix', p }))
+      assert.same('a = 1\nb = 2\n', read(kept))
+      assert.same({ p .. ': cannot be written; its formatted text'
+        .. ' is in ' .. kept .. '\n' }, errors)
+    end)
+
+    it('then writes neither file again while the copy is there',
+      function()
+        local p = new_file('a  =  1\nb  =  2\n')
+        local kept = p .. '.compyfmt~'
+        table.insert(paths, kept)
+        failing_write(p)
+        compyfmt.main({ '--fix', p })
+        io.open = real_open
+        --- as a failed write leaves it: cut short
+        local f = assert(io.open(p, 'wb'))
+        f:write('a  =  1\n')
+        f:close()
+        assert.equal(2, compyfmt.main({ '--fix', p, p }))
+        assert.same('a = 1\nb = 2\n', read(kept))
+        assert.same('a  =  1\n', read(p))
+        assert.truthy(string.find(errors[#errors],
+          'is there from an earlier --fix', 1, true))
+      end)
+  end)
+
   it('by default writes nothing, naming the file and exiting 1',
     function()
       local text = 'a  =  1\n'
