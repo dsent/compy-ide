@@ -42,7 +42,9 @@ end
 local function fileForBoard(filename)
   local text = read(filename)
   local cr = text:gsub("\r\n", "\n"):gsub("\n", "\r")
-  if cr:sub(-1) ~= "\r" then cr = cr .. "\r" end
+  if cr:sub(-1) ~= "\r" then
+    cr = cr .. "\r"
+  end
   return cr
 end
 
@@ -60,18 +62,24 @@ local showing = false
 --- hand what followed, and all that comes after, back to echo
 --- @param marker string
 --- @return function
+local function handBack(heard, at)
+  if not showing then
+    echo(false)
+    return
+  end
+  echo()
+  serial.onBytes(heard:sub(at + 1))
+end
+
 local function silentUntil(marker)
   local heard = ""
   return function(chunk)
     heard = heard .. chunk
     local _, at = heard:find(marker, 1, true)
-    if not at then return end
-    if not showing then
-      echo(false)
+    if not at then
       return
     end
-    echo()
-    serial.onBytes(heard:sub(at + 1))
+    handBack(heard, at)
   end
 end
 
@@ -110,8 +118,12 @@ end
 --- @param blocks table[]
 local function regions(blocks)
   for _, b in ipairs(blocks) do
-    print(string.format("%08X - %08X  %d bytes",
-      b.addr, b.addr + #b.data - 1, #b.data))
+    print(string.format(
+      "%08X - %08X  %d bytes",
+      b.addr,
+      b.addr + #(b.data) - 1,
+      #(b.data)
+    ))
   end
 end
 
@@ -119,6 +131,16 @@ end
 --- the firmware keeps its Lua script, and how that script
 --- begins.
 --- @param filename string?
+local function printMeta(meta)
+  print(string.format(
+    "script %08X - %08X  %d of %d",
+    meta.start,
+    meta.stop,
+    meta.size,
+    meta.space
+  ))
+end
+
 function hexmap(filename)
   local blocks = blocksOf(filename or HEX)
   regions(blocks)
@@ -127,8 +149,7 @@ function hexmap(filename)
     print("no Lua script inside")
     return
   end
-  print(string.format("script %08X - %08X  %d of %d",
-    meta.start, meta.stop, meta.size, meta.space))
+  printMeta(meta)
   print(head(hex.script(blocks)))
 end
 
@@ -161,10 +182,11 @@ end
 --- @param filename string
 --- @return string[]
 local function linesOf(filename)
-  local kept = {}
+  local kept = { }
   for line in read(filename):gmatch("[^\r\n]*") do
     local code = line:find("%S") and not line:find("^%s*%-%-")
-    if code or line:find("^%s*%-%->>?%s+%S+%s*$") then
+    local keep = code or line:find("^%s*%-%->>?%s+%S+%s*$")
+    if keep then
       kept[#kept + 1] = line
     end
   end
@@ -177,9 +199,13 @@ end
 --- @return boolean? wrapped
 local function included(line)
   local plain = line:match("^%s*%-%->>%s+(%S+)%s*$")
-  if plain then return plain, false end
+  if plain then
+    return plain, false
+  end
   local wrapped = line:match("^%s*%-%->%s+(%S+)%s*$")
-  if wrapped then return wrapped, true end
+  if wrapped then
+    return wrapped, true
+  end
 end
 
 --- An included file, as it stands. Its own directives are
@@ -188,7 +214,9 @@ end
 --- @param filename string
 local function bring(out, filename)
   for _, line in ipairs(linesOf(filename)) do
-    if not included(line) then out[#out + 1] = line end
+    if not included(line) then
+      out[#out + 1] = line
+    end
   end
 end
 
@@ -217,7 +245,7 @@ end
 function compile(lua_name, hex_name)
   assert(lua_name, "name the lua file to compile")
   assert(lua_name ~= LUA, LUA .. " is the one it builds")
-  local out = {}
+  local out = { }
   for _, line in ipairs(linesOf(lua_name)) do
     expand(out, line)
   end
@@ -257,12 +285,14 @@ local COMMANDS = {
   "extract(hex, lua)       its script out to a file",
   "embed(hex, lua)         a script into a new hex",
   "compile(lua, hex)       files into one, then into a hex",
-  "upload(hex)             a hex file onto the board",
+  "upload(hex)             a hex file onto the board"
 }
 
 function help()
   print("micro:bit tools")
-  for _, line in ipairs(COMMANDS) do print("  " .. line) end
+  for _, line in ipairs(COMMANDS) do
+    print("  " .. line)
+  end
   print("")
   print("upload() with no file sends MICROBIT.hex, the")
   print("firmware for the TPBot robots.")
