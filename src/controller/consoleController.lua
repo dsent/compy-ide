@@ -1832,26 +1832,26 @@ end
 
 --- Close the current project without opening another.
 --- @return boolean success
---- Closing ends the project, so it ends the project's run:
---- one that is going, which can reach close_project from its
---- own env, or one paused in `inspect`, reached from the
---- console. The run leaves by its exit path, stop_project_run:
---- compy.before_exit fires, the handlers go, and continue()
---- has nothing to resume. Otherwise a closed project's code
---- ran on in the next one. quit_project stops the run first,
---- so it finds nothing running here.
+--- Closing ends the project, so it ends the project's run,
+--- whatever its state: going, which can reach close_project
+--- from its own env; paused in `inspect`; or idle in 'ready'
+--- with its handlers still set. The run leaves by its exit
+--- path, stop_project_run: compy.before_exit fires, the
+--- handlers go, and continue() has nothing to resume.
+--- Otherwise a closed project's code ran on in the next one.
+--- With nothing running the exit path changes nothing. The
+--- project to close is read after it, since a before_exit
+--- hook may itself have switched projects.
 ---
 --- The widget ends with the project too (D-WIDGET-AT-BOOT as
 --- amended): unconditional, ahead of the has-a-project check,
 --- since with no project there is no widget either.
 function ConsoleController:_close_project()
-  local state = love.state.app_state
-  if state == 'running' or state == 'inspect'
-      or state == 'snapshot' then
+  local P = self.model.projects
+  if P.current then
     self:stop_project_run()
   end
   destroy_input_widget()
-  local P = self.model.projects
   local open = P.current
   if open then
     local name = P.current.name
@@ -1902,7 +1902,17 @@ function ConsoleController:evacuate_required()
   open.required = {}
 end
 
+--- Once at a time: a before_exit hook that closes or switches
+--- the project reaches here again, and returns at once.
 function ConsoleController:stop_project_run()
+  if self.stopping then return end
+  self.stopping = true
+  local ok, err = pcall(self._stop_project_run, self)
+  self.stopping = false
+  if not ok then error(err, 0) end
+end
+
+function ConsoleController:_stop_project_run()
   self:evacuate_required()
   local compy = self:get_project_env().compy
   framework_before_exit(compy)

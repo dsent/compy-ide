@@ -380,11 +380,29 @@ describe('ConsoleController project env #project', function()
         assert.are.equal('ready', love.state.app_state)
       end)
 
-    it('closing with nothing running stops nothing', function()
+    it('closing an idle run stops it', function()
       CC:open_project('clock')
+      love.state.app_state = 'ready'
       CC:close_project()
-      assert.are.equal(0, stops)
+      assert.are.equal(1, stops)
     end)
+
+    it('a before_exit hook that closes the project runs once',
+      function()
+        CC:open_project('clock')
+        local env = CC:get_project_env()
+        local hooks = 0
+        env.compy.before_exit = function()
+          hooks = hooks + 1
+          env.close_project()
+        end
+        love.state.app_state = 'running'
+        CC:close_project()
+        assert.are.equal(1, hooks)
+        assert.are.equal(ProjectService.DEFAULT,
+          CC:get_current_project().name)
+        assert.are.equal('ready', love.state.app_state)
+      end)
   end)
 
   --- A module the project requires runs in the project's env;
