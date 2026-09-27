@@ -1068,8 +1068,8 @@ local wrapping = {
     'local assigning, an, amount, of, variables, that, cannot, possibly, fit, on, one, line  = 101, 102, 103, 4, 5, 6, 7, 8, 9, 10, 11, 12'
     , {
       'local assigning, an, amount, of, variables, that, cannot,',
-      '    possibly, fit, on, one, line = 101, 102, 103, 4, 5, 6, 7, 8, 9, 10,',
-      '    11, 12', }
+      '    possibly, fit, on, one, line = 101, 102, 103, 4, 5, 6, 7, 8',
+      '    , 9, 10, 11, 12', }
   ),
   prep({
       'Globally, declaring, a, lot, of, ',

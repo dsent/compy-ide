@@ -70,6 +70,23 @@ describe('lua format #format', function()
     assert.equal(W, #rule)
   end)
 
+  it('wraps a continued line again when it fills up', function()
+    local text = { 'help = "Hint:\\n" .. "left click for next example\\n"'
+      .. ' .. "shift + left click to go back\\n"'
+      .. ' .. "right click for a random one"' }
+    local out, ok = format.format(text, W)
+    assert.is_true(ok)
+    assert.is_true(#out > 2)
+    for n, l in ipairs(out) do
+      assert.is_true(string.ulen(l) <= W, n .. ': ' .. l)
+    end
+    local function run(lines)
+      return assert(loadstring(table.concat(lines, '\n')
+        .. '\nreturn help'))()
+    end
+    assert.equal(run(text), run(out))
+  end)
+
   it('leaves text that does not parse as it is', function()
     local text = { 'function f(', '  return 1' }
     local out, ok = format.format(text, W)

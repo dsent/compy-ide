@@ -141,7 +141,9 @@ function M:acc(x)
       local ind = self.indent_step:rep(self.current_indent + 2)
       self:trim_line_end()
       self:acc("\n" .. ind)
+      --- the piece starts the new line and counts toward it
       self._line_len = #ind
+          + (string.ulen(wrapped_x) or string.len(wrapped_x))
       table.insert(self._acc, wrapped_x)
     else
       self._line_len = clen + l
