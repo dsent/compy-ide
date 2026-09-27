@@ -1,7 +1,7 @@
 --- Conway's Game of Life
---- original from https://github.com/Aethelios/Conway-s-Game-of-Life-in-Lua-and-Love2D
+--- original from https://github.com/Aethelios/Conway-s-Game-of-
+-- Life-in-Lua-and-Love2D
 
-gfx = love.graphics
 local font = gfx.newFont(compy.fonts.mono, 32)
 gfx.setFont(font)
 fh = font:getHeight()
@@ -11,7 +11,7 @@ margin = 5
 screen_w, screen_h = gfx.getDimensions()
 grid_w = screen_w / cell_size
 grid_h = screen_h / cell_size
-grid = {}
+grid = { }
 
 mouse_held = false
 hold_y = nil
@@ -20,9 +20,13 @@ speed = 10
 time = 0
 epsilon = 3
 reset_time = 1
+help_color = Color.with_alpha(
+  Color[Color.white + Color.bright],
+  0.5
+)
 
-tick = function()
-  if time > (1 / speed) then
+function tick()
+  if (1 / speed) < time then
     time = 0
     return true
   end
@@ -30,7 +34,7 @@ end
 
 function initializeGrid()
   for x = 1, grid_w do
-    grid[x] = {}
+    grid[x] = { }
     for y = 1, grid_h do
       -- Initialize with some random live cells
       grid[x][y] = 0.7 < math.random() and 1 or 0
@@ -45,12 +49,12 @@ end
 
 function countHelper(nx, ny)
   local c = 0
-  if 1 <= nx
-      and nx <= grid_w
-      and 1 <= ny
-      and ny <= grid_h
-  then
-    local row = grid[nx] or {}
+  local inside = 1 <= nx
+       and nx <= grid_w
+       and 1 <= ny
+       and ny <= grid_h
+  if inside then
+    local row = grid[nx] or { }
     c = c + (row[ny] or 0)
   end
   return c
@@ -60,7 +64,8 @@ function countAliveNeighbors(x, y)
   local count = 0
   for dx = -1, 1 do
     for dy = -1, 1 do
-      if dx ~= 0 or dy ~= 0 then
+      local is_neighbor = dx ~= 0 or dy ~= 0
+      if is_neighbor then
         local nx, ny = x + dx, y + dy
         count = count + countHelper(nx, ny)
       end
@@ -69,29 +74,36 @@ function countAliveNeighbors(x, y)
   return count
 end
 
+function nextCell(x, y)
+  local neighbors = countAliveNeighbors(x, y)
+  if grid[x][y] == 1 then
+    return (neighbors == 2 or neighbors == 3) and 1 or 0
+  else
+    return (neighbors == 3) and 1 or 0
+  end
+end
+
 local function updateGrid()
-  local newGrid = {}
+  local new_grid = { }
   for x = 1, grid_w do
-    newGrid[x] = {}
+    new_grid[x] = { }
     for y = 1, grid_h do
-      local neighbors = countAliveNeighbors(x, y)
-      if grid[x][y] == 1 then
-        newGrid[x][y] =
-            (neighbors == 2 or neighbors == 3) and 1 or 0
-      else
-        newGrid[x][y] = (neighbors == 3) and 1 or 0
-      end
+      new_grid[x][y] = nextCell(x, y)
     end
   end
-  grid = newGrid
+  grid = new_grid
 end
 
 function changeSpeed(d)
-  if not d then return end
-  if d < 0 and 1 < speed then
+  if not d then
+    return
+  end
+  local slower = d < 0 and 1 < speed
+  if slower then
     speed = speed - 1
   end
-  if 0 < d and speed < 99 then
+  local faster = 0 < d and speed < 99
+  if faster then
     speed = speed + 1
   end
 end
@@ -113,7 +125,8 @@ function love.keypressed(k)
   if k == "-" then
     changeSpeed(-1)
   end
-  if k == "+" or k == "=" then
+  local up = k == "+" or k == "="
+  if up then
     changeSpeed(1)
   end
 end
@@ -125,18 +138,22 @@ function love.mousepressed(_, y, button)
   end
 end
 
+function dragSpeed(y)
+  if hold_y then
+    local dy = hold_y - y
+    if epsilon < math.abs(dy) then
+      changeSpeed(dy)
+    end
+  end
+end
+
 function love.mousereleased(_, y, button)
   if button == 1 then
     mouse_held = false
     if reset_time < hold_time then
       init()
     else
-      if hold_y then
-        local dy = hold_y - y
-        if math.abs(dy) > epsilon then
-          changeSpeed(dy)
-        end
-      end
+      dragSpeed(y)
     end
     hold_y = nil
     hold_time = 0
@@ -155,18 +172,31 @@ function drawHelp()
   gfx.print(speed_label, right_edge - label_w, bottom - fh)
 end
 
-function drawCell(x, y)
-  gfx.setColor(.9, .9, .9)
-  gfx.rectangle('fill',
+function fillCell(x, y)
+  gfx.setColor(Color[Color.white + Color.bright])
+  gfx.rectangle(
+    "fill",
     (x - 1) * cell_size,
     (y - 1) * cell_size,
-    cell_size, cell_size)
-  gfx.setColor(.3, .3, .3)
+    cell_size,
+    cell_size
+  )
+end
 
-  gfx.rectangle('line',
+function outlineCell(x, y)
+  gfx.setColor(Color[Color.black + Color.bright])
+  gfx.rectangle(
+    "line",
     (x - 1) * cell_size,
     (y - 1) * cell_size,
-    cell_size, cell_size)
+    cell_size,
+    cell_size
+  )
+end
+
+function drawCell(x, y)
+  fillCell(x, y)
+  outlineCell(x, y)
 end
 
 function love.draw()
@@ -178,7 +208,7 @@ function love.draw()
     end
   end
 
-  gfx.setColor(1, 1, 1, 0.5)
+  gfx.setColor(help_color)
   drawHelp()
 end
 
