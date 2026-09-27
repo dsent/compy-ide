@@ -6,40 +6,39 @@ WIDTH, HEIGHT = gfx.getDimensions()
 SCREEN = 0
 SCREENS = 2
 
-NAMES = {
-  "black",
-  "blue",
-  "red",
-  "magenta",
-  "green",
-  "cyan",
-  "yellow",
-  "white",
-  "orange",
-  "brown",
-  "tan",
-  "yellowgreen",
-  "skyblue",
-  "purple",
-  "pink",
-  "gray",
-  "coral",
-  "gold",
-  "limegreen",
-  "springgreen",
-  "turquoise",
-  "azure",
-  "slateblue",
-  "crimson",
-  "khaki",
-  "salmon",
-  "mint",
-  "powderblue",
-  "lavender",
-  "orchid",
-  "royalblue",
-  "slategray",
-}
+NAMES = { }
+NAMES[1] = "black"
+NAMES[2] = "blue"
+NAMES[3] = "red"
+NAMES[4] = "magenta"
+NAMES[5] = "green"
+NAMES[6] = "cyan"
+NAMES[7] = "yellow"
+NAMES[8] = "white"
+NAMES[9] = "orange"
+NAMES[10] = "brown"
+NAMES[11] = "tan"
+NAMES[12] = "yellowgreen"
+NAMES[13] = "skyblue"
+NAMES[14] = "purple"
+NAMES[15] = "pink"
+NAMES[16] = "gray"
+NAMES[17] = "coral"
+NAMES[18] = "gold"
+NAMES[19] = "limegreen"
+NAMES[20] = "springgreen"
+NAMES[21] = "turquoise"
+NAMES[22] = "azure"
+NAMES[23] = "slateblue"
+NAMES[24] = "crimson"
+NAMES[25] = "khaki"
+NAMES[26] = "salmon"
+NAMES[27] = "mint"
+NAMES[28] = "powderblue"
+NAMES[29] = "lavender"
+NAMES[30] = "orchid"
+NAMES[31] = "royalblue"
+NAMES[32] = "slategray"
 
 -- list geometry: 11 rows of 3 names. Cell height follows the
 -- font rather than a guess, so rows cannot overlap.
@@ -47,7 +46,7 @@ CELL_H = gfx.getFont():getHeight() + 6
 TEXT_DY = 3
 TOP = CELL_H + 2
 ROWS = 11
-ROW_STEP = (HEIGHT - TOP - 4) / ROWS
+ROW_STEP = ((HEIGHT - TOP) - 4) / ROWS
 NAME_W = 244
 CHIP_W = 48
 BLOCK_STEP = 330
@@ -55,15 +54,46 @@ BLOCK_X0 = 16
 
 -- picture geometry
 HORIZON = 350
-FLOWERS = {
-  { 150, 470, Color.pink + Color.bright },
-  { 205, 505, Color.orchid + Color.bright },
-  { 262, 462, Color.lavender + Color.bright },
-  { 330, 520, Color.salmon + Color.bright },
-  { 700, 470, Color.crimson + Color.bright },
-  { 762, 512, Color.lavender + Color.bright },
-  { 830, 466, Color.pink + Color.bright },
-  { 900, 528, Color.orchid + Color.bright },
+FLOWERS = { }
+FLOWERS[1] = {
+  150,
+  470,
+  Color.pink + Color.bright
+}
+FLOWERS[2] = {
+  205,
+  505,
+  Color.orchid + Color.bright
+}
+FLOWERS[3] = {
+  262,
+  462,
+  Color.lavender + Color.bright
+}
+FLOWERS[4] = {
+  330,
+  520,
+  Color.salmon + Color.bright
+}
+FLOWERS[5] = {
+  700,
+  470,
+  Color.crimson + Color.bright
+}
+FLOWERS[6] = {
+  762,
+  512,
+  Color.lavender + Color.bright
+}
+FLOWERS[7] = {
+  830,
+  466,
+  Color.pink + Color.bright
+}
+FLOWERS[8] = {
+  900,
+  528,
+  Color.orchid + Color.bright
 }
 
 gfx.setBackgroundColor(Color[Color.black])
@@ -76,7 +106,7 @@ end
 function labelFor(i)
   local c = Color[i]
   local lum = 0.299 * c[1] + 0.587 * c[2] + 0.114 * c[3]
-  if lum > 0.55 then
+  if 0.55 < lum then
     return Color[Color.black]
   end
   return Color[Color.white + Color.bright]
@@ -108,7 +138,7 @@ function drawList()
   local hint = "space: picture"
   local hint_w = gfx.getFont():getWidth(hint)
   gfx.setColor(Color[Color.white + Color.bright])
-  gfx.print(hint, WIDTH - hint_w - BLOCK_X0, 2)
+  gfx.print(hint, (WIDTH - hint_w) - BLOCK_X0, 2)
   for hue = 0, 31 do
     drawBlock(hue, hue % 3, math.floor(hue / 3))
   end
@@ -213,19 +243,27 @@ function drawButterfly(x, y)
   gfx.ellipse("fill", x, y, 3, 17)
 end
 
-function drawPicture()
+function drawBackdrop()
   drawSky()
   drawSun()
   drawCloud(180, 96, 62)
   drawCloud(430, 66, 46)
   drawMountains()
   drawGround()
+end
+
+function drawForeground()
   drawHouse()
   drawPond()
   drawTree(228, HORIZON + 96)
   drawTree(946, HORIZON + 74)
   drawFlowers()
   drawButterfly(566, 300)
+end
+
+function drawPicture()
+  drawBackdrop()
+  drawForeground()
   gfx.setColor(Color[Color.white + Color.bright])
   gfx.print("space: color list", 830, 2)
 end
