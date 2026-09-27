@@ -83,6 +83,7 @@ end
 --- @field readfile function
 --- @field writefile function
 --- @field get_path function
+--- @field required table<string, true> modules its loader loaded
 Project = class.create(function(pname, play)
   local path = play and
       love.paths.play_path or
@@ -91,6 +92,7 @@ Project = class.create(function(pname, play)
     name = pname,
     path = path,
     play = play,
+    required = {},
   }
 end)
 
@@ -137,6 +139,7 @@ function Project:get_loader(get_env)
       self.name, modname))
     if f then
       setfenv(f, get_env())
+      self.required[modname] = true
       return assert(f)
     else
       return string.format(

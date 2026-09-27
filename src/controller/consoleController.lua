@@ -1888,20 +1888,16 @@ function ConsoleController:get_current_project()
   return P.current
 end
 
+--- Forget the modules the open project's loader loaded, and
+--- only those: a module of the IDE's that shares a project
+--- file's name stays, and one from a subfolder goes
 function ConsoleController:evacuate_required()
   local open = self:get_current_project()
   if not open then return end
-  local files = open:contents()
-  local lua = '.lua$'
-  for _, v in ipairs(files) do
-    if string.matches(v.name, lua, true) then
-      local fn = v.name
-      local modname = fn:gsub(lua, '')
-      if package.loaded[modname] then
-        package.loaded[modname] = nil
-      end
-    end
+  for modname in pairs(open.required or {}) do
+    package.loaded[modname] = nil
   end
+  open.required = {}
 end
 
 function ConsoleController:stop_project_run()

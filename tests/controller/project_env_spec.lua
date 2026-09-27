@@ -373,5 +373,32 @@ describe('ConsoleController project env #project', function()
       local ok = pcall(CC:get_project_env().require, 'counter')
       assert.is_false(ok)
     end)
+
+    it('keeps an IDE module that shares a project file name',
+      function()
+        local ide_module = { }
+        package.loaded['util.shared_name'] = ide_module
+        CC:open_project('clock')
+        CC:get_current_project():writefile('util.shared_name.lua',
+          'return { }')
+        CC:close_project()
+        assert.are.equal(ide_module,
+          package.loaded['util.shared_name'])
+        package.loaded['util.shared_name'] = nil
+      end)
+
+    it('runs a module from a subfolder again', function()
+      CC:open_project('clock')
+      local dir = FS.join_path(tmp, 'clock', 'lib')
+      lfs.mkdir(dir)
+      assert.is_true(FS.write(FS.join_path(dir, 'x.lua'),
+        'runs = (runs or 0) + 1\nreturn true'))
+      CC:get_project_env().require('lib/x')
+      CC:close_project()
+      CC:open_project('clock')
+      CC:get_project_env().require('lib/x')
+      assert.are.equal(1, CC:get_project_env().runs)
+      package.loaded['lib/x'] = nil
+    end)
   end)
 end)
