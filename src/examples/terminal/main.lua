@@ -8,7 +8,6 @@
 -- Whatever is typed is sent as is; the field does not check
 -- it, because what is valid is up to the board.
 
-local utf8 = require("utf8")
 local serial = compy.serial
 local input = compy.input
 
@@ -48,11 +47,13 @@ end
 local tail = ""
 local settle = 0
 
-serial.onBytes = function(chunk)
+function serial.onBytes(chunk)
   tail = tail .. asText(asLines(chunk))
   while true do
     local line, rest = tail:match("^([^\n]*)\n(.*)$")
-    if not line then break end
+    if not line then
+      break
+    end
     print(line)
     tail = rest
   end
@@ -60,7 +61,9 @@ serial.onBytes = function(chunk)
 end
 
 function love.update(dt)
-  if tail == "" then return end
+  if tail == "" then
+    return
+  end
   settle = settle - dt
   if settle <= 0 then
     io.write(tail)
@@ -68,11 +71,11 @@ function love.update(dt)
   end
 end
 
-serial.onConnect = function(info)
+function serial.onConnect(info)
   print("[connected " .. tostring(info and info.name) .. "]")
 end
 
-serial.onDisconnect = function()
+function serial.onDisconnect()
   print("[disconnected]")
 end
 
@@ -87,14 +90,19 @@ end
 -- it to nobody, so the walk through this one is ours: at is
 -- where the walk has got to, and past the end is where it
 -- rests, on the line being typed.
-local sent = {}
+local sent = { }
 local at = 1
 
 --- @param text string
 local function remember(text)
-  if text == "" or text == sent[#sent] then return end
+  local skip = text == "" or text == sent[#sent]
+  if skip then
+    return
+  end
   sent[#sent + 1] = text
-  if #sent > RECALL then table.remove(sent, 1) end
+  if RECALL < #sent then
+    table.remove(sent, 1)
+  end
 end
 
 -- One step through what was sent; off the near end is the
@@ -102,8 +110,12 @@ end
 --- @param step integer
 local function recall(step)
   at = at + step
-  if at < 1 then at = 1 end
-  if at > #sent + 1 then at = #sent + 1 end
+  if at < 1 then
+    at = 1
+  end
+  if #sent + 1 < at then
+    at = #sent + 1
+  end
   input.set_text(sent[at] or "")
 end
 
@@ -127,13 +139,17 @@ input.callbacks.after_submit = input.clear
 
 -- The caret trying to leave the field is how the widget says
 -- that an earlier line was asked for.
-input.callbacks.on_limit_reached = function(dir)
-  if dir == "up" then recall(-1) end
-  if dir == "down" then recall(1) end
+function input.callbacks.on_limit_reached(dir)
+  if dir == "up" then
+    recall(-1)
+  end
+  if dir == "down" then
+    recall(1)
+  end
 end
 
-input.show{
+input.show({
   prompt = PROMPT,
   highlighter = LuaHighlighter,
-  on_text_entered = sendLine,
-}
+  on_text_entered = sendLine
+})
