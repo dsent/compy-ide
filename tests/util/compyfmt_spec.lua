@@ -144,7 +144,8 @@ describe('compyfmt #compyfmt', function()
       function()
         local msg = ': function takes 5 parameters; keep it to 4,'
           .. ' or pass a table (parameters)'
-        assert.same({ '9' .. msg, '14' .. msg, '19' .. msg },
+        assert.same({ '9' .. msg, '15' .. msg, '20' .. msg,
+          '25' .. msg },
           reports(table.concat({
             'function love.mousemoved(x, y, dx, dy, t)',
             '  print(t)',
@@ -153,6 +154,12 @@ describe('compyfmt #compyfmt', function()
             'love.touchmoved = function(id, x, y, dx, dy, p)',
             '  print(p)',
             'end',
+            '',
+            'function love.helper(a, b, c, d, e)',
+            '  print(e)',
+            'end',
+            '',
+            'love.draw, love.update = nil',
             '',
             'function love.handlers.x(a, b, c, d, e)',
             '  print(e)',

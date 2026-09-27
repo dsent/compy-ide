@@ -93,7 +93,24 @@ local function function_length(_, ast)
   return found
 end
 
---- The functions set on a field of love, as in love.mousemoved:
+--- The callbacks LÖVE 11.5 calls a program on
+local LOVE_CALLBACKS = {}
+for _, name in ipairs({
+  'conf', 'directorydropped', 'displayrotated', 'draw', 'errhand',
+  'errorhandler', 'filedropped', 'focus', 'gamepadaxis',
+  'gamepadpressed', 'gamepadreleased', 'joystickadded',
+  'joystickaxis', 'joystickhat', 'joystickpressed',
+  'joystickreleased', 'joystickremoved', 'keypressed',
+  'keyreleased', 'load', 'lowmemory', 'mousefocus', 'mousemoved',
+  'mousepressed', 'mousereleased', 'quit', 'resize', 'run',
+  'textedited', 'textinput', 'threaderror', 'touchmoved',
+  'touchpressed', 'touchreleased', 'update', 'visible',
+  'wheelmoved',
+}) do
+  LOVE_CALLBACKS[name] = true
+end
+
+--- The functions set as a LÖVE callback, as in love.mousemoved:
 --- LÖVE calls them, so their parameters are LÖVE's
 --- @param ast luaAST
 --- @return table --- set of Function nodes
@@ -103,9 +120,13 @@ local function love_callbacks(ast)
     if n.tag ~= 'Set' then return end
     for i, target in ipairs(n[1]) do
       local f = n[2][i] and unparen(n[2][i])
-      local on_love = target.tag == 'Index'
+      local callback = target.tag == 'Index'
           and is_path(target[1], 'love')
-      if on_love and f.tag == 'Function' then set[f] = true end
+          and target[2].tag == 'String'
+          and LOVE_CALLBACKS[target[2][1]]
+      if callback and f and f.tag == 'Function' then
+        set[f] = true
+      end
     end
   end)
   return set
