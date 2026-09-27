@@ -1853,6 +1853,10 @@ function ConsoleController:_close_project()
   local open = P.current
   if open then
     local name = P.current.name
+    --- the project's modules go with it: the next project, or
+    --- this one reopened, starts from a new env, and require
+    --- must run its files again to fill it
+    self:evacuate_required()
     local ok = P:close()
     local lf = self:get_loader(name)
     if lf then

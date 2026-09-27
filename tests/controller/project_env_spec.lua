@@ -329,4 +329,49 @@ describe('ConsoleController project env #project', function()
   it('eval works in the merged env #project', function()
     assert.are.equal(2, CC:get_project_env().eval('1+1'))
   end)
+
+  --- A module the project requires runs in the project's env;
+  --- the env is new after every switch, so a module kept from
+  --- before would leave its globals missing
+  describe('require after the project is reopened #project', function()
+    local function write_module()
+      CC:get_current_project():writefile('counter.lua',
+        'runs = (runs or 0) + 1\nreturn true')
+    end
+
+    after_each(function()
+      package.loaded['counter'] = nil
+    end)
+
+    it('runs the module again after close_project', function()
+      CC:open_project('clock')
+      write_module()
+      CC:get_project_env().require('counter')
+      assert.are.equal(1, CC:get_project_env().runs)
+      CC:close_project()
+      CC:open_project('clock')
+      CC:get_project_env().require('counter')
+      assert.are.equal(1, CC:get_project_env().runs)
+    end)
+
+    it('runs the module again after another project was open',
+      function()
+        CC:open_project('clock')
+        write_module()
+        CC:get_project_env().require('counter')
+        CC:open_project('other')
+        CC:open_project('clock')
+        CC:get_project_env().require('counter')
+        assert.are.equal(1, CC:get_project_env().runs)
+      end)
+
+    it('does not hand the module to another project', function()
+      CC:open_project('clock')
+      write_module()
+      CC:get_project_env().require('counter')
+      CC:open_project('other')
+      local ok = pcall(CC:get_project_env().require, 'counter')
+      assert.is_false(ok)
+    end)
+  end)
 end)
