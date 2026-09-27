@@ -96,21 +96,41 @@ local function read_file(path)
   return s
 end
 
---- Write beside the file, then put that in its place, so a
---- write that fails leaves the file as it was
 --- @param path string
 --- @param text string
 --- @return boolean
-local function write_file(path, text)
-  local tmp = path .. '.compyfmt~'
-  local f = io.open(tmp, 'wb')
+local function write_all(path, text)
+  local f = io.open(path, 'wb')
   if not f then return false end
   local written = f:write(text)
   local closed = f:close()
-  if not (written and closed and os.rename(tmp, path)) then
+  return (written and closed) and true or false
+end
+
+--- Write beside the file first, so a disk that cannot take the
+--- text fails with the file as it was; then write the same text
+--- into the file itself, which keeps its mode, owner and inode.
+--- When that second write fails part way, the text stays beside
+--- the file.
+--- @param path string
+--- @param text string
+--- @return boolean written
+--- @return string? kept --- where the text is, when it is kept
+local function write_file(path, text)
+  local tmp = path .. '.compyfmt~'
+  if not write_all(tmp, text) then
     os.remove(tmp)
     return false
   end
+  local f = io.open(path, 'wb')
+  if not f then
+    os.remove(tmp)
+    return false
+  end
+  local written = f:write(text)
+  local closed = f:close()
+  if not (written and closed) then return false, tmp end
+  os.remove(tmp)
   return true
 end
 
@@ -166,8 +186,14 @@ function M.main(args)
       --- format stays byte for byte
       local new = formatted and textfile.text(text) or s
       local changed = new ~= s
-      if changed and fix and not write_file(path, new) then
-        io.stderr:write(path .. ': cannot be written\n')
+      local written, kept = true, nil
+      if changed and fix then
+        written, kept = write_file(path, new)
+      end
+      if not written then
+        io.stderr:write(path .. ': cannot be written'
+          .. (kept and ('; its formatted text is in ' .. kept)
+            or '') .. '\n')
         status = 2
       end
       if changed and not fix then

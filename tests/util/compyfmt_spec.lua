@@ -51,6 +51,54 @@ describe('compyfmt #compyfmt', function()
       assert.equal(0, compyfmt.main({ p }))
     end)
 
+  --- @param cmd string
+  --- @return string --- its first line of output
+  local function first_line(cmd)
+    local h = assert(io.popen(cmd))
+    local line = h:read('*l')
+    h:close()
+    return line
+  end
+
+  it('keeps the mode and the inode of a file it fixes', function()
+    local p = new_file('a  =  1\n')
+    os.execute('chmod 755 ' .. p)
+    local inode = first_line('stat -c %i ' .. p)
+    assert.equal('755', first_line('stat -c %a ' .. p))
+    assert.equal(0, compyfmt.main({ '--fix', p }))
+    assert.same('a = 1\n', read(p))
+    assert.equal('755', first_line('stat -c %a ' .. p))
+    assert.equal(inode, first_line('stat -c %i ' .. p))
+    assert.is_nil(io.open(p .. '.compyfmt~'))
+  end)
+
+  it('leaves the file as it was when it cannot write beside it',
+    function()
+      local dir = first_line('mktemp -d')
+      local p = dir .. '/game.lua'
+      local f = assert(io.open(p, 'wb'))
+      f:write('a  =  1\n')
+      f:close()
+      os.execute('chmod 555 ' .. dir)
+      local status = compyfmt.main({ '--fix', p })
+      os.execute('chmod 755 ' .. dir)
+      assert.equal(2, status)
+      assert.same('a  =  1\n', read(p))
+      assert.is_nil(io.open(p .. '.compyfmt~'))
+      os.remove(p)
+      os.remove(dir)
+    end)
+
+  it('leaves a read-only file as it was, and nothing beside it',
+    function()
+      local p = new_file('a  =  1\n')
+      os.execute('chmod 444 ' .. p)
+      assert.equal(2, compyfmt.main({ '--fix', p }))
+      assert.same('a  =  1\n', read(p))
+      assert.is_nil(io.open(p .. '.compyfmt~'))
+      os.execute('chmod 644 ' .. p)
+    end)
+
   it('by default writes nothing, naming the file and exiting 1',
     function()
       local text = 'a  =  1\n'

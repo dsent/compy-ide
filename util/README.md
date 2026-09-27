@@ -15,9 +15,7 @@ luajit util/compyfmt.lua --strict src/examples/tixy/*.lua
 ```
 
 Reports read `file:line: what`. Both modes exit 1 when they
-report anything, 2 when a file cannot be read. `--fix` rewrites
-each file it changes and does not keep its mode, such as the
-executable bit.
+report anything, 2 when a file cannot be read.
 
 A lint's report ends with its rule's name. The lints
 (`src/model/lang/lua/lint.lua`) are the limits of
