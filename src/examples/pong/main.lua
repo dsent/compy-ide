@@ -334,8 +334,7 @@ function update_player(dt)
   move_paddle(S.player, dir, dt)
 end
 
-function love.mousemoved(...)
-  local dy, t = select(4, ...)
+function love.mousemoved(x, y, dx, dy, t)
   local ignore = not mouse_enabled or t
        or S.state ~= "play"
   if ignore then
