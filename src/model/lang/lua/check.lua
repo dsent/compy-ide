@@ -23,11 +23,14 @@ local MAX_LINE_LENGTH = display.columns
 --- A block holds no more lines than the input shows at once.
 local MAX_BLOCK_LINES = display.input_lines
 
+--- A line is as wide as its characters: an accented letter or a
+--- dash takes one column however many bytes it is. Bytes that are
+--- not UTF-8 have no length in characters and count one each.
 --- @param n integer
 --- @return ValidatorFilter
 local max_length = function(n)
   return function(s)
-    if string.len(s) <= n then
+    if (string.ulen(s) or string.len(s)) <= n then
       return true
     end
     return false, 'line too long!'

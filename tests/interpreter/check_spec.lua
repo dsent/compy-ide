@@ -30,6 +30,29 @@ describe('lua check #check', function()
     assert.equal('line too long!', errors[1].msg)
   end)
 
+  it('counts characters, so accents and dashes take one each',
+    function()
+      local n = check.max_line_length
+      local at = '-- ' .. string.rep('é', n - 4) .. '—'
+      assert.equal(n, string.ulen(at))
+      assert.is_true(#at > n)
+      assert.is_true((check.check({ at })))
+      local over = at .. 'a'
+      local ok, errors = check.check({ over })
+      assert.is_false(ok)
+      assert.equal('line too long!', errors[1].msg)
+    end)
+
+  it('counts bytes in a line that is not UTF-8', function()
+    local n = check.max_line_length
+    local at = '--' .. string.rep('\255', n - 2)
+    assert.is_nil(string.ulen(at))
+    assert.is_true((check.check({ at })))
+    local ok, errors = check.check({ at .. '\255' })
+    assert.is_false(ok)
+    assert.equal('line too long!', errors[1].msg)
+  end)
+
   it('numbers the offending line in a multi-line text', function()
     local ok, errors = check.check({
       'local x = 1',

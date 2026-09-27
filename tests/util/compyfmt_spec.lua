@@ -131,6 +131,15 @@ describe('compyfmt #compyfmt', function()
       }, '\n')))
     end)
 
+    it('line length: counted in characters, as the editor does',
+      function()
+        local comment = '-- ' .. string.rep('é', 60) .. '—'
+        assert.equal(64, string.ulen(comment))
+        local text, found = compyfmt.inspect({ comment })
+        assert.same({}, found)
+        assert.same({ comment }, text)
+      end)
+
     it('parameters: a LÖVE callback takes the ones LÖVE passes',
       function()
         local msg = ': function takes 5 parameters; keep it to 4,'

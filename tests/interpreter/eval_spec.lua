@@ -130,4 +130,12 @@ describe('Lua editor eval', function()
     assert.is_false(ok)
     assert.truthy(string.find(tostring(errors[1]), 'line too long!', 1, true))
   end)
+
+  it('takes a line as long as the screen in accented text', function()
+    local line = 's = "' .. string.rep('é', 58) .. '"'
+    assert.equal(64, string.ulen(line))
+    local ok = LuaEditorEval:apply({ line })
+
+    assert.is_true(ok)
+  end)
 end)
