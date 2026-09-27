@@ -1496,21 +1496,6 @@ chord and of what our re-homing adopted.
   stakeholders' ask, and to leave them room to contest the suggested fix —
   a glitch may have had a reason nobody here can see.
 
-### `close_project` bypasses the run's exit path
-
-- **Status:** open — needs one ruling, either way.
-- **Where:** `consoleController.lua` `close_project`, reachable from a running
-  project's own env and from the console during `inspect`.
-- **State:** it sets `app_state = 'ready'` and returns. `stop_project_run` is
-  never called, so `compy.before_exit` never fires and handler teardown never
-  runs. `quit_project` does it correctly (stop, then close); the bare path does
-  not. The widget half is now handled at the call site (it destroys its own
-  widget) — the rest of the exit path is not.
-- **Decide:** either `close_project` runs the normal exit path, **or** the
-  omission is confirmed deliberate and the reason is written down here. It is
-  currently neither, which is why this entry exists.
-- **Revisit:** with the next change to project lifecycle.
-
 ### A raise at `project_open` is swallowed whole, so pen-and-paper projects report errors worse than any other kind
 
 - **Status:** open — found while probing the dispatch path's nil-safety during

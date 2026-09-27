@@ -330,6 +330,63 @@ describe('ConsoleController project env #project', function()
     assert.are.equal(2, CC:get_project_env().eval('1+1'))
   end)
 
+  --- Closing a project ends its run, paused or going, the way
+  --- stopping it does: nothing is left for continue() to resume
+  describe('closing ends the run #project', function()
+    local stops
+    local orig
+
+    before_each(function()
+      stops = 0
+      orig = CC.stop_project_run
+      CC.stop_project_run = function(self, ...)
+        stops = stops + 1
+        return orig(self, ...)
+      end
+    end)
+
+    after_each(function()
+      CC.stop_project_run = orig
+      love.state.app_state = 'ready'
+    end)
+
+    it('close_project while paused stops the run', function()
+      CC:open_project('clock')
+      love.state.app_state = 'inspect'
+      CC:close_project()
+      assert.are.equal(1, stops)
+      assert.are.equal('ready', love.state.app_state)
+    end)
+
+    it('continue has nothing to resume after the close', function()
+      CC:open_project('clock')
+      love.state.app_state = 'inspect'
+      CC:close_project()
+      local said = { }
+      local print_ = _G.print
+      _G.print = function(s) said[#said + 1] = s end
+      CC:get_project_env().continue()
+      _G.print = print_
+      assert.are.same({ 'No project halted' }, said)
+      assert.are.equal('ready', love.state.app_state)
+    end)
+
+    it('opening another project while paused stops the run',
+      function()
+        CC:open_project('clock')
+        love.state.app_state = 'inspect'
+        CC:open_project('other')
+        assert.are.equal(1, stops)
+        assert.are.equal('ready', love.state.app_state)
+      end)
+
+    it('closing with nothing running stops nothing', function()
+      CC:open_project('clock')
+      CC:close_project()
+      assert.are.equal(0, stops)
+    end)
+  end)
+
   --- A module the project requires runs in the project's env;
   --- the env is new after every switch, so a module kept from
   --- before would leave its globals missing

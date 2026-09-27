@@ -1832,22 +1832,24 @@ end
 
 --- Close the current project without opening another.
 --- @return boolean success
---- Closing ends the project, so it ends the project's widget:
---- reachable from a running project's own env and from the
---- console during `inspect`, and without this a closed
---- project's widget outlives it (D-WIDGET-AT-BOOT as amended).
---- Unconditional, ahead of the has-a-project check: with no
---- project there is no widget either, so it is a no-op there,
---- and the invariant does not depend on the bookkeeping order.
+--- Closing ends the project, so it ends the project's run:
+--- one that is going, which can reach close_project from its
+--- own env, or one paused in `inspect`, reached from the
+--- console. The run leaves by its exit path, stop_project_run:
+--- compy.before_exit fires, the handlers go, and continue()
+--- has nothing to resume. Otherwise a closed project's code
+--- ran on in the next one. quit_project stops the run first,
+--- so it finds nothing running here.
 ---
---- Only the widget, deliberately. The whole exit path belongs
---- here — `stop_project_run` fires `compy.before_exit` and
---- tears the handlers down, and `quit_project` calls it before
---- closing. Whether its absence here was purposeful is not
---- established, so this does the narrow correct thing rather
---- than guess. See doc/development/technical_debt/input.md,
---- "`close_project` bypasses the run's exit path".
+--- The widget ends with the project too (D-WIDGET-AT-BOOT as
+--- amended): unconditional, ahead of the has-a-project check,
+--- since with no project there is no widget either.
 function ConsoleController:_close_project()
+  local state = love.state.app_state
+  if state == 'running' or state == 'inspect'
+      or state == 'snapshot' then
+    self:stop_project_run()
+  end
   destroy_input_widget()
   local P = self.model.projects
   local open = P.current
