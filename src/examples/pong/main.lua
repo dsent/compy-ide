@@ -1,9 +1,7 @@
 -- main.lua
 
-require "constants"
-require "strategy"
-
-gfx = love.graphics
+require("constants")
+require("strategy")
 
 -- virtual game space
 VIRTUAL_W = 640
@@ -232,7 +230,8 @@ function collide(b, p, off)
   local hx2 = p.x < b.x + BALL_SIZE
   local hy1 = b.y < p.y + PADDLE_HEIGHT
   local hy2 = p.y < b.y + BALL_SIZE
-  if hx1 and hx2 and hy1 and hy2 then
+  local hit = hx1 and hx2 and hy1 and hy2
+  if hit then
     b.x = p.x + off
     b.dx = -b.dx
     b.dy = b.dy + hit_offset(b, p) * (BALL_SPEED_Y * 0.75)
@@ -314,8 +313,9 @@ end
 
 function love.keypressed(k)
   local group = key_actions[S.state]
-  if group and group[k] then
-    group[k]()
+  local action = group and group[k]
+  if action then
+    action()
   end
 end
 
@@ -334,11 +334,12 @@ function update_player(dt)
   move_paddle(S.player, dir, dt)
 end
 
-function love.mousemoved(x, y, dx, dy, t)
-  if not mouse_enabled or t
+function love.mousemoved(...)
+  local dy, t = select(4, ...)
+  local ignore = not mouse_enabled or t
        or S.state ~= "play"
-  then
-    return 
+  if ignore then
+    return
   end
   local p = S.player
   p.y = p.y + dy * MOUSE_SENSITIVITY
@@ -366,7 +367,7 @@ end
 
 function step_game(dt)
   if S.state ~= "play" then
-    return 
+    return
   end
   local sdt = dt * SPEED_SCALE
   update_player(sdt)
@@ -375,10 +376,14 @@ function step_game(dt)
   handle_score()
 end
 
+function stepDue(steps)
+  return FIXED_DT <= acc and steps < MAX_STEPS
+end
+
 function update_fixed(rdt)
   acc = acc + rdt
   local steps = 0
-  while FIXED_DT <= acc and steps < MAX_STEPS do
+  while stepDue(steps) do
     step_game(FIXED_DT)
     acc = acc - FIXED_DT
     steps = steps + 1
@@ -422,7 +427,8 @@ function draw_state_text(s)
   if t then
     gfx.draw(t, VIRTUAL_W / 2 - 40, VIRTUAL_H / 2 - 16)
   end
-  if s == "start" and S.strategy.text then
+  local show_strategy = s == "start" and S.strategy.text
+  if show_strategy then
     gfx.draw(S.strategy.text, VIRTUAL_W / 2 - 40, VIRTUAL_H / 2)
   end
 end
