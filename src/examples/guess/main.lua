@@ -42,8 +42,8 @@ end
 -- The line validator keeps invalid guesses out of the submit
 -- callback. Escape is a no-op by default, so it cannot strand
 -- this game's only input surface and needs no callback either.
--- This project therefore configures no lifecycle flag at
--- all — the defaults are what a continuous prompt wants.
+-- This project therefore configures no lifecycle flag at all —
+-- the defaults are what a continuous prompt wants.
 
 init()
 
