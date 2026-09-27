@@ -14,7 +14,10 @@ function is_natural(s)
   if ok then
     return true
   end
-  return false, Error("The guess should be a positive number", err_c)
+  return false, Error(
+    "The guess should be a positive number",
+    err_c
+  )
 end
 
 function check(n)
@@ -39,16 +42,18 @@ end
 -- The line validator keeps invalid guesses out of the submit
 -- callback. Escape is a no-op by default, so it cannot strand
 -- this game's only input surface and needs no callback either.
--- This project therefore configures no lifecycle flag at all —
--- the defaults are what a continuous prompt wants.
+-- This project therefore configures no lifecycle flag at
+-- all — the defaults are what a continuous prompt wants.
 
 init()
 
 -- TODO: guess is input-only/live now (project_open ruling
 -- a); rework check()'s print() feedback to go through the
 -- on-screen input API / draw instead of the console terminal.
-compy.input.show{
+compy.input.show({
   prompt = "Guess a number:",
   validator = LineValidators({ is_natural }),
-  on_text_entered = function(text) check(tonumber(text)) end,
-}
+  on_text_entered = function(text)
+    check(tonumber(text))
+  end
+})
