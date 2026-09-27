@@ -505,10 +505,42 @@ function M:extract_comments(node)
   return comments
 end
 
+--- The start of a comment line that fits `n` columns, and the
+--- rest. It breaks at the last space that leaves the start
+--- within `n`, dropping the spaces at the break; a line with no
+--- such space, a single token wider than `n` such as a URL, is
+--- cut at the column. Spaces leading the line are no break.
+--- Bytes that are not UTF-8 count one column each.
+--- @param s string
+--- @param n integer
+--- @return string head
+--- @return string rest
+local function break_words(s, n)
+  local len = string.ulen(s)
+  local sub = len and string.usub or string.sub
+  len = len or #s
+  if len <= n then return s, '' end
+  local at
+  local in_text = false
+  for i = 1, n + 1 do
+    if sub(s, i, i) ~= ' ' then
+      in_text = true
+    elseif in_text then
+      at = i
+    end
+  end
+  if not at then return sub(s, 1, n), sub(s, n + 1, len) end
+  local head = string.gsub(sub(s, 1, at - 1), ' +$', '')
+  local rest = string.gsub(sub(s, at + 1, len), '^ +', '')
+  return head, rest
+end
+
 --- A `--` comment's text cut into lines that fit `w` columns
---- once each takes its `--`. The first piece of a line keeps
---- its own leading space or dash, so it takes two columns more;
---- a piece after it may take a space as well, so three.
+--- once each takes its `--`, broken between words where it can.
+--- The first piece of a line keeps its own leading space or
+--- dash, so it takes two columns more, or three when a space is
+--- added. A piece after it starts with a space of its own, so it
+--- reads `-- ` whatever its first character, a dash included.
 --- @param lines string[]
 --- @param w integer --- columns left after the indentation
 --- @return string[]
@@ -519,12 +551,11 @@ local function wrap_comment(lines, w)
   for _, l in ipairs(lines) do
     local first = string.sub(l, 1, 1)
     local pre = (first == ' ' or first == '-') and 2 or 3
-    local head, rest = string.split_at(l, w - pre + 1)
+    local head, rest = break_words(l, w - pre)
     table.insert(res, head)
-    if rest ~= '' then
-      for _, piece in ipairs(string.wrap_at(rest, w - 3)) do
-        table.insert(res, piece)
-      end
+    while rest ~= '' do
+      head, rest = break_words(rest, w - 3)
+      table.insert(res, ' ' .. head)
     end
   end
   return res
@@ -592,9 +623,7 @@ function M:node(node, stmt)
                 local pre = '--'
                 --- add a space if not present already
                 --- do not break up '---'-style comments
-                if i == 1 and first == ' ' or first == '-'
-                --- in this case, only for the first line
-                then
+                if first == ' ' or first == '-' then
                 else
                   pre = pre .. ' '
                 end

@@ -61,6 +61,41 @@ describe('lua format #format', function()
       assert.equal('-- why   ', comment)
     end)
 
+  it('wraps a comment wider than the line between words', function()
+    local out, ok = format.format({
+      'function f()',
+      '  -- the hook runs BEFORE the widget, so without the guard'
+      .. ' every i typed into it',
+      '  go()',
+      'end',
+    }, W)
+    assert.is_true(ok)
+    assert.same({
+      'function f()',
+      '  -- the hook runs BEFORE the widget, so without the guard every',
+      '  -- i typed into it',
+      '  go()',
+      'end',
+    }, out)
+  end)
+
+  it('cuts a word wider than the line at the column', function()
+    --- a URL has no space to break at; the dash it is cut before
+    --- stays text, and does not join the `--`
+    local out, ok = format.format({
+      '-- see https://github.com/Aethelios/'
+      .. 'Conway-s-Game-of-Life-in-Lua-and-Love2D',
+      'x = 1',
+    }, W)
+    assert.is_true(ok)
+    assert.same({
+      '-- see',
+      '-- https://github.com/Aethelios/Conway-s-Game-of-Life-in-Lua-and',
+      '-- -Love2D',
+      'x = 1',
+    }, out)
+  end)
+
   it('keeps a comment as wide as the line on one line', function()
     local rule = '-- send, exec ' .. string.rep('-', 50)
     local text = { rule, 'x = 1' }
