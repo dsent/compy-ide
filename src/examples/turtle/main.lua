@@ -43,8 +43,7 @@ end
 -- reach your project"). A project that shows the widget has to
 -- register here instead, where falling through on falsey is
 -- the contract and the guard above can work.
-compy.input.hooks.keypressed = function(key)
-  if compy.input.is_shown() then return end
+function actOnKey(key)
   if Key.shift() then
     if key == "r" then
       tx, ty = midx, midy
@@ -58,6 +57,13 @@ compy.input.hooks.keypressed = function(key)
   end
 end
 
+function compy.input.hooks.keypressed(key)
+  if compy.input.is_shown() then
+    return
+  end
+  actOnKey(key)
+end
+
 -- The `i` that shows the widget must not also be typed into
 -- it (doc/input_api.md, "Worked example: the trigger key
 -- echoes into the widget it showed"):
@@ -66,8 +72,8 @@ end
 -- echo whichever side of the open it lands on, then unregisters
 -- so `i` is ordinary content afterwards.
 local function arm_echo_guard()
-  compy.input.shortcuts.textinput["i"] = function()
-    compy.input.shortcuts.textinput["i"] = nil
+  function compy.input.shortcuts.textinput.i()
+    compy.input.shortcuts.textinput.i = nil
     return true
   end
 end
@@ -82,7 +88,7 @@ arm_echo_guard()
 -- and why it is configured once rather than re-armed per show.
 -- The widget is shown empty next time because the project
 -- widget clears on submit by default.
-compy.input.configure{ hide_on_submit = true }
+compy.input.configure({ hide_on_submit = true })
 
 --
 -- What is left for after_submit is the echo guard, which runs
@@ -96,24 +102,29 @@ compy.input.callbacks.after_submit = arm_echo_guard
 -- widget would never see a key. Turtle used to demonstrate the
 -- legacy path for its own sake; the widget is the reason it
 -- stopped.
-compy.input.hooks.keyreleased = function(key)
-  -- Open only when it is closed, and consume `i` only then: the hook
-  -- runs BEFORE the widget, so without the guard every `i` typed into
-  -- the widget would re-trigger show (which warns and no-ops).
-  if key == "i" and not compy.input.is_shown() then
-    compy.input.show{
-      prompt = "TURTLE",
-      on_text_entered = function(text)
-        eval(text)
-      end,
-    }
+function showTurtleInput()
+  compy.input.show({
+    prompt = "TURTLE",
+    on_text_entered = function(text)
+      eval(text)
+    end
+  })
+end
+
+function compy.input.hooks.keyreleased(key)
+  -- Open only when it is closed, and consume `i` only then: the
+  -- hook runs BEFORE the widget, so without the guard every `i`
+  -- typed into the widget would re-trigger show (which warns
+  -- and no-ops).
+  local open = key == "i" and not compy.input.is_shown()
+  if open then
+    showTurtleInput()
     return true
   end
-
 end
 
 function love.update()
-  if ty > midy then
+  if midy < ty then
     debug_color = Color.red
   end
 end

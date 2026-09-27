@@ -1,5 +1,3 @@
-gfx = love.graphics
-
 bg_color = Color.black
 body_color = Color.green
 limb_color = body_color + Color.bright
@@ -8,7 +6,7 @@ debug_color = Color.yellow
 function drawBackground(color)
   local c = bg_color
   local not_green = color ~= body_color
-      and color ~= limb_color
+       and color ~= limb_color
   local color_valid = Color.valid(color) and not_green
   if color_valid then
     c = color
@@ -45,13 +43,23 @@ function drawHindLegs(x_r, y_r, leg_r, leg_yr)
   gfx.pop()
 end
 
+function drawHead(y_r, head_r)
+  local neck = 5
+  gfx.circle(
+    "fill",
+    0,
+    ((0 - y_r) - head_r) + neck,
+    head_r,
+    100
+  )
+end
+
 function drawBody(x_r, y_r, head_r)
   --- body
   gfx.setColor(Color[body_color])
   gfx.ellipse("fill", 0, 0, x_r, y_r, 100)
   --- head
-  local neck = 5
-  gfx.circle("fill", 0, ((0 - y_r) - head_r) + neck, head_r, 100)
+  drawHead(y_r, head_r)
   --- end
 end
 
@@ -73,8 +81,8 @@ function drawHelp()
   local x = 15
   gfx.setColor(Color[Color.white])
   gfx.print("Press [I] to open console", x, 20)
-  local help = "Enter 'forward', 'back', 'left', or 'right' " ..
-      "to move the turtle!"
+  local help = "Enter 'forward', 'back', 'left', or 'right' "
+      .. "to move the turtle!"
   gfx.print(help, x, 50)
 end
 
