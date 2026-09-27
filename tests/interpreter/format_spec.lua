@@ -87,6 +87,22 @@ describe('lua format #format', function()
     assert.equal(run(text), run(out))
   end)
 
+  it("keeps a call's parenthesis on the line of what it calls",
+    function()
+      --- a `(` starting a line would begin a new statement
+      for _, src in ipairs({
+        'return a + ' .. string.rep('b', 60) .. '(1)',
+        'return a + ' .. string.rep('b', 58) .. ':m(1)',
+      }) do
+        local out, ok = format.format({ src }, W)
+        assert.is_true(ok)
+        assert(loadstring(table.concat(out, '\n')))
+        for _, l in ipairs(out) do
+          assert.is_nil(string.match(l, '^%s*%('), l)
+        end
+      end
+    end)
+
   it('leaves text that does not parse as it is', function()
     local text = { 'function f(', '  return 1' }
     local out, ok = format.format(text, W)

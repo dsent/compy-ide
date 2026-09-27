@@ -108,8 +108,11 @@ end
 ----------------------------------------------------------------
 --- Accumulate a piece of source file in the synthetizer.
 --- @param x string
+--- @param glued boolean? --- stays on the line it continues,
+---   however long: a call's `(` that starts a line is read as
+---   the start of a new statement
 ----------------------------------------------------------------
-function M:acc(x)
+function M:acc(x, glued)
   if x then
     if self._in_comment and string.find(x, "%S")
         and not string.match(x, "^\n") then
@@ -126,6 +129,7 @@ function M:acc(x)
     local line_start = clen == 0
         or (prev and string.match(prev, "\n[ \t]*$"))
     if l + clen > self.wrap
+        and not glued
         --- if the string has multiple lines,
         --- handle it elsewhere
         and n_l < 2
@@ -1001,7 +1005,7 @@ end
 
 function M:Call(node, f)
   self:node(f)
-  self:acc("(")
+  self:acc("(", true)
   self:wrapped_list(node, ", ", 2, 'all') --- skip `f'.
   self:acc(")")
 end
@@ -1016,7 +1020,7 @@ function M:Invoke(node, f, method)
   end
   self:acc(":")
   self:acc(method[1])
-  self:acc("(")
+  self:acc("(", true)
   --- Skip args #1 and #2, object and method name.
   self:wrapped_list(node, ", ", 3, 'all')
   self:acc(")")
