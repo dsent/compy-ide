@@ -584,15 +584,26 @@ function M:node(node, stmt)
   local function show_comments(pos)
     --- to avoid double dipping, only show corresponding
     for _, co in pairs(comments) do
-      --- a block comment between a callee and its `(` stays on
-      --- the callee's line, and the `(` after it: a `(` that
-      --- starts a line would begin a new statement. It can only
-      --- be a one-line block comment, or the source would not
-      --- have parsed.
+      --- a block comment between a callee and its arguments
+      --- keeps the `(` on the callee's line: a `(` that starts a
+      --- line would begin a new statement. A one-line comment
+      --- stays where it is, before the `(`; one over several
+      --- lines, possible before a string or table argument, goes
+      --- just inside the `(`.
       local before_paren = co.position == pos and pos == 'last'
           and co.multiline and node == self._callee
-      if before_paren then
+      if before_paren and co.first.l == co.last.l then
         self:acc(' --[[' .. co.text .. ']] ', true)
+        self:emptyline_gap_reset(co.last)
+      elseif before_paren then
+        self:acc('(', true)
+        self._callee_paren = true
+        local lines = string.lines('--[[' .. co.text .. ']]')
+        for i, l in ipairs(lines) do
+          self:acc(l, true)
+          if i ~= #lines then self:nl() end
+        end
+        self:acc(' ', true)
         self:emptyline_gap_reset(co.last)
       elseif co.position == pos then
         --- comes _after_ a previous expression
@@ -1047,7 +1058,12 @@ function M:Call(node, f)
   self._callee = f
   self:node(f)
   self._callee = outer
-  self:acc("(", true)
+  --- a comment after the callee may have opened it already
+  if self._callee_paren then
+    self._callee_paren = nil
+  else
+    self:acc("(", true)
+  end
   self:wrapped_list(node, ", ", 2, 'all') --- skip `f'.
   self:acc(")")
 end

@@ -154,6 +154,24 @@ describe('lua format #format', function()
       assert.same({ 'x = 1', '--[[ note ]]' }, out)
     end)
 
+  it('opens the parenthesis before a comment over several lines',
+    function()
+      --- legal before a string or table argument, which the
+      --- printer puts in parentheses
+      local out, ok = format.format(
+        { 'return f --[[ a', 'b ]] "abc"' }, W)
+      assert.is_true(ok)
+      assert.same({ 'return f(--[[ a', 'b ]]', '"abc")' }, out)
+      assert(loadstring(table.concat(out, '\n')))
+      --- indented, such a comment never settles, so the text
+      --- comes back as it was
+      local src = { 'function h()', '  return f --[[ a', 'b ]] "s"',
+        'end' }
+      local kept, settled = format.format(src, W)
+      assert.is_false(settled)
+      assert.same(src, kept)
+    end)
+
   it('leaves text that does not parse as it is', function()
     local text = { 'function f(', '  return 1' }
     local out, ok = format.format(text, W)
