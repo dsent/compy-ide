@@ -1,5 +1,3 @@
-local gfx = love.graphics
-
 local x0 = 0
 local xe = gfx.getWidth()
 local y0 = 0
@@ -8,12 +6,14 @@ local ye = gfx.getHeight()
 local xh = xe / 2
 local yh = ye / 2
 
-gfx.setColor(1, 1, 1, 0.5)
+gfx.setColor(
+  Color.with_alpha(Color[Color.white + Color.bright], 0.5)
+)
 gfx.setLineWidth(1)
 gfx.line(xh, y0, xh, ye)
 gfx.line(x0, yh, xe, yh)
 
-gfx.setColor(1, 0, 0)
+gfx.setColor(Color[Color.red + Color.bright])
 gfx.setPointSize(2)
 
 local amp = 100
