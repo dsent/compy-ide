@@ -131,6 +131,36 @@ describe('compyfmt #compyfmt', function()
       }, '\n')))
     end)
 
+    it('parameters: a LÖVE callback takes the ones LÖVE passes',
+      function()
+        local msg = ': function takes 5 parameters; keep it to 4,'
+          .. ' or pass a table (parameters)'
+        assert.same({ '9' .. msg, '14' .. msg, '19' .. msg },
+          reports(table.concat({
+            'function love.mousemoved(x, y, dx, dy, t)',
+            '  print(t)',
+            'end',
+            '',
+            'love.touchmoved = function(id, x, y, dx, dy, p)',
+            '  print(p)',
+            'end',
+            '',
+            'function love.handlers.x(a, b, c, d, e)',
+            '  print(e)',
+            'end',
+            '',
+            'function love.keypressed(k)',
+            '  local f = function(a, b, c, d, e)',
+            '    print(e)',
+            '  end',
+            'end',
+            '',
+            'function g(a, b, c, d, e)',
+            '  print(e)',
+            'end',
+          }, '\n')))
+      end)
+
     it('nesting: deeper than 4, counted afresh in a function',
       function()
         local ok_deep = table.concat({

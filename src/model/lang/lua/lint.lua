@@ -93,11 +93,30 @@ local function function_length(_, ast)
   return found
 end
 
+--- The functions set on a field of love, as in love.mousemoved:
+--- LÖVE calls them, so their parameters are LÖVE's
+--- @param ast luaAST
+--- @return table --- set of Function nodes
+local function love_callbacks(ast)
+  local set = {}
+  walk(ast, function(n)
+    if n.tag ~= 'Set' then return end
+    for i, target in ipairs(n[1]) do
+      local f = n[2][i] and unparen(n[2][i])
+      local on_love = target.tag == 'Index'
+          and is_path(target[1], 'love')
+      if on_love and f.tag == 'Function' then set[f] = true end
+    end
+  end)
+  return set
+end
+
 --- @type LintRule
 local function parameters(_, ast)
   local found = {}
+  local callbacks = love_callbacks(ast)
   walk(ast, function(n)
-    if n.tag ~= 'Function' then return end
+    if n.tag ~= 'Function' or callbacks[n] then return end
     local params = n[1]
     local count = #params
     --- `self` in a method is no parameter the caller passes
