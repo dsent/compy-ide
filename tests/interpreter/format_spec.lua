@@ -172,6 +172,25 @@ describe('lua format #format', function()
       assert.same(src, kept)
     end)
 
+  it('opens the parenthesis before a line comment', function()
+    --- the comment ends its line, so the argument starts the next
+    local cases = {
+      { { 'return f -- one', '  "s"' },
+        { 'return f(-- one', '"s")' } },
+      { { 'function h()', '  return f -- one', '    "s"', 'end' },
+        { 'function h()', '  return f(-- one', '  "s")', 'end' } },
+      --- two comments open it once
+      { { 'return f --[[ a', 'b ]] -- two', '  { 1 }' },
+        { 'return f(--[[ a', 'b ]]', '-- two', '{ 1 })' } },
+    }
+    for _, c in ipairs(cases) do
+      local out, ok = format.format(c[1], W)
+      assert.is_true(ok)
+      assert.same(c[2], out)
+      assert(loadstring(table.concat(out, '\n')))
+    end
+  end)
+
   it('leaves text that does not parse as it is', function()
     local text = { 'function f(', '  return 1' }
     local out, ok = format.format(text, W)
