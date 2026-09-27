@@ -138,6 +138,22 @@ describe('lua format #format', function()
       end
     end)
 
+  it('keeps a block comment before a call\'s parenthesis in place',
+    function()
+      for _, src in ipairs({
+        'return f --[[ c ]] (1)',
+        'g(x) --[[ c ]] (y)',
+      }) do
+        local out, ok = format.format({ src }, W)
+        assert.is_true(ok)
+        assert.same({ src }, out)
+        assert(loadstring(src))
+      end
+      --- a trailing block comment elsewhere still takes a line
+      local out = format.format({ 'x = 1 --[[ note ]]' }, W)
+      assert.same({ 'x = 1', '--[[ note ]]' }, out)
+    end)
+
   it('leaves text that does not parse as it is', function()
     local text = { 'function f(', '  return 1' }
     local out, ok = format.format(text, W)

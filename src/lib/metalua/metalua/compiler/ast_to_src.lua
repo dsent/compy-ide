@@ -584,7 +584,17 @@ function M:node(node, stmt)
   local function show_comments(pos)
     --- to avoid double dipping, only show corresponding
     for _, co in pairs(comments) do
-      if co.position == pos then
+      --- a block comment between a callee and its `(` stays on
+      --- the callee's line, and the `(` after it: a `(` that
+      --- starts a line would begin a new statement. It can only
+      --- be a one-line block comment, or the source would not
+      --- have parsed.
+      local before_paren = co.position == pos and pos == 'last'
+          and co.multiline and node == self._callee
+      if before_paren then
+        self:acc(' --[[' .. co.text .. ']] ', true)
+        self:emptyline_gap_reset(co.last)
+      elseif co.position == pos then
         --- comes _after_ a previous expression
         if co.position == 'last' then self:nl() end
         self:keep_gap(co.first)
@@ -1033,7 +1043,10 @@ function M:Localrec(_, lhs, rhs)
 end
 
 function M:Call(node, f)
+  local outer = self._callee
+  self._callee = f
   self:node(f)
+  self._callee = outer
   self:acc("(", true)
   self:wrapped_list(node, ", ", 2, 'all') --- skip `f'.
   self:acc(")")
