@@ -154,7 +154,7 @@ describe('compyfmt #compyfmt', function()
         assert.same('a = 1\nb = 2\n', read(kept))
         assert.same('a  =  1\n', read(p))
         assert.truthy(string.find(errors[#errors],
-          'is there from an earlier --fix', 1, true))
+          'is there: another --fix', 1, true))
       end)
 
     --- @param p string
@@ -167,6 +167,27 @@ describe('compyfmt #compyfmt', function()
       f:close()
       return kept
     end
+
+    it('is held through the read, then removed', function()
+      local p = new_file('a  =  1\n')
+      local kept = p .. '.compyfmt~'
+      table.insert(paths, kept)
+      --- another run reading now could find the file cut short
+      local held_then = false
+      io.open = function(q, mode)
+        if q == p and mode == 'rb' then
+          local c = real_open(kept, 'rb')
+          held_then = c ~= nil
+          if c then c:close() end
+        end
+        return real_open(q, mode)
+      end
+      assert.equal(0, compyfmt.main({ '--fix', p }))
+      io.open = real_open
+      assert.is_true(held_then)
+      assert.same('a = 1\n', read(p))
+      assert.is_nil(io.open(kept))
+    end)
 
     it('is left alone when it cannot be read', function()
       local p = new_file('a  =  1\n')

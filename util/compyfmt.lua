@@ -128,28 +128,45 @@ local function write_to(f, text)
   return (written and closed) and true or false
 end
 
---- Write beside the file first, so a disk that cannot take the
---- text fails with the file as it was; then write the same text
---- into the file itself, which keeps its mode, owner and inode.
---- When that second write fails part way, the text stays beside
---- the file, and while it is there the file is not written again:
---- it may be the only whole copy of the program. The copy is
---- only ever created ('x'), so one that another run made in the
---- meantime is never written over.
+--- Take the copy beside `path` before the file is read: it is
+--- created new ('x') and held until the file is written, so
+--- while one run holds it no other reads a file that run may
+--- have cut short part way through its write. A directory that
+--- takes no new file gives nothing to hold, and nothing can be
+--- written there.
+--- @param path string
+--- @return file*? held
+--- @return boolean taken --- another run's copy is there
+local function hold_copy(path)
+  --- @diagnostic disable-next-line: param-type-mismatch
+  local c = io.open(copy_path(path), 'wbx')
+  if c then return c, false end
+  return nil, is_there(copy_path(path))
+end
+
+--- @param path string
+--- @param held file*?
+local function release_copy(path, held)
+  if not held then return end
+  held:close()
+  os.remove(copy_path(path))
+end
+
+--- Write into the held copy first, so a disk that cannot take
+--- the text fails with the file as it was; then write the same
+--- text into the file itself, which keeps its mode, owner and
+--- inode. When that second write fails part way, the text stays
+--- beside the file, and while it is there the file is not
+--- written again: it may be the only whole copy of the program.
 --- @param path string
 --- @param text string
+--- @param held file*? --- the copy, from hold_copy
 --- @return boolean written
---- @return string? kept --- the copy beside the file, if any
---- @return 'left'|'partial'|nil --- found there, or left just now
-local function write_file(path, text)
+--- @return string? kept --- the copy left beside the file
+local function write_file(path, text, held)
+  if not held then return false end
   local tmp = copy_path(path)
-  --- @diagnostic disable-next-line: param-type-mismatch
-  local c = io.open(tmp, 'wbx')
-  if not c then
-    if is_there(tmp) then return false, tmp, 'left' end
-    return false
-  end
-  if not write_to(c, text) then
+  if not write_to(held, text) then
     os.remove(tmp)
     return false
   end
@@ -158,19 +175,20 @@ local function write_file(path, text)
     os.remove(tmp)
     return false
   end
-  if not write_to(f, text) then return false, tmp, 'partial' end
+  if not write_to(f, text) then return false, tmp end
   os.remove(tmp)
   return true
 end
 
 --- @param path string
---- @param kept string
-local function report_left(path, kept)
+local function report_left(path)
+  local kept = copy_path(path)
   io.stderr:write(path .. ': not written, because ' .. kept
-    .. ' is there from an earlier --fix that did not finish'
-    .. ' and may hold the only whole copy of the program;'
-    .. ' compare the two, keep the whole one as ' .. path
-    .. ', and remove ' .. kept .. '\n')
+    .. ' is there: another --fix is writing ' .. path
+    .. ', or one stopped part way and ' .. kept
+    .. ' may hold the only whole copy of the program. When no'
+    .. ' --fix is running, compare the two, keep the whole one'
+    .. ' as ' .. path .. ', and remove ' .. kept .. '\n')
 end
 
 local USAGE = 'Usage: luajit util/compyfmt.lua'
@@ -201,6 +219,62 @@ local function options(args)
   return o
 end
 
+--- @param path string
+--- @param o CompyfmtOptions
+--- @return integer --- 0, 1 for a report, 2 for a file that
+---   cannot be read or written
+local function check_file(path, o)
+  local held, taken
+  if o.fix then held, taken = hold_copy(path) end
+  if taken then
+    --- whatever the file holds now, even text that needs no
+    --- formatting, it may be cut short
+    report_left(path)
+    return 2
+  end
+  local s = read_file(path)
+  if not s then
+    release_copy(path, held)
+    io.stderr:write(path .. ': cannot be read\n')
+    return 2
+  end
+  local lines = textfile.lines(s)
+  local done, text, reports, formatted = xpcall(function()
+    return M.inspect(lines, o.strict)
+  end, debug.traceback)
+  if not done then
+    release_copy(path, held)
+    error(text, 0)
+  end
+  --- written as the editor writes a file; one that does not
+  --- format stays byte for byte
+  local new = formatted and textfile.text(text) or s
+  local changed = new ~= s
+  local status = 0
+  if changed and o.fix then
+    local written, kept = write_file(path, new, held)
+    if not written then
+      io.stderr:write(path .. ': cannot be written'
+        .. (kept and ('; its formatted text is in ' .. kept)
+          or '') .. '\n')
+      status = 2
+    end
+  else
+    release_copy(path, held)
+  end
+  if changed and not o.fix then
+    print(path .. ': not formatted')
+  end
+  for _, r in ipairs(reports) do
+    print(path .. ':' .. r)
+  end
+  if status == 0
+      and (#reports > 0 or changed and not o.fix) then
+    status = 1
+  end
+  return status
+end
+
 --- @param args string[]
 --- @return integer --- the exit status
 function M.main(args)
@@ -209,50 +283,9 @@ function M.main(args)
     io.stderr:write(USAGE)
     return 2
   end
-  local fix, files = o.fix, o.files
-
   local status = 0
-  for _, path in ipairs(files) do
-    local s = read_file(path)
-    if fix and is_there(copy_path(path)) then
-      --- whatever the file holds now, even text that needs no
-      --- formatting, it may be cut short
-      report_left(path, copy_path(path))
-      status = 2
-    elseif not s then
-      io.stderr:write(path .. ': cannot be read\n')
-      status = 2
-    else
-      local lines = textfile.lines(s)
-      local text, reports, formatted =
-          M.inspect(lines, o.strict)
-      --- written as the editor writes a file; one that does not
-      --- format stays byte for byte
-      local new = formatted and textfile.text(text) or s
-      local changed = new ~= s
-      local written, kept, why = true, nil, nil
-      if changed and fix then
-        written, kept, why = write_file(path, new)
-      end
-      if why == 'left' then
-        report_left(path, copy_path(path))
-        status = 2
-      elseif not written then
-        io.stderr:write(path .. ': cannot be written'
-          .. (kept and ('; its formatted text is in ' .. kept)
-            or '') .. '\n')
-        status = 2
-      end
-      if changed and not fix then
-        print(path .. ': not formatted')
-      end
-      for _, r in ipairs(reports) do
-        print(path .. ':' .. r)
-      end
-      if status == 0 and (#reports > 0 or changed and not fix) then
-        status = 1
-      end
-    end
+  for _, path in ipairs(o.files) do
+    status = math.max(status, check_file(path, o))
   end
   return status
 end
