@@ -1,11 +1,9 @@
-local gfx = love.graphics
 math.randomseed(os.time())
 cw, ch = gfx.getDimensions()
 midx = cw / 2
 
 require("mathlib")
 examples = require("examples")
-
 
 size = 28
 spacing = 3
@@ -21,12 +19,10 @@ local colors = {
 
 body = ""
 legend = ""
-help =
-    "Hint:\n" ..
-    "left click for next example\n" ..
+help = "Hint:\n" .. "left click for next example\n" ..
     "shift + left click to go back\n" ..
     "right click for a random one"
-showHelp = true
+show_help = true
 count = 16
 ex_idx = 1
 local time = 0
@@ -91,10 +87,8 @@ function tixy(t, i, x, y)
 end
 
 function setupTixy()
-  local code = "return function(t, i, x, y)\n" ..
-      "  " .. body ..
-      "  return r\n" ..
-      "end"
+  local code = "return function(t, i, x, y)\n" .. "  " .. body
+      .. "  return r\n" .. "end"
   local f = loadstring(code)
   if f then
     setfenv(f, _G)
@@ -108,20 +102,19 @@ function drawBackground()
   gfx.rectangle("fill", 0, 0, cw, ch)
 end
 
+function dotCircle(mode, radius, x, y)
+  gfx.circle(
+    mode,
+    x * (size + spacing) + offset,
+    y * (size + spacing) + offset,
+    radius
+  )
+end
+
 function drawCircle(color, radius, x, y)
   gfx.setColor(color)
-  gfx.circle(
-    "fill",
-    x * (size + spacing) + offset,
-    y * (size + spacing) + offset,
-    radius
-  )
-  gfx.circle(
-    "line",
-    x * (size + spacing) + offset,
-    y * (size + spacing) + offset,
-    radius
-  )
+  dotCircle("fill", radius, x, y)
+  dotCircle("line", radius, x, y)
 end
 
 function clamp(value)
@@ -155,7 +148,7 @@ function drawText()
   local sof = (size / 2) + offset
   local hof = sof / 2
   gfx.printf(legend, midx + hof, sof, midx - sof)
-  if showHelp then
+  if show_help then
     gfx.setColor(colors.help)
     gfx.setFont(font)
     gfx.printf(help, midx + hof, ch - (5 * sof), midx - sof)
@@ -185,7 +178,7 @@ end
 -- repair any more — it is what Escape MEANS here: revert the
 -- strip to the last body that actually ran. The widget is still
 -- standing when it runs, so the reverted text is on screen.
-compy.input.callbacks.after_cancel = function()
+function compy.input.callbacks.after_cancel()
   compy.input.set_text(string.lines(body))
 end
 
@@ -199,7 +192,7 @@ end
 -- (doc/input_api.md, "Event hooks and shortcuts — when to use
 -- which"). The two buttons this game uses are claimed; any
 -- other goes on to the widget.
-compy.input.hooks.mousepressed = function(_, _, button)
+function compy.input.hooks.mousepressed(_, _, button)
   if button == 1 then
     if Key.shift() then
       retreat()
@@ -219,12 +212,12 @@ advance()
 -- Set this program's lifecycle once, before the first show
 -- (doc/input_api.md, "Submit lifecycle"): the submitted body
 -- stays in the strip so it can be edited and re-run.
-compy.input.configure{ clear_on_submit = false }
+compy.input.configure({ clear_on_submit = false })
 
-compy.input.show{
+compy.input.show({
   prompt = "function tixy(t, i, x, y)",
   text = string.lines(body),
   highlighter = LuaHighlighter,
   validator = LuaSyntaxValidator,
-  on_text_entered = submit_body,
-}
+  on_text_entered = submit_body
+})
