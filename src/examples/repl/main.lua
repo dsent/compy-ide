@@ -4,6 +4,8 @@
 -- next line starts empty with no callback and no re-show. No
 -- lifecycle flag is configured here: the defaults are exactly
 -- what a continuous prompt wants.
-compy.input.show{
-  on_text_entered = function(text) print(text) end,
-}
+compy.input.show({
+  on_text_entered = function(text)
+    print(text)
+  end
+})
