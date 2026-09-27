@@ -1,5 +1,3 @@
-local gfx = love.graphics
-
 width, height = gfx.getDimensions()
 midx = width / 2
 midy = height / 2
@@ -9,19 +7,30 @@ local H = M * M
 local D = 24
 
 local h, m, s, t
-function setTime()
+function stencilCircle()
   love.graphics.stencil(function()
-    love.graphics.setColor(1, 1, 1)
+    love.graphics.setColor(Color[Color.white + Color.bright])
     local time = love.timer.getTime() * 3
-    love.graphics.circle("fill", 115 * .5 + math.cos(time) * 20, 50 * .5 + math.sin(time) * 20,
-      10 + math.sin(time) * 2)
-  end, 'replace', 1)
+    love.graphics.circle(
+      "fill",
+      115 * 0.5 + math.cos(time) * 20,
+      50 * 0.5 + math.sin(time) * 20,
+      10 + math.sin(time) * 2
+    )
+  end, "replace", 1)
+end
 
+function readClock()
   local time = os.date("*t")
   h = time.hour
   m = time.min
   s = time.sec
   t = s + M * m + H * h
+end
+
+function setTime()
+  stencilCircle()
+  readClock()
 end
 
 setTime()
@@ -44,7 +53,7 @@ end
 
 function love.draw()
   gfx.setColor(Color[bg_color])
-  gfx.rectangle('fill', 0, 0, width, height)
+  gfx.rectangle("fill", 0, 0, width, height)
   gfx.setColor(Color[color + Color.bright])
   gfx.setFont(font)
   local text = getTimestamp()
@@ -83,7 +92,8 @@ local function color_cycle(k)
 end
 function love.keyreleased(k)
   color_cycle(k)
-  if k == "r" and Key.shift() then
+  local reset = k == "r" and Key.shift()
+  if reset then
     setTime()
   end
   if k == "p" then
