@@ -21,21 +21,6 @@ local function unhex(pair)
   return string.char(tonumber(pair, 16))
 end
 
---- Bytes of one record, or nil if the line is not one
---- @param line string
---- @return integer? kind
---- @return integer? addr
---- @return string? body
-local function bodyOf(line, count)
-  local digits = line:sub(10, 9 + count * 2)
-  assert(
-    #digits == count * 2 and not digits:find("%X"),
-    "bad hex record"
-  )
-  local body = digits:gsub("%x%x", unhex)
-  return body
-end
-
 --- The checksum byte of a record
 --- @param addr integer
 --- @param kind integer
@@ -49,20 +34,33 @@ local function sum_of(addr, kind, body)
   return (-sum) % 256
 end
 
+--- The digits of a record after its colon, all of them: as
+--- many as its count says, and nothing after them
+--- @param line string
+--- @return string digits
+--- @return integer count
+local function digitsOf(line)
+  local digits = line:match("^:(%x+)%s*$")
+  local count = digits and tonumber(digits:sub(1, 2), 16)
+  local whole = count and #digits == 10 + count * 2
+  assert(whole, "bad hex record")
+  return digits, count
+end
+
 --- One record: what kind it is, where its bytes go, and the
---- bytes. Its checksum must agree, so a file damaged on the way
---- is refused before any of it reaches the board.
+--- bytes, or nothing for a blank line. Any other line must be a
+--- whole record whose checksum agrees, so a file damaged on the
+--- way is refused before any of it reaches the board.
+--- @param line string
 local function record(line)
-  if line:sub(1, 1) ~= ":" then
+  if not line:find("%S") then
     return
   end
-  local count = tonumber(line:sub(2, 3), 16)
-  local addr = tonumber(line:sub(4, 7), 16)
-  local kind = tonumber(line:sub(8, 9), 16)
-  assert(count and addr and kind, "bad hex record")
-  local body = bodyOf(line, count)
-  local at = 10 + count * 2
-  local sum = tonumber(line:sub(at, at + 1), 16)
+  local digits, count = digitsOf(line)
+  local addr = tonumber(digits:sub(3, 6), 16)
+  local kind = tonumber(digits:sub(7, 8), 16)
+  local body = digits:sub(9, 8 + count * 2):gsub("%x%x", unhex)
+  local sum = tonumber(digits:sub(-2), 16)
   assert(sum == sum_of(addr, kind, body), "bad hex checksum")
   return kind, addr, body
 end

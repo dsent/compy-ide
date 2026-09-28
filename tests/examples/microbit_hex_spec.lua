@@ -49,6 +49,20 @@ describe('micro:bit hex files #microbit', function()
     end, 'bad hex checksum')
   end)
 
+  it('refuses a line that is not a record', function()
+    assert.has_error(function()
+      hex.parse(';0400000001020304F2\n')
+    end, 'bad hex record')
+  end)
+
+  --- 0F would do, and a lone F reads as the same number
+  it('refuses a checksum cut short', function()
+    assert.are.equal(1, #hex.parse(':01000000F00F\n'))
+    assert.has_error(function()
+      hex.parse(':01000000F0F\n')
+    end, 'bad hex record')
+  end)
+
   it('refuses a record shorter than its count', function()
     assert.has_error(function()
       hex.parse(':0400000000FF\n')
