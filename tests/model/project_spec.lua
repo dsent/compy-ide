@@ -244,6 +244,21 @@ describe('ProjectService #project', function()
         assert.is_false(FS.exists(FS.join_path(tmp, NEW)))
       end)
 
+    it('leaves a file by the former name alone #project',
+      function()
+        assert.is_true(FS.write(FS.join_path(tmp, OLD), 'notes'))
+        assert.is_nil(PS:carry_over_default())
+        assert.are.equal('notes',
+          FS.combined_read(FS.join_path(tmp, OLD)))
+        assert.is_false(FS.exists(FS.join_path(tmp, NEW)))
+      end)
+
+    it('moves scratch to scratchpad, by those names #project',
+      function()
+        assert.are.equal('scratch', OLD)
+        assert.are.equal('scratchpad', NEW)
+      end)
+
     it('keeps the former where it is if renaming fails #project',
       function()
         former()

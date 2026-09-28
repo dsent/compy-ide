@@ -60,7 +60,8 @@ local messages = {
   end,
   not_carried_over    = function(old, new)
     return 'Could not rename ' .. old .. ' to ' .. new
-        .. ', so its files stay in the project ' .. old .. '.'
+        .. '. Its files are still there: type project("'
+        .. old .. '") to open it.'
   end,
 }
 
@@ -488,16 +489,16 @@ end
 
 --- A card from before the rename holds the default project
 --- under its former name. When it has no project by the new
---- name, the former one is renamed, so its files open as the
---- default project; either way, nothing is deleted.
+--- name, the former folder is renamed, so its files open as
+--- the default project; either way, nothing is deleted.
 --- @return string? said what happened, when anything did
 function ProjectService:carry_over_default()
   local path = ProjectService.path
   local new = ProjectService.DEFAULT
   local old = ProjectService.FORMER_DEFAULT
+  local old_path = FS.join_path(path, old)
   if FS.exists(FS.join_path(path, new)) then return end
-  local old_path = self.is_project(path, old)
-  if not old_path then return end
+  if not FS.exists(old_path, 'directory') then return end
   if FS.rename(old_path, FS.join_path(path, new)) then
     return messages.carried_over(old, new)
   end
