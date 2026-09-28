@@ -30,5 +30,9 @@ end
 function NullBackend:drop()
 end
 
+function NullBackend:reset()
+  return nil, 'no serial on this platform'
+end
+
 function NullBackend:stop()
 end

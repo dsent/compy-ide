@@ -84,6 +84,23 @@ if serial.isConnected() then
 else
   print("[plug the micro:bit in]")
 end
+print("[Ctrl+R restarts the micro:bit]")
+
+-- The way back from a board that no longer reads what is
+-- typed, stuck in a loop or in listen(): it restarts, as its
+-- reset button makes it, and greets you again.
+compy.input.shortcuts.keypressed["ctrl+r"] = function()
+  tail = ""
+  if not serial.isConnected() then
+    print("[plug the micro:bit in]")
+  elseif serial.reset() then
+    print("[restarting the micro:bit]")
+  else
+    print("[the micro:bit did not restart: press its reset"
+      .. " button, on the back next to the USB socket]")
+  end
+  return true
+end
 
 -- What has been sent, newest last, the hundred most recent
 -- of them. The widget keeps a history of its own but hands

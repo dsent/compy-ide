@@ -273,11 +273,52 @@ describe('micro:bit exec #microbit', function()
     assert.is_false(flashed)
   end)
 
+  it('restart restarts the board', function()
+    local tools = load_tools()
+    tools.restart()
+    assert.equal(1, backend.resets)
+    assert.truthy(said[#said - 1]:find('restarts', 1, true))
+  end)
+
+  it('restart stops an exec first, with what was queued',
+    function()
+      local tools = load_tools()
+      tools.exec('f.lua')
+      board()
+      said = {}
+      tools.restart()
+      assert.equal(1, backend.resets)
+      assert.equal(1, backend.drops)
+      assert.truthy(said[1]:find('the board was restarted', 1,
+        true))
+      assert.is_nil(port.onBytes)
+      assert.is_nil(port.onTick)
+    end)
+
+  it('restart says to press the button when refused', function()
+    local tools = load_tools()
+    backend.refuse = 'break -1'
+    local ok, err = pcall(tools.restart)
+    assert.is_false(ok)
+    assert.truthy(tostring(err):find('reset button', 1, true))
+  end)
+
+  it('a board that stops answering points to restart', function()
+    local tools = load_tools()
+    tools.exec('f.lua')
+    board()
+    said = {}
+    for _ = 1, 6 do serial:update(1) end
+    assert.truthy(said[#said]:find('restart()', 1, true))
+  end)
+
   it('refuses while no board is connected', function()
     local tools = load_tools()
     backend:detach()
     serial:update(0)
     assert.has_error(function() tools.exec('f.lua') end)
+    assert.has_error(function() tools.restart() end)
     assert.equal(0, sent())
+    assert.equal(0, backend.resets)
   end)
 end)

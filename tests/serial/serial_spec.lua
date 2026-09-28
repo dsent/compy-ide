@@ -340,3 +340,50 @@ describe('Serial tick faults', function()
     assert.equal(fail, t.onBytes)
   end)
 end)
+
+--- The way back from a board that no longer reads what it is
+--- sent: it restarts, as its reset button makes it
+describe('Serial reset', function()
+  it('restarts the board, from either table', function()
+    local s, b = make()
+    b:attach()
+    assert.is_true(s:table_for('console').reset())
+    assert.is_true(s:table_for('program').reset())
+    assert.same(2, b.resets)
+  end)
+
+  it('drops what waits, and the half line, first', function()
+    local s, b = make()
+    local lines = {}
+    s:table_for('console').onLine = function(l)
+      lines[#lines + 1] = l
+    end
+    b:attach()
+    b:rx('while true do')
+    s:update(0)
+    assert.is_true(s:reset())
+    assert.same(1, b.drops)
+    b:rx('Lua 5.1\n')
+    s:update(0)
+    assert.same({ 'Lua 5.1' }, lines)
+  end)
+
+  it('says why when the board did not take it', function()
+    local s, b = make()
+    b:attach()
+    b.refuse = 'break -1'
+    local ok, err = s:reset()
+    assert.is_nil(ok)
+    assert.same('break -1', err)
+  end)
+
+  it('is refused with no board behind it', function()
+    require('model.serial.backend_android')
+    require('model.serial.backend_null')
+    local ok, err = AndroidBackend.new():reset()
+    assert.is_nil(ok)
+    assert.same('no device connected', err)
+    ok = NullBackend.new():reset()
+    assert.is_nil(ok)
+  end)
+end)

@@ -50,6 +50,10 @@ local ACM_CLASS_IFACE = 0x21
 local ACM_LINE_CODING = 0x20
 local ACM_LINE_STATE = 0x22
 local ACM_DTR_AND_RTS = 0x03
+local ACM_SEND_BREAK = 0x23
+--- The break's length. The micro:bit's USB chip resets the
+--- board when a break arrives.
+local BREAK_MS = 100
 local PERMISSION_S = 60
 local SCAN_S = 1
 local PRESENCE_S = 1
@@ -409,6 +413,24 @@ end
 --- What send queued and has not written yet goes
 function AndroidBackend:drop()
   self.tx = ''
+end
+
+--- The board restarts, as its reset button makes it: a
+--- break down the cable, which the micro:bit's USB chip
+--- answers with a reset
+--- @return boolean? ok
+--- @return string? err
+function AndroidBackend:reset()
+  if self.state ~= 'open' then
+    return nil, 'no device connected'
+  end
+  local rc = jniCallInt(self.env, self.port.conn,
+    self.port.ctrlM, ACM_CLASS_IFACE, ACM_SEND_BREAK, BREAK_MS,
+    self.port.commId, nil, 0, CTRL_MS)
+  if rc < 0 then
+    return nil, 'break ' .. rc
+  end
+  return true
 end
 
 --- Called on detach and on stop

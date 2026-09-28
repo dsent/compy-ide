@@ -9,6 +9,7 @@ require('model.serial.echo')
 ---   backend:send(data) -> true | nil, err
 ---   backend:drop()       what send queued and has not
 ---                        written yet goes
+---   backend:reset() -> true | nil, err  the board restarts
 ---   backend:stop()
 
 --- @class Serial
@@ -17,6 +18,7 @@ require('model.serial.echo')
 --- @field table_for function
 --- @field send function
 --- @field drop function
+--- @field reset function
 --- @field isConnected function
 --- @field programStarted function
 --- @field programIdle function
@@ -44,6 +46,9 @@ function Serial.new(backend, max_line)
     local t = self.dispatcher:table_for(env)
     t.send = function(line)
       return self:send(line)
+    end
+    t.reset = function()
+      return self:reset()
     end
     t.isConnected = function()
       return self:isConnected()
@@ -95,9 +100,9 @@ end
 --- onDisconnect, onBytes, onLine, and onTick, called every
 --- update with the seconds since the last, after that
 --- update's bytes, so a wait on the board can end when it
---- stops answering. send and isConnected live in the same
---- table. Delivery reads the current field value; a field
---- left nil means nothing is delivered.
+--- stops answering. send, reset and isConnected live in
+--- the same table. Delivery reads the current field value;
+--- a field left nil means nothing is delivered.
 --- @param env SerialEnv
 --- @return table
 function Serial:table_for(env)
@@ -122,6 +127,18 @@ end
 --- longer makes sense, as lines typed into a fresh REPL.
 function Serial:drop()
   self.backend:drop()
+end
+
+--- The board restarts, as its reset button makes it: the way
+--- back from a board that no longer reads what it is sent.
+--- What waits to be sent goes first, and so does the line it
+--- was in the middle of, or both would run into its greeting.
+--- @return boolean? ok
+--- @return string? err
+function Serial:reset()
+  self:drop()
+  self.reader:reset()
+  return self.backend:reset()
 end
 
 --- @return boolean

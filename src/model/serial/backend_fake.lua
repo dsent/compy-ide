@@ -7,6 +7,7 @@
 --- @field poll function
 --- @field send function
 --- @field drop function
+--- @field reset function
 --- @field stop function
 FakeBackend = {}
 FakeBackend.__index = FakeBackend
@@ -17,6 +18,7 @@ function FakeBackend.new()
   self.sink = nil
   self.sent = {}
   self.drops = 0
+  self.resets = 0
   self.started = false
   return self
 end
@@ -48,6 +50,20 @@ end
 --- the drop is counted
 function FakeBackend:drop()
   self.drops = self.drops + 1
+end
+
+--- Counted; a test sets .refuse to have it refused
+--- @return boolean? ok
+--- @return string? err
+function FakeBackend:reset()
+  if not self.started then
+    return nil, 'backend not started'
+  end
+  if self.refuse then
+    return nil, self.refuse
+  end
+  self.resets = self.resets + 1
+  return true
 end
 
 function FakeBackend:stop()
