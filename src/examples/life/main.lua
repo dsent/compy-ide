@@ -20,6 +20,11 @@ speed = 10
 time = 0
 epsilon = 3
 reset_time = 1
+--- on the black canvas, the original 0.9 gray
+cell_color = Color.with_alpha(
+  Color[Color.white + Color.bright],
+  0.9
+)
 help_color = Color.with_alpha(
   Color[Color.white + Color.bright],
   0.5
@@ -173,7 +178,7 @@ function drawHelp()
 end
 
 function fillCell(x, y)
-  gfx.setColor(Color[Color.white + Color.bright])
+  gfx.setColor(cell_color)
   gfx.rectangle(
     "fill",
     (x - 1) * cell_size,
