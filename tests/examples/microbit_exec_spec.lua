@@ -277,8 +277,19 @@ describe('micro:bit exec #microbit', function()
     local tools = load_tools()
     tools.restart_microbit()
     assert.equal(1, backend.resets)
-    assert.truthy(said[#said - 1]:find('restarts', 1, true))
+    local told = table.concat(said, ' ')
+    assert.truthy(told:find('restarts', 1, true))
+    assert.truthy(told:find('reset button', 1, true))
   end)
+
+  it('restart_microbit turns echo back on for the greeting',
+    function()
+      local tools = load_tools()
+      tools.echo(false)
+      echoes = {}
+      tools.restart_microbit()
+      assert.same({ true }, echoes)
+    end)
 
   it('restart_microbit stops an exec first, with what was queued',
     function()

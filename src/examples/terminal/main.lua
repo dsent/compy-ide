@@ -94,7 +94,9 @@ compy.input.shortcuts.keypressed["ctrl+r"] = function()
   if not serial.isConnected() then
     print("[plug the micro:bit in]")
   elseif serial.reset() then
-    print("[restarting the micro:bit]")
+    print("[restarting the micro:bit: if it does not greet you"
+      .. " within a minute, press its reset button, on the back"
+      .. " next to the USB socket]")
   else
     print("[the micro:bit did not restart: press its reset"
       .. " button, on the back next to the USB socket]")

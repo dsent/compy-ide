@@ -368,6 +368,18 @@ describe('Serial reset', function()
     assert.same({ 'Lua 5.1' }, lines)
   end)
 
+  it('drops what the console held back of the half line',
+    function()
+      local s, b = make()
+      b:attach()
+      s.echo:on()
+      s.echo:bytes('old-half-line')
+      assert.same('old-half-line', s.echo.held)
+      s:reset()
+      assert.same('', s.echo.held)
+      assert.is_true(s.echo:isOn())
+    end)
+
   it('says why when the board did not take it', function()
     local s, b = make()
     b:attach()

@@ -429,7 +429,10 @@ end
 --- The board restarts, as its reset button makes it: a break
 --- down the cable, then its end, which the micro:bit's USB
 --- chip answers with a reset. The end goes even when the
---- start was refused, so the board is never left held.
+--- start was refused; if the end itself is refused, the
+--- board may stay held until its reset button is pressed.
+--- The chip ignores a break while it writes new firmware, and
+--- takes it without a word, so true means sent, not done.
 --- @return boolean? ok
 --- @return string? err
 function AndroidBackend:reset()

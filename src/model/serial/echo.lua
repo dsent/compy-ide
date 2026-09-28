@@ -27,6 +27,7 @@ local SETTLE_S = 0.2
 --- @field on function
 --- @field off function
 --- @field isOn function
+--- @field clear function
 --- @field bytes function
 --- @field tick function
 Echo = {}
@@ -71,6 +72,13 @@ function Echo:on()
   self.held = ""
   self.settle = 0
   self.showing = true
+end
+
+--- What is held back goes, shown or not: the board has
+--- restarted and what comes next begins a line of its own
+function Echo:clear()
+  self.held = ""
+  self.settle = 0
 end
 
 function Echo:off()

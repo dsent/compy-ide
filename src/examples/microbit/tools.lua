@@ -353,15 +353,21 @@ local NO_RESTART = "the micro:bit did not restart. Press its"
 --- Restart the board, as its reset button does, without
 --- touching it: the way back from a board that no longer
 --- reads what it is sent, stuck in a loop or in listen(). An
---- exec still sending stops first.
+--- exec still sending stops first, and echo comes back on,
+--- so the greeting shows. The board ignores a restart while
+--- it writes new firmware, and the Compy cannot tell, so the
+--- message says what to do when no greeting comes.
 function restart_microbit()
   assert(serial.isConnected(), "no micro:bit connected")
   if isSending() then
     stopAt("the board was restarted")
   end
   assert(serial.reset(), NO_RESTART)
+  echo()
   print("The micro:bit restarts, and greets you when it")
-  print("is ready.")
+  print("is ready. If it does not within a minute, press")
+  print("its reset button, on the back next to the USB")
+  print("socket.")
 end
 
 -- firmware ---------------------------------------------------

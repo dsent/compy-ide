@@ -131,13 +131,15 @@ end
 
 --- The board restarts, as its reset button makes it: the way
 --- back from a board that no longer reads what it is sent.
---- What waits to be sent goes first, and so does the line it
---- was in the middle of, or both would run into its greeting.
+--- What waits to be sent goes first, and so do the line it
+--- was in the middle of and what the console held back of
+--- it, or they would run into its greeting.
 --- @return boolean? ok
 --- @return string? err
 function Serial:reset()
   self:drop()
   self.reader:reset()
+  self.echo:clear()
   return self.backend:reset()
 end
 
