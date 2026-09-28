@@ -92,9 +92,12 @@ end
 
 --- The environment's compy.serial table. Handlers are its
 --- fields, assigned by the code running there: onConnect,
---- onDisconnect, onBytes, onLine. send and isConnected live
---- in the same table. Delivery reads the current field
---- value; a field left nil means nothing is delivered.
+--- onDisconnect, onBytes, onLine, and onTick, called every
+--- update with the seconds since the last, after that
+--- update's bytes, so a wait on the board can end when it
+--- stops answering. send and isConnected live in the same
+--- table. Delivery reads the current field value; a field
+--- left nil means nothing is delivered.
 --- @param env SerialEnv
 --- @return table
 function Serial:table_for(env)
@@ -164,6 +167,7 @@ end
 function Serial:update(dt)
   self:fault(self.backend:poll())
   self.echo:tick(dt)
+  self.dispatcher:push('tick', dt)
   local errors = self.dispatcher:pump()
   for _, f in ipairs(self.faults) do
     errors[#errors + 1] = f

@@ -1,5 +1,6 @@
 --- @alias SerialEnv 'console' | 'program'
 --- @alias SerialEvent 'connect' | 'disconnect' | 'bytes' | 'line'
+---   | 'tick'
 
 --- Delivery by assignment, the love way: each environment
 --- owns a compy.serial table and assigns its handlers to
@@ -23,6 +24,7 @@ local FIELDS = {
   disconnect = 'onDisconnect',
   bytes = 'onBytes',
   line = 'onLine',
+  tick = 'onTick',
 }
 
 local ENVS = { console = true, program = true }

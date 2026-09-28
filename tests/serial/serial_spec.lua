@@ -260,3 +260,46 @@ describe('Serial unsent output', function()
     assert.same('', b.tx)
   end)
 end)
+
+--- Time passing, for a wait on the board that has to end when
+--- it stops answering
+describe('Serial ticks', function()
+  it('tick every update with the seconds since the last',
+    function()
+      local s = make()
+      local ticks = {}
+      s:table_for('console').onTick = function(dt)
+        ticks[#ticks + 1] = dt
+      end
+      s:update(0.5)
+      s:update(0.25)
+      assert.same({ 0.5, 0.25 }, ticks)
+    end)
+
+  it('come after the bytes of the same update', function()
+    local s, b = make()
+    local heard = {}
+    local t = s:table_for('program')
+    t.onBytes = function() heard[#heard + 1] = 'bytes' end
+    t.onTick = function() heard[#heard + 1] = 'tick' end
+    b:attach()
+    s:update(0)
+    heard = {}
+    b:rx('> ')
+    s:update(0.1)
+    assert.same({ 'bytes', 'tick' }, heard)
+  end)
+
+  it('skip a suspended environment', function()
+    local s = make()
+    local ticks = { console = 0, program = 0 }
+    for env in pairs(ticks) do
+      s:table_for(env).onTick = function()
+        ticks[env] = ticks[env] + 1
+      end
+    end
+    s:programStarted()
+    s:update(0.1)
+    assert.same({ console = 0, program = 1 }, ticks)
+  end)
+end)
