@@ -1497,8 +1497,8 @@ function ConsoleController.prepare_project_env(cc)
     end
   end
 
-  project_env.reset_scratch    = function()
-    cc:reset_scratch()
+  project_env.reset_scratchpad = function()
+    cc:reset_scratchpad()
   end
 
   --- file access
@@ -1940,18 +1940,19 @@ function ConsoleController:quit_project()
   self:close_project()
 end
 
---- Delete the default project and recreate it with factory contents.
+--- Set the default project aside under a backup name and start
+--- it again with factory contents.
 --- @return boolean success
-function ConsoleController:reset_scratch()
+function ConsoleController:reset_scratchpad()
   local P = self.model.projects
   local name = ProjectService.DEFAULT
   if P.current and P.current.name == name then
     self:_close_project()
   else
-    self:close_project()  --- lands on scratch
+    self:close_project()  --- lands on the scratchpad
     self:_close_project() --- close it directly (no redirect)
   end
-  --- the old scratch is kept, never deleted
+  --- the old scratchpad is kept, never deleted
   local kept = P:set_aside(name)
   if kept then
     print(P.messages.kept_as(name, kept))

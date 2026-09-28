@@ -414,6 +414,9 @@ function love.load()
       CM.projects:deploy_examples()
     end
 
+    --- a card from before the rename keeps its files
+    local said = CM.projects:carry_over_default()
+    if said then print(said) end
     --- always have a project open
     CC:open_project(ProjectService.DEFAULT)
 

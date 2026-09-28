@@ -197,6 +197,64 @@ describe('ProjectService #project', function()
     end)
   end)
 
+  describe('carry_over_default', function()
+    local OLD = ProjectService.FORMER_DEFAULT
+    local NEW = ProjectService.DEFAULT
+    local rename
+
+    --- the former default project, as a card from before the
+    --- rename holds it, with a file of the child's in it
+    local function former()
+      assert.is_true(PS:create(OLD))
+      assert.is_true(FS.write(FS.join_path(tmp, OLD, 'mine.lua'),
+        '-- mine'))
+    end
+
+    before_each(function()
+      rename = FS.rename
+    end)
+
+    after_each(function()
+      FS.rename = rename
+    end)
+
+    it('renames the former default and keeps its files #project',
+      function()
+        former()
+        assert.are.equal(ProjectService.messages.carried_over(OLD,
+          NEW), PS:carry_over_default())
+        assert.is_false(FS.exists(FS.join_path(tmp, OLD)))
+        assert.are.equal('-- mine',
+          FS.combined_read(FS.join_path(tmp, NEW, 'mine.lua')))
+        assert.is_nil(PS:carry_over_default())
+      end)
+
+    it('leaves both alone when the new name exists #project',
+      function()
+        former()
+        assert.is_true(PS:create(NEW))
+        assert.is_nil(PS:carry_over_default())
+        assert.is_true(FS.exists(FS.join_path(tmp, OLD, 'mine.lua')))
+        assert.is_false(FS.exists(FS.join_path(tmp, NEW, 'mine.lua')))
+      end)
+
+    it('does nothing on a card without the former #project',
+      function()
+        assert.is_nil(PS:carry_over_default())
+        assert.is_false(FS.exists(FS.join_path(tmp, NEW)))
+      end)
+
+    it('keeps the former where it is if renaming fails #project',
+      function()
+        former()
+        FS.rename = function() return false, 'rename failed' end
+        assert.are.equal(ProjectService.messages.not_carried_over(OLD,
+          NEW), PS:carry_over_default())
+        assert.is_true(FS.exists(FS.join_path(tmp, OLD, 'mine.lua')))
+        assert.is_false(FS.exists(FS.join_path(tmp, NEW)))
+      end)
+  end)
+
   describe('close', function()
     it('clears current #project', function()
       PS:opreate(ProjectService.DEFAULT)

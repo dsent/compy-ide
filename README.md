@@ -94,8 +94,8 @@ ran. At any time, pressing <kbd>Ctrl-Q</kbd> quits and
 returns to the console
 
 There is always a project open: the application starts on the
-default `scratch` project, which can be used to persist files.
-Closing a project returns to `scratch`.
+default `scratchpad` project, which can be used to persist files.
+Closing a project returns to `scratchpad`.
 
 - `list_projects()`
 
@@ -123,12 +123,13 @@ Closing a project returns to `scratch`.
 - `close_project()`
 
   Close currently opened project and return to the default
-  `scratch` project.
+  `scratchpad` project.
 
-- `reset_scratch()`
+- `reset_scratchpad()`
 
-  Delete the default `scratch` project and recreate it with
-  factory contents.
+  Set the default `scratchpad` project aside as
+  `scratchpad.old` (or `scratchpad.old.N` when that is taken) and
+  start it again with factory contents.
 
 - `edit(file)`
 

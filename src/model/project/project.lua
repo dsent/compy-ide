@@ -54,6 +54,14 @@ local messages = {
     return 'Could not keep your old ' .. name
         .. ', so it is left as it is.'
   end,
+  carried_over        = function(old, new)
+    return 'Your ' .. old .. ' project is now called '
+        .. new .. '.'
+  end,
+  not_carried_over    = function(old, new)
+    return 'Could not rename ' .. old .. ' to ' .. new
+        .. ', so its files stay in the project ' .. old .. '.'
+  end,
 }
 
 --- Determine if the supplied string is a valid filename
@@ -236,7 +244,9 @@ end
 ProjectService = class.create(newps)
 ProjectService.MAIN = 'main.lua'
 ProjectService.README = 'README.md'
-ProjectService.DEFAULT = 'scratch'
+ProjectService.DEFAULT = 'scratchpad'
+--- what the default project was called before it was renamed
+ProjectService.FORMER_DEFAULT = 'scratch'
 ProjectService.messages = messages
 
 --- @param name string
@@ -474,6 +484,24 @@ function ProjectService:set_aside(name)
     return nil, err
   end
   return kept
+end
+
+--- A card from before the rename holds the default project
+--- under its former name. When it has no project by the new
+--- name, the former one is renamed, so its files open as the
+--- default project; either way, nothing is deleted.
+--- @return string? said what happened, when anything did
+function ProjectService:carry_over_default()
+  local path = ProjectService.path
+  local new = ProjectService.DEFAULT
+  local old = ProjectService.FORMER_DEFAULT
+  if FS.exists(FS.join_path(path, new)) then return end
+  local old_path = self.is_project(path, old)
+  if not old_path then return end
+  if FS.rename(old_path, FS.join_path(path, new)) then
+    return messages.carried_over(old, new)
+  end
+  return messages.not_carried_over(old, new)
 end
 
 --- @param name string

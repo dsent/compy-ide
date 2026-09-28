@@ -1,6 +1,6 @@
 --- Headless ConsoleController tests for the unified project
 --- environment (issue #106): single env for console + project,
---- env reset on switch, close redirects to scratch, reset_scratch.
+--- env reset on switch, close redirects to the scratchpad, reset_scratchpad.
 --- Uses the "Web" FS branch with an lfs-backed mock on a tmpdir.
 --- @diagnostic disable: invisible
 
@@ -184,7 +184,7 @@ describe('ConsoleController project env #project', function()
     local env = CC:get_project_env()
     for _, k in ipairs({
       'project', 'list_projects', 'current_project', 'close_project',
-      'reset_scratch', 'readfile', 'readlines', 'writefile', 'loadfile',
+      'reset_scratchpad', 'readfile', 'readlines', 'writefile', 'loadfile',
       'dofile', 'edit', 'run', 'run_project', 'list_contents',
       'example_projects', 'clone', 'appver', 'quit',
       'pause', 'stop', 'continue', 'eval',
@@ -221,7 +221,8 @@ describe('ConsoleController project env #project', function()
     assert.is_nil(CC:get_project_env().x)
     --- console commands survive the reset
     assert.is_function(CC:get_project_env().project)
-    assert.is_function(CC:get_project_env().reset_scratch)
+    assert.is_function(CC:get_project_env().reset_scratchpad)
+    assert.is_nil(CC:get_project_env().reset_scratch)
   end)
 
   it('close_project returns to the default project #project', function()
@@ -233,7 +234,7 @@ describe('ConsoleController project env #project', function()
     assert.are.equal('ready', love.state.app_state)
   end)
 
-  it('close_project from scratch reopens scratch #project', function()
+  it('close_project from the scratchpad reopens it #project', function()
     CC:open_project(ProjectService.DEFAULT)
     CC:get_project_env().x = 5
     assert.is_true(CC:close_project())
@@ -242,10 +243,10 @@ describe('ConsoleController project env #project', function()
     assert.is_nil(CC:get_project_env().x)
   end)
 
-  it('reset_scratch restores factory contents #project', function()
+  it('reset_scratchpad restores factory contents #project', function()
     CC:open_project(ProjectService.DEFAULT)
     CC:get_current_project():writefile('extra.lua', '-- extra')
-    assert.is_true(CC:reset_scratch())
+    assert.is_true(CC:reset_scratchpad())
     assert.are.equal(ProjectService.DEFAULT,
       CC:get_current_project().name)
     local p = FS.join_path(tmp, ProjectService.DEFAULT, 'extra.lua')
@@ -256,14 +257,14 @@ describe('ConsoleController project env #project', function()
     assert.are.equal("print('Hello world!')\n", content)
   end)
 
-  it('reset_scratch keeps the old scratch, numbered #project',
+  it('reset_scratchpad keeps the old scratchpad, numbered #project',
     function()
       local old = ProjectService.DEFAULT .. '.old'
       CC:open_project(ProjectService.DEFAULT)
       CC:get_current_project():writefile('extra.lua', '-- one')
-      assert.is_true(CC:reset_scratch())
+      assert.is_true(CC:reset_scratchpad())
       CC:get_current_project():writefile('extra.lua', '-- two')
-      assert.is_true(CC:reset_scratch())
+      assert.is_true(CC:reset_scratchpad())
       local function kept(name)
         local f = io.open(FS.join_path(tmp, name, 'extra.lua'))
         if not f then return nil end
@@ -276,7 +277,7 @@ describe('ConsoleController project env #project', function()
       assert.is_nil(kept(ProjectService.DEFAULT))
     end)
 
-  it('close_project says closed before it opens scratch #project',
+  it('close_project says closed before it opens scratchpad #project',
     function()
       CC:open_project(ProjectService.DEFAULT)
       CC:open_project('clock')
@@ -291,13 +292,14 @@ describe('ConsoleController project env #project', function()
       }, said)
     end)
 
-  it('reset_scratch from another project keeps that project #project', function()
-    CC:open_project('clock')
-    assert.is_true(CC:reset_scratch())
-    assert.are.equal(ProjectService.DEFAULT,
-      CC:get_current_project().name)
-    assert.is_not_nil(ProjectService.is_project(tmp, 'clock'))
-  end)
+  it('reset_scratchpad from another project keeps that project #project',
+    function()
+      CC:open_project('clock')
+      assert.is_true(CC:reset_scratchpad())
+      assert.are.equal(ProjectService.DEFAULT,
+        CC:get_current_project().name)
+      assert.is_not_nil(ProjectService.is_project(tmp, 'clock'))
+    end)
 
   it('never enters the project_open state #project', function()
     CC:open_project(ProjectService.DEFAULT)
