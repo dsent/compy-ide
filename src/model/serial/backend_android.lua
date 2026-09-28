@@ -53,8 +53,7 @@ local ACM_DTR_AND_RTS = 0x03
 local ACM_SEND_BREAK = 0x23
 --- The micro:bit's USB chip (DAPLink) holds the board in
 --- reset from a break's start and lets it go at its end, a
---- break of length 0. Held for 3 s or more, the board
---- restarts and sends its unique ID instead of its greeting.
+--- break of length 0.
 local BREAK_MS = 100
 local PERMISSION_S = 60
 local SCAN_S = 1

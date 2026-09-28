@@ -104,6 +104,12 @@ compy.input.shortcuts.keypressed["ctrl+r"] = function()
   return true
 end
 
+-- On the Compy a Ctrl chord can also bring its letter as
+-- text; this "r" is not meant for the board.
+compy.input.shortcuts.textinput["ctrl+r"] = function()
+  return true
+end
+
 -- What has been sent, newest last, the hundred most recent
 -- of them. The widget keeps a history of its own but hands
 -- it to nobody, so the walk through this one is ours: at is

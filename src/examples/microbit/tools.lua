@@ -359,10 +359,12 @@ local NO_RESTART = "the micro:bit did not restart. Press its"
 --- message says what to do when no greeting comes.
 function restart_microbit()
   assert(serial.isConnected(), "no micro:bit connected")
+  local restarted = serial.reset()
   if isSending() then
-    stopAt("the board was restarted")
+    stopAt(restarted and "the board was restarted"
+      or "the board did not restart")
   end
-  assert(serial.reset(), NO_RESTART)
+  assert(restarted, NO_RESTART)
   echo()
   print("The micro:bit restarts, and greets you when it")
   print("is ready. If it does not within a minute, press")

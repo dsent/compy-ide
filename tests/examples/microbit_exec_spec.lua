@@ -306,6 +306,18 @@ describe('micro:bit exec #microbit', function()
       assert.is_nil(port.onTick)
     end)
 
+  it('restart_microbit refused while exec sends says so',
+    function()
+      local tools = load_tools()
+      tools.exec('f.lua')
+      board()
+      said = {}
+      backend.refuse = 'break -1, end -1'
+      assert.has_error(function() tools.restart_microbit() end)
+      assert.truthy(said[1]:find('did not restart', 1, true))
+      assert.is_nil(port.onTick)
+    end)
+
   it('restart_microbit says to press the button when refused', function()
     local tools = load_tools()
     backend.refuse = 'break -1'
