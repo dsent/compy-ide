@@ -76,6 +76,14 @@ FS.is_absolute = function(path)
   end
 end
 
+--- The path the operating system reads for `path`. The same
+--- path everywhere but the web build (see below).
+--- @param path string
+--- @return string
+FS.system_path = function(path)
+  return path
+end
+
 if love and not TESTING then
   local _fs
 
@@ -120,6 +128,13 @@ if love and not TESTING then
         return LFS.mount(...)
       end,
     }
+    --- The web build names files relative to LÖVE's save
+    --- directory, but the operating system reads a relative
+    --- path from the process's directory, the root there.
+    FS.system_path = function(path)
+      if FS.is_absolute(path) then return path end
+      return FS.join_path(LFS.getSaveDirectory(), path)
+    end
   else
     _fs = require("lib.nativefs.nativefs")
   end
@@ -593,7 +608,8 @@ end
 --- @return boolean success
 --- @return string? error
 function FS.rename(source, target)
-  local ok, err = os.rename(source, target)
+  local ok, err = os.rename(FS.system_path(source),
+    FS.system_path(target))
   return ok or false, err
 end
 

@@ -270,6 +270,22 @@ describe('ProjectService #project', function()
       end)
   end)
 
+  describe('FS.rename in the web build', function()
+    it('reads a relative path from the save directory #project',
+      function()
+        local saved = LFS.getSaveDirectory
+        LFS.getSaveDirectory = function() return tmp end
+        lfs.mkdir(tmp .. '/projects')
+        lfs.mkdir(tmp .. '/projects/a')
+        local ok, err = FS.rename('projects/a', 'projects/b')
+        LFS.getSaveDirectory = saved
+        assert.is_true(ok, err)
+        assert.is_nil(lfs.attributes(tmp .. '/projects/a'))
+        assert.are.equal('directory',
+          lfs.attributes(tmp .. '/projects/b', 'mode'))
+      end)
+  end)
+
   describe('close', function()
     it('clears current #project', function()
       PS:opreate(ProjectService.DEFAULT)
