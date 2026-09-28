@@ -151,10 +151,8 @@ function Serial:programContinued()
   self.dispatcher:resume_env('program')
 end
 
---- Stopped for good, and what it sent that has not left yet
---- goes with it
+--- Stopped for good
 function Serial:programEnded()
-  self:drop()
   self.dispatcher:resume_env('program')
   self.dispatcher:clear_env('program')
   self.dispatcher:resume_env('console')

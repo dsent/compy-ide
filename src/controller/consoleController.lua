@@ -497,7 +497,9 @@ function ConsoleController:run_project(name)
         self:get_project_env().compy.before_exit =
             default_before_exit
         -- Its serial handlers go the same way, by the same
-        -- invariant, and the console is heard again.
+        -- invariant, and the console is heard again. What it
+        -- queued for the board and has not sent goes too.
+        SerialPort:drop()
         SerialPort:programEnded()
         love.state.app_state = 'ready'
         print('Error: ', run_err)
@@ -1916,6 +1918,10 @@ function ConsoleController:stop_project_run()
 end
 
 function ConsoleController:_stop_project_run()
+  -- What the run queued for the board and has not sent goes
+  -- first: its before_exit hook may send the board a last
+  -- line on purpose, and that one stays.
+  SerialPort:drop()
   self:evacuate_required()
   local compy = self:get_project_env().compy
   framework_before_exit(compy)

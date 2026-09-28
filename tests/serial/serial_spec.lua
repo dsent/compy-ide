@@ -231,22 +231,22 @@ end)
 --- What was sent and has not left yet would reach the board
 --- where it no longer makes sense
 describe('Serial unsent output', function()
-  it('goes when the program ends', function()
+  it('goes from the backend on drop', function()
     local s, b = make()
     b:attach()
-    s:programStarted()
-    assert.same(0, b.drops)
-    s:programEnded()
+    s:drop()
     assert.same(1, b.drops)
   end)
 
-  it('stays while the program is idle or paused', function()
+  --- the IDE drops it where a run stops, around its hooks
+  it('stays through the program\'s own states', function()
     local s, b = make()
     b:attach()
     s:programStarted()
     s:programIdle()
     s:programPaused()
     s:programContinued()
+    s:programEnded()
     assert.same(0, b.drops)
   end)
 

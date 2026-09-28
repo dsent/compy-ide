@@ -434,6 +434,34 @@ describe('ConsoleController project env #project', function()
       assert.are.equal(before + 1, fake.drops)
     end)
 
+    it('goes before the before_exit hook, which may still send',
+      function()
+        CC:open_project('clock')
+        local before = fake.drops
+        local at_hook
+        CC:get_project_env().compy.before_exit = function()
+          at_hook = fake.drops
+        end
+        love.state.app_state = 'running'
+        CC:stop_project_run()
+        assert.are.equal(before + 1, at_hook)
+        assert.are.equal(before + 1, fake.drops)
+      end)
+
+    it('goes when the top-level code raises', function()
+      CC:open_project(ProjectService.DEFAULT)
+      CC:get_current_project():writefile(ProjectService.MAIN,
+        'error("boom")')
+      CC.main_ctrl.release_keyboard_route = function() end
+      local before = fake.drops
+      local print_ = _G.print
+      _G.print = function() end
+      CC:run_project()
+      _G.print = print_
+      assert.are.equal('ready', love.state.app_state)
+      assert.are.equal(before + 1, fake.drops)
+    end)
+
     it('goes before a flash begins', function()
       CC:open_project(ProjectService.DEFAULT)
       local before = fake.drops
