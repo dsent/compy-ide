@@ -8,6 +8,11 @@
 --- storage is a SCSI disk. An SD card in a USB card
 --- reader is a SCSI disk too, so only a card in the
 --- built-in slot is chosen.
+---
+--- A volume is the card only when its vold line shows the
+--- MMC device. A volume without one may be a micro:bit
+--- drive or a card reader, so it is never chosen; with no
+--- card found the IDE uses internal storage.
 
 local MMC_BLOCK_MAJOR = 179
 
@@ -18,7 +23,8 @@ local vold_mount = '^/dev/block/vold/public:(%d+),%d+ '
   .. '/mnt/media_rw/(%S+) '
 
 --- @param mounts string the text of /proc/mounts
---- @return string? root the SD card's storage root
+--- @return string? root the SD card's storage root, nil
+---   when no volume shows the MMC device
 local function find_card(mounts)
   if type(mounts) ~= 'string' then return nil end
   local roots = {}
@@ -33,18 +39,10 @@ local function find_card(mounts)
       majors[string.upper(mounted)] = tonumber(major)
     end
   end
-  --- A volume on another block device is USB storage and
-  --- never holds projects. A volume without a vold line is
-  --- unknown, so without vold lines the first volume wins.
-  local unknown
   for _, r in ipairs(roots) do
-    local major = majors[r.uuid]
-    if major == MMC_BLOCK_MAJOR then return r.path end
-    if major == nil and not unknown then
-      unknown = r.path
-    end
+    if majors[r.uuid] == MMC_BLOCK_MAJOR then return r.path end
   end
-  return unknown
+  return nil
 end
 
 return {

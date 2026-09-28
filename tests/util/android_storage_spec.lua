@@ -19,6 +19,7 @@ local function mounts(...)
   return table.concat({ ... }, '\n') .. '\n'
 end
 
+--- Where no card is found, the IDE uses internal storage.
 describe('Android SD card lookup #util', function()
   it('chooses the card over a micro:bit drive listed first',
     function()
@@ -28,21 +29,30 @@ describe('Android SD card lookup #util', function()
         AndroidStorage.find_card(text))
     end)
 
-  it('never chooses USB storage', function()
+  it('chooses the card over a volume without a vold line',
+    function()
+      assert.same('/storage/6BBF-F260', AndroidStorage.find_card(
+        mounts(usb_fuse, card_vold, card_fuse)))
+    end)
+
+  it('never chooses a micro:bit drive alone', function()
     assert.is_nil(AndroidStorage.find_card(
       mounts(emulated, usb_vold, usb_fuse)))
+    assert.is_nil(AndroidStorage.find_card(
+      mounts(emulated, usb_fuse)))
   end)
 
-  it('keeps a volume whose block device is unknown', function()
-    assert.same('/storage/6BBF-F260', AndroidStorage.find_card(
+  it('never chooses a card without its vold line', function()
+    assert.is_nil(AndroidStorage.find_card(
       mounts(usb_vold, usb_fuse, card_fuse)))
+    assert.is_nil(AndroidStorage.find_card(
+      mounts(emulated, card_fuse, card_pass)))
   end)
 
-  it('keeps the first volume when no vold lines exist',
-    function()
-      assert.same('/storage/2702-1974', AndroidStorage.find_card(
-        mounts(usb_fuse, card_fuse)))
-    end)
+  it('finds nothing when no vold lines exist', function()
+    assert.is_nil(AndroidStorage.find_card(
+      mounts(usb_fuse, card_fuse)))
+  end)
 
   it('finds nothing without a portable volume', function()
     assert.is_nil(AndroidStorage.find_card(mounts(emulated)))
