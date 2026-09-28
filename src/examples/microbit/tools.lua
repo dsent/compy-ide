@@ -179,7 +179,7 @@ local function sendNext()
   sending.quiet = 0
   local line = sending.lines[sending.at]
   if not line then
-    finish(sending.name .. " is on the board and has run")
+    finish(sending.name .. " is on the board")
   elseif not serial.send(line .. "\r") then
     stopAt("the board is not connected")
   end
@@ -232,21 +232,23 @@ end
 local function quietLast(after)
   if after then
     show(after)
-    finish(sending.name .. " is running on the board")
+    finish(sending.name .. " is on the board and still running")
   else
     stopAt(STOPPED)
   end
 end
 
 --- The last line runs the file: a prompt the board has been
---- quiet after means the file has run
+--- quiet after means the file has run, as far as the board's
+--- bytes can tell; a program that writes "> " and pauses looks
+--- the same
 local function lastLine()
   local after = afterEcho()
   local said = after and after:match("^(.*)> $")
   local done = said and SETTLE_S <= sending.quiet
   if done then
     show(said)
-    finish(sending.name .. " is on the board and has run")
+    finish(sending.name .. " is on the board")
   elseif QUIET_S < sending.quiet then
     quietLast(after)
   end

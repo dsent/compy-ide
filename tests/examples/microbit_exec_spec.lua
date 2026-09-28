@@ -15,7 +15,7 @@ require('model.serial.backend_fake')
 
 local WRAP = 'assert(loadstring[['
 local UNWRAP = ']])()'
-local RAN = 'f.lua is on the board and has run'
+local RAN = 'f.lua is on the board'
 
 describe('micro:bit exec #microbit', function()
   local serial, backend, port, said, echoes, files, flashed
@@ -183,7 +183,7 @@ describe('micro:bit exec #microbit', function()
     for _ = 1, 4 do serial:update(1) end
     assert.is_not_nil(port.onBytes)
     serial:update(2)
-    assert.same({ '1', 'f.lua is running on the board' },
+    assert.same({ '1', 'f.lua is on the board and still running' },
       { said[#said - 1], said[#said] })
     assert.is_nil(port.onBytes)
     assert.same({ true, false, true }, echoes)
