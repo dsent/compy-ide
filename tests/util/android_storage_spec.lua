@@ -19,6 +19,15 @@ local function mounts(...)
   return table.concat({ ... }, '\n') .. '\n'
 end
 
+local function vold(major, uuid)
+  return '/dev/block/vold/public:' .. major .. ',1 '
+    .. '/mnt/media_rw/' .. uuid .. ' ntfs rw 0 0'
+end
+
+local function fuse(uuid)
+  return '/dev/fuse /storage/' .. uuid .. ' fuse rw 0 0'
+end
+
 --- Where no card is found, the IDE uses internal storage.
 describe('Android SD card lookup #util', function()
   it('chooses the card over a micro:bit drive listed first',
@@ -31,9 +40,26 @@ describe('Android SD card lookup #util', function()
 
   it('chooses the card over a volume without a vold line',
     function()
-      assert.same('/storage/6BBF-F260', AndroidStorage.find_card(
-        mounts(usb_fuse, card_vold, card_fuse)))
+      assert.same('/storage/6BBF-F260',
+        AndroidStorage.find_card(
+          mounts(usb_fuse, card_vold, card_fuse)))
     end)
+
+  it('chooses a card with a longer uuid, upper or lower case',
+    function()
+      local long = '0123456789ABCDEF'
+      local ext = 'd2f6c4a0-5e1b-4c3a-9b7e-1f2a3b4c5d6e'
+      for _, uuid in ipairs({ long, ext }) do
+        assert.same('/storage/' .. uuid,
+          AndroidStorage.find_card(mounts(emulated,
+            vold(179, uuid), fuse(uuid))))
+      end
+    end)
+
+  it('matches a lowercase vold path to its volume', function()
+    assert.same('/storage/6BBF-F260', AndroidStorage.find_card(
+      mounts(vold(179, '6bbf-f260'), card_fuse)))
+  end)
 
   it('never chooses a micro:bit drive alone', function()
     assert.is_nil(AndroidStorage.find_card(
@@ -53,6 +79,12 @@ describe('Android SD card lookup #util', function()
     assert.is_nil(AndroidStorage.find_card(
       mounts(usb_fuse, card_fuse)))
   end)
+
+  it('finds nothing before the card has its FUSE mount',
+    function()
+      assert.is_nil(AndroidStorage.find_card(
+        mounts(emulated, card_vold)))
+    end)
 
   it('finds nothing without a portable volume', function()
     assert.is_nil(AndroidStorage.find_card(mounts(emulated)))
