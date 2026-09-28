@@ -6,6 +6,7 @@
 --- IDE's own Serial and the fake backend, and the board is
 --- played by the test: it echoes each line and answers it with a
 --- prompt.
+
 --- LÖVE provides utf8; in tests it is the lua-utf8 rock
 package.preload['utf8'] = package.preload['utf8']
     or function() return require('lua-utf8') end
@@ -14,15 +15,16 @@ require('model.serial.backend_fake')
 
 local WRAP = 'assert(loadstring[['
 local UNWRAP = ']])()'
+local RAN = 'f.lua is on the board and has run'
 
 describe('micro:bit exec #microbit', function()
-  local serial, backend, port, said, echoes, files
+  local serial, backend, port, said, echoes, files, flashed
 
   --- tools.lua loaded into an environment of its own, with what
   --- the console gives it
   local function load_tools()
     local env = setmetatable({
-      compy = { serial = port, audio = {} },
+      compy = { serial = port, audio = { hyperjump = function() end } },
       echo = function(on) echoes[#echoes + 1] = on ~= false end,
       readfile = function(name) return files[name] end,
       print = function(text) said[#said + 1] = text end,
@@ -30,9 +32,11 @@ describe('micro:bit exec #microbit', function()
         return require('examples.microbit.' .. name)
       end,
       utf8 = require('lua-utf8'),
+      detect_microbit = function() return '/mb' end,
+      flash_microbit = function() flashed = true return true end,
     }, { __index = _G })
-    local chunk = assert(loadfile('src/examples/microbit/tools.lua'))
-    setfenv(chunk, env)()
+    local path = 'src/examples/microbit/tools.lua'
+    setfenv(assert(loadfile(path)), env)()
     return env
   end
 
@@ -47,6 +51,16 @@ describe('micro:bit exec #microbit', function()
     serial:update(0)
   end
 
+  --- The file in, the board prompting after each line, and
+  --- quiet after the last
+  --- @param tools table
+  local function run(tools)
+    tools.exec('f.lua')
+    for _ = 1, 3 do board() end
+    board('1\r\n', '> ')
+    serial:update(0.25)
+  end
+
   --- @return integer
   local function sent()
     return #backend.sent
@@ -56,7 +70,7 @@ describe('micro:bit exec #microbit', function()
     backend = FakeBackend.new()
     serial = Serial.new(backend)
     port = serial:table_for('program')
-    said, echoes = {}, {}
+    said, echoes, flashed = {}, {}, false
     files = { ['f.lua'] = 'a = 1\nprint(a)\n' }
     backend:attach()
     serial:update(0)
@@ -67,7 +81,7 @@ describe('micro:bit exec #microbit', function()
     tools.exec('f.lua')
     assert.same({ WRAP .. '\r' }, backend.sent)
     serial:update(0)
-    backend:rx('assert(loadstring[[\r\r\n')
+    backend:rx(WRAP .. '\r\r\n')
     serial:update(0)
     assert.equal(1, sent())
     backend:rx('>> ')
@@ -78,19 +92,13 @@ describe('micro:bit exec #microbit', function()
   it('shows the answer, hides the echo, puts the handlers back',
     function()
       local tools = load_tools()
-      local mine = function() end
-      local gone = function() end
+      local mine, gone = function() end, function() end
       port.onBytes, port.onDisconnect = mine, gone
       said = {}
-      tools.exec('f.lua')
-      board()
-      board()
-      board()
-      board('1\r\n', '> ')
+      run(tools)
       assert.same({ WRAP .. '\r', 'a = 1\r', 'print(a)\r',
         UNWRAP .. '\r' }, backend.sent)
-      assert.same({ '1', 'f.lua is on the board and has run' },
-        said)
+      assert.same({ '1', RAN }, said)
       assert.equal(mine, port.onBytes)
       assert.equal(gone, port.onDisconnect)
       assert.is_nil(port.onTick)
@@ -100,14 +108,41 @@ describe('micro:bit exec #microbit', function()
 
   it('runs a second time the same way', function()
     local tools = load_tools()
-    for _ = 1, 2 do
-      tools.exec('f.lua')
-      for _ = 1, 3 do board() end
-      board('1\r\n', '> ')
-    end
+    run(tools)
+    run(tools)
     assert.equal(8, sent())
     assert.is_nil(port.onBytes)
+    assert.equal(RAN, said[#said])
   end)
+
+  it('takes what came before the echo for none of its own',
+    function()
+      local tools = load_tools()
+      tools.exec('f.lua')
+      --- the greeting of a board just reset
+      backend:rx('micro:bit\r\nLua 5.1 REPL\r\n> ')
+      serial:update(0)
+      assert.equal(1, sent())
+      board()
+      assert.equal(2, sent())
+    end)
+
+  it('waits for the board to be quiet after the last prompt',
+    function()
+      local tools = load_tools()
+      tools.exec('f.lua')
+      for _ = 1, 3 do board() end
+      --- a line the program prints starts with "> ", and the
+      --- chunk ends just after it
+      board('x\r\n> ', '')
+      serial:update(0.1)
+      assert.is_not_nil(port.onBytes)
+      backend:rx('y\r\n> ')
+      serial:update(0)
+      serial:update(0.25)
+      assert.same({ 'x', '> y', RAN },
+        { said[#said - 2], said[#said - 1], said[#said] })
+    end)
 
   it('says how far it has got while the board is slow', function()
     local tools = load_tools()
@@ -128,6 +163,14 @@ describe('micro:bit exec #microbit', function()
     assert.truthy(said[#said]:find('stopped answering', 1, true))
     assert.is_nil(port.onBytes)
     assert.is_nil(port.onTick)
+  end)
+
+  it('stops when the last line never reaches the board', function()
+    local tools = load_tools()
+    tools.exec('f.lua')
+    for _ = 1, 3 do board() end
+    for _ = 1, 6 do serial:update(1) end
+    assert.truthy(said[#said]:find('stopped answering', 1, true))
   end)
 
   --- a program that loops never brings the prompt back
@@ -166,6 +209,49 @@ describe('micro:bit exec #microbit', function()
     serial:update(0)
     assert.truthy(said[#said]:find('unplugged', 1, true))
     assert.is_nil(port.onDisconnect)
+  end)
+
+  --- stop() fires compy.before_exit before it clears the handlers
+  it('stops when stop() is typed, and runs the hook it held',
+    function()
+      local tools = load_tools()
+      local hooked = false
+      tools.compy.before_exit = function() hooked = true end
+      tools.exec('f.lua')
+      board()
+      tools.compy.before_exit()
+      assert.truthy(said[#said]:find('it was stopped', 1, true))
+      assert.is_true(hooked)
+      assert.is_nil(port.onBytes)
+      assert.same({ true, false, true }, echoes)
+      assert.has_no_error(function() tools.exec('f.lua') end)
+    end)
+
+  it('leaves a handler something else has taken over', function()
+    local tools = load_tools()
+    tools.exec('f.lua')
+    board()
+    local other = function() end
+    port.onBytes = other
+    for _ = 1, 6 do serial:update(1) end
+    assert.equal(other, port.onBytes)
+    assert.is_nil(port.onTick)
+  end)
+
+  it('starts again after a stop cleared its handlers', function()
+    local tools = load_tools()
+    tools.exec('f.lua')
+    serial:programEnded()
+    assert.has_no_error(function() tools.exec('f.lua') end)
+    assert.equal(2, sent())
+  end)
+
+  it('holds upload back while it sends', function()
+    local tools = load_tools()
+    tools.exec('f.lua')
+    files['MICROBIT.hex'] = ':00000001FF\n'
+    assert.has_error(function() tools.upload() end)
+    assert.is_false(flashed)
   end)
 
   it('refuses while no board is connected', function()

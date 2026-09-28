@@ -63,15 +63,14 @@ end
 --- How long the board may say nothing before exec stops
 --- waiting on it
 local QUIET_S = 5
+--- How long the board must be quiet after the last line's
+--- prompt before it counts: what the program prints may end
+--- in "> " too
+local SETTLE_S = 0.2
 --- How often exec says how far it has got
 local PROGRESS_S = 3
-
---- The handlers exec sets while it sends, and puts back after
-local HANDLERS = {
-  "onBytes",
-  "onTick",
-  "onDisconnect"
-}
+local STOPPED = "the board stopped answering. Press its reset"
+    .. " button, then try again."
 
 --- The file exec is sending, while it sends
 local sending = nil
@@ -88,20 +87,27 @@ local function chunkLines(filename)
   return lines
 end
 
---- What the board said to the line in flight, once its prompt
---- has come after the line's echo, and whether that prompt
---- says the chunk is still open
---- @param heard string
+--- What the board has said since it echoed the line in flight
+--- and started a new line on taking it. What came before the
+--- echo, such as the greeting of a board just reset, is not
+--- the line's.
+--- @return string?
+local function afterEcho()
+  local line = sending.lines[sending.at]
+  local _, at = sending.heard:find(line .. "\r\r\n", 1, true)
+  if at then
+    return sending.heard:sub(at + 1)
+  end
+end
+
+--- The board's answer once its prompt has come, and whether
+--- that prompt says the chunk is still open
+--- @param after string
 --- @return string? said
 --- @return boolean? open
-local function reply(heard)
-  local _, echoed = heard:find("\r\n", 1, true)
-  if not echoed then
-    return
-  end
-  local rest = heard:sub(echoed + 1)
-  local open = rest:match("^(.*)>> $")
-  local said = open or rest:match("^(.*)> $")
+local function reply(after)
+  local open = after:match("^(.*)>> $")
+  local said = open or after:match("^(.*)> $")
   local whole = said == "" or (said and said:find("[\r\n]$"))
   if whole then
     return said, open ~= nil
@@ -120,7 +126,7 @@ local function asText(text)
   return text
 end
 
---- The board's answer, a line at a time
+--- The board's answer, a line at a time, blank lines left out
 --- @param said string
 local function show(said)
   local text = asText(said):gsub("\r\n?", "\n")
@@ -138,13 +144,24 @@ local function where()
       .name
 end
 
---- Put back what exec set aside, and say what happened. Echo
---- comes back on: what the board says from here on is shown.
+--- Put back what exec set aside, where its own handlers still
+--- are: something that took one over keeps it
+local function putBack()
+  for field, mine in pairs(sending.mine) do
+    if serial[field] == mine then
+      serial[field] = sending.kept[field]
+    end
+  end
+  if compy.before_exit == sending.stop then
+    compy.before_exit = sending.exit
+  end
+end
+
+--- Say what happened, and hand the board back. Echo comes back
+--- on: what the board says from here on is shown.
 --- @param outcome string
 local function finish(outcome)
-  for _, field in ipairs(HANDLERS) do
-    serial[field] = sending.kept[field]
-  end
+  putBack()
   sending = nil
   echo()
   print(outcome)
@@ -168,23 +185,33 @@ local function sendNext()
   end
 end
 
---- The board's bytes while exec sends: its prompt lets the
---- next line go. A prompt for a new statement before the
---- last line means the board ran the file before its end,
---- and the rest would reach it as statements of their own.
+--- A line's prompt lets the next line go. A prompt for a new
+--- statement before the last line means the board ran the file
+--- before its end, and the rest would reach it as statements
+--- of their own.
+--- @param said string
+--- @param open boolean
+local function answered(said, open)
+  show(said)
+  if open then
+    sendNext()
+  else
+    stopAt("the board ran the file before its end")
+  end
+end
+
+--- The board's bytes while exec sends. The last line's prompt
+--- is left to waiting, which lets the board settle first.
 --- @param chunk string
 local function hear(chunk)
   sending.heard = sending.heard .. chunk
   sending.quiet = 0
-  local said, open = reply(sending.heard)
-  local early = said and not open
-       and sending.at < #(sending.lines)
-  if early then
-    show(said)
-    stopAt("the board ran the file before its end")
-  elseif said then
-    show(said)
-    sendNext()
+  if sending.at == #(sending.lines) then
+    return
+  end
+  local said, open = reply(afterEcho() or "")
+  if said then
+    answered(said, open)
   end
 end
 
@@ -198,13 +225,31 @@ local function tell(dt)
   end
 end
 
---- The whole file is in and the board is still running it,
---- as a program that loops does: what it has said so far is
---- shown, and echo shows the rest as it comes
-local function handOver()
-  local _, echoed = sending.heard:find("\r\n", 1, true)
-  show(echoed and sending.heard:sub(echoed + 1) or "")
-  finish(sending.name .. " is running on the board")
+--- No prompt QUIET_S after the last line: once the board has
+--- taken it, the file is still running, as a program that
+--- loops is, and echo shows the rest as it comes
+--- @param after string?
+local function quietLast(after)
+  if after then
+    show(after)
+    finish(sending.name .. " is running on the board")
+  else
+    stopAt(STOPPED)
+  end
+end
+
+--- The last line runs the file: a prompt the board has been
+--- quiet after means the file has run
+local function lastLine()
+  local after = afterEcho()
+  local said = after and after:match("^(.*)> $")
+  local done = said and SETTLE_S <= sending.quiet
+  if done then
+    show(said)
+    finish(sending.name .. " is on the board and has run")
+  elseif QUIET_S < sending.quiet then
+    quietLast(after)
+  end
 end
 
 --- Time passing while exec waits on the board
@@ -212,14 +257,10 @@ end
 local function waiting(dt)
   tell(dt)
   sending.quiet = sending.quiet + dt
-  local last = sending.at == #(sending.lines)
-  if sending.quiet <= QUIET_S then
-    return
-  elseif last then
-    handOver()
-  else
-    stopAt("the board stopped answering. Press its reset" ..
-        " button, then try again.")
+  if sending.at == #(sending.lines) then
+    lastLine()
+  elseif QUIET_S < sending.quiet then
+    stopAt(STOPPED)
   end
 end
 
@@ -227,11 +268,31 @@ local function unplugged()
   stopAt("the board was unplugged")
 end
 
---- The handlers exec is about to replace
+--- stop(), or the project closing, while exec sends
+local function stopped()
+  local exit = sending.exit
+  stopAt("it was stopped")
+  if exit then
+    exit()
+  end
+end
+
+--- The handlers exec sets while it sends
 --- @return table
-local function setAside()
+local function handlers()
+  return {
+    onBytes = hear,
+    onTick = waiting,
+    onDisconnect = unplugged
+  }
+end
+
+--- The handlers found where exec is about to set its own
+--- @param mine table
+--- @return table
+local function setAside(mine)
   local kept = { }
-  for _, field in ipairs(HANDLERS) do
+  for field in pairs(mine) do
     kept[field] = serial[field]
   end
   return kept
@@ -241,14 +302,25 @@ end
 --- @param filename string
 --- @return table
 local function newSending(filename)
+  local mine = handlers()
   return {
     name = filename,
     lines = chunkLines(filename),
+    mine = mine,
+    kept = setAside(mine),
+    stop = stopped,
+    exit = compy.before_exit,
     at = 0,
-    kept = setAside(),
     quiet = 0,
     told = 0
   }
+end
+
+--- Whether an exec is still sending: a stop or a project run
+--- that cleared its handlers has ended it without a word
+--- @return boolean
+local function isSending()
+  return sending ~= nil and serial.onTick == waiting
 end
 
 --- Run a project file on the board as one chunk, wrapped in
@@ -257,12 +329,16 @@ end
 --- @param filename string
 function exec(filename)
   assert(serial.isConnected(), "no micro:bit connected")
-  local busy = sending and serial.onBytes == hear
-  assert(not busy, "exec is still sending a file")
+  assert(not isSending(), "exec is still sending a file")
+  if sending then
+    putBack()
+  end
   sending = newSending(filename)
   echo(false)
-  serial.onBytes, serial.onTick = hear, waiting
-  serial.onDisconnect = unplugged
+  for field, handler in pairs(sending.mine) do
+    serial[field] = handler
+  end
+  compy.before_exit = stopped
   sendNext()
 end
 
@@ -433,6 +509,7 @@ end
 function upload(filename)
   local name = filename or HEX
   local data = read(name)
+  assert(not isSending(), "exec is still sending a file")
   assert(detect_microbit(), "no micro:bit plugged in")
   compy.audio.hyperjump()
   local ok, err = flash_microbit(data)
