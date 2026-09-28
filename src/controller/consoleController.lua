@@ -404,6 +404,9 @@ function ConsoleController:flash_microbit(content)
   if not p then
     return false
   end
+  -- the board restarts with the new firmware, and what was
+  -- queued for the old one would be typed into its new REPL
+  SerialPort:drop()
   return p:flash_microbit(content)
 end
 

@@ -27,5 +27,8 @@ function NullBackend:send()
   return nil, 'no serial on this platform'
 end
 
+function NullBackend:drop()
+end
+
 function NullBackend:stop()
 end

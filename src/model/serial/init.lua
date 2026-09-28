@@ -7,6 +7,8 @@ require('model.serial.echo')
 ---                        sink.bytes(chunk)
 ---   backend:poll() -> nil | fault, one step per update
 ---   backend:send(data) -> true | nil, err
+---   backend:drop()       what send queued and has not
+---                        written yet goes
 ---   backend:stop()
 
 --- @class Serial
@@ -14,6 +16,7 @@ require('model.serial.echo')
 --- @field fault function
 --- @field table_for function
 --- @field send function
+--- @field drop function
 --- @field isConnected function
 --- @field programStarted function
 --- @field programIdle function
@@ -110,6 +113,14 @@ function Serial:send(line)
   return self.backend:send(line)
 end
 
+--- What was sent and has not left yet goes: the program that
+--- sent it has ended, or the board is about to take new
+--- firmware. Either way it would reach the board where it no
+--- longer makes sense, as lines typed into a fresh REPL.
+function Serial:drop()
+  self.backend:drop()
+end
+
 --- @return boolean
 function Serial:isConnected()
   return self.connected
@@ -140,8 +151,10 @@ function Serial:programContinued()
   self.dispatcher:resume_env('program')
 end
 
---- Stopped for good
+--- Stopped for good, and what it sent that has not left yet
+--- goes with it
 function Serial:programEnded()
+  self:drop()
   self.dispatcher:resume_env('program')
   self.dispatcher:clear_env('program')
   self.dispatcher:resume_env('console')

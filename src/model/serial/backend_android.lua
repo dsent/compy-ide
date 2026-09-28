@@ -406,9 +406,14 @@ function AndroidBackend:dropDevice()
   self.extras_told = false
 end
 
+--- What send queued and has not written yet goes
+function AndroidBackend:drop()
+  self.tx = ''
+end
+
 --- Called on detach and on stop
 function AndroidBackend:closePort(notify)
-  self.tx = ''
+  self:drop()
   if self.port then self:release(self.port) end
   jniDropGlobal(self.env, self.dev and self.dev.dev)
   self:dropDevice()

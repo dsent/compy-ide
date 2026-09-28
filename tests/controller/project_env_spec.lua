@@ -407,6 +407,46 @@ describe('ConsoleController project env #project', function()
       end)
   end)
 
+  --- Output queued for the board and not sent yet would reach
+  --- it where it no longer makes sense: after the program that
+  --- sent it, or in the REPL of new firmware
+  describe('unsent serial output #project', function()
+    local port, fake
+
+    --- the controller reads the IDE's global, not this file's
+    before_each(function()
+      require('model.serial.backend_fake')
+      port = _G.SerialPort
+      fake = FakeBackend.new()
+      _G.SerialPort = Serial.new(fake)
+    end)
+
+    after_each(function()
+      _G.SerialPort = port
+      love.state.app_state = 'ready'
+    end)
+
+    it('goes when the run stops', function()
+      CC:open_project('clock')
+      love.state.app_state = 'running'
+      local before = fake.drops
+      CC:stop_project_run()
+      assert.are.equal(before + 1, fake.drops)
+    end)
+
+    it('goes before a flash begins', function()
+      CC:open_project(ProjectService.DEFAULT)
+      local before = fake.drops
+      local at_flash
+      CC:get_current_project().flash_microbit = function()
+        at_flash = fake.drops
+        return true
+      end
+      assert.is_true(CC:flash_microbit(':data:'))
+      assert.are.equal(before + 1, at_flash)
+    end)
+  end)
+
   --- A module the project requires runs in the project's env;
   --- the env is new after every switch, so a module kept from
   --- before would leave its globals missing

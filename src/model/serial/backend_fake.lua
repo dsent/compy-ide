@@ -6,6 +6,7 @@
 --- @field start function
 --- @field poll function
 --- @field send function
+--- @field drop function
 --- @field stop function
 FakeBackend = {}
 FakeBackend.__index = FakeBackend
@@ -15,6 +16,7 @@ function FakeBackend.new()
   local self = setmetatable({}, FakeBackend)
   self.sink = nil
   self.sent = {}
+  self.drops = 0
   self.started = false
   return self
 end
@@ -40,6 +42,12 @@ function FakeBackend:send(data)
   end
   self.sent[#self.sent + 1] = data
   return true
+end
+
+--- send hands data to .sent at once, so nothing waits here;
+--- the drop is counted
+function FakeBackend:drop()
+  self.drops = self.drops + 1
 end
 
 function FakeBackend:stop()
