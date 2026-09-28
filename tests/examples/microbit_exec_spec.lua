@@ -273,20 +273,20 @@ describe('micro:bit exec #microbit', function()
     assert.is_false(flashed)
   end)
 
-  it('restart restarts the board', function()
+  it('restart_microbit restarts the board', function()
     local tools = load_tools()
-    tools.restart()
+    tools.restart_microbit()
     assert.equal(1, backend.resets)
     assert.truthy(said[#said - 1]:find('restarts', 1, true))
   end)
 
-  it('restart stops an exec first, with what was queued',
+  it('restart_microbit stops an exec first, with what was queued',
     function()
       local tools = load_tools()
       tools.exec('f.lua')
       board()
       said = {}
-      tools.restart()
+      tools.restart_microbit()
       assert.equal(1, backend.resets)
       assert.equal(1, backend.drops)
       assert.truthy(said[1]:find('the board was restarted', 1,
@@ -295,21 +295,21 @@ describe('micro:bit exec #microbit', function()
       assert.is_nil(port.onTick)
     end)
 
-  it('restart says to press the button when refused', function()
+  it('restart_microbit says to press the button when refused', function()
     local tools = load_tools()
     backend.refuse = 'break -1'
-    local ok, err = pcall(tools.restart)
+    local ok, err = pcall(tools.restart_microbit)
     assert.is_false(ok)
     assert.truthy(tostring(err):find('reset button', 1, true))
   end)
 
-  it('a board that stops answering points to restart', function()
+  it('a board that stops answering points to restart_microbit', function()
     local tools = load_tools()
     tools.exec('f.lua')
     board()
     said = {}
     for _ = 1, 6 do serial:update(1) end
-    assert.truthy(said[#said]:find('restart()', 1, true))
+    assert.truthy(said[#said]:find('restart_microbit()', 1, true))
   end)
 
   it('refuses while no board is connected', function()
@@ -317,7 +317,7 @@ describe('micro:bit exec #microbit', function()
     backend:detach()
     serial:update(0)
     assert.has_error(function() tools.exec('f.lua') end)
-    assert.has_error(function() tools.restart() end)
+    assert.has_error(function() tools.restart_microbit() end)
     assert.equal(0, sent())
     assert.equal(0, backend.resets)
   end)

@@ -51,8 +51,10 @@ local ACM_LINE_CODING = 0x20
 local ACM_LINE_STATE = 0x22
 local ACM_DTR_AND_RTS = 0x03
 local ACM_SEND_BREAK = 0x23
---- The break's length. The micro:bit's USB chip resets the
---- board when a break arrives.
+--- The micro:bit's USB chip (DAPLink) holds the board in
+--- reset from a break's start and lets it go at its end, a
+--- break of length 0. Held for 3 s or more, the board
+--- restarts and sends its unique ID instead of its greeting.
 local BREAK_MS = 100
 local PERMISSION_S = 60
 local SCAN_S = 1
@@ -415,20 +417,29 @@ function AndroidBackend:drop()
   self.tx = ''
 end
 
---- The board restarts, as its reset button makes it: a
---- break down the cable, which the micro:bit's USB chip
---- answers with a reset
+--- A break of the given length, 0 to end one
+--- @param ms integer
+--- @return integer rc
+function AndroidBackend:sendBreak(ms)
+  return jniCallInt(self.env, self.port.conn,
+    self.port.ctrlM, ACM_CLASS_IFACE, ACM_SEND_BREAK, ms,
+    self.port.commId, nil, 0, CTRL_MS)
+end
+
+--- The board restarts, as its reset button makes it: a break
+--- down the cable, then its end, which the micro:bit's USB
+--- chip answers with a reset. The end goes even when the
+--- start was refused, so the board is never left held.
 --- @return boolean? ok
 --- @return string? err
 function AndroidBackend:reset()
   if self.state ~= 'open' then
     return nil, 'no device connected'
   end
-  local rc = jniCallInt(self.env, self.port.conn,
-    self.port.ctrlM, ACM_CLASS_IFACE, ACM_SEND_BREAK, BREAK_MS,
-    self.port.commId, nil, 0, CTRL_MS)
-  if rc < 0 then
-    return nil, 'break ' .. rc
+  local rc = self:sendBreak(BREAK_MS)
+  local rc2 = self:sendBreak(0)
+  if rc < 0 or rc2 < 0 then
+    return nil, 'break ' .. rc .. ', end ' .. rc2
   end
   return true
 end

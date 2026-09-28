@@ -69,8 +69,8 @@ local QUIET_S = 5
 local SETTLE_S = 0.2
 --- How often exec says how far it has got
 local PROGRESS_S = 3
-local STOPPED = "the board stopped answering. Type restart(),"
-    .. " then try again."
+local STOPPED = "the board stopped answering. Type"
+    .. " restart_microbit(), then try again."
 
 --- The file exec is sending, while it sends
 local sending = nil
@@ -354,7 +354,7 @@ local NO_RESTART = "the micro:bit did not restart. Press its"
 --- touching it: the way back from a board that no longer
 --- reads what it is sent, stuck in a loop or in listen(). An
 --- exec still sending stops first.
-function restart()
+function restart_microbit()
   assert(serial.isConnected(), "no micro:bit connected")
   if isSending() then
     stopAt("the board was restarted")
@@ -558,7 +558,7 @@ local COMMANDS = {
   "embed(hex, lua)         a script into a new hex",
   "compile(lua, hex)       files into one, then into a hex",
   "upload(hex)             a hex file onto the board",
-  "restart()               the board starts again, as its",
+  "restart_microbit()      the board starts again, as its",
   "                        reset button makes it"
 }
 
