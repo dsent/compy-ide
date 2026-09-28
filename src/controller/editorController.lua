@@ -1561,7 +1561,12 @@ function EditorController:keypressed(k)
     --- dialogs are repeat-proof by construction: the
     --- confirming key differs from the invoking one, so
     --- key repeat lands on the idempotent cancel.
-    --- Enter or Space confirms, everything else cancels
+    --- Enter or Space confirms, a modifier on its own
+    --- waits for the key it goes with, everything else
+    --- cancels
+    if Key.is_mod(k) then
+      return
+    end
     if Key.is_enter(k) or k == 'space' then
       local act = self.pending_confirm
       self.pending_confirm = nil
