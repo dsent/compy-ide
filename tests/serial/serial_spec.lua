@@ -303,3 +303,27 @@ describe('Serial ticks', function()
     assert.same({ console = 0, program = 1 }, ticks)
   end)
 end)
+
+describe('Serial tick faults', function()
+  it('take a failing tick handler off after one error', function()
+    local s = make()
+    local t = s:table_for('console')
+    t.onTick = function() error('boom') end
+    local errors = s:update(0.1)
+    assert.same(1, #errors)
+    assert.truthy(errors[1].err:find('onTick is taken off', 1, true))
+    assert.is_nil(t.onTick)
+    assert.same(0, #s:update(0.1))
+  end)
+
+  it('keep a failing bytes handler', function()
+    local s, b = make()
+    local t = s:table_for('console')
+    local fail = function() error('boom') end
+    t.onBytes = fail
+    b:attach()
+    b:rx('x')
+    s:update(0)
+    assert.equal(fail, t.onBytes)
+  end)
+end)

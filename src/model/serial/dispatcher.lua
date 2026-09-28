@@ -86,6 +86,19 @@ function Dispatcher:push(event, arg)
   self.queue[#self.queue + 1] = { event = event, arg = arg }
 end
 
+--- A tick comes every update, so a tick handler that fails
+--- would fail every update: it is taken off after its first
+--- error, and the error says so
+--- @param t table
+--- @param field string
+--- @param e any
+--- @return any
+local function failed(t, field, e)
+  if field ~= FIELDS.tick then return e end
+  t[field] = nil
+  return tostring(e) .. ' (onTick is taken off)'
+end
+
 --- Run queued events through the current field values, in
 --- order. Anything pushed from a handler waits for the next
 --- pump.
@@ -102,7 +115,8 @@ function Dispatcher:pump()
         if type(fn) == 'function' then
           local ok, e = pcall(fn, ev.arg)
           if not ok then
-            errors[#errors + 1] = { env = env, err = e }
+            errors[#errors + 1] =
+                { env = env, err = failed(t, field, e) }
           end
         end
       end
