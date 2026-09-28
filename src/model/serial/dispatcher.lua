@@ -88,13 +88,16 @@ end
 
 --- A tick comes every update, so a tick handler that fails
 --- would fail every update: it is taken off after its first
---- error, and the error says so
+--- error, and the error says so. One that put another handler
+--- in its place before failing leaves that one there.
 --- @param t table
 --- @param field string
+--- @param fn function --- the handler that failed
 --- @param e any
 --- @return any
-local function failed(t, field, e)
-  if field ~= FIELDS.tick then return e end
+local function failed(t, field, fn, e)
+  local still = field == FIELDS.tick and t[field] == fn
+  if not still then return e end
   t[field] = nil
   return tostring(e) .. ' (onTick is taken off)'
 end
@@ -116,7 +119,7 @@ function Dispatcher:pump()
           local ok, e = pcall(fn, ev.arg)
           if not ok then
             errors[#errors + 1] =
-                { env = env, err = failed(t, field, e) }
+                { env = env, err = failed(t, field, fn, e) }
           end
         end
       end

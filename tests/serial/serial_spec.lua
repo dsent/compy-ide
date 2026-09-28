@@ -316,6 +316,19 @@ describe('Serial tick faults', function()
     assert.same(0, #s:update(0.1))
   end)
 
+  it('keep the handler a failing one put in its place',
+    function()
+      local s = make()
+      local t = s:table_for('console')
+      local next_tick = function() end
+      t.onTick = function()
+        t.onTick = next_tick
+        error('boom')
+      end
+      s:update(0.1)
+      assert.equal(next_tick, t.onTick)
+    end)
+
   it('keep a failing bytes handler', function()
     local s, b = make()
     local t = s:table_for('console')
