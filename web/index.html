@@ -13,6 +13,9 @@
 </head>
 
 <body class="noscroll">
+  <div id="storageNote" hidden style="position: fixed; top: 0; left: 0;
+    right: 0; z-index: 10; padding: 0.6em; background: #fff3b0;
+    color: #000; font: 16px sans-serif; text-align: center;"></div>
   <center>
     <div class="container">
       <div>
@@ -86,6 +89,161 @@
       }
     }, false);
 
+    // The save directory lives in the browser's IndexedDB. love.js,
+    // patched at packaging (web/patch-love.mjs), hands the filesystem to
+    // storeInBrowser. One tab of a browser holds the 'compy-storage' Web
+    // Lock and keeps work: it loads storage under the lock, saves half a
+    // second after a change, when hidden, and every minute, one save at a
+    // time, and warns before closing while a save is due. Any other tab,
+    // and a page without Web Locks (plain http off this computer), loads
+    // storage but never saves, and says so.
+    function storeInBrowser(FS) {
+      var root = '/home/web_user/love';
+      var loaded = false, writer = false;
+      var saving = false, again = false, due = false, timer = null;
+      var release = null;
+
+      // Fullscreen shows only the canvas, which would hide a notice
+      function keepNoticeInView() {
+        var note = document.getElementById('storageNote');
+        if (!note.hidden && document.fullscreenElement &&
+            document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      }
+      document.addEventListener('fullscreenchange', keepNoticeInView);
+      function tell(text) {
+        var note = document.getElementById('storageNote');
+        note.textContent = text;
+        note.hidden = !text;
+        keepNoticeInView();
+      }
+      function save() {
+        if (!loaded || !writer) return;
+        if (saving) { again = true; return; }
+        saving = true;
+        due = false;
+        FS.syncfs(false, function (err) {
+          saving = false;
+          if (err) {
+            due = true;
+            Module.printErr(err);
+            tell('Compy could not save to this browser, so your latest ' +
+              'work is not kept yet. It keeps trying. If this stays, the ' +
+              'browser may be out of space for this page.');
+          } else if (writer) {
+            tell('');
+          }
+          if (again) { again = false; save(); }
+        });
+      }
+      // The absolute, normalized path of a path or a node, '' for none
+      function absolute(path) {
+        try {
+          var full = typeof path === 'string'
+            ? (path.charAt(0) === '/' ? path : FS.cwd() + '/' + path)
+            : FS.getPath(path.node || path);
+          var parts = [];
+          full.split('/').forEach(function (part) {
+            if (part === '..') parts.pop();
+            else if (part && part !== '.') parts.push(part);
+          });
+          return '/' + parts.join('/');
+        } catch (e) {
+          return '';
+        }
+      }
+      function changed(path) {
+        path = absolute(path);
+        if (!writer || (path !== root && path.indexOf(root + '/') !== 0)) return;
+        due = true;
+        clearTimeout(timer);
+        timer = setTimeout(save, 500);
+      }
+      function watch() {
+        var hooks = FS.trackingDelegate;
+        hooks.onWriteToFile = changed;
+        hooks.onDeletePath = changed;
+        hooks.onMovePath = function (from, to) { changed(from); changed(to); };
+        ['mkdir', 'truncate', 'rmdir'].forEach(function (name) {
+          var original = FS[name];
+          FS[name] = function (path) {
+            var result = original.apply(FS, arguments);
+            changed(path);
+            return result;
+          };
+        });
+        setInterval(save, 60000);
+      }
+      function stopWriting(text) {
+        writer = false;
+        tell(text);
+      }
+      function load() {
+        FS.syncfs(true, function (err) {
+          if (err) {
+            Module.printErr(err);
+            tell('Compy could not read your saved work from this ' +
+              'browser. Reload the page to try again.');
+            if (release) release();
+            return;
+          }
+          loaded = true;
+          if (writer) watch();
+          Module.removeRunDependency('IDBFS_sync');
+        });
+      }
+
+      if (!navigator.locks) {
+        tell(window.isSecureContext
+          ? 'This browser cannot keep your work in Compy. Open Compy in ' +
+            'a recent Chrome, Edge, Firefox or Safari.'
+          : 'This page cannot keep your work, because its address does ' +
+            'not start with https. Ask whoever set up this Compy page to ' +
+            'serve it over https.');
+        load();
+      } else {
+        navigator.locks.request('compy-storage', { ifAvailable: true },
+          function (lock) {
+            if (!lock) {
+              tell('Compy is open in another tab or window of this ' +
+                'browser, so nothing you do here is kept. Carry on in the ' +
+                'other one, or close it and reload this page, which ' +
+                'starts again from what the other one kept.');
+              load();
+              return;
+            }
+            writer = true;
+            var held = new Promise(function (resolve) { release = resolve; });
+            load();
+            return held;
+          }).catch(function () {
+            stopWriting('Compy stopped keeping your work in this tab. ' +
+              'Reload the page to carry on.');
+          });
+      }
+
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') save();
+      });
+      window.addEventListener('pagehide', function (event) {
+        save();
+        // A page kept for the back button gives up its lock
+        if (event.persisted) stopWriting('');
+      });
+      window.addEventListener('pageshow', function (event) {
+        if (event.persisted) location.reload();
+      });
+      window.addEventListener('beforeunload', function (event) {
+        var atRisk = writer && (due || saving || again);
+        save();
+        if (atRisk) {
+          event.preventDefault();
+          event.returnValue = '';
+        }
+      });
+    }
+
     var Module = {
       arguments: ["./"],
       INITIAL_MEMORY: 67108864,
@@ -116,6 +274,7 @@
         Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies - left) + '/' + this.totalDependencies + ')' : 'All downloads complete.');
       }
     };
+    Module.compyStorage = storeInBrowser;
     Module.setStatus('Downloading...');
     window.onerror = function (event) {
       Module.setStatus('Exception thrown, see JavaScript console');

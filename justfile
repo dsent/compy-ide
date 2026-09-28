@@ -173,7 +173,8 @@ package-js-dir DT: version
   [[ $WEB =~ "-c" ]] && C='-c'
   pushd web &> /dev/null
   npx love.js $C ../src ../$WEB \
-    --title "{{PRODUCT_NAME}}" --memory 67108864
+    --title "{{PRODUCT_NAME}}" --memory 67108864 || exit 1
+  node patch-love.mjs ../$WEB/love.js || exit 1
   popd &> /dev/null
   test -f $WEB/{{FAVI}} || \
     cp -f res/"{{PRODUCT_NAME_SC}}".ico $WEB/{{FAVI}}
