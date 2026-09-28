@@ -99,16 +99,22 @@ end
 --- @param s string
 --- @param press function?
 --- @param hold boolean?
---- @param opts table?  e.g. {isrepeat=true, scancode='a'}
+--- @param opts table?  e.g. {isrepeat=true, scancode='a'};
+--- mod_press=true also delivers each modifier's own
+--- keypressed as it goes down, as LÖVE does
 local function keystroke(s, press, hold, opts)
   local isrepeat = opts and opts.isrepeat or false
   local scancode = opts and opts.scancode or ''
+  local mod_press = opts and opts.mod_press or false
   local keypress = press or love.keypressed
   local ks = string.split(s, '-')
   for _, v in ipairs(ks) do
     local m = mods[v]
     if m then
       held[m] = true
+      if mod_press then
+        keypress(m, scancode, isrepeat)
+      end
     else
       keypress(v, scancode, isrepeat)
     end

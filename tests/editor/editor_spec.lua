@@ -766,6 +766,22 @@ describe('Editor #editor', function()
           assert.is_nil(controller.pending_confirm)
         end)
 
+      it('a modifier on its own leaves the discard ask open',
+        function()
+          local bare = { mod_press = true }
+          mock.keystroke('return', press)
+          controller.input:set_text({ 'x = 1' })
+          mock.keystroke('S-escape', press)
+          mock.keystroke('S', press, false, bare)
+          mock.keystroke('C', press, false, bare)
+          mock.keystroke('M', press, false, bare)
+          assert.same('discard', controller.pending_confirm)
+          assert.is_true(controller.input:has_error())
+          --- Shift+Enter still confirms
+          mock.keystroke('S-return', press, false, bare)
+          assert.same('nav', controller:get_mode())
+        end)
+
       it('a broken draft discards without the pair',
         function()
           local orig = string.unlines(
@@ -1368,6 +1384,30 @@ describe('Editor #editor', function()
         assert.same({}, calls)
         assert.is_true(inter:has_error())
       end)
+
+      it('a modifier on its own leaves the question open',
+        function()
+          local bare = { mod_press = true }
+          cp_time = 1752400000
+          mock.keystroke('C-k', press)
+          mock.keystroke('S', press, false, bare)
+          mock.keystroke('rctrl', press, false, bare)
+          assert.same('overwrite', controller.pending_confirm)
+          mock.keystroke('return', press)
+          assert.same({ 'write:main.lua' }, calls)
+        end)
+
+      it('a modifier on its own leaves the restore open',
+        function()
+          local bare = { mod_press = true }
+          cp_time = 1752400000
+          mock.keystroke('C-S-k', press)
+          mock.keystroke('C', press, false, bare)
+          mock.keystroke('rshift', press, false, bare)
+          assert.same('restore', controller.pending_confirm)
+          mock.keystroke('space', press)
+          assert.same({ 'restore:main.lua' }, calls)
+        end)
 
       it('restore asks and reloads the buffer', function()
         cp_time = 1752400000
