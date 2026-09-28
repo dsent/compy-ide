@@ -86,21 +86,28 @@ else
 end
 print("[Ctrl+R restarts the micro:bit]")
 
+-- What to do when the board does not come back by itself
+local BUTTON = "press its reset button, on the back next to" ..
+    " the USB socket"
+
 -- The way back from a board that no longer reads what is
 -- typed, stuck in a loop or in listen(): it restarts, as its
 -- reset button makes it, and greets you again.
+--- @return string what to tell
+local function restartBoard()
+  if not serial.isConnected() then
+    return "[plug the micro:bit in]"
+  end
+  if serial.reset() then
+    return "[restarting the micro:bit: if it does not greet" ..
+        " you within a minute, " .. BUTTON .. "]"
+  end
+  return "[the micro:bit did not restart: " .. BUTTON .. "]"
+end
+
 compy.input.shortcuts.keypressed["ctrl+r"] = function()
   tail = ""
-  if not serial.isConnected() then
-    print("[plug the micro:bit in]")
-  elseif serial.reset() then
-    print("[restarting the micro:bit: if it does not greet you"
-      .. " within a minute, press its reset button, on the back"
-      .. " next to the USB socket]")
-  else
-    print("[the micro:bit did not restart: press its reset"
-      .. " button, on the back next to the USB socket]")
-  end
+  print(restartBoard())
   return true
 end
 

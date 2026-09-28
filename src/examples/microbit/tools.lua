@@ -69,8 +69,8 @@ local QUIET_S = 5
 local SETTLE_S = 0.2
 --- How often exec says how far it has got
 local PROGRESS_S = 3
-local STOPPED = "the board stopped answering. Type"
-    .. " restart_microbit(), then try again."
+local STOPPED = "the board stopped answering. Type" ..
+    " restart_microbit(), then try again."
 
 --- The file exec is sending, while it sends
 local sending = nil
@@ -362,7 +362,7 @@ function restart_microbit()
   local restarted = serial.reset()
   if isSending() then
     stopAt(restarted and "the board was restarted"
-      or "the board did not restart")
+         or "the board did not restart")
   end
   echo()
   assert(restarted, NO_RESTART)
@@ -553,6 +553,8 @@ end
 
 -- help --------------------------------------------------------
 
+--- The commands for the board itself, then those for its
+--- firmware
 local COMMANDS = {
   "help()                  this list",
   "echo(on)                board output in the console;",
@@ -561,18 +563,24 @@ local COMMANDS = {
   "send(filename)          file to the board, as typed",
   "exec(filename)          file to the board a line at a",
   "                        time, run as one chunk",
+  "restart_microbit()      the board starts again, as its",
+  "                        reset button makes it"
+}
+
+local FIRMWARE = {
   "hexmap(hex)             what a hex file holds",
   "extract(hex, lua)       its script out to a file",
   "embed(hex, lua)         a script into a new hex",
   "compile(lua, hex)       files into one, then into a hex",
-  "upload(hex)             a hex file onto the board",
-  "restart_microbit()      the board starts again, as its",
-  "                        reset button makes it"
+  "upload(hex)             a hex file onto the board"
 }
 
 function help()
   print("micro:bit tools")
   for _, line in ipairs(COMMANDS) do
+    print("  " .. line)
+  end
+  for _, line in ipairs(FIRMWARE) do
     print("  " .. line)
   end
   print("")
