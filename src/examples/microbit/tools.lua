@@ -364,8 +364,8 @@ function restart_microbit()
     stopAt(restarted and "the board was restarted"
       or "the board did not restart")
   end
-  assert(restarted, NO_RESTART)
   echo()
+  assert(restarted, NO_RESTART)
   print("The micro:bit restarts, and greets you when it")
   print("is ready. If it does not within a minute, press")
   print("its reset button, on the back next to the USB")

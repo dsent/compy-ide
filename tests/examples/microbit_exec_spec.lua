@@ -306,6 +306,15 @@ describe('micro:bit exec #microbit', function()
       assert.is_nil(port.onTick)
     end)
 
+  it('a refused restart_microbit still turns echo on', function()
+    local tools = load_tools()
+    tools.echo(false)
+    echoes = {}
+    backend.refuse = 'break -1, end -1'
+    assert.has_error(function() tools.restart_microbit() end)
+    assert.same({ true }, echoes)
+  end)
+
   it('restart_microbit refused while exec sends says so',
     function()
       local tools = load_tools()
