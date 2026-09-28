@@ -254,6 +254,18 @@ describe('micro:bit exec #microbit', function()
     assert.is_false(flashed)
   end)
 
+  it('upload says which firmware it put on the board', function()
+    local tools = load_tools()
+    local hex = require('examples.microbit.hex')
+    files['v.hex'] = hex.write({ {
+      addr = 0,
+      data = 'microbit-lua firmware abc1234\0',
+    } })
+    tools.upload('v.hex')
+    assert.is_true(flashed)
+    assert.equal('Its firmware: abc1234', said[#said])
+  end)
+
   it('refuses while no board is connected', function()
     local tools = load_tools()
     backend:detach()

@@ -26,6 +26,23 @@ describe('micro:bit hex files #microbit', function()
       end, 'bad hex record')
     end)
 
+  it('reads the version the firmware keeps after its mark',
+    function()
+      local blocks = { {
+        addr = 0,
+        data = 'xx microbit-lua firmware 86c8e16-drift\0yy',
+      } }
+      assert.are.equal('86c8e16-drift', hex.version(blocks))
+    end)
+
+  it('reads no version from firmware built before the mark',
+    function()
+      local f = assert(io.open('src/examples/microbit/MICROBIT.hex'))
+      local shipped = f:read('*a')
+      f:close()
+      assert.is_nil(hex.version(hex.parse(shipped)))
+    end)
+
   it('refuses a record shorter than its count', function()
     assert.has_error(function()
       hex.parse(':0400000000FF\n')

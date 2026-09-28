@@ -511,6 +511,7 @@ end
 function upload(filename)
   local name = filename or HEX
   local data = read(name)
+  local version = hex.version(hex.parse(data))
   assert(not isSending(), "exec is still sending a file")
   assert(detect_microbit(), "no micro:bit plugged in")
   compy.audio.hyperjump()
@@ -518,6 +519,7 @@ function upload(filename)
   assert(ok, err)
   print(name .. " is sent. The micro:bit's light blinks")
   print("while it writes it, then it restarts with it.")
+  print("Its firmware: " .. (version or "too old to say"))
 end
 
 -- help --------------------------------------------------------

@@ -10,6 +10,9 @@ local hex = { }
 local ROW = 16
 -- "LUA1", least significant byte first
 local MAGIC = "1AUL"
+-- The firmware keeps its version after this text, ended by a
+-- zero byte
+local VERSION_MARK = "microbit-lua firmware "
 
 --- Two hex digits as the byte they spell
 --- @param pair string
@@ -348,6 +351,19 @@ function hex.embed(blocks, script)
   local block, at = hex.at(blocks, meta.start)
   block.data = block.data:sub(1, at - 1) .. script
   restate(blocks, addr, meta.start + #script, #script)
+end
+
+--- The version of the firmware a hex file holds, or nil for
+--- one built before the firmware carried it
+--- @param blocks table[]
+--- @return string?
+function hex.version(blocks)
+  for _, block in ipairs(blocks) do
+    local _, at = block.data:find(VERSION_MARK, 1, true)
+    if at then
+      return block.data:match("^[^%z]*", at + 1)
+    end
+  end
 end
 
 return hex
