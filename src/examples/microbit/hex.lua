@@ -36,6 +36,22 @@ local function bodyOf(line, count)
   return body
 end
 
+--- The checksum byte of a record
+--- @param addr integer
+--- @param kind integer
+--- @param body string
+--- @return integer
+local function sum_of(addr, kind, body)
+  local sum = #body + math.floor(addr / 256) + addr % 256 + kind
+  for i = 1, #body do
+    sum = sum + body:byte(i)
+  end
+  return (-sum) % 256
+end
+
+--- One record: what kind it is, where its bytes go, and the
+--- bytes. Its checksum must agree, so a file damaged on the way
+--- is refused before any of it reaches the board.
 local function record(line)
   if line:sub(1, 1) ~= ":" then
     return
@@ -45,6 +61,9 @@ local function record(line)
   local kind = tonumber(line:sub(8, 9), 16)
   assert(count and addr and kind, "bad hex record")
   local body = bodyOf(line, count)
+  local at = 10 + count * 2
+  local sum = tonumber(line:sub(at, at + 1), 16)
+  assert(sum == sum_of(addr, kind, body), "bad hex checksum")
   return kind, addr, body
 end
 
@@ -121,19 +140,6 @@ function hex.parse(text)
     end
   end
   return settle(gathered)
-end
-
---- The checksum byte of a record
---- @param addr integer
---- @param kind integer
---- @param body string
---- @return integer
-local function sum_of(addr, kind, body)
-  local sum = #body + math.floor(addr / 256) + addr % 256 + kind
-  for i = 1, #body do
-    sum = sum + body:byte(i)
-  end
-  return (-sum) % 256
 end
 
 -- Every byte as the two digits that spell it, looked up

@@ -263,7 +263,14 @@ describe('micro:bit exec #microbit', function()
     } })
     tools.upload('v.hex')
     assert.is_true(flashed)
-    assert.equal('Its firmware: abc1234', said[#said])
+    assert.equal('v.hex holds firmware abc1234', said[#said])
+  end)
+
+  it('upload refuses a damaged hex before flashing', function()
+    local tools = load_tools()
+    files['bad.hex'] = ':00000001FE\n'
+    assert.has_error(function() tools.upload('bad.hex') end)
+    assert.is_false(flashed)
   end)
 
   it('refuses while no board is connected', function()

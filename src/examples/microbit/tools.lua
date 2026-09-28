@@ -519,7 +519,8 @@ function upload(filename)
   assert(ok, err)
   print(name .. " is sent. The micro:bit's light blinks")
   print("while it writes it, then it restarts with it.")
-  print("Its firmware: " .. (version or "too old to say"))
+  print(name .. " holds firmware " ..
+    (version or "too old to say its version"))
 end
 
 -- help --------------------------------------------------------

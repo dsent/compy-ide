@@ -43,6 +43,12 @@ describe('micro:bit hex files #microbit', function()
       assert.is_nil(hex.version(hex.parse(shipped)))
     end)
 
+  it('refuses a record whose checksum does not agree', function()
+    assert.has_error(function()
+      hex.parse(':00000001FE\n')
+    end, 'bad hex checksum')
+  end)
+
   it('refuses a record shorter than its count', function()
     assert.has_error(function()
       hex.parse(':0400000000FF\n')
