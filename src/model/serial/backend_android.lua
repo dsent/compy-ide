@@ -666,6 +666,12 @@ function AndroidBackend:dap()
   if not self.port.storageTaken then
     return nil, 'drive not held'
   end
+  -- a link that broke stays broken until the board opens
+  -- again, as a replug makes it
+  if self.port.link.fault then
+    return nil, 'CMSIS-DAP link broken: '
+        .. tostring(self.port.link.fault)
+  end
   return self.port.link
 end
 

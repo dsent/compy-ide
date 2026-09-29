@@ -121,10 +121,10 @@ function DapFlash:fail(plain, why)
   if self.state ~= 'running' then return end
   self.state = 'failed'
   self.log(string.format('FAILED in phase %s after %.3f s,'
-    .. ' %d of %d bytes taken: %s', self.phase,
-    self.clock() - self.started,
+    .. ' %d of %d bytes taken, %d of %d chunks accepted: %s',
+    self.phase, self.clock() - self.started,
     math.min(self.acked * Dap.CHUNK, #self.data),
-    #self.data, why))
+    #self.data, self.accepted, self.chunks, why))
   self.say('The micro:bit did not take the file. ' .. plain)
   self:mayBeGone()
 end
@@ -348,6 +348,11 @@ end
 function DapFlash:closed(status)
   self.statuses.close = self:name(status)
   self.log('close: ' .. self:name(status))
+  -- a stop waits for this answer itself (abandon)
+  if self.stopping then
+    self.stopping.close = status
+    return
+  end
   if status ~= Dap.SUCCESS then
     return self:fail(Dap.plain(status),
       'close ' .. self:name(status))
@@ -501,14 +506,61 @@ function DapFlash:account(dt, spent, waited, sent)
     waited = 0, sent = 0 }
 end
 
+DapFlash.TOOK = 'The micro:bit took the file. ' .. RESET_NOTE
+
+--- A stop that finds the chip with the whole file: the flash
+--- is done, and only the board's restart is left undone
+--- @param plain string? said when given, as for a failure
+--- @return boolean true
+function DapFlash:tookOnStop(plain)
+  self.state = 'done'
+  self.log(string.format('DONE on stop in phase %s after %.3f s,'
+    .. ' close %s', self.phase, self.clock() - self.started,
+    tostring(self.statuses.close)))
+  if plain then self.say(DapFlash.TOOK) end
+  return true
+end
+
 --- The flash stops where it is: close the stream, waiting at
 --- most `seconds` in all, so the chip is not left with it
 --- open. With `plain`, the verdict is said in those words;
---- without, only the log has it.
+--- without, only the log has it. A chip that already has the
+--- whole file makes it a success, said in its own words.
 --- @param seconds number
 --- @param plain string?
+--- @return boolean? took the board has the whole file
 function DapFlash:abandon(seconds, plain)
   if self.state ~= 'running' then return end
+  local link = self.link
+  local deadline = self.clock() + seconds
+  local function left()
+    return math.floor((deadline - self.clock()) * 1000)
+  end
+  -- the chip has the whole file once it closed the stream as
+  -- done (phase reset), or when it does so now: the end of
+  -- the file was reported, and the close goes, or has gone,
+  -- before the stop
+  if self.phase == 'close' then
+    self.stopping = {}
+    if self.mayBeOpen then
+      while link:room() == 0 and not link.fault and left() > 0 do
+        link:pump(left())
+      end
+      self.mayBeOpen = false
+      link:send(Dap.packet(Dap.CLOSE), function(raw)
+        self:closed(statusOf(Dap.CLOSE, raw))
+      end)
+    end
+    while self.stopping.close == nil and not link.fault
+        and left() > 0 do
+      link:pump(left())
+    end
+    if self.stopping.close == Dap.SUCCESS then
+      return self:tookOnStop(plain)
+    end
+  elseif self.phase == 'reset' then
+    return self:tookOnStop(plain)
+  end
   if plain then
     self.say('The micro:bit did not take the file. ' .. plain)
     self:mayBeGone()
@@ -516,17 +568,12 @@ function DapFlash:abandon(seconds, plain)
   self.state = 'failed'
   self.log(string.format('ABANDONED in phase %s, %d of %d'
     .. ' chunks answered', self.phase, self.acked, self.chunks))
-  local link = self.link
   -- a close with no stream open trips an assert in the chip,
   -- which it keeps and shows on its drive; an OPEN goes only
   -- once the link is in step
   if not self.mayBeOpen then
     self.log('close on stop: no stream open')
     return
-  end
-  local deadline = self.clock() + seconds
-  local function left()
-    return math.floor((deadline - self.clock()) * 1000)
   end
   while link:room() == 0 and not link.fault and left() > 0 do
     link:pump(left())

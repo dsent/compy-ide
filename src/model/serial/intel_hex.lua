@@ -27,9 +27,11 @@ local LONGEST = 1 + 2 * (255 + 5)
 --- Blanks a line may carry after its record
 local TRAILING = 256
 
---- Blanks (space, tab, CR, LF, VT, FF) and NUL
+--- Blanks (space, tab, CR, LF, VT, FF), NUL, and the DOS
+--- end-of-file byte 0x1A some tools write after the end record
 local BLANK = { [0] = true, [9] = true, [10] = true,
-  [11] = true, [12] = true, [13] = true, [32] = true }
+  [11] = true, [12] = true, [13] = true, [26] = true,
+  [32] = true }
 
 --- A line without the blanks at its end, read from the end
 --- byte by byte

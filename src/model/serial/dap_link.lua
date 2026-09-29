@@ -26,6 +26,13 @@ require('model.serial.dap')
 --- back, everything left from before has come out ahead of
 --- it, and the full DEPTH is open. Until then room() is 0.
 ---
+--- Replies are matched by their command byte alone. A reply
+--- left from a run before could still be taken for one of
+--- this run's only if that run died while the chip was still
+--- erasing and a second died inside the drain's DRAIN_S of
+--- quiet; the drain's quiet is kept short, since every board
+--- open waits it out.
+---
 --- The io is { submit(endpoint, data|size) -> ok, err,
 --- reap() -> done | nil | nil, err, wait(ms) -> ready },
 --- see Usbfs.

@@ -977,6 +977,45 @@ describe('DapFlash', function()
       assert.same(0, chip.drops)
     end)
 
+  --- the chip has the whole file once it reported the end of
+  --- the file and closed the stream as done: a stop then is a
+  --- success, said in its own words
+  local function stepTo(j, chip, phase)
+    for _ = 1, 20000 do
+      if j.phase == phase or j.state ~= 'running' then break end
+      j:step(1 / 30)
+      chip.now = chip.now + 1 / 30
+    end
+    assert.same(phase, j.phase)
+    assert.same('running', j.state)
+  end
+
+  for _, phase in ipairs({ 'close', 'reset' }) do
+    it('takes a stop in phase ' .. phase .. ' for a success',
+      function()
+        local chip = F.chip({ latency = 0.2 })
+        local j, said = job(F.hex(300), chip)
+        stepTo(j, chip, phase)
+        assert.is_true(j:abandon(1, 'The Compy was closed.'))
+        assert.same('done', j.state)
+        local words = joined(said)
+        assert.truthy(words:find('took the file', 1, true))
+        assert.is_nil(words:find('did not take', 1, true))
+        assert.is_nil(words:find('old program', 1, true))
+        assert.same('CLOSED', chip.stream)
+      end)
+  end
+
+  it('takes a stop before the end of file for a failure',
+    function()
+      local chip = F.chip({ latency = 0.2 })
+      local j, said = job(F.hex(300), chip)
+      stepTo(j, chip, 'write')
+      assert.is_nil(j:abandon(1, 'The Compy was closed.'))
+      assert.same('failed', j.state)
+      assert.truthy(joined(said):find('did not take', 1, true))
+    end)
+
   it('says how far it has got every few seconds', function()
     local chip = F.chip({ latency = 0.05 })
     local j, said = job(F.hex(300), chip)
@@ -1145,6 +1184,25 @@ describe('Serial flash', function()
         assert.is_nil(ok)
         assert.truthy(err:find(c[3], 1, true), c[3])
       end
+    end)
+
+  it('gives success words for a stop once the chip has the'
+    .. ' whole file', function()
+      local chip = F.chip({ latency = 0.2 })
+      local s = connected(chip)
+      assert.is_true(s:flash(F.hex(300), quiet))
+      for _ = 1, 20000 do
+        local j = s.job
+        if j and getmetatable(j) == DapFlash
+            and j.phase == 'reset' then
+          break
+        end
+        s:update(1 / 30)
+        chip.now = chip.now + 1 / 30
+      end
+      local cut = s:stop()
+      assert.truthy(cut:find('took the file', 1, true))
+      assert.is_nil(cut:find('did not take', 1, true))
     end)
 
   it('gives the words for a flash a stop cut off', function()

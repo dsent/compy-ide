@@ -415,13 +415,16 @@ function Serial:stop()
   if self.job then
     if getmetatable(self.job) == DapPrepare then
       cut = DapPrepare.CLOSED
+      self.job:abandon(STOP_S)
     else
-      cut = CUT
-      if self.job:erased() then
-        cut = cut .. ' ' .. DapFlash.GONE
+      local erased = self.job:erased()
+      if self.job:abandon(STOP_S) then
+        cut = DapFlash.TOOK
+      else
+        cut = CUT
+        if erased then cut = cut .. ' ' .. DapFlash.GONE end
       end
     end
-    self.job:abandon(STOP_S)
   end
   self.job = nil
   self.backend:stop()

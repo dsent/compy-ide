@@ -294,6 +294,18 @@ describe('AndroidBackend drive hold', function()
       assert.same('9904' .. string.rep('1', 44), b:boardId())
     end)
 
+  --- a broken link stays broken until the board opens again
+  it('refuses a link that broke', function()
+    local p = port(F.chip())
+    local b = backend(p)
+    b:openReady()
+    assert.equal(p.link, b:dap())
+    p.link:broke('status -71')
+    local link, err = b:dap()
+    assert.is_nil(link)
+    assert.truthy(err:find('broken', 1, true))
+  end)
+
   it('refuses the link on a board without the interface',
     function()
       local p = port()

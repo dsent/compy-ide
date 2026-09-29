@@ -317,6 +317,9 @@ describe('IntelHex', function()
       { ':0000\r\n0001FF\r\n', 'damaged' },
       -- longer than any record: refused before it is decoded
       { ':' .. string.rep('00', 261) .. '\r\n' .. EOF, 'damaged' },
+      -- the DOS end-of-file byte some tools write last
+      { rec(0, 0, seq(4)) .. EOF .. '\26', nil },
+      { rec(0, 0, seq(4)) .. EOF:gsub('\r\n', '\26'), nil },
       -- a record with blanks after it is read
       { rec(0, 0, seq(4)):gsub('\r\n', '  \t\0\r\n') .. EOF, nil },
     }

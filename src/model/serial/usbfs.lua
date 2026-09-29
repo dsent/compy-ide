@@ -18,7 +18,12 @@ local ffi = require('ffi')
 local bit = require('bit')
 
 --- Each alone: a declaration another module made first must
---- not keep the others out
+--- not keep the others out. The C types are bionic's, the C
+--- library of Android (NDK sysroot poll.h and bits/ioctl.h):
+--- nfds_t is unsigned int there, and ioctl's request an
+--- unsigned int in its overload; the struct follows the
+--- kernel's usbdevfs_urb field by field, its pointers the
+--- platform's size.
 for _, decl in ipairs({
   [[struct compy_usbfs_urb {
     unsigned char type;
@@ -35,7 +40,7 @@ for _, decl in ipairs({
     void *usercontext;
   };]],
   [[struct compy_pollfd { int fd; short events; short revents; };]],
-  [[int ioctl(int fd, unsigned long request, ...);]],
+  [[int ioctl(int fd, unsigned int request, ...);]],
   [[int poll(struct compy_pollfd *fds, unsigned int n,
     int timeout);]],
 }) do
