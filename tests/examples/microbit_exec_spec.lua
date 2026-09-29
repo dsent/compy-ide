@@ -297,6 +297,16 @@ describe('micro:bit exec #microbit', function()
       assert.equal(0, sounds)
     end)
 
+  it('exec waits while a file goes to the board', function()
+    local tools = load_tools()
+    serial.job = { step = function() return 'running' end }
+    local ok, err = pcall(tools.exec, 'f.lua')
+    serial.job = nil
+    assert.is_false(ok)
+    assert.truthy(tostring(err):find('taking a file', 1, true))
+    assert.same({}, backend.sent)
+  end)
+
   it('restart_microbit waits while a file goes to the board',
     function()
       local tools = load_tools()

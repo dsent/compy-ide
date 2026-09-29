@@ -777,7 +777,8 @@ end
 
 --- While a file goes to the board (busy), the board is
 --- halted and says nothing, so its serial output is not
---- waited on, and whether it answers is left to the link,
+--- waited on, nothing is written to it (Serial takes nothing
+--- to send then), and whether it answers is left to the link,
 --- which a gone board breaks: the chip may hold a control
 --- request back while it writes a page.
 --- @param busy boolean?
@@ -790,9 +791,9 @@ function AndroidBackend:pollOpen(busy)
   if not busy then
     local chunk = self:read()
     if chunk ~= '' then self.sink.bytes(chunk) end
+    local fault = self:write()
+    if fault then return fault end
   end
-  local fault = self:write()
-  if fault then return fault end
   if now() < self.due then return end
   self.due = now() + PRESENCE_S
   local listed = self:present()

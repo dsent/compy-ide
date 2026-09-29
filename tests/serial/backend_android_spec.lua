@@ -188,14 +188,16 @@ describe('AndroidBackend drive hold', function()
       local p = port(F.chip())
       local b = backend(p)
       b:openReady()
-      local reads = 0
+      local reads, writes = 0, 0
       b.read = function() reads = reads + 1 return '' end
-      b.write = function() end
+      b.write = function() writes = writes + 1 end
       b.due = math.huge
       b:poll(true)
       assert.same(0, reads)
+      assert.same(0, writes)
       b:poll(false)
       assert.same(1, reads)
+      assert.same(1, writes)
     end)
 
   it('hands back no drive it did not take', function()

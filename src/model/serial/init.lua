@@ -136,6 +136,9 @@ function Serial:send(line)
   if not self.connected then
     return nil, 'no device connected'
   end
+  -- the board is halted, and what waits would reach the
+  -- new program as lines typed into it
+  if self.job then return nil, FLASHING end
   return self.backend:send(line)
 end
 

@@ -860,6 +860,25 @@ describe('Serial flash', function()
     assert.is_false(s:isFlashing())
   end)
 
+  --- the board is halted; what waited would reach the new
+  --- program as lines typed into it
+  it('takes nothing to send while a flash runs', function()
+    local chip = F.chip()
+    local s, b = connected(chip)
+    assert.is_true(s:flash(F.hex(40), quiet))
+    local ok, err = s:send('print(1)\r')
+    assert.is_nil(ok)
+    assert.truthy(err:find('taking a file', 1, true))
+    assert.same({}, b.sent)
+    for _ = 1, 200 do
+      s:update(1 / 30)
+      chip.now = chip.now + 1 / 30
+    end
+    assert.is_false(s:isFlashing())
+    assert.same({}, b.sent)
+    assert.is_true(s:send('print(2)\r'))
+  end)
+
   it('tells a program whether a flash runs', function()
     local s = connected(F.chip({ latency = 1 }))
     local t = s:table_for('program')

@@ -325,13 +325,22 @@ local function isSending()
   return sending ~= nil and serial.onTick == waiting
 end
 
+--- A stop, in words, when the board cannot take a file now:
+--- it is not there, it is taking new firmware, or exec is
+--- still sending one
+local function readyToSend()
+  assert(serial.isConnected(), "no micro:bit connected")
+  assert(not serial.isFlashing(), "the micro:bit is taking a"
+      .. " file. Wait until the Compy says how it went.")
+  assert(not isSending(), "exec is still sending a file")
+end
+
 --- Run a project file on the board as one chunk, wrapped in
 --- assert(loadstring [[ ... ]])(), sent a line at a time. The
 --- board's echo of the file is not shown; what it answers is.
 --- @param filename string
 function exec(filename)
-  assert(serial.isConnected(), "no micro:bit connected")
-  assert(not isSending(), "exec is still sending a file")
+  readyToSend()
   if sending then
     putBack()
   end
