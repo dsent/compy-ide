@@ -513,7 +513,12 @@ function AndroidBackend:release(port)
     pcall(jniCallBool, env, port.conn, port.releaseM,
       port.data)
   end
+  -- the kernel cancels the transfers still posted as the
+  -- connection closes; how long that takes is logged
+  local t0 = now()
   pcall(jniCallVoid, env, port.conn, port.closeM)
+  log(string.format('connection closed in %.0f ms',
+    1000 * (now() - t0)))
   jniDropGlobal(env, port.msc)
   jniDropGlobal(env, port.rx)
   jniDropGlobal(env, port.epIn)

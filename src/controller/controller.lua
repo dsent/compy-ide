@@ -847,6 +847,8 @@ Controller = {
         -- nothing here may keep the run going: a fault is
         -- logged, and the quit goes ahead
         local ok, err = true, nil
+        local timer = love.timer
+        local t0 = timer and timer.getTime()
         if port then
           ok, err = pcall(function()
             if port:isFlashing() then port:abandon() end
@@ -858,7 +860,9 @@ Controller = {
           pcall(out, 'The micro:bit could not be let go as the'
             .. ' IDE quit: ' .. tostring(err))
         end
-        pcall(out, 'Quit accepted: this run of the IDE ends')
+        pcall(out, 'Quit accepted: this run of the IDE ends'
+          .. (t0 and string.format(', the board let go in %.0f ms',
+            1000 * (timer.getTime() - t0)) or ''))
         go_back()
       end
       return stay
