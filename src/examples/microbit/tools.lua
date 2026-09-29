@@ -530,11 +530,12 @@ local function hexNameOf(filename)
 end
 
 --- The end of a long bracket around a script, long enough
---- that nothing in the script ends it first
+--- that nothing in the script ends it first. It is never
+--- [[ ]]: the board's Lua refuses a [[ inside one of those.
 --- @param script string
 --- @return string
 local function closing(script)
-  local level = ""
+  local level = "="
   while script:find("]" .. level .. "]", 1, true) do
     level = level .. "="
   end
@@ -560,34 +561,49 @@ local ARMING = ".*()\nserial_session%.prompt%(%)"
 
 --- The Lua file, run where the firmware's script is about to
 --- arm the port. Nothing else runs Lua meanwhile: on_event,
---- through which the firmware calls in, is set aside, and an
---- on_event the file defines is held until the file returns.
---- A mistake stops only the file, and is printed and its
---- start scrolled; the prompt comes after it all the same.
-local RUN_START = table.concat({
+--- through which the firmware calls in, is set aside. The
+--- file's globals are the board's, save on_event: the file
+--- reads the firmware's, and one it defines is held until it
+--- returns without a mistake. A mistake stops only the file,
+--- and is printed and its start scrolled; the prompt comes
+--- after it all the same.
+local RUN_PROXY = table.concat({
   "",
   "do",
-  "local firmware, env = on_event, { }",
+  "local firmware, proxy = on_event, { }",
   "on_event = nil",
-  "local function set(t, k, v)",
-  "  if k == 'on_event' then rawset(t, k, v)",
-  "  else _G[k] = v end",
+  "local function get(t, k)",
+  "  if k == 'on_event' then return firmware end",
+  "  return _G[k]",
   "end",
-  "setmetatable(env, { __index = _G, __newindex = set })",
-  "local file, err = loadstring(%s, %s)"
+  "local function set(t, k, v)",
+  "  if k ~= 'on_event' then _G[k] = v",
+  "  else rawset(t, k, v) end",
+  "end"
 }, "\n")
 
---- The end of the Lua file's run, after it is read
-local RUN_END = table.concat({
+--- The file's run: its text, its name for mistakes, and the
+--- words for a mistake that says nothing
+local RUN_FILE = table.concat({
+  "setmetatable(proxy, { __index = get, __newindex = set })",
+  "local file, err = loadstring(%s, %s)",
   "local ran = file ~= nil",
-  "if ran then ran, err = pcall(setfenv(file, env)) end",
+  "if ran then ran, err = pcall(setfenv(file, proxy)) end",
   "local function say()",
-  "  local text = tostring(err)",
+  "  local text = err == nil and %q or tostring(err)",
   "  print(text)",
   "  microbit.display.scroll(text:sub(1, 60))",
   "end",
-  "if not ran then pcall(say) end",
-  "on_event = rawget(env, 'on_event') or firmware",
+  "if not ran then pcall(say) end"
+}, "\n")
+
+--- After the file: its globals are the board's alone from
+--- here on, and its on_event takes over
+local RUN_END = table.concat({
+  "local mine = ran and rawget(proxy, 'on_event')",
+  "rawset(proxy, 'on_event', nil)",
+  "setmetatable(proxy, { __index = _G, __newindex = _G })",
+  "on_event = mine or rawget(_G, 'on_event') or firmware",
   "end"
 }, "\n")
 
@@ -610,6 +626,17 @@ local function noPlace(filename)
   print(("then upload(%q)."):format(hex_name))
 end
 
+--- The code that runs a Lua file inside the firmware's script
+--- @param script string
+--- @param filename string
+--- @return string
+local function runOf(script, filename)
+  local name = string.format("%q", "@" .. filename)
+  local silent = filename .. " stopped, and said nothing more."
+  local file = RUN_FILE:format(quoted(script), name, silent)
+  return RUN_PROXY .. "\n" .. file .. "\n" .. RUN_END
+end
+
 --- The firmware's own script with a Lua file run in it; nil,
 --- said, when the firmware's script has no place for one
 --- @param runtime string
@@ -622,9 +649,7 @@ local function withRuntime(runtime, script, filename)
     noPlace(filename)
     return nil
   end
-  local name = string.format("%q", "@" .. filename)
-  local start = RUN_START:format(quoted(script), name)
-  local run = start .. "\n" .. RUN_END
+  local run = runOf(script, filename)
   return runtime:sub(1, at - 1) .. run .. runtime:sub(at)
 end
 

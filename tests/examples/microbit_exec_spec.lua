@@ -637,7 +637,7 @@ describe('micro:bit exec #microbit', function()
         .. ' into Lua', function()
           local tools = load_tools()
           files['robot.lua'] =
-            'print("blink-ok", on_event == nil)\n'
+            'print("blink-ok", rawget(_G, "on_event") == nil)\n'
           local out, env, err = boot(uploaded(tools))
           assert.is_nil(err)
           assert.is_function(env.on_event)
@@ -663,6 +663,66 @@ describe('micro:bit exec #microbit', function()
           assert.equal('mine', env.on_event())
         end)
 
+      it('lets the file call the firmware\'s on_event', function()
+        local tools = load_tools()
+        files['robot.lua'] = 'local firmware = on_event\n'
+          .. 'function on_event(...) return "mine", firmware end\n'
+        local _, env, err = boot(uploaded(tools))
+        assert.is_nil(err)
+        local mine, firmware = env.on_event()
+        assert.equal('mine', mine)
+        assert.is_function(firmware)
+      end)
+
+      it('takes an on_event a function of the file sets later',
+        function()
+          local tools = load_tools()
+          files['robot.lua'] = 'function on_event() return 1 end\n'
+            .. 'function start() on_event = function() return 2 end'
+            .. ' end\n'
+          local _, env, err = boot(uploaded(tools))
+          assert.is_nil(err)
+          assert.equal(1, env.on_event())
+          env.start()
+          assert.equal(2, env.on_event())
+        end)
+
+      it('keeps the firmware\'s on_event when the file stops on a'
+        .. ' mistake', function()
+          local tools = load_tools()
+          files['robot.lua'] =
+            'function on_event() return "mine" end\nerror("oops")\n'
+          local out, env, err = boot(uploaded(tools))
+          assert.is_nil(err)
+          assert.truthy(out:find('oops', 1, true))
+          assert.are_not.equal('mine', (env.on_event()))
+        end)
+
+      --- The board's Lua is 5.1 itself, stricter than LuaJIT
+      --- here: it refuses a [[ inside [[ ]]
+      local luac = io.popen('command -v luac5.1'):read('*l')
+      for _, text in ipairs({ 'print("[[")\n', '--[[ open\n',
+        'print("]]")\n', 'print([==[ a ]] b ]==])' }) do
+        it('builds a script the board\'s Lua reads ('
+          .. text:gsub('\n', ' ') .. ')', function()
+            if not luac then
+              pending('luac5.1 is not installed')
+              return
+            end
+            local tools = load_tools()
+            files['robot.lua'] = text
+            uploaded(tools)
+            local path = os.tmpname()
+            local f = assert(io.open(path, 'w'))
+            f:write(hex.script(hex.parse(files['robot.hex'])))
+            f:close()
+            local said = io.popen(luac .. ' -p ' .. path .. ' 2>&1')
+              :read('*a')
+            os.remove(path)
+            assert.equal('', said)
+          end)
+      end
+
       it('leaves the file\'s other globals to the prompt',
         function()
           local tools = load_tools()
@@ -678,7 +738,8 @@ describe('micro:bit exec #microbit', function()
           files['robot.lua'] = 'print("before")\nerror()\n'
           local out, env, err = boot(uploaded(tools))
           assert.is_nil(err)
-          local at = assert(out:find('before\r\nnil\r\n', 1, true))
+          local at = assert(out:find('before\r\nrobot.lua stopped,'
+            .. ' and said nothing more.\r\n', 1, true))
           assert.truthy(out:find('<armed>', at, true))
           assert.is_function(env.on_event)
         end)
@@ -735,7 +796,7 @@ describe('micro:bit exec #microbit', function()
         keeps(sent)
       end)
 
-      it('takes and runs a program as long as the board allows',
+      it('takes and runs a program as long as the cap',
         function()
           local tools = load_tools()
           local code = ('x = 1\n'):rep(1330) .. 'print("end")\n'
