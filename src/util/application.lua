@@ -44,6 +44,38 @@ local function request_exit()
   love.event.quit(quit_tag())
 end
 
+--- The tagging functions put in place, so none is wrapped twice
+local tagging = setmetatable({}, { __mode = 'k' })
+
+--- love.event's quit and push, in the given table, send every
+--- quit tagged. It must be done before anything copies them:
+--- a project's environment is a copy of the IDE's, love.event
+--- included (ConsoleController.new), and a function saved
+--- before would send its quits untagged, which reads as
+--- Android's own quit.
+--- @param event table? love.event, or a copy of it
+local function tag_quits(event)
+  if type(event) ~= 'table' then return end
+  local quit, push = event.quit, event.push
+  if quit and not tagging[quit] then
+    local tagged = function(status)
+      return quit(quit_tag(status))
+    end
+    tagging[tagged] = true
+    event.quit = tagged
+  end
+  if push and not tagging[push] then
+    local tagged = function(name, a, ...)
+      if name == 'quit' then
+        return push(name, quit_tag(a), ...)
+      end
+      return push(name, a, ...)
+    end
+    tagging[tagged] = true
+    event.push = tagged
+  end
+end
+
 --- LÖVE 11.5's own love.run, with one change: love.quit is
 --- given the quit event's value, and the status the run ends
 --- with is the one the quit was asked with
@@ -103,6 +135,7 @@ return {
   consume_application_exit_request = consume_application_exit_request,
   quit_tag = quit_tag,
   untag = untag,
+  tag_quits = tag_quits,
   run = run,
   return_home_before_exit = return_home_before_exit,
 }

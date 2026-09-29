@@ -27,6 +27,9 @@ local TU   = require('tests.testutil')
 -- Mouse position the click path samples; tests drive it through
 -- set_mouse_pos to make drift detection observable.
 local mx, my = 0, 0
+-- The values of the quit events sent through love.event, as
+-- the event queue would get them; F.quits() reads them.
+local quits = {}
 -- Held-button state the widget's drag-select reads through
 -- love.mouse.isDown; see mock_runtime below.
 local mouse_down = false
@@ -41,7 +44,12 @@ local function mock_runtime()
     },
     DEBUG   = false,
     PROFILE = false,
-    event   = { quit = function() end, push = function() end },
+    event   = {
+      quit = function(v) quits[#quits + 1] = { v } end,
+      push = function(name, v)
+        if name == 'quit' then quits[#quits + 1] = { v } end
+      end,
+    },
     audio   = {
       newSource = function() return { } end,
       stop      = function() end,
@@ -239,6 +247,31 @@ function F.teardown()
   cfg, CC, widget, session = nil, nil, nil, nil
   F.cc, F.console, F.editor = nil, nil, nil
   F.session, F.cfg = nil, nil
+end
+
+--- The quit events sent through love.event since the last
+--- call, each as { value }, and forget them
+--- @return table[]
+function F.quits()
+  local got = quits
+  quits = {}
+  return got
+end
+
+-- Drive the REAL run with a project's source: the chunk is
+-- compiled in the project's own environment, as the project
+-- loader does, so `love` in it is the project's copy.
+--- @param src string the project's main.lua
+function F.run_source(src)
+  local P = CC.model.projects
+  local prev_current, prev_run = P.current, P.run
+  P.current = { name = 'p' }
+  P.run = function(_, _, env)
+    local chunk = assert(loadstring(src, 'main.lua'))
+    return setfenv(chunk, env), nil, '/tmp/p'
+  end
+  CC:run_project('p')
+  P.current, P.run = prev_current, prev_run
 end
 
 -- The project-facing public surface (compy.input.show/hide); it

@@ -432,6 +432,57 @@ describe('input surface: inbound events — a project stays live'
     end)
   end)
 
+  --- a project quits through its own copy of love, made
+  --- when the console was built: every way it has goes out
+  --- tagged, so the IDE never reads it as Android's quit (which
+  --- would end the IDE, where a project's quit only stops it)
+  it('tags every quit a project sends through its own love',
+    function()
+      F.quits()
+      F.run_source([[
+        love.event.quit()
+        love.event.quit(0)
+        love.event.quit('restart')
+        love.event.push('quit')
+        local saved = love.event.quit
+        saved(3)
+      ]])
+      local got = F.quits()
+      local app = require('util.application')
+      local statuses = {}
+      for i, q in ipairs(got) do
+        local asked, status = app.untag(q[1])
+        assert.is_true(asked, 'quit ' .. i)
+        statuses[i] = status == nil and 'none' or status
+      end
+      assert.same({ 'none', 0, 'restart', 'none', 3 }, statuses)
+      -- the project's love is a copy, not the IDE's own
+      local env = F.cc:get_project_env()
+      assert.are_not.equal(love.event, env.love.event)
+    end)
+
+  --- Android: a project's quit stops the project, and the IDE
+  --- stays with the console, as it always has
+  it('keeps the IDE when a running project quits on Android',
+    function()
+      local calls = stub_stop()
+      F.quits()
+      F.run_source('love.event.quit()')
+      local got = F.quits()
+      local system, window = love.system, love.window
+      local minimized = 0
+      love.system = { getOS = function() return 'Android' end }
+      love.window = {
+        minimize = function() minimized = minimized + 1 end,
+      }
+      love.state.app_state = 'running'
+      local stay = love.quit(got[1][1])
+      love.system, love.window = system, window
+      assert.is_true(stay)
+      assert.are.equal(1, calls.n)
+      assert.are.equal(0, minimized)
+    end)
+
   --- Ctrl+Esc with a board open and no file going to it,
   --- walked as LÖVE walks it: the key's release pushes quit,
   --- love.run's loop polls it and asks love.quit, and boot

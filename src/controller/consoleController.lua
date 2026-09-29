@@ -41,6 +41,9 @@ ConsoleController = class.create()
 
 --- @param M Model
 function ConsoleController.new(M, main_ctrl)
+  -- a project's love is a copy of this one: its quits must be
+  -- tagged before the copy is made (Application.tag_quits)
+  Application.tag_quits(love and love.event)
   local pre_env = table.clone(getfenv())
   local config = M.cfg
   pre_env.font = config.view.font
