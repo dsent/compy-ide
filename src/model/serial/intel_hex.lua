@@ -99,13 +99,15 @@ end
 
 --- The data records of a file, placed, in file order
 --- @param data string
+--- @param pause function called once a line
 --- @return table[]? pieces { at, data }
 --- @return string? why
-local function pieces(data)
+local function pieces(data, pause)
   local out, base, segment, ended = {}, 0, false, false
   -- lines end in LF, CR LF or CR alone; the empty line
   -- between a CR and its LF is a blank line
   for line in (data .. '\n'):gmatch('([^\r\n]*)[\r\n]') do
+    pause()
     line = line:gsub('[%s%z]+$', '')
     if line ~= '' then
       if ended then return nil, 'early end' end
@@ -151,14 +153,28 @@ end
 
 --- The pieces as one image: runs of bytes in address order,
 --- each { at, data }. A byte given twice must be given the
---- same both times.
+--- same both times. Pieces already in order, as a file
+--- usually lists them, are not sorted: the sort is the one
+--- step that cannot pause.
 --- @param list table[]
+--- @param pause function called once a piece
 --- @return table[]? image
 --- @return string? why
-local function merge(list)
-  table.sort(list, function(a, b) return a.at < b.at end)
+local function merge(list, pause)
+  local sorted = true
+  for i = 2, #list do
+    pause()
+    if list[i].at < list[i - 1].at then
+      sorted = false
+      break
+    end
+  end
+  if not sorted then
+    table.sort(list, function(a, b) return a.at < b.at end)
+  end
   local image, run, parts, stop = {}, nil, nil, nil
   for _, p in ipairs(list) do
+    pause()
     local pend = p.at + #p.data
     if run and p.at < stop then
       local overlap = math.min(pend, stop) - p.at
@@ -194,14 +210,20 @@ end
 --- record ends the file, and only blank lines may follow it.
 --- Each record's length and checksum must hold. Lines end in
 --- LF, CR LF or CR; blanks at a line's end are left out.
+---
+--- pause, when given, is called every line and every piece,
+--- and may yield the coroutine the reading runs in, so a big
+--- file is read a share at a time.
 --- @param data string
+--- @param pause function?
 --- @return table[]? image runs { at, data } in address order
 --- @return string? why 'cut short', 'early end', 'universal',
 ---   'overlap', 'damaged'
-function IntelHex.parse(data)
-  local list, why = pieces(data)
+function IntelHex.parse(data, pause)
+  pause = pause or function() end
+  local list, why = pieces(data, pause)
   if not list then return nil, why end
-  return merge(list)
+  return merge(list, pause)
 end
 
 --- @param count integer
@@ -226,13 +248,17 @@ end
 --- the chunk that brings the end of file is the last one, and
 --- the flash asks exactly that of the chip (DapFlash:wrote).
 --- A line of odd length would break that.
+---
+--- pause, when given, is called every record, as for parse.
 --- @param image table[] runs { at, data } in address order
+--- @param pause function?
 --- @return string
-function IntelHex.encode(image)
+function IntelHex.encode(image, pause)
   local out, block = {}, nil
   for _, run in ipairs(image) do
     local at, i = run.at, 1
     while i <= #run.data do
+      if pause then pause() end
       local high = math.floor(at / BLOCK)
       if high ~= block then
         block = high

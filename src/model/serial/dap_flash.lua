@@ -554,8 +554,8 @@ function DapFlash:step(dt)
   if self.updates then
     self:adapt(dt)
   else
-    -- the frame that prepared the file is long, and says
-    -- nothing about the frames to come
+    -- the frame before the first update read the file's
+    -- last share, and says nothing about the frames to come
     self.updates = 0
     self.log(string.format('first update: the frame before it'
       .. ' took %.0f ms', 1000 * (dt or 0)))

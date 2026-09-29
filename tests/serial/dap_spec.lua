@@ -1009,22 +1009,36 @@ describe('Serial flash', function()
     return s, b
   end
 
+  --- What the person hears of a flash from start to end,
+  --- joined, once the flash returned at once
+  local function heard(s, chip, data)
+    local said = {}
+    assert.is_true(s:flash(data,
+      function(l) said[#said + 1] = l end))
+    for _ = 1, 200 do
+      if not s:isFlashing() then break end
+      s:update(1 / 30)
+      chip.now = chip.now + 1 / 30
+    end
+    assert.is_false(s:isFlashing())
+    return joined(said)
+  end
+
   it('refuses a hex without its end record, sending nothing',
     function()
       local chip = F.chip()
       local s = connected(chip)
       local body = F.hex(3):gsub(':00000001FF\r\n$', '')
-      local ok, err = s:flash(body, quiet)
-      assert.is_nil(ok)
+      local err = heard(s, chip, body)
       assert.truthy(err:find('cut short', 1, true))
       assert.same(0, #chip.got)
     end)
 
   it('refuses a Universal Hex', function()
-    local s = connected(F.chip())
-    local ok, err = s:flash(':0400000A9900C0DEBB\r\n'
-      .. ':00000001FF\r\n', quiet)
-    assert.is_nil(ok)
+    local chip = F.chip()
+    local s = connected(chip)
+    local err = heard(s, chip, ':0400000A9900C0DEBB\r\n'
+      .. ':00000001FF\r\n')
     assert.truthy(err:find('both micro:bit versions', 1, true))
     assert.truthy(err:find('from a computer', 1, true))
   end)
@@ -1140,7 +1154,8 @@ describe('Serial flash', function()
     local s2 = connected(chip)
     assert.is_true(s2:flash(F.hex(300), quiet))
     for _ = 1, 200 do
-      if s2.job and s2.job.sent >= s2.job.eraseChunk then break end
+      local j = s2.job
+      if j and j.sent and j.sent >= j.eraseChunk then break end
       s2:update(1 / 30)
       chip.now = chip.now + 1 / 30
     end
@@ -1172,9 +1187,8 @@ describe('Serial flash', function()
     function()
       local chip = F.chip()
       local s = connected(chip)
-      local ok, err = s:flash(':0400000001020304F2\n'
-        .. ':00000001FF\n', quiet)
-      assert.is_nil(ok)
+      local err = heard(s, chip, ':0400000001020304F2\n'
+        .. ':00000001FF\n')
       assert.truthy(err:find('too little to be a program', 1,
         true))
       assert.is_nil(err:find('Get the file again', 1, true))
@@ -1186,8 +1200,7 @@ describe('Serial flash', function()
       local chip = F.chip()
       local s = connected(chip)
       local bad = F.hex(40):gsub('ABAB', 'ABAC', 1)
-      local ok, err = s:flash(bad, quiet)
-      assert.is_nil(ok)
+      local err = heard(s, chip, bad)
       assert.truthy(err:find('damaged', 1, true))
       assert.same(0, #chip.got)
     end)
@@ -1196,8 +1209,7 @@ describe('Serial flash', function()
     function()
       local chip = F.chip()
       local s = connected(chip)
-      local ok, err = s:flash(F.hex(2) .. F.hex(2), quiet)
-      assert.is_nil(ok)
+      local err = heard(s, chip, F.hex(2) .. F.hex(2))
       assert.truthy(err:find('damaged', 1, true))
       assert.same(0, #chip.got)
     end)
@@ -1235,6 +1247,87 @@ describe('Serial flash', function()
     assert.same({}, b.sent)
     assert.is_true(s:send('print(2)\r'))
   end)
+
+  --- a big file is read a share per update, and the screen
+  --- keeps moving meanwhile
+  it('reads a big file a share per update, each within the'
+    .. ' budget', function()
+      local data = F.hex(2000)
+      local now, tick = 0, 0.001
+      local function clock()
+        now = now + tick
+        return now
+      end
+      local said, lines = {}, {}
+      local prep = DapPrepare.new(data,
+        function(l) said[#said + 1] = l end,
+        function(l) lines[#lines + 1] = l end, clock)
+      local updates = 0
+      while prep:step(1 / 30) == 'running' do
+        updates = updates + 1
+        assert.is_true(updates < 1000)
+      end
+      assert.same('ready', prep.state)
+      assert.is_true(updates > 3)
+      -- the clock is looked at every CHECK_EVERY records, so
+      -- a share runs past the budget by at most that many
+      -- ticks, and the looks in step itself
+      local slack = (DapPrepare.CHECK_EVERY + 4) * tick
+      assert.is_true(prep.longest <= DapPrepare.BUDGET + slack,
+        tostring(prep.longest))
+      assert.same(Dap.prepare(data), prep.text)
+      assert.truthy(said[1]:find('Reading the file', 1, true))
+      assert.truthy(lines[#lines]:find('prepared in', 1, true))
+    end)
+
+  it('sends nothing while it reads the file, then sends it',
+    function()
+      local chip = F.chip()
+      local s = connected(chip)
+      local now = 0
+      s.clock = function()
+        now = now + 0.001
+        return now
+      end
+      local said = {}
+      assert.is_true(s:flash(F.hex(400),
+        function(l) said[#said + 1] = l end))
+      s:update(1 / 30)
+      assert.is_true(s:isFlashing())
+      assert.is_true(getmetatable(s.job) == DapPrepare)
+      assert.same(0, #chip.got)
+      assert.same(1, #said)
+      assert.truthy(said[1]:find('Reading the file', 1, true))
+      for _ = 1, 20 do
+        if getmetatable(s.job) ~= DapPrepare then break end
+        s:update(1 / 30)
+      end
+      assert.is_true(getmetatable(s.job) == DapFlash)
+      assert.truthy(said[#said]:find('Sending the file', 1,
+        true))
+    end)
+
+  it('stops reading at once when the board is unplugged',
+    function()
+      local chip = F.chip()
+      local s, b = connected(chip)
+      local now = 0
+      s.clock = function()
+        now = now + 0.001
+        return now
+      end
+      local said = {}
+      assert.is_true(s:flash(F.hex(400),
+        function(l) said[#said + 1] = l end))
+      s:update(1 / 30)
+      assert.is_true(s:isFlashing())
+      b:detach()
+      s:update(1 / 30)
+      assert.is_false(s:isFlashing())
+      assert.same(0, #chip.got)
+      assert.truthy(said[#said]:find('unplugged before the file'
+        .. ' went to it', 1, true))
+    end)
 
   it('tells a program whether a flash runs', function()
     local s = connected(F.chip({ latency = 1 }))

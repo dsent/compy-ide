@@ -2,6 +2,7 @@ require('model.serial.line_reader')
 require('model.serial.dispatcher')
 require('model.serial.echo')
 require('model.serial.dap_flash')
+require('model.serial.dap_prepare')
 
 --- Backend contract:
 ---   backend:start(sink)  sink.attach(info), sink.detach(),
@@ -255,6 +256,9 @@ local FAULTS = {
   ['too small'] = TOO_SMALL,
   interface = INTERFACE,
 }
+local UNPLUGGED = 'The micro:bit was unplugged before the'
+    .. ' file went to it. Plug it back in, then send the file'
+    .. ' again.'
 local NOT_READY = 'The Compy cannot send files to this micro:bit'
     .. ' yet. Unplug it, plug it back in, then try again.'
 local NO_FLASHING = 'This micro:bit cannot take files from the'
@@ -263,9 +267,11 @@ local NO_FLASHING = 'This micro:bit cannot take files from the'
 --- Put a hex file on the board through its interface chip,
 --- without its drive. The file is read first and written
 --- afresh in the shape the chip reads right (Dap.prepare), so
---- a damaged one never reaches the board. Returns at once; the work runs a share
---- per update, and say gives the progress and the verdict.
---- Tests may set self.clock to the chip's time.
+--- a damaged one never reaches the board. Returns at once:
+--- the reading and then the flash run a share per update,
+--- and say gives the progress and the verdict, a damaged
+--- file's included. Tests may set self.clock to the chip's
+--- time.
 --- @param data string
 --- @param say function
 --- @return boolean? ok
@@ -282,11 +288,6 @@ function Serial:flash(data, say)
   if type(data) ~= 'string' or data == '' then
     return nil, NO_FILE
   end
-  local t0 = clock()
-  local text, fault = Dap.prepare(data)
-  Dap.log(string.format('file prepared in %.0f ms: %s',
-    1000 * (clock() - t0), fault or (#text .. ' bytes')))
-  if not text then return nil, FAULTS[fault] or DAMAGED end
   local link, err = self.backend:dap()
   if not link then
     Dap.log('flash refused: ' .. tostring(err))
@@ -295,9 +296,34 @@ function Serial:flash(data, say)
   -- the board restarts with the new firmware, and what was
   -- queued for the old one would be typed into its new REPL
   self:drop()
-  self.job = DapFlash.new(text, link, say, Dap.log,
+  self.job = DapPrepare.new(data, say, Dap.log,
     self.clock or clock)
   return true
+end
+
+--- The file is read: it goes to the board, or the person
+--- hears why not
+--- @param prep DapPrepare
+function Serial:prepared(prep)
+  self.job = nil
+  if prep.state == 'failed' then
+    if prep.why then
+      prep.say(FAULTS[prep.why] or DAMAGED)
+    end
+    return
+  end
+  if not self.connected then
+    prep.say(UNPLUGGED)
+    return
+  end
+  local link, err = self.backend:dap()
+  if not link then
+    Dap.log('flash refused: ' .. tostring(err))
+    prep.say(self:cannot(err))
+    return
+  end
+  self.job = DapFlash.new(prep.text, link, prep.say, Dap.log,
+    self.clock or clock)
 end
 
 --- Words for a board the Compy cannot flash: a replug helps
@@ -329,10 +355,21 @@ end
 --- @return table[] errors
 --- @param dt number
 function Serial:update(dt)
+  local job = self.job
+  local preparing = job ~= nil
+      and getmetatable(job) == DapPrepare
   -- a board taking a file is halted and says nothing: the
   -- backend need not wait on its serial output
-  self:fault(self.backend:poll(self.job ~= nil))
-  if self.job and self.job:step(dt) ~= 'running' then
+  self:fault(self.backend:poll(job ~= nil and not preparing))
+  if preparing then
+    if not self.connected then
+      job:abandon()
+      self.job = nil
+      job.say(UNPLUGGED)
+    elseif job:step(dt) ~= 'running' then
+      self:prepared(job)
+    end
+  elseif job and job:step(dt) ~= 'running' then
     self.job = nil
   end
   self.echo:tick(dt)
