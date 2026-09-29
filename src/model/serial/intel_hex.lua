@@ -130,6 +130,23 @@ local function pieces(data)
   return out
 end
 
+--- The bytes of a run from address `from` to its end `stop`,
+--- read from its last parts only: an overlap is never longer
+--- than the record that makes it
+--- @param parts string[]
+--- @param from integer
+--- @param stop integer
+--- @return string
+local function tail(parts, from, stop)
+  local got, at, i = {}, stop, #parts
+  while at > from do
+    at = at - #parts[i]
+    table.insert(got, 1, parts[i])
+    i = i - 1
+  end
+  return table.concat(got):sub(from - at + 1)
+end
+
 --- The pieces as one image: runs of bytes in address order,
 --- each { at, data }. A byte given twice must be given the
 --- same both times.
@@ -142,16 +159,13 @@ local function merge(list)
   for _, p in ipairs(list) do
     local pend = p.at + #p.data
     if run and p.at < stop then
-      local whole = table.concat(parts)
       local overlap = math.min(pend, stop) - p.at
-      local from = p.at - run.at
-      if whole:sub(from + 1, from + overlap)
+      if tail(parts, p.at, stop):sub(1, overlap)
           ~= p.data:sub(1, overlap) then
         return nil, 'overlap'
       end
-      parts = { whole }
       if pend > stop then
-        parts[2] = p.data:sub(overlap + 1)
+        parts[#parts + 1] = p.data:sub(overlap + 1)
         stop = pend
       end
     elseif run and p.at == stop then

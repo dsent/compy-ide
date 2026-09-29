@@ -244,6 +244,23 @@ describe('IntelHex', function()
       assert.same('overlap', why)
     end)
 
+  --- each overlap is compared on its own bytes, not on the
+  --- whole run it falls in
+  it('reads a file that gives its image twice, quickly',
+    function()
+      local body = example():gsub(':00000001FF%s*$', '')
+      local doubled = body .. rec(4, 0, { 0, 0 }) .. body .. EOF
+      local t0 = os.clock()
+      local once = assert(IntelHex.parse(example()))
+      local t1 = os.clock()
+      local twice = assert(IntelHex.parse(doubled))
+      local t2 = os.clock()
+      -- twice the records, so about twice the time; a compare
+      -- over the whole run makes it grow with its square
+      assert.is_true(t2 - t1 < 4 * (t1 - t0) + 0.05)
+      assert.same(once, twice)
+    end)
+
   it('reads records of any length the format allows',
     function()
       local image = assert(IntelHex.parse(rec(0, 0, seq(255))
