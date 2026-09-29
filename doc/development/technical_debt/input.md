@@ -1386,7 +1386,7 @@ chord and of what our re-homing adopted.
   `compy.before_exit`, and by ratified contract that hook fires on **stop**
   paths only; crash is explicitly out of its scope. A project that mutates
   global state in top-level code and then raises therefore never restores it:
-  `run_project`'s failed-run branch drops to `project_open` without ever
+  `run_project`'s failed-run branch drops to `ready` without ever
   calling `stop_project_run`, so nothing fires, and the dirty state bleeds
   into the next run. `examples/keyboard` is the canonical mutator — it calls
   `love.keyboard.setTextInput(true)` and `love.mouse.setRelativeMode(true)`

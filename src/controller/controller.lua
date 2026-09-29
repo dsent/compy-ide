@@ -35,9 +35,10 @@ local user_draw
 -- Together with a shown input widget it marks a non-blocking
 -- project (one that overrides no update/draw, e.g. a
 -- pen-and-paper game) as still "live"
--- (doc/development/technical_debt/input.md, "Input-only /
--- pointer-only projects stay live in `project_open` (RESOLVED,
--- ruling a)"): keep the project route, Ctrl+Esc -> console.
+-- in 'ready' (doc/development/technical_debt/input.md,
+-- "Input-only / pointer-only projects stay live", RESOLVED,
+-- ruling a): keep the project route, and its own quit stops it
+-- back to the console.
 local user_pointer
 
 -- One lifetime, several names for subsets of it. Every channel
@@ -719,9 +720,8 @@ Controller = {
       -- still interactive (input widget shown or pointer
       -- handlers installed —
       -- doc/development/technical_debt/input.md, "Input-only /
-      -- pointer-only projects stay live in `project_open`
-      -- (RESOLVED, ruling a)"). An idle console in ready
-      -- falls through: the app quits.
+      -- pointer-only projects stay live", RESOLVED, ruling a).
+      -- An idle console in ready falls through: the app quits.
       if love.state.app_state == 'running'
           or (love.state.app_state == 'ready'
               and Controller.user_is_interactive()) then

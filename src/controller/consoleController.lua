@@ -1963,7 +1963,12 @@ function ConsoleController:stop_project_run()
   self.stopping = true
   local ok, err = pcall(self._stop_project_run, self)
   self.stopping = false
-  if not ok then error(err, 0) end
+  if not ok then
+    -- A step ahead of the reset raised: the console still
+    -- gets its mouse.
+    self:flush_program_state()
+    error(err, 0)
+  end
 end
 
 --- Put back what a program changed and the console needs,

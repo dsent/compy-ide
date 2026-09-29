@@ -169,6 +169,48 @@ describe('a program\'s mouse after it stops #input', function()
       assert.same(CAPTURED, mouse())
     end)
 
+  -- setCursor raises on a cursor the program released after
+  -- setting it, as LÖVE does
+  it('continue() gives the program its handlers back even when'
+    .. ' its mouse cannot be restored', function()
+      local released = { }
+      local set_cursor = love.mouse.setCursor
+      local updates = 0
+      F.activate_project({
+        update = function()
+          updates = updates + 1
+          if updates == 1 then error('boom') end
+        end,
+      })
+      capture()
+      love.mouse.setCursor(released)
+      F.love_update(0.1)
+      F.cc:suspend()
+      love.mouse.setCursor = function(c)
+        if c == released then
+          error('Cannot use object after it has been released.')
+        end
+        set_cursor(c)
+      end
+      local ok = pcall(F.cc:get_project_env().continue)
+      love.mouse.setCursor = set_cursor
+      assert.is_false(ok)
+      assert.equal('running', love.state.app_state)
+      F.love_update(0.1)
+      assert.equal(2, updates)
+    end)
+
+  -- evacuate_required runs ahead of the reset in the stop
+  it('a stop that raises before the reset still gives the'
+    .. ' console its mouse', function()
+      run_capturing()
+      F.cc.evacuate_required = function() error('broken') end
+      local ok = pcall(F.cc.stop_project_run, F.cc)
+      F.cc.evacuate_required = nil
+      assert.is_false(ok)
+      assert.same(CONSOLE, mouse())
+    end)
+
   it('Ctrl+Alt+R starts the program again on the console\'s'
     .. ' mouse', function()
       local seen

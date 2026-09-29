@@ -665,7 +665,7 @@ teardown invariant, which is the part later decisions depend on.
 
 **Decision (as amended).** The project route occupies **every** input channel — keyboard, text,
 pointer and the derived click events — from activation until the project stops. A non-blocking
-project reaching `'project_open'` keeps them; `Ctrl+Esc` is the way back to the console. On project
+project reaching `'ready'` keeps them. On project
 stop, every handler restores to framework defaults and every project participant — handler tables,
 callbacks, widget configuration — resets.
 

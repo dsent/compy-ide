@@ -122,7 +122,7 @@ Each says what you get by following it, so the list can be scanned rather than s
 - **The `before_exit` contract** — teardown is the framework's, the hook is called from inside it,
   and its return value is unread: [`../decisions/input.md`](../decisions/input.md), D-STOP-IS-FW.
 - **Why the input route outlives the run** — every channel is held from activation until the
-  project *stops*, so a non-blocking project sitting in `project_open` keeps them all:
+  project *stops*, so a non-blocking project sitting in `ready` keeps them all:
   [`../decisions/input.md`](../decisions/input.md), D-ROUTE-LIFETIME.
 - **The T3 leak, fixed for the mouse and registered for the rest**:
   [`../technical_debt/input.md`](../technical_debt/input.md), *"A project that raises leaves
