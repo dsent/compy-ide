@@ -13,8 +13,8 @@ package.preload['utf8'] = package.preload['utf8']
 require('model.serial.init')
 require('model.serial.backend_fake')
 
-local WRAP = 'assert(loadstring[=['
-local UNWRAP = ']=])()'
+local WRAP = 'assert(loadstring([=['
+local UNWRAP = ']=], "@f.lua"))()'
 
 --- @return string? luac5.1, when installed
 local function luac()
@@ -140,7 +140,7 @@ describe('micro:bit exec #microbit', function()
     files['g.lua'] = 'print("]=]")\n'
     local tools = load_tools()
     tools.exec('g.lua')
-    assert.same({ 'assert(loadstring[==[\r' }, backend.sent)
+    assert.same({ 'assert(loadstring([==[\r' }, backend.sent)
   end)
 
   --- The lines exec sends for a file, all of them, as the
@@ -177,6 +177,19 @@ describe('micro:bit exec #microbit', function()
           'g.lua')))
       end)
   end
+
+  --- the board's words for a mistake name the file, and exec
+  --- does not call a file that stopped on one "on the board"
+  it('says a file that stopped on a mistake was run', function()
+    local tools = load_tools()
+    tools.exec('f.lua')
+    for _ = 1, 3 do board() end
+    board('Runtime error: f.lua:2: boom\r\n', '> ')
+    serial:update(0.25)
+    assert.same('Runtime error: f.lua:2: boom', said[#said - 1])
+    assert.same('f.lua was run, and stopped on the mistake above',
+      said[#said])
+  end)
 
   it('runs a second time the same way', function()
     local tools = load_tools()
@@ -606,7 +619,7 @@ describe('micro:bit exec #microbit', function()
       local hex = require('examples.microbit.hex')
 
       --- The largest file upload takes
-      local CAP = 8000
+      local CAP = 4000
 
       --- The script the shipped firmware carries
       --- @return string
@@ -863,13 +876,35 @@ describe('micro:bit exec #microbit', function()
               _, why = pcall(fn)
             end
             local at = assert(out:find(why .. '\r\n', 1, true))
-            assert.truthy(out:find('<scrolled ' .. why:sub(1, 60)
+            local line = why:match(':(%d+):')
+            assert.truthy(out:find('<scrolled error, line ' .. line
               .. '>', at, true))
             local prompt = assert(out:find('> ', at, true))
             assert.truthy(out:find('<armed>', prompt, true))
             assert.is_function(env.on_event)
           end)
       end
+
+      --- after the bracket a CR would join the newline, and
+      --- every line would be counted one too few
+      it('counts lines from a file that starts with a CR',
+        function()
+          local tools = load_tools()
+          files['robot.lua'] = '\rprint('
+          local out = boot(uploaded(tools))
+          assert.truthy(out:find('robot.lua:2:', 1, true))
+          assert.truthy(out:find('<scrolled error, line 2>', 1,
+            true))
+        end)
+
+      it('scrolls "error" alone for a mistake with no line',
+        function()
+          local tools = load_tools()
+          files['robot.lua'] = 'error("plain", 0)\n'
+          local out = boot(uploaded(tools))
+          assert.truthy(out:find('plain\r\n<scrolled error>', 1,
+            true))
+        end)
 
       it('sends exactly the hex it wrote', function()
         local tools = load_tools()
@@ -882,7 +917,9 @@ describe('micro:bit exec #microbit', function()
       it('takes and runs a program as long as the cap',
         function()
           local tools = load_tools()
-          local code = ('x = 1\n'):rep(1330) .. 'print("end")\n'
+          local tail = 'print("end")\n'
+          local code = ('x = 1\n'):rep(math.floor((CAP - #tail)
+            / 6)) .. tail
           code = (' '):rep(CAP - #code) .. code
           assert.equal(CAP, #code)
           files['robot.lua'] = code

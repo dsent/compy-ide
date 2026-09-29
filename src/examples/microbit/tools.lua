@@ -114,18 +114,20 @@ local function closing(script)
 end
 
 --- The lines exec sends: the file in a chunk of its own, so
---- what the code declares stays in it
+--- what the code declares stays in it, named for the file in
+--- the board's words for a mistake
 --- @param filename string
 --- @return string[]
 local function chunkLines(filename)
   local text = fileForBoard(filename)
   local close = closing(text)
   local open = (close:gsub("%]", "["))
-  local lines = { "assert(loadstring" .. open }
+  local lines = { "assert(loadstring(" .. open }
   for line in text:gmatch("([^\r]*)\r") do
     lines[#lines + 1] = line
   end
-  lines[#lines + 1] = close .. ")()"
+  local name = string.format("%q", "@" .. filename)
+  lines[#lines + 1] = close .. ", " .. name .. "))()"
   return lines
 end
 
@@ -284,13 +286,28 @@ end
 --- quiet after means the file has run, as far as the board's
 --- bytes can tell; a program that writes "> " and pauses looks
 --- the same
+--- What exec says once the board has run the file: whether
+--- the board's answer tells of a mistake that stopped it
+--- @param said string
+--- @return string
+local function verdict(said)
+  local unread = said:find("Compile error:", 1, true)
+  local failed = said:find("Runtime error:", 1, true)
+  local stopped = unread or failed
+  if not stopped then
+    return sending.name .. " is on the board"
+  end
+  return sending.name .. " was run, and stopped on the mistake"
+      .. " above"
+end
+
 local function lastLine()
   local after = afterEcho()
   local said = after and after:match("^(.*)> $")
   local done = said and SETTLE_S <= sending.quiet
   if done then
     show(said)
-    finish(sending.name .. " is on the board")
+    finish(verdict(said))
   elseif QUIET_S < sending.quiet then
     quietLast(after)
   end
@@ -566,9 +583,9 @@ local ARMING = ".*()\nserial_session%.prompt%(%)"
 --- reads the firmware's, and one it defines is held until it
 --- returns without a mistake; one it writes into _G itself
 --- is live at once, and the firmware's replaces it when the
---- file returns. A mistake stops only the file, and is
---- printed and its start scrolled; the prompt comes after it
---- all the same.
+--- file returns. A mistake stops only the file; it is
+--- printed, the lights scroll "error" and its line, and the
+--- prompt comes after it all the same.
 local RUN_PROXY = table.concat({
   "",
   "do",
@@ -594,7 +611,9 @@ local RUN_FILE = table.concat({
   "local function say()",
   "  local text = err == nil and %q or tostring(err)",
   "  print(text)",
-  "  microbit.display.scroll(text:sub(1, 60))",
+  "  local line = text:match(':(%%d+):')",
+  "  microbit.display.scroll(line and 'error, line ' .. line",
+  "    or 'error')",
   "end",
   "if not ran then pcall(say) end"
 }, "\n")
@@ -609,12 +628,21 @@ local RUN_END = table.concat({
   "end"
 }, "\n")
 
---- The largest Lua file upload puts on the board. The board
---- holds the file as text and as parsed code while it reads
---- it, in about 100 KB of memory shared with the firmware's
---- own script. The figure is an estimate, not yet measured on
---- a board.
-local MAX_SCRIPT = 8000
+--- The largest Lua file upload puts on the board, in bytes.
+--- The board reads the file with about 100 KB of memory,
+--- a quarter of it taken by the firmware's own script. It
+--- holds the file as text, as the text read into the parser,
+--- and as parsed code, and the parsed code grows with how
+--- much the file does per character: a list of short calls
+--- or a long table of numbers costs about twice what a
+--- program of the same length usually does. A board that
+--- runs out of memory reading its program does not start: it
+--- shows 020 on every start until upload() puts the shipped
+--- firmware back. 4000 keeps the densest code tried within
+--- the memory a 7000-character program of the usual kind
+--- takes, and 7916 characters of that kind started on a
+--- board; the densest code at 4000 is yet to be tried on one.
+local MAX_SCRIPT = 4000
 
 --- Say that MICROBIT.hex has no place for a Lua file, and
 --- how to send the file alone
@@ -633,6 +661,9 @@ end
 --- @param filename string
 --- @return string
 local function runOf(script, filename)
+  -- a CR first would be taken with the newline after the
+  -- bracket, and every line counted one too few
+  script = script:gsub("\r\n?", "\n")
   local name = string.format("%q", "@" .. filename)
   local silent = filename .. " stopped, and said nothing more."
   local file = RUN_FILE:format(quoted(script), name, silent)
@@ -667,9 +698,10 @@ end
 --- @param filename string
 local function tooLong(filename)
   print(filename .. " is too long for the micro:bit, which")
-  local limit = "takes a program of up to %d characters."
+  local limit = "takes a program of up to %d characters; a"
   print(limit:format(MAX_SCRIPT))
-  print("Make it shorter, then upload it again.")
+  print("letter with an accent or a symbol counts as two or")
+  print("more. Make it shorter, then upload it again.")
 end
 
 --- A Lua file's text; nil, said, when it holds no program or
