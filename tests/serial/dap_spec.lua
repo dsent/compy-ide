@@ -145,95 +145,6 @@ describe('Dap status', function()
   end)
 end)
 
-describe('Dap hex checks', function()
-  it('want the end record last', function()
-    assert.is_nil(Dap.hexFault(F.hex(2)))
-    assert.is_nil(Dap.hexFault(F.hex(2) .. '\r\n\0 \t'))
-    local body = F.hex(2):gsub(':00000001FF\r\n$', '')
-    assert.same('cut short', Dap.hexFault(body))
-    assert.same('cut short', Dap.hexFault(''))
-    assert.same('early end', Dap.hexFault(F.hex(2) .. ':1000'))
-    assert.same('damaged', Dap.hexFault(':1000' .. F.hex(2)))
-  end)
-
-  --- the chip skips line ends anywhere, and misreads what is
-  --- not a hex digit
-  it('read the records as the chip reads them', function()
-    local split = F.hex(1):gsub(':00000001FF', ':0000\r\n0001FF')
-    assert.is_nil(Dap.hexFault(split))
-    local hidden = F.hex(1):gsub('\r\n:00000001FF',
-      ':0000\n0001FF')
-    assert.is_nil(Dap.hexFault(hidden))
-    assert.same('early end', Dap.hexFault(
-      ':0000\n0001FF\r\n' .. F.hex(1)))
-    assert.same('damaged', Dap.hexFault(' ' .. F.hex(1)))
-    assert.same('damaged', Dap.hexFault(
-      F.hex(1):gsub('ABAB', 'AB B', 1)))
-  end)
-
-  it('refuse a record whose checksum is wrong', function()
-    local bad = F.hex(3):gsub('(:10002000%x+)(%x%x)\r', function(r, c)
-      return r .. string.format('%02X', (tonumber(c, 16) + 1)
-        % 256) .. '\r'
-    end)
-    assert.same('damaged', Dap.hexFault(bad))
-  end)
-
-  --- the chip's record buffer holds 32 data bytes
-  it('refuse a record longer than the chip reads', function()
-    local function record(n)
-      local sum, body = n, string.format('%02X000000', n)
-      for _ = 1, n do
-        body = body .. '01'
-        sum = sum + 1
-      end
-      return ':' .. body .. string.format('%02X',
-        (256 - sum % 256) % 256) .. '\r\n'
-    end
-    assert.is_nil(Dap.hexFault(record(32) .. ':00000001FF'))
-    assert.same('layout',
-      Dap.hexFault(record(33) .. ':00000001FF'))
-  end)
-
-  --- the chip keeps a segment base only above 64 KB, and
-  --- writes what follows at the boundary below
-  it('refuse a segment address the chip places wrongly',
-    function()
-      local tail = ':04000000AABBCCDDEE\r\n:00000001FF'
-      assert.same('layout',
-        Dap.hexFault(':020000021234B6\r\n' .. tail))
-      assert.is_nil(Dap.hexFault(':020000021000EC\r\n' .. tail))
-      assert.same('damaged',
-        Dap.hexFault(':0100000210ED\r\n' .. tail))
-    end)
-
-  it('send nothing after the end record', function()
-    local body = Dap.hexBody(F.hex(2) .. '\r\n\r\n\0')
-    assert.same(':00000001FF', body:sub(-11))
-  end)
-
-  it('tell a Universal Hex', function()
-    assert.is_nil(Dap.hexFault(F.hex(3)))
-    local uni = ':020000040000FA\r\n:0400000A9900C0DEBB\r\n'
-        .. F.hex(1)
-    assert.same('universal', Dap.hexFault(uni))
-  end)
-
-  --- the chip stops at the first end record and says it took
-  --- the file, whatever follows
-  it('tell an end record before the last record', function()
-    local twice = F.hex(1) .. F.hex(1)
-    assert.same('early end', Dap.hexFault(twice))
-  end)
-
-  it('find the example firmware a plain V2 hex', function()
-    local f = assert(io.open('src/examples/microbit/MICROBIT.hex'))
-    local data = f:read('*a')
-    f:close()
-    assert.is_nil(Dap.hexFault(data))
-  end)
-end)
-
 describe('Usbfs', function()
   it('uses the kernel\'s ioctl numbers', function()
     if ffi.abi('64bit') then
@@ -470,21 +381,11 @@ describe('DapFlash', function()
       assert.same(0x8B, chip.got[n - 1])
       assert.same(0x89, chip.got[n])
       assert.same(1, chip.streamType)
-      assert.same(Dap.hexBody(data), chip.written)
-      assert.same(math.ceil(#Dap.hexBody(data) / 62),
-        count(chip.got, 0x8C))
+      assert.same(data, chip.written)
+      assert.same(math.ceil(#data / 62), count(chip.got, 0x8C))
       assert.same('CLOSED', chip.stream)
       assert.truthy(said[#said]:find('took the file', 1, true))
     end)
-
-  it('sends nothing after the end record', function()
-    local chip = F.chip()
-    local j = job(F.hex(3) .. string.rep('\r\n', 100), chip)
-    assert.same('done', run(j, chip))
-    assert.same(':00000001FF', chip.written:sub(-11))
-    assert.same(0, count(chip.got, 0x8C)
-      - math.ceil(#chip.written / 62))
-  end)
 
   it('never fills the chip\'s reply queue', function()
     local chip = F.chip({ latency = 0.001 })
@@ -818,6 +719,20 @@ describe('Serial flash', function()
       assert.is_nil(ok)
       assert.truthy(err:find('taking a file', 1, true))
     end)
+
+  it('sends the file as Dap.prepare wrote it', function()
+    local chip = F.chip()
+    local s = connected(chip)
+    local data = F.hex(40):gsub('\r\n', '\n') .. '\n\n'
+    assert.is_true(s:flash(data, quiet))
+    for _ = 1, 200 do
+      s:update(1 / 30)
+      chip.now = chip.now + 1 / 30
+    end
+    assert.is_false(s:isFlashing())
+    assert.same(Dap.prepare(data), chip.written)
+    assert.are_not.same(data, chip.written)
+  end)
 
   it('returns at once and flashes over updates', function()
     local chip = F.chip()

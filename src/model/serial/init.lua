@@ -215,25 +215,33 @@ local CUT_SHORT = 'The file is cut short: its last line is'
 local UNIVERSAL = 'This file holds programs for both'
     .. ' micro:bit versions, and the Compy sends only a file'
     .. ' made for a micro:bit V2.'
-local EARLY_END = 'The file is damaged: it ends before its'
-    .. ' last line. Get the file again, then send it once more.'
+local AGAIN = ' Get the file again, then send it once more.'
+local EARLY_END = 'The file is damaged: more follows its last'
+    .. ' line.' .. AGAIN
 local DAMAGED = 'The file is damaged: some of its lines are'
-    .. ' broken. Get the file again, then send it once more.'
-local LAYOUT = 'The file is laid out in a way the micro:bit'
-    .. ' reads wrongly. Make it again with a micro:bit editor,'
-    .. ' then send it.'
+    .. ' broken.' .. AGAIN
+local OVERLAP = 'The file is damaged: it puts two different'
+    .. ' things in the same place.' .. AGAIN
+local EMPTY = 'The file holds no program.' .. AGAIN
+local OUTSIDE = 'This file is not made for a micro:bit V2: it'
+    .. ' puts part of itself where a micro:bit V2 keeps no'
+    .. ' program. Use a file made for a micro:bit V2.'
+local INTERFACE = 'This file is software for the micro:bit\'s'
+    .. ' USB chip, which the Compy does not change. Use a'
+    .. ' program made for a micro:bit V2.'
 local FAULTS = {
   ['cut short'] = CUT_SHORT, universal = UNIVERSAL,
-  ['early end'] = EARLY_END, layout = LAYOUT,
-  damaged = DAMAGED,
+  ['early end'] = EARLY_END, damaged = DAMAGED,
+  overlap = OVERLAP, empty = EMPTY, outside = OUTSIDE,
+  interface = INTERFACE,
 }
 local NOT_READY = 'The Compy cannot send files to this micro:bit'
     .. ' yet. Unplug it, plug it back in, then try again.'
 
 --- Put a hex file on the board through its interface chip,
---- without its drive. The file is checked first, record by
---- record, as the chip will read it, so a damaged one never
---- reaches the board. Returns at once; the work runs a share
+--- without its drive. The file is read first and written
+--- afresh in the shape the chip reads right (Dap.prepare), so
+--- a damaged one never reaches the board. Returns at once; the work runs a share
 --- per update, and say gives the progress and the verdict.
 --- Tests may set self.clock to the chip's time.
 --- @param data string
@@ -250,8 +258,8 @@ function Serial:flash(data, say)
   if type(data) ~= 'string' or data == '' then
     return nil, NO_FILE
   end
-  local fault = Dap.hexFault(data)
-  if fault then return nil, FAULTS[fault] or DAMAGED end
+  local text, fault = Dap.prepare(data)
+  if not text then return nil, FAULTS[fault] or DAMAGED end
   local link, err = self.backend:dap()
   if not link then
     Dap.log('flash refused: ' .. tostring(err))
@@ -260,7 +268,7 @@ function Serial:flash(data, say)
   -- the board restarts with the new firmware, and what was
   -- queued for the old one would be typed into its new REPL
   self:drop()
-  self.job = DapFlash.new(data, link, say, Dap.log,
+  self.job = DapFlash.new(text, link, say, Dap.log,
     self.clock or clock, self.pace)
   return true
 end

@@ -14,6 +14,8 @@
 --- payload, zeros after. Every reply starts with the command
 --- it answers.
 
+require('model.serial.intel_hex')
+
 --- @class Dap
 Dap = {}
 
@@ -172,102 +174,72 @@ function Dap.boardVersion(id)
   end
 end
 
---- The last position that is not a line end, a blank or
---- another control character
+--- Where a program for a micro:bit V2 may put bytes, end
+--- exclusive. DAPLink 0257 flashes any address with the
+--- nRF52833's algorithm (target_flash.c get_flash_algo falls
+--- back to the default region; flash_decoder.c leaves the
+--- range check as a TODO), so the Compy sets the bounds:
+--- - the program flash, 0 to 512 KB: flash_regions[0] of
+---   target_device_nrf52833 (source/family/nordic/nrf52/
+---   target.c);
+--- - the UICR page, 4 KB from NRF_UICR_BASE 0x10001000
+---   (source/hic_hal/nordic/nrf52820/cmsis/nrf52.h), which
+---   CODAL programs such as MICROBIT.hex write to.
+Dap.REGIONS = {
+  { from = 0x00000000, to = 0x00080000 },
+  { from = 0x10001000, to = 0x10002000 },
+}
+
+--- The micro:bit V2's interface chips, by DAPLINK_HIC_ID
+--- (source/daplink/daplink.h): the KL27Z and the nRF52820
+local OWN_HIC = { [0x9796990B] = true, [0x6E052820] = true }
+--- Where DAPLink looks for an image's own info, and how much
+--- it reads before it decides (daplink.h DAPLINK_INFO_OFFSET,
+--- flash_decoder.h FLASH_DECODER_MIN_SIZE)
+local INFO_OFFSET, DECIDE_SIZE = 0x20, 0x30
+
+--- @param run table { at, data }
+--- @return boolean
+local function inside(run)
+  for _, r in ipairs(Dap.REGIONS) do
+    if run.at >= r.from and run.at + #run.data <= r.to then
+      return true
+    end
+  end
+  return false
+end
+
+--- Would the chip take this image for software of its own?
+--- It reads the first DECIDE_SIZE bytes of the file's first
+--- data, and when they carry its HIC id at INFO_OFFSET + 4
+--- it treats the file as an update of itself
+--- (flash_decoder.c flash_decoder_detect_type).
+--- @param first table the lowest run { at, data }
+--- @return boolean
+local function forTheChip(first)
+  if #first.data < DECIDE_SIZE then return false end
+  local b1, b2, b3, b4 = first.data:byte(INFO_OFFSET + 5,
+    INFO_OFFSET + 8)
+  local hic = b1 + b2 * 0x100 + b3 * 0x10000 + b4 * 0x1000000
+  return OWN_HIC[hic] == true
+end
+
+--- The file the chip is sent: the given hex read into an
+--- image (IntelHex.parse), checked, and written afresh
+--- (IntelHex.encode), or why it cannot go:
+--- IntelHex.parse's reasons, 'empty' for no data at all,
+--- 'outside' for a byte outside REGIONS, 'interface' for an
+--- image the chip would take for software of its own
 --- @param data string
---- @return integer
-local function lastVisible(data)
-  local i = #data
-  while i > 0 and data:byte(i) <= 32 do i = i - 1 end
-  return i
-end
-
---- The value of each hex digit's byte
-local DIGIT = {}
-for i = 0, 15 do
-  DIGIT[string.byte(string.format('%X', i))] = i
-  DIGIT[string.byte(string.format('%x', i))] = i
-end
-
---- The most data one record may carry: the chip decodes a
---- record into a buffer of 37 bytes, 32 of them data, and a
---- longer record runs past it (intelhex.c, hex_line_t)
-Dap.RECORD_DATA_MAX = 32
-
---- One record's digits, less its ':': nil when the chip
---- reads it as the record it is, else what is wrong
---- @param rec string
+--- @return string? text
 --- @return string? why
---- @return integer? kind the record type
-local function recordFault(rec)
-  local n = #rec
-  if n < 10 or n % 2 == 1 then return 'damaged' end
-  local sum = 0
-  for i = 1, n, 2 do
-    local hi, lo = DIGIT[rec:byte(i)], DIGIT[rec:byte(i + 1)]
-    if not hi or not lo then return 'damaged' end
-    sum = sum + hi * 16 + lo
+function Dap.prepare(data)
+  local image, why = IntelHex.parse(data)
+  if not image then return nil, why end
+  if #image == 0 then return nil, 'empty' end
+  for _, run in ipairs(image) do
+    if not inside(run) then return nil, 'outside' end
   end
-  local count = tonumber(rec:sub(1, 2), 16)
-  if n ~= (count + 5) * 2 then return 'damaged' end
-  if sum % 256 ~= 0 then return 'damaged' end
-  local kind = tonumber(rec:sub(7, 8), 16)
-  if kind >= 0x0A and kind <= 0x0E then return 'universal' end
-  if kind > 5 then return 'damaged' end
-  if count > Dap.RECORD_DATA_MAX then return 'layout' end
-  if (kind == 2 or kind == 4) and count ~= 2 then
-    return 'damaged'
-  end
-  -- a segment base the chip keeps only above 64 KB: it
-  -- places the data after it at the 64 KB boundary below,
-  -- the wrong address, and says nothing
-  if kind == 2 and tonumber(rec:sub(9, 12), 16) % 0x1000 ~= 0
-  then
-    return 'layout'
-  end
-  return nil, kind
-end
-
---- What keeps a hex file from the chip, if anything. The file
---- is read as the chip reads it (intelhex.c): a line end
---- anywhere is skipped, a ':' starts a record, and every
---- other byte is taken for a hex digit. What follows the
---- end-of-file record is never sent (hexBody), so line ends,
---- blanks and other control characters may follow it.
----
---- - 'cut short': no end-of-file record
---- - 'early end': a record after the end-of-file record; the
----   chip would stop at it and say it took the file
---- - 'universal': a Universal Hex, which holds a V1 and a V2
----   image in blocks (record types 0A to 0E); the chip picks
----   its own blocks only when every write starts on a block,
----   and a write here carries 62 bytes
---- - 'layout': what the chip would write to the wrong place:
----   a record of more than 32 data bytes, or a segment
----   address (type 02) that is not on a 64 KB boundary
---- - 'damaged': anything else the chip would misread: a bad
----   digit, a wrong length or checksum, an unknown type
---- @param data string
---- @return string? why
-function Dap.hexFault(data)
-  local text = data:sub(1, lastVisible(data)):gsub('[\r\n]', '')
-  if text == '' then return 'cut short' end
-  if text:sub(1, 1) ~= ':' then return 'damaged' end
-  local ended = false
-  for rec in text:gmatch(':([^:]*)') do
-    if ended then return 'early end' end
-    local why, kind = recordFault(rec)
-    if why then return why end
-    ended = kind == 1
-  end
-  if not ended then return 'cut short' end
-end
-
---- The file as the chip gets it: everything up to the end of
---- the end-of-file record. The chip takes nothing after the
---- record, so the chunk that carries it is the last one.
---- @param data string a file hexFault finds nothing wrong in
---- @return string
-function Dap.hexBody(data)
-  return data:sub(1, lastVisible(data))
+  if forTheChip(image[1]) then return nil, 'interface' end
+  return IntelHex.encode(image)
 end

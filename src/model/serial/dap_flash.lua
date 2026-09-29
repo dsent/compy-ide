@@ -61,8 +61,7 @@ local NOT_V2 = 'This board is not a micro:bit V2, and the file'
 local GONE = 'Its old program may be gone until a file goes'
     .. ' onto it.'
 
---- @param data string a hex Dap.hexFault finds nothing
----   wrong in
+--- @param data string a hex Dap.prepare wrote
 --- @param link DapLink
 --- @param say function
 --- @param log function
@@ -71,7 +70,7 @@ local GONE = 'Its old program may be gone until a file goes'
 --- @return DapFlash
 function DapFlash.new(data, link, say, log, clock, pace)
   local self = setmetatable({}, DapFlash)
-  self.data = Dap.hexBody(data)
+  self.data = data
   self.chunks = math.ceil(#self.data / Dap.CHUNK)
   self.link = link
   self.say = say
