@@ -1429,7 +1429,8 @@ chord and of what our re-homing adopted.
   (`consoleController.lua`), a step of its own beside `framework_before_exit`,
   puts the mouse back — relative mode off, not grabbed, visible, the system
   cursor — on every stop path after the project's hook, on the failed-run
-  branch, and before every run starts. A pause gives the console that mouse
+  branch (the reset alone: the hook still does not fire there), and before
+  every run starts. A pause gives the console that mouse
   and `continue()` gives the program back its own. Keyboard modes and audio
   are still as this entry describes.
 

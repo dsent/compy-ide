@@ -12,8 +12,7 @@ Console mode is the default application state — active when no project is runn
 
 | State | Meaning |
 |---|---|
-| `ready` | No project open, console REPL active |
-| `project_open` | Project opened but not running |
+| `ready` | Console REPL active; the open project is not running, or its code has finished and it only answers events |
 | `running` | Project's main.lua is executing (handlers set) |
 | `snapshot` | Transition: screenshot requested, about to suspend |
 | `inspect` | Project suspended (paused); console REPL active over frozen project state |
@@ -76,7 +75,6 @@ During `inspect` state, the REPL runs code in `project_env`, allowing the user t
 - Closes any currently open project first
 - Calls `ProjectService:opreate(name)` which opens an existing project or creates a new one with example code
 - Registers a custom `package.loader` that loads modules from the project directory (prepended to `package.loaders` so it takes priority)
-- Sets state to `project_open`
 
 The custom loader is stored in `self.loaders[name]` so it can be removed on close.
 
@@ -86,11 +84,11 @@ The custom loader is stored in `self.loaders[name]` so it can be removed on clos
 - Calls `ProjectService:run()` which loads `main.lua` via the project's filesystem mount
 - Sets state to `running`
 - Calls `run_user_code(f, cc, path)` which: executes the chunk in `use_canvas`, then calls `set_user_handlers(env['love'], cc)` to detect and register any `love.*` event handlers the project defined
-- If the project defines no blocking handlers (`love.draw`, `love.update`), state immediately returns to `project_open`
+- If the project defines no blocking handlers (`love.draw`, `love.update`), state immediately returns to `ready`
 
 ### Stopping vs suspending vs quitting
 
-**`stop_project_run()`**: Clears user handlers, calls `evacuate_required()` to remove project modules from `package.loaded`, restores default draw, resets widget input, and puts the mouse back as the console needs it (`flush_program_state`, which `run_project` also calls before a run starts and on a top-level raise). State → `project_open`. The project's global state persists in `project_env` (can be inspected at the REPL).
+**`stop_project_run()`**: Clears user handlers, calls `evacuate_required()` to remove project modules from `package.loaded`, restores default draw, resets widget input, and puts the mouse back as the console needs it (`flush_program_state`, which `run_project` also calls before a run starts and on a top-level raise). State → `ready`. The project's global state persists in `project_env` (can be inspected at the REPL).
 
 **`suspend_run(msg)`**: Requests a snapshot. State → `snapshot` → `inspect` on next tick. Handlers saved; default handlers restored temporarily. The console gets its mouse back and the program's is saved. User can inspect and continue.
 

@@ -1630,9 +1630,12 @@ function ConsoleController.prepare_project_env(cc)
     if love.state.app_state == 'inspect' then
       -- resume
       love.state.app_state = 'running'
-      set_mouse(cc.paused_mouse)
-      cc.paused_mouse = nil
       cc.main_ctrl.restore_user_handlers(cc)
+      -- After the handlers: a cursor the program has released
+      -- raises here, and the program runs on regardless.
+      local mouse = cc.paused_mouse
+      cc.paused_mouse = nil
+      set_mouse(mouse)
     else
       print('No project halted')
     end
