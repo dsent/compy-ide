@@ -1860,6 +1860,37 @@ describe('Editor #editor', function()
           assert.same(42, bv.content:get_range().start)
         end)
 
+        it('search starts afresh in the next file', function()
+          local lines = {}
+          for i = 1, 9 do lines[i] = 'x' .. i .. ' = ' .. i end
+          local beta = mock_func_snippet('beta')
+          session:open((src(table.concat(lines, '\n'), beta)))
+          mock.keystroke('C-f', press)
+          type_search('be')
+          --- the editor closes with search open, as the
+          --- gate's shortcuts close it
+          controller:close()
+
+          session:open((src(mock_func_snippet('alpha'))))
+          assert.same('nav', controller:get_mode())
+          mock.keystroke('C-f', press)
+          assert.is_true(controller.search.input:is_empty())
+          mock.keystroke('return', press)
+
+          assert.same('nav', controller:get_mode())
+          assert.same(1, session.buffer:get_selection())
+        end)
+
+        it('each load replaces the results, none included', function()
+          local sm = controller.search.model
+          sm:load({ { name = 'a' }, { name = 'b' } })
+          sm:load({ { name = 'c' } })
+          assert.same(1, #sm.resultset)
+          assert.same('c', sm.resultset[1].r.name)
+          sm:load({})
+          assert.same({}, sm.resultset)
+        end)
+
         it('Escape leaves search without moving the selection', function()
           local alpha = mock_func_snippet('alpha')
           local beta = mock_func_snippet('beta')

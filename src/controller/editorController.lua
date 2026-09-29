@@ -236,11 +236,8 @@ function EditorController:set_mode(mode)
   end
   local init_search = function()
     local db = buf.semantic
-    if db then
-      self:save_state()
-      local ds = db.definitions
-      self.search:load(ds)
-    end
+    self:save_state()
+    self.search:load(db and db.definitions or {})
   end
 
   local current = self.mode
@@ -343,6 +340,10 @@ end
 --- @return {name: string, content: string[]}[]
 function EditorController:close()
   self.input:clear()
+  --- the gate's shortcuts close the editor in any mode,
+  --- search included; the next file starts in navigation
+  self.search:clear()
+  self.mode = 'nav'
   local bfs = self.model:get_buffers_content()
   self.model.buffers = Dequeue()
   self.view.buffers = {}
