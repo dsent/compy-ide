@@ -8,6 +8,11 @@ require('model.serial.dap')
 --- It answers as a flash does (step, erased, abandon), and
 --- comes before one: once step says 'ready', text holds the
 --- file to send.
+---
+--- on, when given, holds what the caller wants to hear:
+--- on.read(image) once the file passed every check, with its
+--- runs { at, data }, and on.sending() as the flash begins.
+--- A fault in either is logged and does not stop the flash.
 
 --- @class DapPrepare
 DapPrepare = {}
@@ -18,15 +23,30 @@ DapPrepare.BUDGET = 0.020
 --- Lines, pieces or records read between looks at the clock
 DapPrepare.CHECK_EVERY = 16
 
+--- A call to what the caller gave, whose fault is logged
+--- @param log function
+--- @param fn function?
+local function tell(log, fn, ...)
+  if not fn then return end
+  local ok, err = pcall(fn, ...)
+  if not ok then
+    log('what was asked to hear about the flash failed: '
+      .. tostring(err))
+  end
+end
+DapPrepare.tell = tell
+
 --- @param data string the hex file as given
 --- @param say function a line for the person
 --- @param log function a line for the device log
 --- @param clock function seconds
+--- @param on table? { read = fn(image), sending = fn() }
 --- @return DapPrepare
-function DapPrepare.new(data, say, log, clock)
+function DapPrepare.new(data, say, log, clock, on)
   local self = setmetatable({}, DapPrepare)
   self.say = say
   self.log = log
+  self.on = on or {}
   self.clock = clock
   self.state = 'running'
   self.updates = 0
@@ -40,8 +60,17 @@ function DapPrepare.new(data, say, log, clock)
       coroutine.yield()
     end
   end
+  local function seen(image)
+    tell(log, self.on.read, image)
+  end
+  -- a fault of the Compy's own, not of the file, comes back
+  -- with where it was raised
   self.co = coroutine.create(function()
-    return Dap.prepare(data, pause)
+    local ok, text, why = xpcall(function()
+      return Dap.prepare(data, pause, seen)
+    end, debug.traceback)
+    if not ok then return nil, 'internal', text end
+    return text, why
   end)
   say('Reading the file before it goes to the micro:bit.')
   return self
@@ -61,7 +90,7 @@ function DapPrepare:step(dt)
   self.updates = self.updates + 1
   local began = self.clock()
   self.deadline = began + DapPrepare.BUDGET
-  local ok, text, why = coroutine.resume(self.co)
+  local ok, text, why, trace = coroutine.resume(self.co)
   local took = self.clock() - began
   self.spent = self.spent + took
   self.longest = math.max(self.longest, took)
@@ -69,8 +98,10 @@ function DapPrepare:step(dt)
     return self.state
   end
   if not ok then
-    self.log('preparing failed: ' .. tostring(text))
-    text, why = nil, 'damaged'
+    text, why, trace = nil, 'internal', text
+  end
+  if why == 'internal' then
+    self.log('preparing failed: ' .. tostring(trace))
   end
   self.log(string.format('file prepared in %.0f ms over %d'
     .. ' updates, the longest %.0f ms: %s',

@@ -21,6 +21,9 @@ IntelHex = {}
 IntelHex.ROW = 16
 
 local BLOCK = 0x10000
+--- The longest record: ':', then 255 data bytes and five
+--- more, two digits each
+local LONGEST = 1 + 2 * (255 + 5)
 
 --- The value of each hex digit's byte
 local DIGIT = {}
@@ -109,6 +112,9 @@ local function pieces(data, pause)
   for line in (data .. '\n'):gmatch('([^\r\n]*)[\r\n]') do
     pause()
     line = line:gsub('[%s%z]+$', '')
+    -- a line longer than any record is refused before it is
+    -- decoded, which cannot pause
+    if #line > LONGEST then return nil, 'damaged' end
     if line ~= '' then
       if ended then return nil, 'early end' end
       local r, why = record(line)
@@ -154,8 +160,8 @@ end
 --- The pieces as one image: runs of bytes in address order,
 --- each { at, data }. A byte given twice must be given the
 --- same both times. Pieces already in order, as a file
---- usually lists them, are not sorted: the sort is the one
---- step that cannot pause.
+--- usually lists them, are not sorted: the sort cannot
+--- pause, and on a big file it is the longest such step.
 --- @param list table[]
 --- @param pause function called once a piece
 --- @return table[]? image

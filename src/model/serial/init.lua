@@ -46,8 +46,8 @@ require('model.serial.dap_prepare')
 Serial = {}
 Serial.__index = Serial
 
-local FLASHING = 'The micro:bit is taking a file. Wait until'
-    .. ' the Compy says how it went.'
+local FLASHING = 'A file is on its way to the micro:bit. Wait'
+    .. ' until the Compy says how it went.'
 
 --- @param backend table
 --- @param max_line integer?
@@ -249,12 +249,15 @@ local OUTSIDE = 'This file is not made for a micro:bit V2: it'
 local INTERFACE = 'This file is software for the micro:bit\'s'
     .. ' USB chip, which the Compy does not change. Use a'
     .. ' program made for a micro:bit V2.'
+local INTERNAL = 'The Compy could not read the file, through'
+    .. ' a fault of its own. Send the file again.'
 local FAULTS = {
   ['cut short'] = CUT_SHORT, universal = UNIVERSAL,
   ['early end'] = EARLY_END, damaged = DAMAGED,
   overlap = OVERLAP, empty = EMPTY, outside = OUTSIDE,
   ['too small'] = TOO_SMALL,
   interface = INTERFACE,
+  internal = INTERNAL,
 }
 local UNPLUGGED = 'The micro:bit was unplugged before the'
     .. ' file went to it. Plug it back in, then send the file'
@@ -270,13 +273,15 @@ local NO_FLASHING = 'This micro:bit cannot take files from the'
 --- a damaged one never reaches the board. Returns at once:
 --- the reading and then the flash run a share per update,
 --- and say gives the progress and the verdict, a damaged
---- file's included. Tests may set self.clock to the chip's
---- time.
+--- file's included. on, when given, hears the file read and
+--- the sending begin (DapPrepare.new). Tests may set
+--- self.clock to the chip's time.
 --- @param data string
 --- @param say function
+--- @param on table?
 --- @return boolean? ok
 --- @return string? err in plain words
-function Serial:flash(data, say)
+function Serial:flash(data, say, on)
   if self.job then return nil, FLASHING end
   if not self.connected then
     local why = self.backend.absence and self.backend:absence()
@@ -297,7 +302,7 @@ function Serial:flash(data, say)
   -- queued for the old one would be typed into its new REPL
   self:drop()
   self.job = DapPrepare.new(data, say, Dap.log,
-    self.clock or clock)
+    self.clock or clock, on)
   return true
 end
 
@@ -324,6 +329,7 @@ function Serial:prepared(prep)
   end
   self.job = DapFlash.new(prep.text, link, prep.say, Dap.log,
     self.clock or clock)
+  DapPrepare.tell(Dap.log, prep.on.sending)
 end
 
 --- Words for a board the Compy cannot flash: a replug helps

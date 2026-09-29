@@ -54,8 +54,8 @@ end
 --- @return boolean
 local function flashing()
   if serial.isFlashing() then
-    print("The micro:bit is taking a file. Wait until the")
-    print("Compy says how it went.")
+    print("A file is on its way to the micro:bit. Wait until")
+    print("the Compy says how it went.")
     return true
   end
   return false
@@ -572,51 +572,28 @@ function compile(lua_name, hex_name)
   embed(hex_name or (lua_name:gsub("%.lua$", "") .. ".hex"))
 end
 
---- What a hex file's firmware says its version is, nil when
---- it does not say, false when the file cannot be read
---- @param data string
---- @return string|false|nil
-local function versionOf(data)
-  local ok, blocks = pcall(hex.parse, data)
-  if not ok then
-    return false
-  end
-  return hex.version(blocks)
-end
-
---- Say which firmware a file holds, or that it is damaged
---- @param name string
---- @param data string
---- @return boolean readable
-local function tellVersion(name, data)
-  local version = versionOf(data)
-  if version == false then
-    print(name .. " is damaged: some of its lines are broken.")
-    print("Get the file again, then send it once more.")
-    return false
-  end
-  print(name .. " holds firmware " ..
-    (version or "too old to say its version"))
-  return true
-end
-
 --- Put a hex file on the board over the USB cable, as a
---- Compy does: it says every few seconds how far it has got,
---- and at the end whether the board took it; the board
---- restarts with it. A sound says the sending has begun.
+--- Compy does: the Compy reads the file a share at a time,
+--- says which firmware it holds, then says every few seconds
+--- how far it has got, and at the end whether the board took
+--- it; the board restarts with it. A sound says the sending
+--- has begun.
 --- @param name string
 --- @param data string
 local function uploadOverCable(name, data)
   assert(not isSending(), "exec is still sending a file")
-  if not tellVersion(name, data) then
-    return
-  end
-  local ok, err = flash_microbit(data)
+  local ok, err = flash_microbit(data, {
+    read = function(image)
+      print(name .. " holds firmware " ..
+        (hex.version(image) or "too old to say its version"))
+    end,
+    sending = function()
+      compy.audio.hyperjump()
+    end
+  })
   if not ok then
     print(err)
-    return
   end
-  compy.audio.hyperjump()
 end
 
 --- Put a hex file on the board's drive, on a computer. The

@@ -1088,10 +1088,10 @@ describe('Serial flash', function()
       assert.is_true(s:isFlashing())
       local ok, err = s:flash(F.hex(1), quiet)
       assert.is_nil(ok)
-      assert.truthy(err:find('taking a file', 1, true))
+      assert.truthy(err:find('on its way to the micro:bit', 1, true))
       ok, err = s:reset()
       assert.is_nil(ok)
-      assert.truthy(err:find('taking a file', 1, true))
+      assert.truthy(err:find('on its way to the micro:bit', 1, true))
     end)
 
   it('sends the file as Dap.prepare wrote it', function()
@@ -1237,7 +1237,7 @@ describe('Serial flash', function()
     assert.is_true(s:flash(F.hex(40), quiet))
     local ok, err = s:send('print(1)\r')
     assert.is_nil(ok)
-    assert.truthy(err:find('taking a file', 1, true))
+    assert.truthy(err:find('on its way to the micro:bit', 1, true))
     assert.same({}, b.sent)
     for _ = 1, 200 do
       s:update(1 / 30)
@@ -1328,6 +1328,85 @@ describe('Serial flash', function()
       assert.truthy(said[#said]:find('unplugged before the file'
         .. ' went to it', 1, true))
     end)
+
+  it('tells the caller the file it read, then the sending',
+    function()
+      local chip = F.chip()
+      local s = connected(chip)
+      local order = {}
+      local on = {
+        read = function(image)
+          order[#order + 1] = 'read ' .. #image .. ' ' .. #chip.got
+        end,
+        sending = function()
+          order[#order + 1] = 'sending ' .. #chip.got
+        end,
+      }
+      assert.is_true(s:flash(F.hex(40), quiet, on))
+      for _ = 1, 200 do
+        if not s:isFlashing() then break end
+        s:update(1 / 30)
+        chip.now = chip.now + 1 / 30
+      end
+      assert.same({ 'read 1 0', 'sending 0' }, order)
+      assert.same(Dap.prepare(F.hex(40)), chip.written)
+    end)
+
+  it('tells the caller nothing of a file it refuses',
+    function()
+      local chip = F.chip()
+      local s = connected(chip)
+      local told = 0
+      local on = {
+        read = function() told = told + 1 end,
+        sending = function() told = told + 1 end,
+      }
+      local bad = F.hex(40):gsub('ABAB', 'ABAC', 1)
+      assert.is_true(s:flash(bad, quiet, on))
+      for _ = 1, 20 do s:update(1 / 30) end
+      assert.is_false(s:isFlashing())
+      assert.same(0, told)
+    end)
+
+  it('flashes on when what the caller gave fails', function()
+    local chip = F.chip()
+    local s = connected(chip)
+    local on = {
+      read = function() error('read broke') end,
+      sending = function() error('sending broke') end,
+    }
+    local err = heard(s, chip, F.hex(40))
+    assert.truthy(err:find('took the file', 1, true))
+    local chip2 = F.chip()
+    local s2 = connected(chip2)
+    local said = {}
+    assert.is_true(s2:flash(F.hex(40),
+      function(l) said[#said + 1] = l end, on))
+    for _ = 1, 200 do
+      if not s2:isFlashing() then break end
+      s2:update(1 / 30)
+      chip2.now = chip2.now + 1 / 30
+    end
+    assert.truthy(joined(said):find('took the file', 1, true))
+  end)
+
+  --- a fault of the Compy's own sends no one for a new file
+  it('tells its own fault from a damaged file', function()
+    local chip = F.chip()
+    local s = connected(chip)
+    local encode = IntelHex.encode
+    local logged = {}
+    Dap.log = function(l) logged[#logged + 1] = l end
+    IntelHex.encode = function() error('out of memory') end
+    local ok, err = pcall(heard, s, chip, F.hex(40))
+    IntelHex.encode = encode
+    assert.is_true(ok, tostring(err))
+    assert.truthy(err:find('fault of its own', 1, true), err)
+    assert.is_nil(err:find('damaged', 1, true))
+    assert.same(0, #chip.got)
+    assert.truthy(joined(logged):find('out of memory', 1, true))
+    assert.truthy(joined(logged):find('traceback', 1, true))
+  end)
 
   it('tells a program whether a flash runs', function()
     local s = connected(F.chip({ latency = 1 }))

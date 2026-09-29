@@ -315,6 +315,8 @@ describe('IntelHex', function()
       { rec(7, 0, seq(2)) .. EOF, 'damaged' },
       { ' ' .. rec(0, 0, seq(4)) .. EOF, 'damaged' },
       { ':0000\r\n0001FF\r\n', 'damaged' },
+      -- longer than any record: refused before it is decoded
+      { ':' .. string.rep('00', 261) .. '\r\n' .. EOF, 'damaged' },
     }
     for i, c in ipairs(cases) do
       local image, why = IntelHex.parse(c[1])

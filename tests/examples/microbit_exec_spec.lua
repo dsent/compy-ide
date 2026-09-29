@@ -256,30 +256,50 @@ describe('micro:bit exec #microbit', function()
     assert.is_false(flashed)
   end)
 
-  it('upload says which firmware it put on the board', function()
-    local tools = load_tools()
-    local hex = require('examples.microbit.hex')
-    files['v.hex'] = hex.write({ {
-      addr = 0,
-      data = 'microbit-lua firmware abc1234\0',
-    } })
-    tools.upload('v.hex')
-    assert.is_true(flashed)
-    assert.equal('v.hex holds firmware abc1234', said[#said])
-  end)
-
-  it('upload refuses a damaged hex before flashing, in plain'
-    .. ' words', function()
-      for _, bad in ipairs({ ':00000001FE\n',
-        ':00000004FC\n:00000001FF\n' }) do
-        local tools = load_tools()
-        files['bad.hex'] = bad
-        said = {}
-        assert.has_no_error(function() tools.upload('bad.hex') end)
-        assert.is_false(flashed)
-        assert.truthy(table.concat(said, ' '):find('damaged', 1,
-          true))
+  --- the Compy reads the file a share at a time, and tells
+  --- the example what it read and when the sending begins
+  it('upload says which firmware it read, and sounds as the'
+    .. ' sending begins', function()
+      local tools = load_tools()
+      local hex = require('examples.microbit.hex')
+      require('model.serial.intel_hex')
+      local on
+      tools.flash_microbit = function(_, hooks)
+        flashed = true
+        on = hooks
+        return true
       end
+      local sounds = 0
+      tools.compy.audio.hyperjump = function() sounds = sounds + 1 end
+      files['v.hex'] = hex.write({ {
+        addr = 0,
+        data = 'microbit-lua firmware abc1234\0',
+      } })
+      said = {}
+      tools.upload('v.hex')
+      assert.is_true(flashed)
+      assert.same({}, said)
+      assert.equal(0, sounds)
+      on.read(IntelHex.parse(files['v.hex']))
+      assert.equal('v.hex holds firmware abc1234', said[#said])
+      assert.equal(0, sounds)
+      on.sending()
+      assert.equal(1, sounds)
+    end)
+
+  --- the example reads nothing itself: a damaged file is the
+  --- Compy's to refuse, and nothing is said for it here
+  it('upload leaves a damaged hex to the Compy\'s own check',
+    function()
+      local tools = load_tools()
+      local sounds = 0
+      tools.compy.audio.hyperjump = function() sounds = sounds + 1 end
+      files['bad.hex'] = ':00000001FE\n'
+      said = {}
+      assert.has_no_error(function() tools.upload('bad.hex') end)
+      assert.is_true(flashed)
+      assert.same({}, said)
+      assert.equal(0, sounds)
     end)
 
   it('upload looks for no drive, and says plainly why a flash'
@@ -308,7 +328,7 @@ describe('micro:bit exec #microbit', function()
       serial.job = nil
       assert.same({}, backend.sent)
       local told = table.concat(said, ' ')
-      local _, n = told:gsub('taking a file', '')
+      local _, n = told:gsub('on its way to the micro:bit', '')
       assert.equal(2, n)
       assert.has_no_error(function() tools.exec('f.lua') end)
       assert.same({ WRAP .. '\r' }, backend.sent)
@@ -365,7 +385,7 @@ describe('micro:bit exec #microbit', function()
       tools.restart_microbit()
       serial.job = nil
       assert.equal(0, backend.resets)
-      assert.truthy(table.concat(said, ' '):find('taking a file',
+      assert.truthy(table.concat(said, ' '):find('on its way to the micro:bit',
         1, true))
     end)
 

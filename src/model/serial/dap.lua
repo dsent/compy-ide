@@ -268,12 +268,14 @@ end
 --- second run, so such a file is never written),
 --- 'outside' for a byte outside REGIONS, 'interface' for an
 --- image the chip would take for software of its own.
---- pause is passed on to the reading and the writing.
+--- pause is passed on to the reading and the writing; seen,
+--- when given, gets the image once it passed every check.
 --- @param data string
 --- @param pause function?
+--- @param seen function?
 --- @return string? text
 --- @return string? why
-function Dap.prepare(data, pause)
+function Dap.prepare(data, pause, seen)
   local image, why = IntelHex.parse(data, pause)
   if not image then return nil, why end
   if #image == 0 then return nil, 'empty' end
@@ -284,5 +286,6 @@ function Dap.prepare(data, pause)
     if not inside(run) then return nil, 'outside' end
   end
   if forTheChip(image[1]) then return nil, 'interface' end
+  if seen then seen(image) end
   return IntelHex.encode(image, pause)
 end

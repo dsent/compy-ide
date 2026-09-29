@@ -406,11 +406,13 @@ end
 --- goes and how it ended. On a desktop it is written to the
 --- board's drive.
 --- @param content any
+--- @param on table? on Android: on.read(image) hears the
+---   file read, on.sending() the sending begin
 --- @return boolean? success
 --- @return string? err
-function ConsoleController:flash_microbit(content)
+function ConsoleController:flash_microbit(content, on)
   if on_android() then
-    return SerialPort:flash(content, print)
+    return SerialPort:flash(content, print, on)
   end
   local P = self.model.projects
   local p = P.current
@@ -1560,10 +1562,11 @@ function ConsoleController.prepare_project_env(cc)
   end
 
   --- @param content string
+  --- @param on table? see ConsoleController:flash_microbit
   --- @return boolean? success
   --- @return string? err
-  project_env.flash_microbit   = function(content)
-    if on_android() then return cc:flash_microbit(content) end
+  project_env.flash_microbit   = function(content, on)
+    if on_android() then return cc:flash_microbit(content, on) end
     return check_microbit_path(cc.flash_microbit, cc, content)
   end
 
