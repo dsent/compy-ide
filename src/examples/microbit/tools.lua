@@ -508,81 +508,17 @@ function embed(hex_name, lua_name)
   print("wrote " .. hex_name)
 end
 
---- What a file has to say: its lines, less the blank ones
---- and the comments. A directive is a comment too, and is
---- left in for the caller to recognise.
+--- The hex file upload sends: the file itself, or for a Lua
+--- file, a hex file of its name with the script put in
 --- @param filename string
---- @return string[]
-local function linesOf(filename)
-  local kept = { }
-  for line in read(filename):gmatch("[^\r\n]*") do
-    local code = line:find("%S") and not line:find("^%s*%-%-")
-    local keep = code or line:find("^%s*%-%->>?%s+%S+%s*$")
-    if keep then
-      kept[#kept + 1] = line
-    end
+--- @return string
+local function hexFor(filename)
+  if not filename:find("%.lua$") then
+    return filename
   end
-  return kept
-end
-
---- The file a directive names, or nothing
---- @param line string
---- @return string? name
---- @return boolean? wrapped
-local function included(line)
-  local plain = line:match("^%s*%-%->>%s+(%S+)%s*$")
-  if plain then
-    return plain, false
-  end
-  local wrapped = line:match("^%s*%-%->%s+(%S+)%s*$")
-  if wrapped then
-    return wrapped, true
-  end
-end
-
---- An included file, as it stands. Its own directives are
---- comments here: a reference is not followed further.
---- @param out string[]
---- @param filename string
-local function bring(out, filename)
-  for _, line in ipairs(linesOf(filename)) do
-    if not included(line) then
-      out[#out + 1] = line
-    end
-  end
-end
-
---- One line of the source: itself, or the file it names
---- @param out string[]
---- @param line string
-local function expand(out, line)
-  local name, wrapped = included(line)
-  if not name then
-    out[#out + 1] = line
-  elseif wrapped then
-    out[#out + 1] = WRAP
-    bring(out, name)
-    out[#out + 1] = UNWRAP
-  else
-    bring(out, name)
-  end
-end
-
---- Build one Lua file out of several and put it in the
---- firmware. A line "--> name" brings that file in wrapped
---- in a chunk of its own, so what it declares stays there;
---- "-->> name" brings it in as it stands.
---- @param lua_name string
---- @param hex_name string?
-function compile(lua_name, hex_name)
-  assert(lua_name, "name the lua file to compile")
-  assert(lua_name ~= LUA, LUA .. " is the one it builds")
-  local out = { }
-  for _, line in ipairs(linesOf(lua_name)) do
-    expand(out, line)
-  end
-  writefile(LUA, table.concat(out, "\n") .. "\n")
-  embed(hex_name or (lua_name:gsub("%.lua$", "") .. ".hex"))
+  local hex_name = filename:gsub("%.lua$", ".hex")
+  embed(hex_name, filename)
+  return hex_name
 end
 
 --- What the Compy tells the upload: the file it read, and
@@ -628,7 +564,6 @@ end
 --- @param data string
 local function uploadToDrive(name, data)
   local version = hex.version(hex.parse(data))
-  assert(not isSending(), "exec is still sending a file")
   assert(detect_microbit(), "no micro:bit plugged in")
   compy.audio.hyperjump()
   local ok, err = flash_microbit(data)
@@ -647,10 +582,12 @@ local function overCable()
   return love.system.getOS() == "Android" and cableFlash()
 end
 
---- Put a hex file on the board
+--- Put a hex file on the board, or a Lua file: that is put
+--- into a hex file of its name first
 --- @param filename string?
 function upload(filename)
-  local name = filename or HEX
+  assert(not isSending(), "exec is still sending a file")
+  local name = hexFor(filename or HEX)
   local data = read(name)
   if overCable() then
     uploadOverCable(name, data)
@@ -679,8 +616,8 @@ local FIRMWARE = {
   "hexmap(hex)             what a hex file holds",
   "extract(hex, lua)       its script out to a file",
   "embed(hex, lua)         a script into a new hex",
-  "compile(lua, hex)       files into one, then into a hex",
-  "upload(hex)             a hex file onto the board"
+  "upload(file)            a hex file onto the board, or a",
+  "                        lua file, put in a hex first"
 }
 
 function help()

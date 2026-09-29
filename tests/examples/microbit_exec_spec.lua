@@ -28,6 +28,7 @@ describe('micro:bit exec #microbit', function()
       compy = { serial = port, audio = { hyperjump = function() end } },
       echo = function(on) echoes[#echoes + 1] = on ~= false end,
       readfile = function(name) return files[name] end,
+      writefile = function(name, text) files[name] = text end,
       print = function(text) said[#said + 1] = text end,
       require = function(name)
         return require('examples.microbit.' .. name)
@@ -425,6 +426,29 @@ describe('micro:bit exec #microbit', function()
       assert.truthy(table.concat(said, ' '):find('on its way to the micro:bit',
         1, true))
     end)
+
+  it('upload puts a lua file into a hex of its name first',
+    function()
+      local tools = load_tools()
+      local hex = require('examples.microbit.hex')
+      local f = assert(io.open('src/examples/microbit/MICROBIT.hex'))
+      files['MICROBIT.hex'] = f:read('*a')
+      f:close()
+      files['robot.lua'] = 'print("robot")\n'
+      tools.upload('robot.lua')
+      assert.is_true(flashed)
+      assert.are.equal(files['robot.lua'],
+        hex.script(hex.parse(files['robot.hex'])))
+    end)
+
+  it('upload leaves MICROBIT.hex as it is', function()
+    local tools = load_tools()
+    files['MICROBIT.hex'] = ':00000001FF\n'
+    files['MICROBIT.lua'] = 'print(1)\n'
+    assert.has_error(function() tools.upload('MICROBIT.lua') end)
+    assert.is_false(flashed)
+    assert.are.equal(':00000001FF\n', files['MICROBIT.hex'])
+  end)
 
   it('restart_microbit restarts the board', function()
     local tools = load_tools()
