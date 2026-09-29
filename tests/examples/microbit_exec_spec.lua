@@ -619,8 +619,27 @@ describe('micro:bit exec #microbit', function()
           hex.script(hex.parse(data)), 'embedded'))
         setfenv(chunk, env)
         local ok, err = pcall(chunk)
+        env.heard = out
         return table.concat(out), env, not ok and tostring(err)
           or nil
+      end
+
+      --- Whether a handler takes what is typed at the board to
+      --- the prompt, as the firmware's does: it arms the port
+      --- again for the next character
+      --- @param env table a booted board
+      --- @param handler function
+      --- @return boolean
+      local function typing(env, handler)
+        local before = #env.heard
+        handler(env.microbit.DEVICE_ID_SERIAL,
+          env.microbit.CODAL_SERIAL_EVT_HEAD_MATCH)
+        for i = before + 1, #env.heard do
+          if env.heard[i] == '<armed>' then
+            return true
+          end
+        end
+        return false
       end
 
       before_each(firmware)
@@ -671,7 +690,7 @@ describe('micro:bit exec #microbit', function()
         assert.is_nil(err)
         local mine, firmware = env.on_event()
         assert.equal('mine', mine)
-        assert.is_function(firmware)
+        assert.is_true(typing(env, firmware))
       end)
 
       it('takes an on_event a function of the file sets later',
@@ -695,17 +714,26 @@ describe('micro:bit exec #microbit', function()
           local out, env, err = boot(uploaded(tools))
           assert.is_nil(err)
           assert.truthy(out:find('oops', 1, true))
-          assert.are_not.equal('mine', (env.on_event()))
+          assert.is_true(typing(env, env.on_event))
         end)
 
       --- The board's Lua is 5.1 itself, stricter than LuaJIT
       --- here: it refuses a [[ inside [[ ]]
-      local luac = io.popen('command -v luac5.1'):read('*l')
+      --- @return string? luac5.1, when installed
+      local function luac()
+        local probe = io.popen('command -v luac5.1')
+        local path = probe:read('*l')
+        probe:close()
+        return path
+      end
+
       for _, text in ipairs({ 'print("[[")\n', '--[[ open\n',
-        'print("]]")\n', 'print([==[ a ]] b ]==])' }) do
+        'print("]]")\n', 'print([==[ a ]] b ]==])',
+        'print([=[ x ]=])\n' }) do
         it('builds a script the board\'s Lua reads ('
           .. text:gsub('\n', ' ') .. ')', function()
-            if not luac then
+            local compiler = luac()
+            if not compiler then
               pending('luac5.1 is not installed')
               return
             end
@@ -716,8 +744,10 @@ describe('micro:bit exec #microbit', function()
             local f = assert(io.open(path, 'w'))
             f:write(hex.script(hex.parse(files['robot.hex'])))
             f:close()
-            local said = io.popen(luac .. ' -p ' .. path .. ' 2>&1')
-              :read('*a')
+            local run = io.popen(compiler .. ' -p ' .. path
+              .. ' 2>&1')
+            local said = run:read('*a')
+            run:close()
             os.remove(path)
             assert.equal('', said)
           end)

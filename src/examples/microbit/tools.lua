@@ -564,9 +564,11 @@ local ARMING = ".*()\nserial_session%.prompt%(%)"
 --- through which the firmware calls in, is set aside. The
 --- file's globals are the board's, save on_event: the file
 --- reads the firmware's, and one it defines is held until it
---- returns without a mistake. A mistake stops only the file,
---- and is printed and its start scrolled; the prompt comes
---- after it all the same.
+--- returns without a mistake; one it writes into _G itself
+--- is live at once, and the firmware's replaces it when the
+--- file returns. A mistake stops only the file, and is
+--- printed and its start scrolled; the prompt comes after it
+--- all the same.
 local RUN_PROXY = table.concat({
   "",
   "do",
@@ -603,7 +605,7 @@ local RUN_END = table.concat({
   "local mine = ran and rawget(proxy, 'on_event')",
   "rawset(proxy, 'on_event', nil)",
   "setmetatable(proxy, { __index = _G, __newindex = _G })",
-  "on_event = mine or rawget(_G, 'on_event') or firmware",
+  "on_event = mine or firmware",
   "end"
 }, "\n")
 
