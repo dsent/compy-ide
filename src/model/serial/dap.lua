@@ -83,8 +83,11 @@ function Dap.statusName(code)
   return (NAMES[code] or 'UNKNOWN') .. ' (' .. code .. ')'
 end
 
-local DAMAGED = 'The file is damaged, so the micro:bit could not'
-    .. ' read it. Get the file again, then send it once more.'
+-- the Compy writes the file the chip reads, so a record the
+-- chip cannot read was damaged on its way down the cable
+local DAMAGED = 'The file was damaged on its way to the'
+    .. ' micro:bit. Unplug it, plug it back in, then send the'
+    .. ' file again.'
 local FOREIGN = 'This file is not made for this micro:bit. Use'
     .. ' a file made for a micro:bit V2.'
 local MEMORY = 'The micro:bit could not write the file into'
@@ -105,6 +108,10 @@ local PLAIN = {
   [28] = FOREIGN, [29] = FOREIGN,
   [21] = DAMAGED, [22] = DAMAGED, [23] = DAMAGED,
 }
+
+--- For a micro:bit V1: the Compy sends files to a V2 only
+Dap.V1_BOARD = 'This is a micro:bit V1, and the Compy sends'
+    .. ' files only to a micro:bit V2. Use a micro:bit V2.'
 
 --- What a status means for the person at the Compy
 --- @param code integer

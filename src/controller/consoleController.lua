@@ -400,18 +400,14 @@ local function on_android()
   return love.system.getOS() == 'Android'
 end
 
-local DRIVE_SENT = 'The file is on the micro:bit\'s drive. Its'
-    .. ' light blinks while it takes the file, then it'
-    .. ' restarts with it.'
-
 --- Put a hex file on the micro:bit. On Android it goes down
 --- the USB cable to the board's interface chip, never to its
 --- drive: this returns at once, and the console says how it
 --- goes and how it ended. On a desktop it is written to the
---- board's drive, looked for afresh each time.
+--- board's drive.
 --- @param content any
 --- @return boolean? success
---- @return string? err in plain words
+--- @return string? err
 function ConsoleController:flash_microbit(content)
   if on_android() then
     return SerialPort:flash(content, print)
@@ -421,15 +417,10 @@ function ConsoleController:flash_microbit(content)
   if not p then
     return false
   end
-  if not self:detect_microbit() then
-    return false, P.messages.no_microbit_board
-  end
   -- the board restarts with the new firmware, and what was
   -- queued for the old one would be typed into its new REPL
   SerialPort:drop()
-  local ok, err = p:flash_microbit(content)
-  if ok then print(DRIVE_SENT) end
-  return ok, err
+  return p:flash_microbit(content)
 end
 
 --- Look for the micro:bit. On Android it is the board the
@@ -1465,6 +1456,15 @@ function ConsoleController.prepare_project_env(cc)
     end
   end
 
+  --- @param f function
+  local check_microbit_path    = function(f, ...)
+    if not love.paths.microbit_path then
+      print(P.messages.no_microbit_board)
+    else
+      return f(...)
+    end
+  end
+
   project_env.require          = function(name)
     return project_require(name)
   end
@@ -1563,7 +1563,8 @@ function ConsoleController.prepare_project_env(cc)
   --- @return boolean? success
   --- @return string? err
   project_env.flash_microbit   = function(content)
-    return cc:flash_microbit(content)
+    if on_android() then return cc:flash_microbit(content) end
+    return check_microbit_path(cc.flash_microbit, cc, content)
   end
 
   --- look for the micro:bit, see detect_microbit above

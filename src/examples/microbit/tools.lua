@@ -48,10 +48,26 @@ local function fileForBoard(filename)
   return cr
 end
 
+--- Whether a file is on its way to the board, said when it
+--- is: the board is halted, and sending to it or restarting
+--- it would break the file off
+--- @return boolean
+local function flashing()
+  if serial.isFlashing() then
+    print("The micro:bit is taking a file. Wait until the")
+    print("Compy says how it went.")
+    return true
+  end
+  return false
+end
+
 --- Send a project file to the board, line by line, as if
 --- typed
 --- @param filename string
 function send(filename)
+  if flashing() then
+    return
+  end
   assert(serial.send(fileForBoard(filename)))
 end
 
@@ -325,14 +341,25 @@ local function isSending()
   return sending ~= nil and serial.onTick == waiting
 end
 
---- A stop, in words, when the board cannot take a file now:
---- it is not there, it is taking new firmware, or exec is
---- still sending one
+--- Whether the board can take a file now; a stop, in words,
+--- when it is not there or exec is still sending one, and
+--- false, said, while it takes new firmware
+--- @return boolean
 local function readyToSend()
   assert(serial.isConnected(), "no micro:bit connected")
-  assert(not serial.isFlashing(), "the micro:bit is taking a"
-      .. " file. Wait until the Compy says how it went.")
+  if flashing() then
+    return false
+  end
   assert(not isSending(), "exec is still sending a file")
+  return true
+end
+
+--- exec's handlers take the board over while it sends
+local function takeOver()
+  for field, handler in pairs(sending.mine) do
+    serial[field] = handler
+  end
+  compy.before_exit = stopped
 end
 
 --- Run a project file on the board as one chunk, wrapped in
@@ -340,16 +367,15 @@ end
 --- board's echo of the file is not shown; what it answers is.
 --- @param filename string
 function exec(filename)
-  readyToSend()
+  if not readyToSend() then
+    return
+  end
   if sending then
     putBack()
   end
   sending = newSending(filename)
   echo(false)
-  for field, handler in pairs(sending.mine) do
-    serial[field] = handler
-  end
-  compy.before_exit = stopped
+  takeOver()
   sendNext()
 end
 
@@ -358,18 +384,6 @@ end
 --- What to do when the board did not take the restart
 local NO_RESTART = "the micro:bit did not restart. Press its"
     .. " reset button, on the back next to the USB socket."
-
---- Whether a file is on its way to the board, said when it
---- is: a restart would break it off
---- @return boolean
-local function flashing()
-  if serial.isFlashing() then
-    print("The micro:bit is taking a file. Wait until the")
-    print("Compy says how it went.")
-    return true
-  end
-  return false
-end
 
 --- What to do when no greeting comes after a restart
 local function greetingNote()
@@ -586,14 +600,13 @@ local function tellVersion(name, data)
   return true
 end
 
---- Put a hex file on the board. The Compy sends it down the
---- USB cable, says every few seconds how far it has got, and
---- at the end whether the board took it; the board restarts
---- with it. A sound says the sending has begun.
---- @param filename string?
-function upload(filename)
-  local name = filename or HEX
-  local data = read(name)
+--- Put a hex file on the board over the USB cable, as a
+--- Compy does: it says every few seconds how far it has got,
+--- and at the end whether the board took it; the board
+--- restarts with it. A sound says the sending has begun.
+--- @param name string
+--- @param data string
+local function uploadOverCable(name, data)
   assert(not isSending(), "exec is still sending a file")
   if not tellVersion(name, data) then
     return
@@ -604,6 +617,40 @@ function upload(filename)
     return
   end
   compy.audio.hyperjump()
+end
+
+--- Put a hex file on the board's drive, on a computer. The
+--- board is looked for each time, since it usually goes in
+--- after Compy has started. Copying takes a few seconds and
+--- the screen does not move until it is done, so a sound says
+--- the copying has begun. The board then writes the file into
+--- its memory by itself and restarts; the Compy cannot see
+--- whether it took it.
+--- @param name string
+--- @param data string
+local function uploadToDrive(name, data)
+  local version = hex.version(hex.parse(data))
+  assert(not isSending(), "exec is still sending a file")
+  assert(detect_microbit(), "no micro:bit plugged in")
+  compy.audio.hyperjump()
+  local ok, err = flash_microbit(data)
+  assert(ok, err)
+  print(name .. " is sent. The micro:bit's light blinks")
+  print("while it writes it, then it restarts with it.")
+  print(name .. " holds firmware " ..
+    (version or "too old to say its version"))
+end
+
+--- Put a hex file on the board
+--- @param filename string?
+function upload(filename)
+  local name = filename or HEX
+  local data = read(name)
+  if love.system.getOS() == "Android" then
+    uploadOverCable(name, data)
+  else
+    uploadToDrive(name, data)
+  end
 end
 
 -- help --------------------------------------------------------

@@ -232,9 +232,13 @@ describe('AndroidBackend drive hold', function()
       local p = port()
       local b = backend(p)
       b.openDevice = function() return nil, 'maintenance mode' end
-      b:openReady()
+      -- the console is not told every SCAN_S; upload() says
+      -- what to do
+      assert.is_nil(b:openReady())
       assert.same('maintenance mode', b:absence())
       assert.same(0, b.attached)
+      b.dev = { dev = 'dev', name = 'same board' }
+      assert.is_nil(b:openReady())
       b.dev = { dev = 'dev', name = 'again' }
       b.openDevice = function() return p end
       b:openReady()
@@ -252,6 +256,18 @@ describe('AndroidBackend drive hold', function()
       local link, err = b:dap()
       assert.is_nil(link)
       assert.same('drive not held', err)
+    end)
+
+  it('names the board by its serial number until the chip'
+    .. ' answers', function()
+      local p = port()
+      local b = backend(p)
+      b.serialOf = function() return '9900' .. string.rep('0', 44) end
+      assert.is_nil(b:boardId())
+      b:openReady()
+      assert.same('9900' .. string.rep('0', 44), b:boardId())
+      p.board = { id = '9904' .. string.rep('1', 44) }
+      assert.same('9904' .. string.rep('1', 44), b:boardId())
     end)
 
   it('refuses the link on a board without the interface',

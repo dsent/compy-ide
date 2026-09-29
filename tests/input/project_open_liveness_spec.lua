@@ -88,9 +88,13 @@ describe('input surface: inbound events — a project stays live'
     before_each(function()
       kept, keptSerial = _G.SerialPort, _G.Serial
       _G.Serial = _G.Serial or {}
-      port = { flashing = false, stops = 0 }
+      port = { flashing = false, stops = 0, abandons = 0 }
       function port:isFlashing() return self.flashing end
       function port:stop() self.stops = self.stops + 1 end
+      function port:abandon()
+        self.abandons = self.abandons + 1
+        self.flashing = false
+      end
       _G.SerialPort = port
     end)
     after_each(function()
@@ -131,18 +135,56 @@ describe('input surface: inbound events — a project stays live'
         assert.are.equal('boom', shown)
       end)
 
-    it('stays while a file goes to the board', function()
-      local calls = stub_stop()
+    --- a quit the person asked for (Ctrl+Esc, quit()) goes
+    --- through Application.request_exit
+    local function asked_quit()
+      local event = love.event
+      love.event = { quit = function() end }
+      require('util.application').request_exit()
+      love.event = event
+      return love.quit()
+    end
+
+    it('stays, and says so, when asked to quit while a file'
+      .. ' goes to the board', function()
+        local calls = stub_stop()
+        port.flashing = true
+        local print_ = _G.print
+        local said
+        _G.print = function(text) said = text end
+        local aborted = asked_quit()
+        _G.print = print_
+        assert.is_true(aborted)
+        assert.are.equal(0, port.stops)
+        assert.are.equal(0, port.abandons)
+        assert.are.equal(0, calls.n)
+        assert.truthy(said:find('still going to the micro:bit', 1,
+          true))
+        assert.truthy(said:find('quit again', 1, true))
+      end)
+
+    --- Android closing the IDE waits for it: refusing could
+    --- hang the app
+    it('never refuses a quit Android asks for: the flash ends'
+      .. ' first', function()
+        stub_stop()
+        port.flashing = true
+        local aborted = love.quit()
+        assert.is_not_true(aborted)
+        assert.are.equal(1, port.abandons)
+        assert.are.equal(1, port.stops)
+      end)
+
+    it('asks once: the next quit is Android\'s', function()
+      stub_stop()
       port.flashing = true
       local print_ = _G.print
-      local said
-      _G.print = function(text) said = text end
-      local aborted = love.quit()
+      _G.print = function() end
+      asked_quit()
       _G.print = print_
-      assert.is_true(aborted)
-      assert.are.equal(0, port.stops)
-      assert.are.equal(0, calls.n)
-      assert.truthy(said:find('taking a file', 1, true))
+      local aborted = love.quit()
+      assert.is_not_true(aborted)
+      assert.are.equal(1, port.abandons)
     end)
   end)
 

@@ -112,6 +112,27 @@ describe('IntelHex', function()
       assert.same(image, IntelHex.parse(a))
     end)
 
+  --- the chip is sent 62 bytes at a time: with every line of
+  --- even length, the end record's last digit and its line
+  --- end share the last chunk, which alone brings the end of
+  --- file (the flash asks exactly that)
+  it('writes every line with an even length', function()
+    local images = {
+      assert(IntelHex.parse(example())),
+      { { at = 0xFFF7, data = string.rep('a', 9) } },
+      { { at = 1, data = 'x' }, { at = 0x10001, data = 'yz' } },
+    }
+    for _, image in ipairs(images) do
+      local text = IntelHex.encode(image)
+      for line in text:gmatch('[^\n]*\n') do
+        assert.same(0, #line % 2, line)
+      end
+      local chunks = math.ceil(#text / 62)
+      local last = text:sub((chunks - 1) * 62 + 1)
+      assert.truthy(last:find('F\n$'))
+    end
+  end)
+
   it('writes only what the chip reads right', function()
     local text = IntelHex.encode(assert(IntelHex.parse(example())))
     local blocks, last = 0, nil
@@ -132,8 +153,8 @@ describe('IntelHex', function()
     assert.is_true(blocks >= 2)
   end)
 
-  --- the case the third review found: the chip keeps a
-  --- segment base only above 64 KB
+  --- the chip keeps a segment base only above 64 KB, and would
+  --- place this data at 0x10000
   it('places data after a segment base off a 64 KB boundary',
     function()
       local image = assert(IntelHex.parse(rec(2, 0, { 0x12, 0x34 })
@@ -143,8 +164,9 @@ describe('IntelHex', function()
       placesExactly(image)
     end)
 
-  --- the case the fourth review found: the chip's address runs
-  --- on past a 64 KB boundary, where the file's does not
+  --- the chip's address runs on past a 64 KB boundary, where
+  --- the file's does not, and would place the second record
+  --- 64 KB too high
   it('places a record after one that ends at FFFF', function()
     local text = rec(4, 0, { 0, 0 }) .. rec(0, 0xFFF0, seq(16))
         .. rec(0, 0x0100, seq(4, 100)) .. EOF
@@ -195,8 +217,8 @@ describe('IntelHex', function()
       placesExactly(image)
     end)
 
-  --- a linear base does not: its addresses run on (the case
-  --- the fifth review found)
+  --- a linear base does not: its addresses run on (Intel's
+  --- specification)
   it('runs a record past FFFF on under a linear base',
     function()
       local text = rec(4, 0, { 0, 2 }) .. rec(0, 0xFFFF,
@@ -348,8 +370,7 @@ describe('Dap.prepare', function()
         local text = rec(0, 0, { unpack(bytes, 1, 32) })
             .. rec(0, 32, { unpack(bytes, 33, 48) }) .. EOF
         assert.same('interface', select(2, Dap.prepare(text)))
-        -- a record with no data first must not hide it (the
-        -- case the sixth review found)
+        -- a record with no data first must not hide it
         assert.same('interface', select(2, Dap.prepare(
           ':0000000000\n' .. text)))
       end

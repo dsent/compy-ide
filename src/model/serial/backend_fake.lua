@@ -101,6 +101,12 @@ function FakeBackend:absence()
   return self.why
 end
 
+--- What a test put in .id
+--- @return string?
+function FakeBackend:boardId()
+  return self.id
+end
+
 --- What a test put in .info
 --- @return table?
 function FakeBackend:board()

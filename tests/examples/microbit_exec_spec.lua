@@ -19,6 +19,7 @@ local RAN = 'f.lua is on the board'
 
 describe('micro:bit exec #microbit', function()
   local serial, backend, port, said, echoes, files, flashed
+  local os_name = 'Android'
 
   --- tools.lua loaded into an environment of its own, with what
   --- the console gives it
@@ -34,6 +35,7 @@ describe('micro:bit exec #microbit', function()
       utf8 = require('lua-utf8'),
       detect_microbit = function() return '/mb' end,
       flash_microbit = function() flashed = true return true end,
+      love = { system = { getOS = function() return os_name end } },
     }, { __index = _G })
     local path = 'src/examples/microbit/tools.lua'
     setfenv(assert(loadfile(path)), env)()
@@ -297,14 +299,63 @@ describe('micro:bit exec #microbit', function()
       assert.equal(0, sounds)
     end)
 
-  it('exec waits while a file goes to the board', function()
-    local tools = load_tools()
-    serial.job = { step = function() return 'running' end }
-    local ok, err = pcall(tools.exec, 'f.lua')
-    serial.job = nil
-    assert.is_false(ok)
-    assert.truthy(tostring(err):find('taking a file', 1, true))
-    assert.same({}, backend.sent)
+  it('send and exec wait while a file goes to the board',
+    function()
+      local tools = load_tools()
+      serial.job = { step = function() return 'running' end }
+      assert.has_no_error(function() tools.exec('f.lua') end)
+      assert.has_no_error(function() tools.send('f.lua') end)
+      serial.job = nil
+      assert.same({}, backend.sent)
+      local told = table.concat(said, ' ')
+      local _, n = told:gsub('taking a file', '')
+      assert.equal(2, n)
+      assert.has_no_error(function() tools.exec('f.lua') end)
+      assert.same({ WRAP .. '\r' }, backend.sent)
+    end)
+
+  --- a computer copies the file onto the board's drive, as it
+  --- always has
+  describe('on a computer', function()
+    before_each(function() os_name = 'Linux' end)
+    after_each(function() os_name = 'Android' end)
+
+    it('upload looks for the drive, sounds, copies, and says so',
+      function()
+        local tools = load_tools()
+        local order = {}
+        tools.detect_microbit = function()
+          order[#order + 1] = 'detect'
+          return '/mb'
+        end
+        tools.compy.audio.hyperjump = function()
+          order[#order + 1] = 'sound'
+        end
+        tools.flash_microbit = function()
+          order[#order + 1] = 'flash'
+          return true
+        end
+        files['MICROBIT.hex'] = ':00000001FF\n'
+        said = {}
+        tools.upload()
+        assert.same({ 'detect', 'sound', 'flash' }, order)
+        assert.same({
+          "MICROBIT.hex is sent. The micro:bit's light blinks",
+          'while it writes it, then it restarts with it.',
+          'MICROBIT.hex holds firmware too old to say its version',
+        }, said)
+      end)
+
+    it('upload stops when no drive is found', function()
+      local tools = load_tools()
+      tools.detect_microbit = function() return nil end
+      files['MICROBIT.hex'] = ':00000001FF\n'
+      local ok, err = pcall(tools.upload)
+      assert.is_false(ok)
+      assert.truthy(tostring(err):find('no micro:bit plugged in',
+        1, true))
+      assert.is_false(flashed)
+    end)
   end)
 
   it('restart_microbit waits while a file goes to the board',

@@ -506,7 +506,7 @@ describe('DapFlash', function()
       local state, steps = run(j, chip)
       assert.same('done', state)
       local chunks = count(chip.got, 0x8C)
-      -- the spike wrote 8 an update, whatever the chip
+      -- four in flight between updates, many more within one
       assert.is_true(chunks / steps > 16)
     end)
 
@@ -644,10 +644,10 @@ describe('DapFlash', function()
       assert.truthy(joined(said):find('lost touch', 1, true))
     end)
 
-  --- the reset's reply comes after the flash gave up on it:
-  --- it must not turn the verdict into a success
+  --- the close's reply comes after the flash gave up on it:
+  --- it must not turn the failure into a success
   it('ignores replies that come after the verdict', function()
-    local chip = F.chip({ slow = { [0x89] = 10 } })
+    local chip = F.chip({ slow = { [0x8B] = 10 } })
     local j, said, _, link = job(F.hex(5), chip)
     assert.same('failed', run(j, chip))
     local told = #said
@@ -657,6 +657,136 @@ describe('DapFlash', function()
     assert.same('failed', j.state)
     assert.same(told, #said)
     assert.is_nil(joined(said):find('took the file', 1, true))
+  end)
+
+  --- a close the chip reported done means the board has the
+  --- whole file, whatever happens to the reset after it
+  it('says the board took the file when only the reset\'s'
+    .. ' reply is missing', function()
+      for _, case in ipairs({ 'late', 'unplugged' }) do
+        local chip = F.chip(case == 'late'
+          and { slow = { [0x89] = 10 } } or nil)
+        if case == 'unplugged' then
+          chip.over[0x89] = function(_, c) c.silent = true end
+        end
+        local j, said, _, link = job(F.hex(5), chip)
+        if case == 'unplugged' then
+          local send = link.send
+          link.send = function(l, packet, f)
+            if packet:byte(1) == 0x89 then l:kill() end
+            return send(l, packet, f)
+          end
+        end
+        assert.same('done', run(j, chip), case)
+        assert.same('CLOSED', chip.stream)
+        local told = joined(said)
+        assert.truthy(told:find('took the file', 1, true), case)
+        assert.truthy(told:find('reset button', 1, true), case)
+        assert.is_nil(told:find('did not take', 1, true), case)
+      end
+    end)
+
+  --- the chip reports the end of the file on the last chunk;
+  --- without that report it has not read the whole file
+  it('fails when the last chunk brings no end of file',
+    function()
+      local chip = F.chip()
+      chip.over[0x8C] = function(packet, c)
+        local chunk = packet:sub(3, 2 + packet:byte(2))
+        c.written = c.written .. chunk
+        return string.char(0x8C, 0)
+      end
+      local j, said = job(F.hex(5), chip)
+      assert.same('failed', run(j, chip))
+      assert.same('CLOSED', chip.stream)
+      assert.same(0, count(chip.got, 0x89))
+      assert.is_nil(joined(said):find('took the file', 1, true))
+    end)
+
+  --- a board that left the bus reads as unplugged, whichever
+  --- way the link learns it
+  it('tells an unplug from a lost link', function()
+    local cases = {
+      { 'reap errno 19', nil, 'was unplugged' },
+      { 'reply transfer status -108', nil, 'was unplugged' },
+      { 'reply transfer status -71', false, 'was unplugged' },
+      { 'reply transfer status -71', true, 'lost touch' },
+      { 'reply transfer status -71', nil, 'lost touch' },
+    }
+    for _, c in ipairs(cases) do
+      local chip = F.chip()
+      local j, said, _, link = job(F.hex(200), chip)
+      if c[2] ~= nil then
+        link.present = function() return c[2] end
+      end
+      j:step(1 / 30)
+      link:broke(c[1])
+      assert.same('failed', run(j, chip))
+      assert.truthy(joined(said):find(c[3], 1, true), c[1])
+    end
+  end)
+
+  it('says the board was unplugged while it closed after a'
+    .. ' refusal', function()
+      local chip = F.chip()
+      local data = F.hex(40):gsub('^(:10001000)', ':10001001')
+      chip.over[0x8B] = function(_, c) c.silent = true end
+      local j, said, _, link = job(data, chip)
+      local send = link.send
+      link.send = function(l, packet, f)
+        if packet:byte(1) == 0x8B then
+          l:kill()
+          return nil, 'device gone'
+        end
+        return send(l, packet, f)
+      end
+      assert.same('failed', run(j, chip))
+      assert.truthy(joined(said):find('was unplugged', 1, true))
+    end)
+
+  --- the IDE may be put in the background for a while: the
+  --- replies that came meanwhile are taken before any wait
+  --- is counted
+  it('goes on after a long pause', function()
+    local chip = F.chip({ latency = 0.001 })
+    local j, said = job(F.hex(300), chip)
+    for _ = 1, 20 do
+      j:step(1 / 30)
+      chip.now = chip.now + 1 / 30
+    end
+    chip.now = chip.now + 60
+    assert.are_not.same('failed', j:step(60))
+    assert.same('done', run(j, chip))
+    assert.is_nil(joined(said):find('did not take', 1, true))
+  end)
+
+  --- the frame that prepared the file is long and says nothing
+  --- about the frames after it
+  it('keeps its time after a long first frame', function()
+    local chip = F.chip({ latency = 0.001 })
+    local j, _, logged = job(F.hex(300), chip)
+    j:step(0.4)
+    assert.same(DapFlash.BUDGET, j.budget)
+    assert.truthy(joined(logged):find('first update: the frame'
+      .. ' before it took 400 ms', 1, true))
+    j:step(0.4)
+    assert.same(DapFlash.BUDGET / 2, j.budget)
+  end)
+
+  it('says why when it is stopped with words', function()
+    local chip = F.chip({ latency = 0.001 })
+    local j, said = job(F.hex(300), chip)
+    for _ = 1, 100 do
+      if chip.stream == 'OPEN' and j.accepted > 0 then break end
+      j:step(1 / 30)
+      chip.now = chip.now + 1 / 30
+    end
+    j:abandon(1, 'The Compy was being closed.')
+    assert.same('CLOSED', chip.stream)
+    local told = joined(said)
+    assert.truthy(told:find('did not take the file. The Compy was'
+      .. ' being closed.', 1, true))
+    assert.truthy(told:find('old program', 1, true))
   end)
 
   it('closes the stream when the IDE stops mid-flash',
@@ -812,16 +942,44 @@ describe('Serial flash', function()
     assert.truthy(said[#said]:find('took the file', 1, true))
   end)
 
-  it('says to plug the board in again when it cannot flash',
+  it('says what helps when it cannot flash the board',
     function()
-      for _, why in ipairs({ 'no CMSIS-DAP interface',
-        'drive not held' }) do
+      local cases = {
+        { 'drive not held', nil, 'plug it back in' },
+        { 'no CMSIS-DAP interface', '9900' .. string.rep('0', 44),
+          'micro:bit V1' },
+        { 'no CMSIS-DAP interface', '9904' .. string.rep('0', 44),
+          'cannot take files from the Compy' },
+        { 'no CMSIS-DAP interface', nil,
+          'cannot take files from the Compy' },
+      }
+      for _, c in ipairs(cases) do
         local s, b = connected()
-        b.dapRefuse = why
+        b.dapRefuse = c[1]
+        b.id = c[2]
         local ok, err = s:flash(F.hex(1), quiet)
         assert.is_nil(ok)
-        assert.truthy(err:find('plug it back in', 1, true))
+        assert.truthy(err:find(c[3], 1, true), c[3])
       end
+    end)
+
+  it('ends a flash with words when the Compy is closed',
+    function()
+      local chip = F.chip({ latency = 0.001 })
+      local said = {}
+      local s = connected(chip)
+      assert.is_true(s:flash(F.hex(300),
+        function(l) said[#said + 1] = l end))
+      for _ = 1, 100 do
+        if chip.stream == 'OPEN' then break end
+        s:update(1 / 30)
+        chip.now = chip.now + 1 / 30
+      end
+      s:abandon()
+      assert.is_false(s:isFlashing())
+      assert.same('CLOSED', chip.stream)
+      assert.truthy(joined(said):find('being closed', 1, true))
+      assert.is_true(s:isConnected())
     end)
 
   it('refuses a damaged file before sending anything',

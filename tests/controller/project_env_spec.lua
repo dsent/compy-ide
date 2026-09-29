@@ -462,7 +462,6 @@ describe('ConsoleController project env #project', function()
       assert.are.equal(before + 1, fake.drops)
     end)
 
-    --- the desktop writes to the board's drive
     it('goes before a flash begins', function()
       CC:open_project(ProjectService.DEFAULT)
       local before = fake.drops
@@ -471,14 +470,7 @@ describe('ConsoleController project env #project', function()
         at_flash = fake.drops
         return true
       end
-      local detect = CC.detect_microbit
-      CC.detect_microbit = function() return '/media/MICROBIT' end
-      local print_ = _G.print
-      _G.print = function() end
-      local ok = CC:flash_microbit(':data:')
-      _G.print = print_
-      CC.detect_microbit = detect
-      assert.is_true(ok)
+      assert.is_true(CC:flash_microbit(':data:'))
       assert.are.equal(before + 1, at_flash)
     end)
 

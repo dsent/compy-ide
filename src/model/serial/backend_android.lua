@@ -659,6 +659,34 @@ function AndroidBackend:absence()
   return self.refused
 end
 
+--- The board's serial number, which DAPLink makes its unique
+--- id; nil when Android does not give it
+--- @return string?
+function AndroidBackend:serialOf(dev)
+  local env = self.env
+  local ok, id = pcall(function()
+    local cls = jniClass(env, 'android/hardware/usb/UsbDevice')
+    local m = jniMethod(env, cls, 'getSerialNumber',
+      '()Ljava/lang/String;')
+    local js = jniCallObj(env, dev, m)
+    local text = jniText(env, js)
+    if js ~= nil then jniDropLocal(env, js) end
+    jniDropLocal(env, cls)
+    return text
+  end)
+  return ok and id or nil
+end
+
+--- The board's unique id while it is open: from the chip
+--- once it has answered, from its serial number before, and
+--- when it has no CMSIS-DAP interface
+--- @return string?
+function AndroidBackend:boardId()
+  if self.state ~= 'open' then return nil end
+  local b = self.port.board
+  return b and b.id or self.port.serialId
+end
+
 --- What the chip said about the board on open: its unique
 --- id and the interface firmware's version, once answered
 --- @return table? info { id, firmware }
@@ -730,15 +758,29 @@ end
 --- @return string? fault
 function AndroidBackend:openReady()
   local port, fault = self:openDevice(self.dev)
+  local again = fault == self.refused
   self.refused = fault
   if not port then
     jniDropGlobal(self.env, self.dev.dev)
     self:dropDevice()
     self.due = now() + SCAN_S
+    -- upload() says what to do about maintenance mode; the
+    -- console is not told every SCAN_S
+    if fault == 'maintenance mode' then
+      if not again then log('board in maintenance mode') end
+      return
+    end
     return fault
   end
   self.port = port
   self.state = 'open'
+  port.serialId = self:serialOf(self.dev.dev)
+  if port.link then
+    port.link.present = function()
+      return self.state == 'open' and self.port == port
+          and self:present()
+    end
+  end
   local ok, err = self:takeStorage()
   log('drive hold on open: ' .. (ok and 'taken'
     or ('not taken, ' .. tostring(err))))

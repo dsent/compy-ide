@@ -42,5 +42,9 @@ function NullBackend:board()
   return nil
 end
 
+function NullBackend:boardId()
+  return nil
+end
+
 function NullBackend:stop()
 end

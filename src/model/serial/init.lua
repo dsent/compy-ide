@@ -19,6 +19,8 @@ require('model.serial.dap_flash')
 ---                        chip said about itself on open
 ---   backend:absence() -> why | nil  (optional) why a board
 ---                        on the bus is not open
+---   backend:boardId() -> id | nil  (optional) the open
+---                        board's unique id
 ---   backend:stop()
 
 --- @class Serial
@@ -219,7 +221,9 @@ local CUT_SHORT = 'The file is cut short: its last line is'
     .. ' missing. Get the file again, then send it once more.'
 local UNIVERSAL = 'This file holds programs for both'
     .. ' micro:bit versions, and the Compy sends only a file'
-    .. ' made for a micro:bit V2.'
+    .. ' made for a micro:bit V2 alone. Put it on the micro:bit'
+    .. ' from a computer instead, or, if the editor that made it'
+    .. ' can, save it for a micro:bit V2 only.'
 local AGAIN = ' Get the file again, then send it once more.'
 local EARLY_END = 'The file is damaged: more follows its last'
     .. ' line.' .. AGAIN
@@ -242,6 +246,8 @@ local FAULTS = {
 }
 local NOT_READY = 'The Compy cannot send files to this micro:bit'
     .. ' yet. Unplug it, plug it back in, then try again.'
+local NO_FLASHING = 'This micro:bit cannot take files from the'
+    .. ' Compy. Put the file on it from a computer instead.'
 
 --- Put a hex file on the board through its interface chip,
 --- without its drive. The file is read first and written
@@ -263,12 +269,15 @@ function Serial:flash(data, say)
   if type(data) ~= 'string' or data == '' then
     return nil, NO_FILE
   end
+  local t0 = clock()
   local text, fault = Dap.prepare(data)
+  Dap.log(string.format('file prepared in %.0f ms: %s',
+    1000 * (clock() - t0), fault or (#text .. ' bytes')))
   if not text then return nil, FAULTS[fault] or DAMAGED end
   local link, err = self.backend:dap()
   if not link then
     Dap.log('flash refused: ' .. tostring(err))
-    return nil, NOT_READY
+    return nil, self:cannot(err)
   end
   -- the board restarts with the new firmware, and what was
   -- queued for the old one would be typed into its new REPL
@@ -276,6 +285,20 @@ function Serial:flash(data, say)
   self.job = DapFlash.new(text, link, say, Dap.log,
     self.clock or clock)
   return true
+end
+
+--- Words for a board the Compy cannot flash: a replug helps
+--- when the drive was not taken, not when the board has no
+--- way to take a file this way
+--- @param err string? the backend's reason
+--- @return string
+function Serial:cannot(err)
+  if err ~= 'no CMSIS-DAP interface' then return NOT_READY end
+  local id = self.backend.boardId and self.backend:boardId()
+  if Dap.boardVersion(id or '') == 'V1' then
+    return Dap.V1_BOARD
+  end
+  return NO_FLASHING
 end
 
 --- @return boolean
@@ -312,6 +335,16 @@ end
 --- The longest a stop waits for the chip to close a stream
 --- a flash left open
 local STOP_S = 1
+local CLOSING = 'The Compy was being closed while it sent the'
+    .. ' file. Send the file again.'
+
+--- End a flash under way now: its stream is closed, waiting
+--- at most STOP_S, and the verdict says why. The port stays
+--- open.
+function Serial:abandon()
+  if self.job then self.job:abandon(STOP_S, CLOSING) end
+  self.job = nil
+end
 
 function Serial:stop()
   if self.job then self.job:abandon(STOP_S) end

@@ -215,7 +215,15 @@ local function line(count, offset, kind, data)
     kind, data:gsub('.', HEX_OF), (256 - sum % 256) % 256)
 end
 
---- Write an image as a hex file the chip reads right
+--- Write an image as a hex file the chip reads right.
+---
+--- Every line written is ':', an even number of digits and
+--- one '\n', so it has even length, and so has the file. The
+--- chip gets it in chunks of 62, an even number, so the end
+--- record's last digit and its '\n' fall in the same chunk:
+--- the chunk that brings the end of file is the last one, and
+--- the flash asks exactly that of the chip (DapFlash:wrote).
+--- A line of odd length would break that.
 --- @param image table[] runs { at, data } in address order
 --- @return string
 function IntelHex.encode(image)

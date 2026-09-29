@@ -730,11 +730,6 @@ Controller = {
       end
       Application.return_home_before_exit()
     end
-    --- An IDE that ends lets the micro:bit go: its USB
-    --- connection closes, and the drive stays without a
-    --- driver until the board is plugged in again, so the
-    --- IDE that starts next, often in the same process,
-    --- takes it without a tussle with Android
     --- An error that ends the IDE lets the micro:bit go too,
     --- before the error screen, which can leave without
     --- love.quit: a flash under way closes its stream, within
@@ -750,16 +745,31 @@ Controller = {
       end
       love.errhand = Controller.errhand
     end
+    --- An IDE that ends lets the micro:bit go: its USB
+    --- connection closes, and the drive stays without a
+    --- driver until the board is plugged in again, so the
+    --- IDE that starts next, often in the same process,
+    --- takes it without a tussle with Android.
+    ---
+    --- While a file goes to the board, a quit the person
+    --- asked for waits, with words that say so. A quit
+    --- Android asks for (it is closing the IDE, and waits for
+    --- it) is never refused: the flash stops, its stream
+    --- closed within a second, and says so.
     love.quit = function()
-      if Serial and SerialPort and SerialPort:isFlashing() then
-        print('The micro:bit is taking a file. Wait until the'
-          .. ' Compy says how it went, then close it.')
-        return true
+      local asked = Application.consume_exit_asked()
+      local port = Serial and SerialPort
+      if port and port:isFlashing() then
+        if asked then
+          print('A file is still going to the micro:bit. Wait'
+            .. ' until the Compy says how it went, then quit'
+            .. ' again.')
+          return true
+        end
+        port:abandon()
       end
       local stay = quit()
-      if not stay and Serial and SerialPort then
-        SerialPort:stop()
-      end
+      if not stay and port then port:stop() end
       return stay
     end
   end,

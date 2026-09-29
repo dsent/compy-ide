@@ -53,14 +53,14 @@ local UNPLUGGED = 'The micro:bit was unplugged before it had'
     .. ' again.'
 local LOST = 'The Compy lost touch with the micro:bit. '
     .. AGAIN
-local OLD_BOARD = 'This is a micro:bit V1, and the file is made'
-    .. ' for a micro:bit V2. Use a micro:bit V2, or a file'
-    .. ' made for the V1.'
 local NOT_V2 = 'This board is not a micro:bit V2, and the file'
     .. ' is made for one. Plug in a micro:bit V2, then send the'
     .. ' file again.'
 local GONE = 'Its old program may be gone until a file goes'
     .. ' onto it.'
+local RESET_NOTE = 'If it does not start with the new program,'
+    .. ' press its reset button, on the back next to the USB'
+    .. ' socket.'
 
 --- @param data string a hex Dap.prepare wrote
 --- @param link DapLink
@@ -127,7 +127,13 @@ function DapFlash:fail(plain, why)
   if self.accepted > 0 then self.say(GONE) end
 end
 
-function DapFlash:succeed()
+--- The verdict after a close the chip reported done: the
+--- board has the whole file. When the reset's reply does not
+--- come, the note says what to do if the board does not
+--- start with it.
+--- @param note string?
+function DapFlash:succeed(note)
+  if self.state ~= 'running' then return end
   self.state = 'done'
   self.log(string.format('DONE in %.3f s, %d bytes,'
     .. ' open %s, last write %s, close %s',
@@ -137,6 +143,10 @@ function DapFlash:succeed()
     tostring(self.statuses.close)))
   self.say('The micro:bit took the file. It restarts with'
     .. ' it now.')
+  if note then
+    self.log('reset: ' .. note)
+    self.say(RESET_NOTE)
+  end
 end
 
 --- A refusal after the stream opened: the stream is closed
@@ -203,7 +213,7 @@ function DapFlash:check()
     self.id, tostring(version), self.fwText ~= ''
     and self.fwText or 'not said (before 0257)'))
   if version == 'V1' then
-    return self:fail(OLD_BOARD, 'board is a V1')
+    return self:fail(Dap.V1_BOARD, 'board is a V1')
   end
   if version ~= 'V2' then
     return self:fail(NOT_V2, 'board id not a micro:bit V2')
@@ -258,9 +268,13 @@ function DapFlash:wrote(i, status)
     self.log('write: end of file reported by the chip')
     return self:enter('close')
   end
+  -- the chip reports the end of the file on the chunk that
+  -- carries the end record, the last one (IntelHex.encode);
+  -- without that report the chip has not read the whole file
   if last and status == Dap.SUCCESS then
     self.log('write: all bytes sent, no end of file reported')
-    return self:enter('close')
+    return self:refuse(Dap.plain(-1),
+      'no end of file reported')
   end
   self.log(string.format('write %d of %d refused: %s', i,
     self.chunks, self:name(status)))
@@ -336,24 +350,48 @@ local PHASES = {
 
 --- The link has broken, or the chip has gone quiet
 --- @return boolean ended
-function DapFlash:watch()
-  local fault = self.link.fault
-  if fault then
-    self:fail(fault == 'device gone' and UNPLUGGED or LOST,
-      'link: ' .. fault)
+--- Did the board leave the bus? The link says so outright
+--- when the port closed under it, the kernel through
+--- ENODEV or ESHUTDOWN; otherwise the bus is asked, when the
+--- link can.
+--- @param fault string
+--- @return boolean
+function DapFlash:unplugged(fault)
+  if fault == 'device gone' or fault:find('errno 19', 1, true)
+      or fault:find('status -19', 1, true)
+      or fault:find('status -108', 1, true) then
     return true
   end
+  local present = self.link.present
+  return present ~= nil and not present()
+end
+
+--- The link has broken, or the chip has gone quiet. Once the
+--- chip has closed the stream as done, the board has the
+--- whole file, and only the reset's reply is missing.
+--- @return boolean ended
+function DapFlash:watch()
+  local fault = self.link.fault
   local waited = self.link:waited()
   if not self.link.synced then
     waited = self.clock() - self.started
   end
-  if waited and waited > DapFlash.REPLY_S then
+  local late = waited and waited > DapFlash.REPLY_S
+  if not fault and not late then return false end
+  if self.phase == 'reset' then
+    self:succeed(fault and ('link: ' .. fault)
+      or 'no reply to the reset')
+    return true
+  end
+  if fault then
+    self:fail(self:unplugged(fault) and UNPLUGGED or LOST,
+      'link: ' .. fault)
+  else
     self:fail(NO_ANSWER, string.format(
       'no reply in %d s, %d commands unanswered',
       DapFlash.REPLY_S, self.link:unanswered()))
-    return true
   end
-  return false
+  return true
 end
 
 function DapFlash:progress()
@@ -406,12 +444,18 @@ function DapFlash:account(dt, spent, waited, sent)
     waited = 0, sent = 0 }
 end
 
---- The IDE is stopping with the flash under way: close the
---- stream, waiting at most `seconds` in all, so the chip is
---- not left with it open. No verdict is said; the log has it.
+--- The flash stops where it is: close the stream, waiting at
+--- most `seconds` in all, so the chip is not left with it
+--- open. With `plain`, the verdict is said in those words;
+--- without, only the log has it.
 --- @param seconds number
-function DapFlash:abandon(seconds)
+--- @param plain string?
+function DapFlash:abandon(seconds, plain)
   if self.state ~= 'running' then return end
+  if plain then
+    self.say('The micro:bit did not take the file. ' .. plain)
+    if self.accepted > 0 then self.say(GONE) end
+  end
   self.state = 'failed'
   self.log(string.format('ABANDONED in phase %s, %d of %d'
     .. ' chunks answered', self.phase, self.acked, self.chunks))
@@ -443,7 +487,16 @@ end
 --- @return string state running, done or failed
 function DapFlash:step(dt)
   if self.state ~= 'running' then return self.state end
-  self:adapt(dt)
+  if self.updates then
+    self:adapt(dt)
+  else
+    -- the frame that prepared the file is long, and says
+    -- nothing about the frames to come
+    self.updates = 0
+    self.log(string.format('first update: the frame before it'
+      .. ' took %.0f ms', 1000 * (dt or 0)))
+  end
+  self.updates = self.updates + 1
   local began = self.clock()
   local deadline = began + self.budget
   local sentBefore, waited = self.sent, 0
