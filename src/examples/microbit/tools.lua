@@ -48,14 +48,25 @@ local function fileForBoard(filename)
   return cr
 end
 
+--- Whether this Compy sends files down the cable: an older
+--- one lacks isFlashing, and copies them to the drive
+--- @return boolean
+local function cableFlash()
+  return serial.isFlashing ~= nil
+end
+
+--- Whether a file is on its way to the board now
+--- @return boolean
+local function onItsWay()
+  return cableFlash() and serial.isFlashing()
+end
+
 --- Whether a file is on its way to the board, said when it
 --- is: the board is halted, and sending to it or restarting
 --- it would break the file off
 --- @return boolean
 local function flashing()
-  -- an older Compy sends no file down the cable, and says so
-  -- by lacking isFlashing
-  if serial.isFlashing and serial.isFlashing() then
+  if onItsWay() then
     print("A file is on its way to the micro:bit. Wait until")
     print("the Compy says how it went.")
     return true
@@ -580,11 +591,12 @@ end
 --- how far it has got, and at the end whether the board took
 --- it; the board restarts with it. A sound says the sending
 --- has begun.
+--- What the Compy tells the upload: the file it read, and
+--- the sending beginning
 --- @param name string
---- @param data string
-local function uploadOverCable(name, data)
-  assert(not isSending(), "exec is still sending a file")
-  local ok, err = flash_microbit(data, {
+--- @return table
+local function uploadHooks(name)
+  return {
     read = function(image)
       print(name .. " holds firmware " ..
         (hex.version(image) or "too old to say its version"))
@@ -592,7 +604,14 @@ local function uploadOverCable(name, data)
     sending = function()
       compy.audio.hyperjump()
     end
-  })
+  }
+end
+
+--- @param name string
+--- @param data string
+local function uploadOverCable(name, data)
+  assert(not isSending(), "exec is still sending a file")
+  local ok, err = flash_microbit(data, uploadHooks(name))
   if not ok then
     print(err)
   end
@@ -620,14 +639,20 @@ local function uploadToDrive(name, data)
     (version or "too old to say its version"))
 end
 
+--- Whether the file goes down the cable: on a Compy that
+--- sends files that way; a computer, or an older Compy,
+--- copies it to the drive, as before
+--- @return boolean
+local function overCable()
+  return love.system.getOS() == "Android" and cableFlash()
+end
+
 --- Put a hex file on the board
 --- @param filename string?
 function upload(filename)
   local name = filename or HEX
   local data = read(name)
-  -- a Compy that sends files down the cable says so with
-  -- isFlashing; an older one copies to the drive, as before
-  if love.system.getOS() == "Android" and serial.isFlashing then
+  if overCable() then
     uploadOverCable(name, data)
   else
     uploadToDrive(name, data)
