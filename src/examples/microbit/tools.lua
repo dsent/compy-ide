@@ -549,6 +549,34 @@ function compile(lua_name, hex_name)
   embed(hex_name or (lua_name:gsub("%.lua$", "") .. ".hex"))
 end
 
+--- What a hex file's firmware says its version is, nil when
+--- it does not say, false when the file cannot be read
+--- @param data string
+--- @return string|false|nil
+local function versionOf(data)
+  local ok, blocks = pcall(hex.parse, data)
+  if not ok then
+    return false
+  end
+  return hex.version(blocks)
+end
+
+--- Say which firmware a file holds, or that it is damaged
+--- @param name string
+--- @param data string
+--- @return boolean readable
+local function tellVersion(name, data)
+  local version = versionOf(data)
+  if version == false then
+    print(name .. " is damaged: some of its lines are broken.")
+    print("Get the file again, then send it once more.")
+    return false
+  end
+  print(name .. " holds firmware " ..
+    (version or "too old to say its version"))
+  return true
+end
+
 --- Put a hex file on the board. The Compy sends it down the
 --- USB cable, says every few seconds how far it has got, and
 --- at the end whether the board took it; the board restarts
@@ -557,10 +585,10 @@ end
 function upload(filename)
   local name = filename or HEX
   local data = read(name)
-  local version = hex.version(hex.parse(data))
   assert(not isSending(), "exec is still sending a file")
-  print(name .. " holds firmware " ..
-    (version or "too old to say its version"))
+  if not tellVersion(name, data) then
+    return
+  end
   local ok, err = flash_microbit(data)
   if not ok then
     print(err)

@@ -316,6 +316,8 @@ describe('Dap.prepare', function()
 
   it('refuses a file with no data', function()
     assert.same('empty', select(2, Dap.prepare(EOF)))
+    assert.same('empty', select(2, Dap.prepare(':0000000000\n'
+      .. EOF)))
   end)
 
   --- the chip reads its HIC id at 0x24 of the first data and
@@ -329,6 +331,10 @@ describe('Dap.prepare', function()
         local text = rec(0, 0, { unpack(bytes, 1, 32) })
             .. rec(0, 32, { unpack(bytes, 33, 48) }) .. EOF
         assert.same('interface', select(2, Dap.prepare(text)))
+        -- a record with no data first must not hide it (the
+        -- case the sixth review found)
+        assert.same('interface', select(2, Dap.prepare(
+          ':0000000000\n' .. text)))
       end
       assert.truthy(Dap.prepare(rec(0, 0, seq(32))
         .. rec(0, 32, seq(16, 32)) .. EOF))

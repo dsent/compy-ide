@@ -266,12 +266,19 @@ describe('micro:bit exec #microbit', function()
     assert.equal('v.hex holds firmware abc1234', said[#said])
   end)
 
-  it('upload refuses a damaged hex before flashing', function()
-    local tools = load_tools()
-    files['bad.hex'] = ':00000001FE\n'
-    assert.has_error(function() tools.upload('bad.hex') end)
-    assert.is_false(flashed)
-  end)
+  it('upload refuses a damaged hex before flashing, in plain'
+    .. ' words', function()
+      for _, bad in ipairs({ ':00000001FE\n',
+        ':00000004FC\n:00000001FF\n' }) do
+        local tools = load_tools()
+        files['bad.hex'] = bad
+        said = {}
+        assert.has_no_error(function() tools.upload('bad.hex') end)
+        assert.is_false(flashed)
+        assert.truthy(table.concat(said, ' '):find('damaged', 1,
+          true))
+      end
+    end)
 
   it('upload looks for no drive, and says plainly why a flash'
     .. ' did not start', function()

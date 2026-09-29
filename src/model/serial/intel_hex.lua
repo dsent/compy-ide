@@ -80,6 +80,8 @@ end
 --- @param r table
 --- @param segment boolean
 local function place(pieces, base, r, segment)
+  -- a record with no data puts nothing anywhere
+  if #r.data == 0 then return end
   if not segment then
     pieces[#pieces + 1] = { at = base + r.offset, data = r.data }
     return
