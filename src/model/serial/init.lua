@@ -168,6 +168,16 @@ function Serial:reset()
   return self.backend:reset()
 end
 
+--- The board runs the file it took: what came in from the
+--- old program, a line it was in the middle of or one it was
+--- passing over as too long, and what the console held back
+--- of it, go, as for a reset, so the new program's first line
+--- is its own
+function Serial:restarted()
+  self.reader:reset()
+  self.echo:clear()
+end
+
 --- @return boolean
 function Serial:isConnected()
   return self.connected
@@ -378,6 +388,7 @@ function Serial:update(dt)
     end
   elseif job and job:step(dt) ~= 'running' then
     self.job = nil
+    if job.state == 'done' then self:restarted() end
   end
   self.echo:tick(dt)
   self.dispatcher:push('tick', dt)
@@ -399,7 +410,9 @@ local CLOSING = 'The Compy was being closed while it sent the'
 --- at most STOP_S, and the verdict says why. The port stays
 --- open.
 function Serial:abandon()
-  if self.job then self.job:abandon(STOP_S, CLOSING) end
+  if self.job and self.job:abandon(STOP_S, CLOSING) == true then
+    self:restarted()
+  end
   self.job = nil
 end
 

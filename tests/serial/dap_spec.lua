@@ -1734,6 +1734,63 @@ describe('Serial flash', function()
     assert.truthy(joined(logged):find('traceback', 1, true))
   end)
 
+  --- the new program's first line is its own: what the old
+  --- one left half-sent, or was sending past the line limit,
+  --- goes with the flash that ends it
+  for _, left in ipairs({ 'old-program: ', string.rep('x', 257) }) do
+    it('gives the new program a clean first line after a flash ('
+      .. #left .. ' bytes left over)', function()
+        local chip = F.chip()
+        local s, b = connected(chip)
+        local lines = {}
+        s:table_for('program').onLine = function(line)
+          lines[#lines + 1] = line
+        end
+        b:rx(left)
+        s:update(0)
+        assert.is_true(s:flash(F.hex(20), quiet))
+        for _ = 1, 200 do
+          if not s:isFlashing() then break end
+          s:update(1 / 30)
+          chip.now = chip.now + 1 / 30
+        end
+        assert.is_false(s:isFlashing())
+        assert.same(1, count(chip.got, 0x89))
+        b:rx('new-program greeting\n')
+        s:update(0)
+        assert.same({ 'new-program greeting' }, lines)
+      end)
+  end
+
+  --- the same when Android's quit finds the chip with the
+  --- whole file, and the port stays
+  it('gives the new program a clean first line after a stop'
+    .. ' that found the file taken', function()
+      local chip = F.chip({ latency = 0.2 })
+      local s, b = connected(chip)
+      local lines = {}
+      s:table_for('program').onLine = function(line)
+        lines[#lines + 1] = line
+      end
+      b:rx('old-program: ')
+      s:update(0)
+      assert.is_true(s:flash(F.hex(300), quiet))
+      for _ = 1, 20000 do
+        local j = s.job
+        if j and getmetatable(j) == DapFlash
+            and j.phase == 'reset' then
+          break
+        end
+        s:update(1 / 30)
+        chip.now = chip.now + 1 / 30
+      end
+      s:abandon()
+      assert.is_false(s:isFlashing())
+      b:rx('new-program greeting\n')
+      s:update(0)
+      assert.same({ 'new-program greeting' }, lines)
+    end)
+
   it('tells a program whether a flash runs', function()
     local s = connected(F.chip({ latency = 1 }))
     local t = s:table_for('program')
