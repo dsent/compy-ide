@@ -129,6 +129,27 @@ describe('a program\'s mouse after it stops #input', function()
       assert.same(CONSOLE, mouse())
     end)
 
+  it('a program that ends with nothing live gives the console'
+    .. ' its mouse', function()
+      F.run_project(capture)
+      assert.equal('ready', love.state.app_state)
+      assert.same(CONSOLE, mouse())
+    end)
+
+  -- Idle, not ended: its pointer handler still answers, so the
+  -- mouse stays as it set it until it stops.
+  it('a program that ends its code with a pointer handler'
+    .. ' keeps its mouse', function()
+      F.run_project(function()
+        capture()
+        F.cc:get_project_env().love.mousepressed = function() end
+      end)
+      assert.equal('ready', love.state.app_state)
+      assert.same(CAPTURED, mouse())
+      press({ 'lctrl', 'q' })
+      assert.same(CONSOLE, mouse())
+    end)
+
   it('an error in a handler pauses the program with the'
     .. ' console\'s mouse; continue() gives it its own back',
     function()

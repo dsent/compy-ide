@@ -73,6 +73,7 @@ describe('ConsoleController project env #project', function()
       set_love_update = noop,
       set_love_draw = noop,
       user_is_blocking = function() return false end,
+      user_is_interactive = function() return false end,
       report = noop,
     }
   end

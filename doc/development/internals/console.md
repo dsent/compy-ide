@@ -84,7 +84,7 @@ The custom loader is stored in `self.loaders[name]` so it can be removed on clos
 - Calls `ProjectService:run()` which loads `main.lua` via the project's filesystem mount
 - Sets state to `running`
 - Calls `run_user_code(f, cc, path)` which: executes the chunk in `use_canvas`, then calls `set_user_handlers(env['love'], cc)` to detect and register any `love.*` event handlers the project defined
-- If the project defines no blocking handlers (`love.draw`, `love.update`), state immediately returns to `ready`
+- If the project defines no blocking handlers (`love.draw`, `love.update`), state immediately returns to `ready`; with no input widget shown and no pointer handler either, the program has ended and `flush_program_state` puts the mouse back
 
 ### Stopping vs suspending vs quitting
 
