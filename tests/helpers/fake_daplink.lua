@@ -59,7 +59,7 @@ local function checks(rec)
 end
 
 --- @param opts table? queue (5), latency (0), page,
----   program, id, firmware
+---   program, slow ({ [cmd] = seconds more }), id, firmware
 --- @return table chip
 function M.chip(opts)
   opts = opts or {}
@@ -164,6 +164,7 @@ function M.chip(opts)
     end
     local reply = self:run(packet)
     local cost = self.latency
+        + ((opts.slow or {})[packet:byte(1)] or 0)
     if opts.page and packet:byte(1) == 0x8C then
       self.writes = (self.writes or 0) + 1
       if self.writes % opts.page == 0 then

@@ -273,6 +273,34 @@ describe('micro:bit exec #microbit', function()
     assert.is_false(flashed)
   end)
 
+  it('upload looks for no drive, and says plainly why a flash'
+    .. ' did not start', function()
+      local tools = load_tools()
+      tools.detect_microbit = function()
+        error('the drive was looked for')
+      end
+      local sounds = 0
+      tools.compy.audio.hyperjump = function() sounds = sounds + 1 end
+      tools.flash_microbit = function()
+        return nil, 'No micro:bit is plugged in.'
+      end
+      files['MICROBIT.hex'] = ':00000001FF\n'
+      assert.has_no_error(function() tools.upload() end)
+      assert.equal('No micro:bit is plugged in.', said[#said])
+      assert.equal(0, sounds)
+    end)
+
+  it('restart_microbit waits while a file goes to the board',
+    function()
+      local tools = load_tools()
+      serial.job = { step = function() return 'running' end }
+      tools.restart_microbit()
+      serial.job = nil
+      assert.equal(0, backend.resets)
+      assert.truthy(table.concat(said, ' '):find('taking a file',
+        1, true))
+    end)
+
   it('restart_microbit restarts the board', function()
     local tools = load_tools()
     tools.restart_microbit()

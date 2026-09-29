@@ -66,6 +66,9 @@ function Serial.new(backend, max_line)
     t.isConnected = function()
       return self:isConnected()
     end
+    t.isFlashing = function()
+      return self:isFlashing()
+    end
   end
   backend:start(self:sink())
   return self
@@ -212,8 +215,10 @@ local CUT_SHORT = 'The file is cut short: its last line is'
 local UNIVERSAL = 'This file holds programs for both'
     .. ' micro:bit versions, and the Compy sends only a file'
     .. ' made for a micro:bit V2.'
-local NO_DAP = 'This micro:bit does not take files from the'
-    .. ' Compy. Unplug it, plug it back in, then try again.'
+local EARLY_END = 'The file is damaged: it ends before its'
+    .. ' last line. Get the file again, then send it once more.'
+local NOT_READY = 'The Compy cannot send files to this micro:bit'
+    .. ' yet. Unplug it, plug it back in, then try again.'
 
 --- Put a hex file on the board through its interface chip,
 --- without its drive. Returns at once; the work runs a share
@@ -232,18 +237,20 @@ function Serial:flash(data, say)
   if type(data) ~= 'string' or data == '' then
     return nil, NO_FILE
   end
-  if not Dap.hexComplete(data) then return nil, CUT_SHORT end
-  if Dap.isUniversal(data) then return nil, UNIVERSAL end
+  local fault = Dap.hexFault(data)
+  if fault == 'cut short' then return nil, CUT_SHORT end
+  if fault == 'universal' then return nil, UNIVERSAL end
+  if fault then return nil, EARLY_END end
   local link, err = self.backend:dap()
   if not link then
     Dap.log('flash refused: ' .. tostring(err))
-    return nil, NO_DAP
+    return nil, NOT_READY
   end
   -- the board restarts with the new firmware, and what was
   -- queued for the old one would be typed into its new REPL
   self:drop()
-  self.job = DapFlash.new(data, link, say, Dap.log, clock,
-    self.pace)
+  self.job = DapFlash.new(data, link, say, Dap.log,
+    self.clock or clock, self.pace)
   return true
 end
 
@@ -280,7 +287,12 @@ function Serial:update(dt)
   return errors
 end
 
+--- The longest a stop waits for the chip to close a stream
+--- a flash left open
+local STOP_S = 1
+
 function Serial:stop()
+  if self.job then self.job:abandon(STOP_S) end
   self.job = nil
   self.backend:stop()
   self.connected = false

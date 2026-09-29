@@ -350,15 +350,38 @@ end
 local NO_RESTART = "the micro:bit did not restart. Press its"
     .. " reset button, on the back next to the USB socket."
 
+--- Whether a file is on its way to the board, said when it
+--- is: a restart would break it off
+--- @return boolean
+local function flashing()
+  if serial.isFlashing() then
+    print("The micro:bit is taking a file. Wait until the")
+    print("Compy says how it went.")
+    return true
+  end
+  return false
+end
+
+--- What to do when no greeting comes after a restart
+local function greetingNote()
+  print("The micro:bit restarts, and greets you when it")
+  print("is ready. If it does not within a minute, press")
+  print("its reset button, on the back next to the USB")
+  print("socket.")
+end
+
 --- Restart the board, as its reset button does, without
 --- touching it: the way back from a board that no longer
 --- reads what it is sent, stuck in a loop or in listen(). An
 --- exec still sending stops first, and echo comes back on,
---- so the greeting shows. The board ignores a restart while
---- it writes new firmware, and the Compy cannot tell, so the
---- message says what to do when no greeting comes.
+--- so the greeting shows. While a file goes to the board, the
+--- restart waits. The message says what to do when no
+--- greeting comes.
 function restart_microbit()
   assert(serial.isConnected(), "no micro:bit connected")
+  if flashing() then
+    return
+  end
   local restarted = serial.reset()
   if isSending() then
     stopAt(restarted and "the board was restarted"
@@ -366,10 +389,7 @@ function restart_microbit()
   end
   echo()
   assert(restarted, NO_RESTART)
-  print("The micro:bit restarts, and greets you when it")
-  print("is ready. If it does not within a minute, press")
-  print("its reset button, on the back next to the USB")
-  print("socket.")
+  greetingNote()
 end
 
 -- firmware ---------------------------------------------------

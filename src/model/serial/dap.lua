@@ -48,10 +48,11 @@ Dap.INFO_FIRMWARE = 0x09
 Dap.STREAM_HEX = 1
 
 --- error_t in 0257, in order from 0. 0254 to 0258 number
---- 0 to 28 alike; 0254 lacks FD_INCOMPATIBLE_IMAGE (29), so
---- its codes from 29 on name the entry after. Before 0254
---- the table differs from 9 on, and the flash refuses such a
---- chip.
+--- 0 to 28 alike (0254 lacks 29, FD_INCOMPATIBLE_IMAGE);
+--- before 0254 the table differs from 9 on. Only a V2 board
+--- is flashed, and V2 boards ship with 0255 or later. The
+--- flash decides on 0, 2 and 19 alone; the other names are
+--- for the log.
 local NAMES = {
   [0] = 'SUCCESS', 'FAILURE', 'INTERNAL',
   'ERROR_DURING_TRANSFER', 'TRANSFER_TIMEOUT', 'FILE_BOUNDS',
@@ -73,17 +74,11 @@ Dap.SUCCESS = 0
 Dap.INTERNAL = 2
 Dap.DONE = 19
 Dap.DONE_OR_CONTINUE = 20
---- The oldest interface firmware whose status numbers this
---- file knows
-Dap.FIRMWARE_MIN = 254
 
 --- @param code integer
---- @param firmware integer? the chip's version, as 257
 --- @return string
-function Dap.statusName(code, firmware)
-  local at = code
-  if firmware == 254 and code >= 29 then at = code + 1 end
-  return (NAMES[at] or 'UNKNOWN') .. ' (' .. code .. ')'
+function Dap.statusName(code)
+  return (NAMES[code] or 'UNKNOWN') .. ' (' .. code .. ')'
 end
 
 local DAMAGED = 'The file is damaged, so the micro:bit could not'
@@ -177,15 +172,6 @@ function Dap.boardVersion(id)
   end
 end
 
---- The interface firmware's version as a number, 257 for
---- "0257"; nil when the chip did not say
---- @param text string?
---- @return integer?
-function Dap.firmware(text)
-  local digits = (text or ''):match('^(%d%d%d%d)$')
-  return digits and tonumber(digits)
-end
-
 --- The last position that is not a line end, a blank or
 --- another control character
 --- @param data string
@@ -211,6 +197,29 @@ function Dap.hexComplete(data)
   return last:upper() == ':00000001FF'
 end
 
+--- What keeps a hex file from the chip, if anything:
+--- 'cut short' without the end-of-file record last,
+--- 'early end' with an end-of-file record before the last
+--- record (the chip stops at the first and says it took the
+--- file, leaving the rest unwritten), 'universal' for a
+--- Universal Hex. A Universal Hex holds a V1 and a V2 image
+--- in blocks, marked by record types 0A to 0E; the chip
+--- picks its own blocks only when every write starts on a
+--- block, and a write here carries 62 bytes.
+--- @param data string
+--- @return string? why
+function Dap.hexFault(data)
+  if not Dap.hexComplete(data) then return 'cut short' end
+  local ends, universal = 0, false
+  for kind in data:gmatch(':%x%x%x%x%x%x(%x%x)') do
+    local k = tonumber(kind, 16)
+    if k == 1 then ends = ends + 1 end
+    if k >= 0x0A and k <= 0x0E then universal = true end
+  end
+  if universal then return 'universal' end
+  if ends ~= 1 then return 'early end' end
+end
+
 --- The file as the chip gets it: everything up to the end of
 --- the end-of-file record. The chip takes nothing after the
 --- record, so the chunk that carries it is the last one.
@@ -218,19 +227,4 @@ end
 --- @return string
 function Dap.hexBody(data)
   return data:sub(1, lastVisible(data))
-end
-
---- A Universal Hex holds a V1 and a V2 image in blocks,
---- marked by record types 0A to 0E. The chip picks its own
---- blocks only when every write starts on a block, and a
---- write here carries 62 bytes, so it takes a plain hex for
---- its own board only.
---- @param data string
---- @return boolean
-function Dap.isUniversal(data)
-  for kind in data:gmatch(':%x%x%x%x%x%x(%x%x)') do
-    local k = tonumber(kind, 16)
-    if k >= 0x0A and k <= 0x0E then return true end
-  end
-  return false
 end

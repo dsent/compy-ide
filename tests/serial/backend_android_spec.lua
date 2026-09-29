@@ -179,6 +179,19 @@ describe('AndroidBackend drive hold', function()
       assert.is_nil(b:absence())
     end)
 
+  it('refuses the link while Android keeps the drive',
+    function()
+      local p = port(F.chip())
+      local b = backend(p)
+      _G.jniCallBool = function(_, _, _, arg)
+        return arg ~= 'msc'
+      end
+      b:openReady()
+      local link, err = b:dap()
+      assert.is_nil(link)
+      assert.same('drive not held', err)
+    end)
+
   it('refuses the link on a board without the interface',
     function()
       local p = port()

@@ -98,8 +98,6 @@ describe('Dap packets', function()
       .. '9904\0\0'))
     assert.same('0257', Dap.text(0x00, string.char(0, 5)
       .. '0257\0'))
-    assert.same(257, Dap.firmware('0257'))
-    assert.is_nil(Dap.firmware(''))
   end)
 
   it('tell a V1 from a V2 by the board id', function()
@@ -119,11 +117,6 @@ describe('Dap status', function()
     assert.same('SUCCESS_DONE (19)', Dap.statusName(19))
     assert.same('HEX_CKSUM (21)', Dap.statusName(21))
     assert.same('FD_INCOMPATIBLE_IMAGE (29)', Dap.statusName(29))
-  end)
-
-  it('shifts the codes from 29 on for 0254', function()
-    assert.same('IAP_INIT (29)', Dap.statusName(29, 254))
-    assert.same('HEX_CKSUM (21)', Dap.statusName(21, 254))
   end)
 
   it('says what a status means in plain words', function()
@@ -155,18 +148,25 @@ describe('Dap hex checks', function()
   end)
 
   it('tell a Universal Hex', function()
-    assert.is_false(Dap.isUniversal(F.hex(3)))
+    assert.is_nil(Dap.hexFault(F.hex(3)))
     local uni = ':020000040000FA\r\n:0400000A9900C0DEBB\r\n'
         .. F.hex(1)
-    assert.is_true(Dap.isUniversal(uni))
+    assert.same('universal', Dap.hexFault(uni))
+  end)
+
+  --- the chip stops at the first end record and says it took
+  --- the file, whatever follows
+  it('tell an end record before the last record', function()
+    local twice = F.hex(1) .. F.hex(1)
+    assert.same('early end', Dap.hexFault(twice))
+    assert.same('cut short', Dap.hexFault(':10000000AB\r\n'))
   end)
 
   it('find the example firmware a plain V2 hex', function()
     local f = assert(io.open('src/examples/microbit/MICROBIT.hex'))
     local data = f:read('*a')
     f:close()
-    assert.is_true(Dap.hexComplete(data))
-    assert.is_false(Dap.isUniversal(data))
+    assert.is_nil(Dap.hexFault(data))
   end)
 end)
 
@@ -444,13 +444,18 @@ describe('DapFlash', function()
       assert.truthy(joined(said):find('micro:bit V1', 1, true))
     end)
 
-  it('refuses a chip with firmware older than 0254', function()
-    local chip = F.chip({ firmware = '0253' })
-    local j, said = job(F.hex(5), chip)
-    assert.same('failed', run(j, chip))
-    assert.same(0, count(chip.got, 0x8A))
-    assert.truthy(joined(said):find('newer software', 1, true))
-  end)
+  it('refuses a board that is not a micro:bit, before'
+    .. ' opening anything', function()
+      for _, id in ipairs({ '', '1234' .. string.rep('0', 44) })
+      do
+        local chip = F.chip({ id = id })
+        local j, said = job(F.hex(5), chip)
+        assert.same('failed', run(j, chip))
+        assert.same(0, count(chip.got, 0x8A))
+        assert.truthy(joined(said):find('not a micro:bit V2', 1,
+          true))
+      end
+    end)
 
   it('goes on when the chip does not say its version',
     function()
@@ -564,19 +569,50 @@ describe('DapFlash', function()
       assert.truthy(joined(said):find('lost touch', 1, true))
     end)
 
+  --- the reset's reply comes after the flash gave up on it:
+  --- it must not turn the verdict into a success
   it('ignores replies that come after the verdict', function()
-    local chip = F.chip()
-    local j, said, _, link = job(F.hex(50), chip)
-    j:step(1 / 30)
-    chip.silent = true
-    run(j, chip)
+    local chip = F.chip({ slow = { [0x89] = 10 } })
+    local j, said, _, link = job(F.hex(5), chip)
+    assert.same('failed', run(j, chip))
     local told = #said
-    chip.silent = false
-    chip:leftover(string.char(0x8B, 0))
+    chip.now = chip.now + 10
     link:pump()
+    assert.same(0, link:unanswered())
     assert.same('failed', j.state)
     assert.same(told, #said)
+    assert.is_nil(joined(said):find('took the file', 1, true))
   end)
+
+  it('closes the stream when the IDE stops mid-flash',
+    function()
+      local chip = F.chip({ latency = 0.001 })
+      local j, said = job(F.hex(300), chip)
+      for _ = 1, 100 do
+        if chip.stream == 'OPEN' then break end
+        j:step(1 / 30)
+        chip.now = chip.now + 1 / 30
+      end
+      assert.same('OPEN', chip.stream)
+      local t0 = chip.now
+      local told = #said
+      j:abandon(1)
+      assert.same('CLOSED', chip.stream)
+      assert.same('failed', j.state)
+      assert.same(told, #said)
+      assert.is_true(chip.now - t0 < 1)
+    end)
+
+  it('waits no longer than it may for a close on stop',
+    function()
+      local chip = F.chip()
+      local j = job(F.hex(300), chip)
+      j:step(1 / 30)
+      chip.silent = true
+      local t0 = chip.now
+      j:abandon(1)
+      assert.is_true(chip.now - t0 <= 1 + 1e-9)
+    end)
 
   it('passes over replies left from an earlier flash',
     function()
@@ -609,11 +645,15 @@ describe('Serial flash', function()
   end)
   after_each(function() Dap.log = kept end)
 
+  --- a board on the chip's clock
   local function connected(chip)
     local b = FakeBackend.new()
     local s = Serial.new(b)
     b:attach()
-    if chip then b.link = linkTo(chip) end
+    if chip then
+      b.link = linkTo(chip)
+      s.clock = function() return chip.now end
+    end
     return s, b
   end
 
@@ -682,11 +722,48 @@ describe('Serial flash', function()
     assert.truthy(said[#said]:find('took the file', 1, true))
   end)
 
-  it('says so when the board takes no files', function()
-    local s, b = connected()
-    b.dapRefuse = 'no CMSIS-DAP interface'
-    local ok, err = s:flash(F.hex(1), quiet)
-    assert.is_nil(ok)
-    assert.truthy(err:find('does not take files', 1, true))
+  it('says to plug the board in again when it cannot flash',
+    function()
+      for _, why in ipairs({ 'no CMSIS-DAP interface',
+        'drive not held' }) do
+        local s, b = connected()
+        b.dapRefuse = why
+        local ok, err = s:flash(F.hex(1), quiet)
+        assert.is_nil(ok)
+        assert.truthy(err:find('plug it back in', 1, true))
+      end
+    end)
+
+  it('refuses a file with an end record in the middle',
+    function()
+      local chip = F.chip()
+      local s = connected(chip)
+      local ok, err = s:flash(F.hex(2) .. F.hex(2), quiet)
+      assert.is_nil(ok)
+      assert.truthy(err:find('damaged', 1, true))
+      assert.same(0, #chip.got)
+    end)
+
+  it('closes the stream when stopped mid-flash', function()
+    local chip = F.chip({ latency = 0.001 })
+    local s = connected(chip)
+    assert.is_true(s:flash(F.hex(300), quiet))
+    for _ = 1, 100 do
+      if chip.stream == 'OPEN' then break end
+      s:update(1 / 30)
+      chip.now = chip.now + 1 / 30
+    end
+    assert.same('OPEN', chip.stream, s.job and s.job.phase)
+    s:stop()
+    assert.same('CLOSED', chip.stream)
+    assert.is_false(s:isFlashing())
+  end)
+
+  it('tells a program whether a flash runs', function()
+    local s = connected(F.chip({ latency = 1 }))
+    local t = s:table_for('program')
+    assert.is_false(t.isFlashing())
+    s:flash(F.hex(5), quiet)
+    assert.is_true(t.isFlashing())
   end)
 end)

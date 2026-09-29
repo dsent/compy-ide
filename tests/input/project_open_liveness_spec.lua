@@ -80,6 +80,45 @@ describe('input surface: inbound events — a project stays live'
       assert.is_not_true(aborted)
     end)
 
+  --- the micro:bit link: a quit lets the board go, so its
+  --- drive goes back to Android, and waits while a file goes
+  --- to the board
+  describe('with a micro:bit', function()
+    local kept, keptSerial, port
+    before_each(function()
+      kept, keptSerial = _G.SerialPort, _G.Serial
+      _G.Serial = _G.Serial or {}
+      port = { flashing = false, stops = 0 }
+      function port:isFlashing() return self.flashing end
+      function port:stop() self.stops = self.stops + 1 end
+      _G.SerialPort = port
+    end)
+    after_each(function()
+      _G.SerialPort, _G.Serial = kept, keptSerial
+    end)
+
+    it('lets the board go as the app quits', function()
+      stub_stop()
+      local aborted = love.quit()
+      assert.is_not_true(aborted)
+      assert.are.equal(1, port.stops)
+    end)
+
+    it('stays while a file goes to the board', function()
+      local calls = stub_stop()
+      port.flashing = true
+      local print_ = _G.print
+      local said
+      _G.print = function(text) said = text end
+      local aborted = love.quit()
+      _G.print = print_
+      assert.is_true(aborted)
+      assert.are.equal(0, port.stops)
+      assert.are.equal(0, calls.n)
+      assert.truthy(said:find('taking a file', 1, true))
+    end)
+  end)
+
   it('a shown widget is what makes the project count as alive',
     function()
       love.state.user_input = nil

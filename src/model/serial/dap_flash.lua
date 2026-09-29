@@ -55,10 +55,9 @@ local LOST = 'The Compy lost touch with the micro:bit. '
 local OLD_BOARD = 'This is a micro:bit V1, and the file is made'
     .. ' for a micro:bit V2. Use a micro:bit V2, or a file'
     .. ' made for the V1.'
-local OLD_CHIP = 'This micro:bit needs newer software on its USB'
-    .. ' chip before the Compy can send it files. Ask an adult'
-    .. ' to update it (search for "micro:bit firmware update"'
-    .. ' on microbit.org).'
+local NOT_V2 = 'This board is not a micro:bit V2, and the file'
+    .. ' is made for one. Plug in a micro:bit V2, then send the'
+    .. ' file again.'
 local GONE = 'Its old program may be gone until a file goes'
     .. ' onto it.'
 
@@ -109,7 +108,7 @@ end
 --- @param code integer
 --- @return string
 function DapFlash:name(code)
-  return Dap.statusName(code, self.firmware)
+  return Dap.statusName(code)
 end
 
 --- The verdict, said once
@@ -184,9 +183,10 @@ function DapFlash:askPhase()
     end)
 end
 
---- Board and chip, before anything is opened
+--- The board, before anything is opened: a V2 only, since
+--- the file is made for one, and any other board on the same
+--- USB vendor id would take it and lose its own program
 function DapFlash:check()
-  self.firmware = Dap.firmware(self.fwText)
   local version = Dap.boardVersion(self.id)
   self.log(string.format('board %s (%s), interface firmware %s',
     self.id, tostring(version), self.fwText ~= ''
@@ -194,9 +194,8 @@ function DapFlash:check()
   if version == 'V1' then
     return self:fail(OLD_BOARD, 'board is a V1')
   end
-  if self.firmware and self.firmware < Dap.FIRMWARE_MIN then
-    return self:fail(OLD_CHIP, 'interface firmware '
-      .. self.fwText)
+  if version ~= 'V2' then
+    return self:fail(NOT_V2, 'board id not a micro:bit V2')
   end
   self:enter('open')
 end
@@ -373,6 +372,36 @@ function DapFlash:adapt(dt)
     self.budget = self.budget / 2
   end
   self.budget = math.max(DapFlash.BUDGET_MIN, self.budget)
+end
+
+--- The IDE is stopping with the flash under way: close the
+--- stream, waiting at most `seconds` in all, so the chip is
+--- not left with it open. No verdict is said; the log has it.
+--- @param seconds number
+function DapFlash:abandon(seconds)
+  if self.state ~= 'running' then return end
+  self.state = 'failed'
+  self.log(string.format('ABANDONED in phase %s, %d of %d'
+    .. ' chunks answered', self.phase, self.acked, self.chunks))
+  local link = self.link
+  local deadline = self.clock() + seconds
+  local function left()
+    return math.floor((deadline - self.clock()) * 1000)
+  end
+  while link:room() == 0 and not link.fault and left() > 0 do
+    link:pump(left())
+  end
+  local closed = false
+  if link:send(Dap.packet(Dap.CLOSE), function(raw)
+        closed = true
+        self.log('close on stop: '
+          .. self:name(statusOf(Dap.CLOSE, raw)))
+      end) then
+    while not closed and not link.fault and left() > 0 do
+      link:pump(left())
+    end
+  end
+  if not closed then self.log('close on stop: no reply') end
 end
 
 --- One update's share of the work: take in replies, send

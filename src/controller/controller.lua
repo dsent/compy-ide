@@ -735,6 +735,11 @@ Controller = {
     --- again only on this explicit release, never when the
     --- process just dies
     love.quit = function()
+      if Serial and SerialPort and SerialPort:isFlashing() then
+        print('The micro:bit is taking a file. Wait until the'
+          .. ' Compy says how it went, then close it.')
+        return true
+      end
       local stay = quit()
       if not stay and Serial and SerialPort then
         SerialPort:stop()

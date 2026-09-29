@@ -658,6 +658,11 @@ function AndroidBackend:dap()
   if not self.port.link then
     return nil, 'no CMSIS-DAP interface'
   end
+  -- a drive Android still has mounted is one it may write to
+  -- while the chip takes a file
+  if not self.port.storageTaken then
+    return nil, 'drive not held'
+  end
   return self.port.link
 end
 
