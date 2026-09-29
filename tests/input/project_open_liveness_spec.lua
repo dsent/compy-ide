@@ -25,6 +25,7 @@
 -- finished but the project has not been stopped".
 
 local F = require('tests.helpers.input_fixture')
+local mock = require('tests.mock')
 
 describe('input surface: inbound events — a project stays live'
   .. ' without update or draw #input', function()
@@ -44,7 +45,10 @@ describe('input surface: inbound events — a project stays live'
     return calls
   end
 
+  local saved_log
   before_each(function()
+    saved_log = rawget(_G, 'orig_print')
+    _G.orig_print = function() end
     F.reset()
     saved_stop = F.cc.stop_project_run
     love.state.user_input = nil
@@ -54,6 +58,7 @@ describe('input surface: inbound events — a project stays live'
 
   after_each(function()
     F.cc.stop_project_run = saved_stop
+    _G.orig_print = saved_log
   end)
 
   -- Ctrl+Esc runs love.event.quit -> the love.quit handler;
@@ -269,6 +274,191 @@ describe('input surface: inbound events — a project stays live'
       assert.are.equal(1, port.abandons)
     end)
   end)
+
+  --- Ctrl+Esc with a board open and no file going to it,
+  --- walked as LÖVE walks it: the key's release pushes quit,
+  --- love.run's loop polls it and asks love.quit, and boot
+  --- runs the loop until it returns. The run must end there:
+  --- a quit refused, or an error on the way out, keeps the
+  --- old run going (an error screen nobody sees, on a window
+  --- gone to the back) while Android starts the IDE again in
+  --- the same process
+  describe('Ctrl+Esc with a micro:bit open and no flash',
+    function()
+      local FD = require('tests.helpers.fake_daplink')
+      local JNI = { 'jniCallBool', 'jniCallVoid', 'jniCallInt',
+        'jniDropGlobal' }
+      local kept, calls, shown, minimized, queue, logged
+
+      --- LÖVE 11.5's love.run, one frame of it: the quit's
+      --- first argument is the run's return value
+      local function love_run_frame()
+        love.event.pump()
+        for name, a in love.event.poll() do
+          if name == 'quit' then
+            if not love.quit or not love.quit() then
+              return a or 0
+            end
+          end
+        end
+        love.update(0.016)
+      end
+
+      --- LÖVE 11.5's boot: the frame runs under the error
+      --- handler, whose loop replaces it after an error, until
+      --- a frame returns a value
+      local function boot(frames)
+        local func = love_run_frame
+        local function errhand(msg)
+          func = (love.errorhandler or love.errhand)(msg)
+        end
+        for n = 1, frames do
+          local _, retval = xpcall(func, errhand)
+          if retval then return retval, n end
+        end
+      end
+
+      before_each(function()
+        kept = {
+          event = love.event, errhand = love.errhand,
+          system = love.system, window = love.window,
+          port = _G.SerialPort, log = Dap and Dap.log,
+          ctrl = Controller.errhand,
+          orig_print = rawget(_G, 'orig_print'),
+        }
+        for _, name in ipairs(JNI) do kept[name] = _G[name] end
+        require('model.serial.init')
+        require('model.serial.backend_android')
+        calls = {}
+        _G.jniCallBool = function(_, _, mid, arg)
+          calls[#calls + 1] = mid .. ':' .. tostring(arg)
+          return true
+        end
+        _G.jniCallInt = function() return 3 end
+        _G.jniCallVoid = function(_, _, mid)
+          calls[#calls + 1] = mid
+        end
+        _G.jniDropGlobal = function() end
+        Dap.log = function() end
+        logged = ''
+        _G.orig_print = function(text)
+          logged = logged .. tostring(text) .. '\n'
+        end
+        queue = {}
+        love.event = {
+          pump = function() end,
+          poll = function()
+            return function()
+              local e = table.remove(queue, 1)
+              if e then return e[1], e[2] end
+            end
+          end,
+          quit = function(status)
+            queue[#queue + 1] = { 'quit', status }
+          end,
+          push = function(name, a)
+            queue[#queue + 1] = { name, a }
+          end,
+        }
+        love.system = { getOS = function() return 'Android' end }
+        minimized = 0
+        love.window = {
+          minimize = function() minimized = minimized + 1 end,
+        }
+        shown = nil
+        love.errhand = function(msg)
+          shown = msg
+          -- the error screen: it waits for a key that never
+          -- comes to a window at the back
+          return function() end
+        end
+        Controller.errhand = nil
+        local chip = FD.chip()
+        local p = {
+          conn = 'conn', comm = 'comm', data = 'data',
+          msc = 'msc', claimM = 'claim', releaseM = 'release',
+          closeM = 'close', fdM = 'fd', ctrlM = 'ctrl',
+          bulkM = 'bulk',
+          dap = { iface = 'dap', id = 5, inAddr = 0x85,
+            outAddr = 0x05, claimed = true },
+        }
+        p.link = DapLink.new(FD.bus(chip), 0x05, 0x85,
+          function() end, function() return chip.now end)
+        p.link:start()
+        local b = AndroidBackend.new()
+        b.start = function(self, sink)
+          self.sink = sink
+          self.env = 'env'
+        end
+        b.dev = { dev = 'dev', name = '/dev/bus/usb/001/002' }
+        b.openDevice = function() return p end
+        _G.SerialPort = Serial.new(b)
+        b:openReady()
+        Controller.set_love_quit(F.cc)
+      end)
+
+      after_each(function()
+        love.event, love.errhand = kept.event, kept.errhand
+        love.system, love.window = kept.system, kept.window
+        _G.SerialPort, Dap.log = kept.port, kept.log
+        Controller.errhand = kept.ctrl
+        _G.orig_print = kept.orig_print
+        for _, name in ipairs(JNI) do _G[name] = kept[name] end
+        mock.release_keys()
+      end)
+
+      it('ends the run at once, the board let go', function()
+        assert.is_true(SerialPort:isConnected())
+        assert.is_false(SerialPort:isFlashing())
+        local keys = F.session
+        keys.press('lctrl')
+        keys.press('escape')
+        keys.release('escape')
+        keys.release('lctrl')
+        local retval, frames = boot(10)
+        assert.is_nil(shown)
+        assert.are.equal(0, retval)
+        assert.are.equal(1, frames)
+        assert.are.equal(1, minimized)
+        assert.is_false(SerialPort:isConnected())
+        assert.are.equal('close', calls[#calls])
+        assert.truthy(logged:find('Quit accepted', 1, true))
+      end)
+
+      local function ctrl_esc()
+        local keys = F.session
+        keys.press('lctrl')
+        keys.press('escape')
+        keys.release('escape')
+        keys.release('lctrl')
+      end
+
+      it('ends the run when the board cannot be let go',
+        function()
+          _G.jniDropGlobal = function() error('ref gone') end
+          ctrl_esc()
+          local retval, frames = boot(10)
+          assert.is_nil(shown)
+          assert.are.equal(0, retval)
+          assert.are.equal(1, frames)
+          assert.truthy(logged:find('could not be let go', 1,
+            true))
+        end)
+
+      --- the window is at the back by then: an error screen
+      --- there would wait for a key that never comes
+      it('ends the run when an error comes on the way out',
+        function()
+          love.window.minimize = function() error('no window') end
+          ctrl_esc()
+          local retval, frames = boot(10)
+          assert.is_nil(shown)
+          assert.are.equal(1, retval)
+          assert.are.equal(2, frames)
+          assert.truthy(logged:find('no window', 1, true))
+          assert.is_false(SerialPort:isConnected())
+        end)
+    end)
 
   it('a shown widget is what makes the project count as alive',
     function()

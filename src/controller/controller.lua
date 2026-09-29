@@ -692,17 +692,25 @@ Controller = {
   set_love_quit = function(CC)
     local cfg = CC.cfg
 
+    --- The window goes to the back, and the IDE leaves: from
+    --- here an error cannot be shown to anyone
+    local function go_home()
+      Controller.leaving = true
+      Application.return_home_before_exit()
+    end
+    Controller.leaving = false
+
     local function quit()
       --- flush pending writes before the process can exit
       --- (spec 2.6): a graceful quit loses nothing. One
       --- syscall; force-stop is covered by per-accept fsync
       FS.sync()
       if Application.consume_application_exit_request() then
-        Application.return_home_before_exit()
+        go_home()
         return false
       end
       if love.state.app_state == 'shutdown' then
-        Application.return_home_before_exit()
+        go_home()
         return false
       end
 
@@ -728,7 +736,7 @@ Controller = {
         CC:stop_project_run()
         return true
       end
-      Application.return_home_before_exit()
+      go_home()
     end
     --- An error that ends the IDE lets the micro:bit go too,
     --- before the error screen, which can leave without
@@ -738,6 +746,20 @@ Controller = {
     local explore = love.errhand
     if explore and explore ~= Controller.errhand then
       Controller.errhand = function(msg)
+        -- an error on the way out would open an error screen
+        -- on a window gone to the back, whose loop waits for a
+        -- key that never comes, and keeps this run going while
+        -- Android starts the IDE again: the error goes to the
+        -- log, and the run ends
+        if Controller.leaving then
+          local out = rawget(_G, 'orig_print') or print
+          pcall(out, 'The IDE was leaving when this error came: '
+            .. debug.traceback(tostring(msg), 2))
+          if Serial and SerialPort then
+            pcall(SerialPort.stop, SerialPort)
+          end
+          return function() return 1 end
+        end
         if Serial and SerialPort then
           local ok, cut = pcall(SerialPort.stop, SerialPort)
           -- a flash cut off is said on the error screen, the
@@ -801,9 +823,23 @@ Controller = {
       -- in an IDE that stays, and ends, with words, in one that
       -- does not
       local stay = quit()
-      if not stay and port then
-        if port:isFlashing() then port:abandon() end
-        port:stop()
+      if not stay then
+        Controller.leaving = true
+        -- nothing here may keep the run going: a fault is
+        -- logged, and the quit goes ahead
+        local ok, err = true, nil
+        if port then
+          ok, err = pcall(function()
+            if port:isFlashing() then port:abandon() end
+            port:stop()
+          end)
+        end
+        local out = rawget(_G, 'orig_print') or print
+        if not ok then
+          pcall(out, 'The micro:bit could not be let go as the'
+            .. ' IDE quit: ' .. tostring(err))
+        end
+        pcall(out, 'Quit accepted: this run of the IDE ends')
       end
       return stay
     end
