@@ -90,11 +90,11 @@ The custom loader is stored in `self.loaders[name]` so it can be removed on clos
 
 ### Stopping vs suspending vs quitting
 
-**`stop_project_run()`**: Clears user handlers, calls `evacuate_required()` to remove project modules from `package.loaded`, restores default draw, resets widget input. State → `project_open`. The project's global state persists in `project_env` (can be inspected at the REPL).
+**`stop_project_run()`**: Clears user handlers, calls `evacuate_required()` to remove project modules from `package.loaded`, restores default draw, resets widget input, and puts the mouse back as the console needs it (`flush_program_state`, which `run_project` also calls before a run starts and on a top-level raise). State → `project_open`. The project's global state persists in `project_env` (can be inspected at the REPL).
 
-**`suspend_run(msg)`**: Requests a snapshot. State → `snapshot` → `inspect` on next tick. Handlers saved; default handlers restored temporarily. User can inspect and continue.
+**`suspend_run(msg)`**: Requests a snapshot. State → `snapshot` → `inspect` on next tick. Handlers saved; default handlers restored temporarily. The console gets its mouse back and the program's is saved. User can inspect and continue.
 
-**`continue()`**: Restores project handlers from the saved copy. State → `running`.
+**`continue()`**: Restores project handlers and the program's mouse from the saved copies. State → `running`.
 
 **`quit_project()`**: Calls `stop_project_run()` + `close_project()` + resets terminal and input. The environment is wiped.
 

@@ -1425,6 +1425,13 @@ chord and of what our re-homing adopted.
   `reset_before_exit` only, deliberately, since a partially initialised project
   runs no teardown. Wiring the force-reset means calling the framework half on
   the crash path too, which is a decision this entry does not pre-empt.
+- **The mouse is force-reset (2026-09-30).** `flush_program_state`
+  (`consoleController.lua`), a step of its own beside `framework_before_exit`,
+  puts the mouse back — relative mode off, not grabbed, visible, the system
+  cursor — on every stop path after the project's hook, on the failed-run
+  branch, and before every run starts. A pause gives the console that mouse
+  and `continue()` gives the program back its own. Keyboard modes and audio
+  are still as this entry describes.
 
 ### `compy.before_exit` is a closure slot
 

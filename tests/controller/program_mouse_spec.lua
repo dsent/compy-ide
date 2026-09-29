@@ -1,0 +1,168 @@
+-- A program may capture the mouse: relative mode (pointer
+-- capture on Android, where the pointer hides and moves a
+-- cursor nobody sees), a grab, a hidden or custom cursor. That
+-- is device state, so it outlives the program unless the IDE
+-- puts it back. Whatever ends the run, the console gets the
+-- mouse it needs, without the program's help; a paused program
+-- gets its own back on continue().
+--
+-- Spec justification (dev testing policy): the stop paths are
+-- a critical dispatch seam, many callers funnelling into one
+-- teardown, and a path that skips it fails on a device only,
+-- as a pointer that clicks somewhere else.
+
+local F = require('tests.helpers.input_fixture')
+
+--- What paint does when it starts
+local function capture()
+  love.mouse.setRelativeMode(true)
+  love.mouse.setGrabbed(true)
+  love.mouse.setVisible(false)
+  love.mouse.setCursor('crosshair')
+end
+
+--- @return table
+local function mouse()
+  return {
+    relative = love.mouse.getRelativeMode(),
+    grabbed = love.mouse.isGrabbed(),
+    visible = love.mouse.isVisible(),
+    cursor = love.mouse.getCursor(),
+  }
+end
+
+local CONSOLE = { relative = false, grabbed = false,
+  visible = true }
+local CAPTURED = { relative = true, grabbed = true,
+  visible = false, cursor = 'crosshair' }
+
+--- A running program that has captured the mouse
+local function run_capturing()
+  F.activate_project({ update = function() end })
+  capture()
+  assert.same(CAPTURED, mouse())
+end
+
+--- @param keys string[] pressed in order, then all let go
+local function press(keys)
+  for _, k in ipairs(keys) do F.session.press(k) end
+  for i = #keys, 1, -1 do F.session.release(keys[i]) end
+end
+
+--- A project on disk, as far as run_project asks: its top-level
+--- code is `fn`, left in place for restart() to run again.
+--- @param fn function
+--- @return function undo
+local function project(fn)
+  local P = F.cc.model.projects
+  local cur, run = P.current, P.run
+  P.current = { name = 'p', required = { } }
+  P.run = function()
+    return fn, nil, '/tmp/p'
+  end
+  return function() P.current, P.run = cur, run end
+end
+
+describe('a program\'s mouse after it stops #input', function()
+  setup(function() F.setup() end)
+  teardown(function() F.teardown() end)
+  before_each(function() F.reset() end)
+
+  it('Ctrl+Q gives the console its mouse', function()
+    run_capturing()
+    press({ 'lctrl', 'q' })
+    assert.same(CONSOLE, mouse())
+  end)
+
+  it('Ctrl+S gives the console its mouse', function()
+    run_capturing()
+    press({ 'lctrl', 's' })
+    assert.equal('ready', love.state.app_state)
+    assert.same(CONSOLE, mouse())
+  end)
+
+  it('Ctrl+T gives the editor the mouse', function()
+    run_capturing()
+    press({ 'lctrl', 't' })
+    assert.are_not.equal('running', love.state.app_state)
+    assert.same(CONSOLE, mouse())
+  end)
+
+  -- love.event.quit() from the program reaches love.quit, as
+  -- LÖVE delivers the quit event it pushes
+  it('the program\'s own quit gives the console its mouse',
+    function()
+      run_capturing()
+      assert.is_true(love.quit())
+      assert.equal('ready', love.state.app_state)
+      assert.same(CONSOLE, mouse())
+    end)
+
+  it('the program\'s stop() gives the console its mouse',
+    function()
+      run_capturing()
+      F.cc:get_project_env().stop()
+      assert.same(CONSOLE, mouse())
+    end)
+
+  it('a switch to another project gives it the console\'s'
+    .. ' mouse', function()
+      local undo = project(function() end)
+      run_capturing()
+      local P = F.cc.model.projects
+      local opreate, close = P.opreate, P.close
+      P.opreate = function() return false, false, 'no q' end
+      P.close = function() P.current = nil return true end
+      F.cc:open_project('q')
+      P.opreate, P.close = opreate, close
+      undo()
+      assert.same(CONSOLE, mouse())
+    end)
+
+  it('an error in top-level code gives the console its mouse',
+    function()
+      F.run_project(function()
+        capture()
+        error('boom')
+      end)
+      assert.equal('ready', love.state.app_state)
+      assert.same(CONSOLE, mouse())
+    end)
+
+  it('an error in a handler pauses the program with the'
+    .. ' console\'s mouse; continue() gives it its own back',
+    function()
+      F.activate_project({
+        update = function() error('boom') end,
+      })
+      capture()
+      F.love_update(0.1)
+      F.cc:suspend()
+      assert.equal('inspect', love.state.app_state)
+      assert.same(CONSOLE, mouse())
+      F.cc:get_project_env().continue()
+      assert.equal('running', love.state.app_state)
+      assert.same(CAPTURED, mouse())
+    end)
+
+  it('Ctrl+Alt+R starts the program again on the console\'s'
+    .. ' mouse', function()
+      local seen
+      local undo = project(function() seen = mouse() end)
+      run_capturing()
+      press({ 'lctrl', 'lalt', 'r' })
+      undo()
+      assert.same(CONSOLE, seen)
+    end)
+
+  -- A path that ended a run without the teardown, or a mouse
+  -- changed with nothing running: the next run still starts
+  -- from the console's mouse.
+  it('run() starts a program on the console\'s mouse',
+    function()
+      capture()
+      local seen
+      F.run_project(function() seen = mouse() end)
+      assert.same(CONSOLE, seen)
+    end)
+end)
