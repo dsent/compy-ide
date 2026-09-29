@@ -1095,10 +1095,8 @@ function EditorController:_search_mode_keys(k)
   local jump = self.search:keypressed(k)
   if jump then
     local buf = self:get_active_buffer()
-    local bn = jump.block
-    local ln = jump.line - 1
-    buf:set_selection(bn)
-    self.view:get_current_buffer():scroll_to_line(ln)
+    buf:set_selection(jump.block)
+    self.view:get_current_buffer():scroll_to_line(jump.line)
     self:set_mode('nav')
     self.search:clear()
   end

@@ -209,10 +209,12 @@ function BufferView:scroll_to(off)
   self:scroll('down', off)
 end
 
+--- Scroll so that source line `ln` is the top line
 --- @param ln integer
 function BufferView:scroll_to_line(ln)
-  local off = self.content.wrap_forward[ln][1] or 0
-  self:scroll_to(off)
+  local wl = self.content.wrap_forward[ln]
+  if not wl then return end
+  self:scroll_to(wl[1] - 1)
 end
 
 --- @param tolerate_oversize boolean?

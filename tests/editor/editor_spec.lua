@@ -1827,6 +1827,39 @@ describe('Editor #editor', function()
           assert.is_true(controller.search.input:is_empty())
         end)
 
+        it('Enter jumps to a definition on the first line', function()
+          local alpha = mock_func_snippet('alpha')
+          local beta = mock_func_snippet('beta')
+          session:open(src(alpha, '', beta), 3)
+          session:select_block(3)
+
+          mock.keystroke('C-f', press)
+          type_search('alpha')
+          mock.keystroke('return', press)
+
+          assert.same('nav', controller:get_mode())
+          assert.same(1, session.buffer:get_selection())
+          local bv = controller.view:get_current_buffer()
+          assert.same(1, bv.content:get_range().start)
+        end)
+
+        it('a jump brings the definition to the top line', function()
+          local lines = {}
+          for i = 1, 40 do lines[i] = 'x' .. i .. ' = ' .. i end
+          local beta = mock_func_snippet('beta')
+          local after = {}
+          for i = 1, 40 do after[i] = 'y' .. i .. ' = ' .. i end
+          session:open((src(table.concat(lines, '\n'), '', beta,
+            table.concat(after, '\n'))))
+
+          mock.keystroke('C-f', press)
+          type_search('beta')
+          mock.keystroke('return', press)
+
+          local bv = controller.view:get_current_buffer()
+          assert.same(42, bv.content:get_range().start)
+        end)
+
         it('Escape leaves search without moving the selection', function()
           local alpha = mock_func_snippet('alpha')
           local beta = mock_func_snippet('beta')
