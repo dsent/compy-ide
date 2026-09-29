@@ -33,6 +33,7 @@
 -- duplicated here.
 
 local F  = require('tests.helpers.input_fixture')
+local mock = require('tests.mock')
 require('tests.helpers.codesnippets')
 
 describe('editor key contract #input', function()
@@ -200,8 +201,6 @@ describe('editor key contract #input', function()
       F.session.release('lctrl')
       for _, h in ipairs(handlers) do ed[h] = nil end
       love.debug = nil
-      --- a case that opens a file again leaves it to the next
-      ed:close()
     end)
 
     --- the key that selects each mode from navigation
@@ -280,6 +279,77 @@ describe('editor key contract #input', function()
 
       assert.same('ready', love.state.app_state)
       assert.is_nil(ed:get_active_buffer())
+    end)
+  end)
+
+  describe('the project boundary', function()
+    -- The editor's buffers belong to the project they were
+    -- opened in. The gate's project shortcuts reach the
+    -- console before the editor sees the key, so they must
+    -- close it themselves, or its buffers outlive the project
+    -- and write into the next one.
+    local stubbed = { 'close_project', 'run_project' }
+    local orig = {}
+
+    before_each(function()
+      love.state.prev_state = 'ready'
+      for _, f in ipairs(stubbed) do
+        orig[f] = F.cc[f]
+        F.cc[f] = function() end
+      end
+    end)
+
+    after_each(function()
+      for _, f in ipairs(stubbed) do F.cc[f] = orig[f] end
+      mock.release_keys()
+    end)
+
+    local chords = {
+      ['Ctrl+Q']       = { 'lctrl', 'q' },
+      ['Ctrl+Shift+R'] = { 'lctrl', 'lshift', 'r' },
+      ['Ctrl+Alt+R']   = { 'lctrl', 'lalt', 'r' },
+    }
+    for name, keys in pairs(chords) do
+      it(name .. ' closes the editor', function()
+        for _, k in ipairs(keys) do F.session.press(k) end
+
+        assert.is_not.equal('editor', love.state.app_state)
+        assert.is_nil(ed:get_active_buffer())
+      end)
+    end
+
+    it('closing a project forgets the quick switch', function()
+      love.state.editor = ed:get_state()
+      F.cc:_close_project()
+      assert.is_nil(love.state.editor)
+    end)
+
+    it('a buffer saves into its own project', function()
+      local P = F.cc.model.projects
+      local prev = P.current
+      finally(function() P.current = prev end)
+      local written = {}
+      local function project(name)
+        return {
+          name = name,
+          get_path = function(_, f) return '/nonexistent/' .. f end,
+          readfile = function() return true, 'x = 1\n' end,
+          writefile = function(_, f)
+            written[#written + 1] = name .. '/' .. f
+            return true
+          end,
+        }
+      end
+      ed:close()
+      love.state.app_state = 'ready'
+      P.current = project('a')
+      F.cc:edit('main.lua')
+      local buf = ed:get_active_buffer()
+
+      P.current = project('b')
+      buf.save_file({ 'x = 2' })
+
+      assert.same({ 'a/main.lua' }, written)
     end)
   end)
 end)

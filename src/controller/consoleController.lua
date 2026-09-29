@@ -372,9 +372,10 @@ end
 --- @param content str --- lines, or the file's text
 --- @return boolean success
 --- @return string? err
-function ConsoleController:_writefile(name, content)
+--- @param project Project? --- default: the current one
+function ConsoleController:_writefile(name, content, project)
   local P = self.model.projects
-  local p = P.current
+  local p = project or P.current
   local text = string.unlines(content)
   return p:writefile(name, text)
 end
@@ -1853,6 +1854,9 @@ end
 --- since with no project there is no widget either.
 function ConsoleController:_close_project()
   local P = self.model.projects
+  --- Ctrl+T's way back into the editor names a file of
+  --- this project
+  love.state.editor = nil
   if P.current then
     self:stop_project_run()
   end
@@ -1909,8 +1913,16 @@ end
 
 --- Once at a time: a before_exit hook that closes or switches
 --- the project reaches here again, and returns at once.
+--- The editor closes first: the gate's project shortcuts
+--- (Ctrl+Q, Ctrl+Shift+R, Ctrl+Alt+R) reach here before the
+--- editor sees their key, and its buffers belong to the
+--- project they were opened in.
 function ConsoleController:stop_project_run()
   if self.stopping then return end
+  if love.state.app_state == 'editor'
+      and self.editor:get_active_buffer() then
+    self:finish_edit()
+  end
   self.stopping = true
   local ok, err = pcall(self._stop_project_run, self)
   self.stopping = false
@@ -2000,8 +2012,9 @@ function ConsoleController:edit(name, state)
   --- editor reports acceptance (spec 2.6), so a force-stop
   --- after an accepted edit cannot lose it. fsync only
   --- here — writefile and bulk paths stay async.
+  --- the file's own project, whichever is current by then
   local save = function(newcontent)
-    local ok, err = self:_writefile(filename, newcontent)
+    local ok, err = self:_writefile(filename, newcontent, p)
     if ok then FS.fsync(fpath) end
     return ok, err
   end
