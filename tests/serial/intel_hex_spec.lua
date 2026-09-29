@@ -317,6 +317,8 @@ describe('IntelHex', function()
       { ':0000\r\n0001FF\r\n', 'damaged' },
       -- longer than any record: refused before it is decoded
       { ':' .. string.rep('00', 261) .. '\r\n' .. EOF, 'damaged' },
+      -- a record with blanks after it is read
+      { rec(0, 0, seq(4)):gsub('\r\n', '  \t\0\r\n') .. EOF, nil },
     }
     for i, c in ipairs(cases) do
       local image, why = IntelHex.parse(c[1])
@@ -324,6 +326,20 @@ describe('IntelHex', function()
       if not c[2] then assert.truthy(image) end
     end
   end)
+end)
+
+--- a torn copy can hold a long run of NULs or blanks: it is
+--- refused at once, never walked over again and again
+it('refuses a long blank run inside a line at once', function()
+  for _, fill in ipairs({ '\0', ' ' }) do
+    local text = rec(0, 0, seq(4)):gsub('\r\n', '')
+        .. string.rep(fill, 32768) .. 'x\r\n' .. EOF
+    local t0 = os.clock()
+    local image, why = IntelHex.parse(text)
+    assert.is_nil(image)
+    assert.same('damaged', why)
+    assert.is_true(os.clock() - t0 < 0.1)
+  end
 end)
 
 describe('Dap.prepare', function()

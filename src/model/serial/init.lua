@@ -413,8 +413,14 @@ local CUT = 'A file was going to the micro:bit, and it did not'
 function Serial:stop()
   local cut
   if self.job then
-    cut = CUT
-    if self.job:erased() then cut = cut .. ' ' .. DapFlash.GONE end
+    if getmetatable(self.job) == DapPrepare then
+      cut = DapPrepare.CLOSED
+    else
+      cut = CUT
+      if self.job:erased() then
+        cut = cut .. ' ' .. DapFlash.GONE
+      end
+    end
     self.job:abandon(STOP_S)
   end
   self.job = nil

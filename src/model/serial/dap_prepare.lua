@@ -123,14 +123,20 @@ function DapPrepare:erased()
   return false
 end
 
---- Stop reading; the board was never touched
+DapPrepare.CLOSED = 'The Compy was closed before the file went'
+    .. ' to the micro:bit, which keeps its program. Send the'
+    .. ' file again once the Compy is back.'
+
+--- Stop reading; the board was never touched. Words are said
+--- when a flash would say them, and they are the reading's
+--- own: nothing was sent.
 --- @param _ number? seconds, as for a flash
---- @param plain string? words for the person
+--- @param plain string? given for a flash; any means say
 function DapPrepare:abandon(_, plain)
   if self.state ~= 'running' then return end
   self.state = 'failed'
   if plain then
-    self.say('The micro:bit did not take the file. ' .. plain)
+    self.say(DapPrepare.CLOSED)
   end
   self.log('ABANDONED while preparing the file')
 end

@@ -24,6 +24,22 @@ local BLOCK = 0x10000
 --- The longest record: ':', then 255 data bytes and five
 --- more, two digits each
 local LONGEST = 1 + 2 * (255 + 5)
+--- Blanks a line may carry after its record
+local TRAILING = 256
+
+--- Blanks (space, tab, CR, LF, VT, FF) and NUL
+local BLANK = { [0] = true, [9] = true, [10] = true,
+  [11] = true, [12] = true, [13] = true, [32] = true }
+
+--- A line without the blanks at its end, read from the end
+--- byte by byte
+--- @param line string
+--- @return string
+local function trimmed(line)
+  local n = #line
+  while n > 0 and BLANK[line:byte(n)] do n = n - 1 end
+  return line:sub(1, n)
+end
 
 --- The value of each hex digit's byte
 local DIGIT = {}
@@ -111,9 +127,11 @@ local function pieces(data, pause)
   -- between a CR and its LF is a blank line
   for line in (data .. '\n'):gmatch('([^\r\n]*)[\r\n]') do
     pause()
-    line = line:gsub('[%s%z]+$', '')
-    -- a line longer than any record is refused before it is
-    -- decoded, which cannot pause
+    -- a line longer than any record, and the blanks it may
+    -- carry, is refused before any work on it, which cannot
+    -- pause
+    if #line > LONGEST + TRAILING then return nil, 'damaged' end
+    line = trimmed(line)
     if #line > LONGEST then return nil, 'damaged' end
     if line ~= '' then
       if ended then return nil, 'early end' end

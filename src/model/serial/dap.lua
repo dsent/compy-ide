@@ -269,7 +269,8 @@ end
 --- 'outside' for a byte outside REGIONS, 'interface' for an
 --- image the chip would take for software of its own.
 --- pause is passed on to the reading and the writing; seen,
---- when given, gets the image once it passed every check.
+--- when given, gets the image once the file is written, so
+--- nothing it does changes what is sent.
 --- @param data string
 --- @param pause function?
 --- @param seen function?
@@ -286,6 +287,7 @@ function Dap.prepare(data, pause, seen)
     if not inside(run) then return nil, 'outside' end
   end
   if forTheChip(image[1]) then return nil, 'interface' end
+  local text = IntelHex.encode(image, pause)
   if seen then seen(image) end
-  return IntelHex.encode(image, pause)
+  return text
 end

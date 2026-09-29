@@ -1352,6 +1352,18 @@ describe('Serial flash', function()
       assert.same(Dap.prepare(F.hex(40)), chip.written)
     end)
 
+  --- what the caller does with the image changes nothing
+  --- that is sent: the file is written before it hears
+  it('writes the file before the caller hears the image',
+    function()
+      local data = F.hex(40)
+      local text = Dap.prepare(data, nil, function(image)
+        image[1].data = string.rep('\0', #image[1].data)
+        image[#image + 1] = { at = 0x20000000, data = 'x' }
+      end)
+      assert.same(Dap.prepare(data), text)
+    end)
+
   it('tells the caller nothing of a file it refuses',
     function()
       local chip = F.chip()
@@ -1389,6 +1401,44 @@ describe('Serial flash', function()
     end
     assert.truthy(joined(said):find('took the file', 1, true))
   end)
+
+  --- no version line for a file that did not get written
+  it('tells the caller nothing when writing the file fails',
+    function()
+      local encode = IntelHex.encode
+      local read = 0
+      IntelHex.encode = function() error('out of memory') end
+      local ok = pcall(Dap.prepare, F.hex(40), nil,
+        function() read = read + 1 end)
+      IntelHex.encode = encode
+      assert.is_false(ok)
+      assert.same(0, read)
+    end)
+
+  --- nothing was sent while the file was read: the words say
+  --- so, when the Compy is closed or stopped then
+  it('says the board kept its program when closed while it'
+    .. ' reads', function()
+      for _, how in ipairs({ 'abandon', 'stop' }) do
+        local chip = F.chip()
+        local s = connected(chip)
+        local now = 0
+        s.clock = function()
+          now = now + 0.001
+          return now
+        end
+        local said = {}
+        assert.is_true(s:flash(F.hex(400),
+          function(l) said[#said + 1] = l end))
+        s:update(1 / 30)
+        assert.is_true(getmetatable(s.job) == DapPrepare)
+        local cut = s[how](s)
+        local words = how == 'stop' and cut or said[#said]
+        assert.truthy(words:find('keeps its program', 1, true), how)
+        assert.is_nil(words:find('did not take', 1, true), how)
+        assert.same(0, #chip.got)
+      end
+    end)
 
   --- a fault of the Compy's own sends no one for a new file
   it('tells its own fault from a damaged file', function()
