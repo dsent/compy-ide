@@ -461,27 +461,45 @@ describe('input surface: inbound events — a project stays live'
       assert.are_not.equal(love.event, env.love.event)
     end)
 
-  --- Android: a project's quit stops the project, and the IDE
-  --- stays with the console, as it always has
-  it('keeps the IDE when a running project quits on Android',
-    function()
-      local calls = stub_stop()
+  --- the console is built before love.quit's wrappers go on
+  --- (main.lua): the copy a project gets must already tag
+  it('gives projects a love.event that tags, copied in main.lua\'s'
+    .. ' order', function()
+      local pre = F.cc:get_pre_env_c()
+      assert.are.equal(love.event.quit, pre.love.event.quit)
+      assert.are.equal(love.event.push, pre.love.event.push)
+      local app = require('util.application')
       F.quits()
-      F.run_source('love.event.quit()')
-      local got = F.quits()
-      local system, window = love.system, love.window
-      local minimized = 0
-      love.system = { getOS = function() return 'Android' end }
-      love.window = {
-        minimize = function() minimized = minimized + 1 end,
-      }
-      love.state.app_state = 'running'
-      local stay = love.quit(got[1][1])
-      love.system, love.window = system, window
-      assert.is_true(stay)
-      assert.are.equal(1, calls.n)
-      assert.are.equal(0, minimized)
+      pre.love.event.quit()
+      assert.is_true((app.untag(F.quits()[1][1])))
     end)
+
+  --- Android: a project's quit, love.event.quit() or a pushed
+  --- one, stops the project, and the IDE stays with the
+  --- console, as it always has
+  for _, how in ipairs({ 'love.event.quit()',
+    "love.event.push('quit')" }) do
+    it('keeps the IDE when a running project on Android runs '
+      .. how, function()
+        local calls = stub_stop()
+        F.quits()
+        F.run_source(how)
+        local got = F.quits()
+        assert.are.equal(1, #got)
+        local system, window = love.system, love.window
+        local minimized = 0
+        love.system = { getOS = function() return 'Android' end }
+        love.window = {
+          minimize = function() minimized = minimized + 1 end,
+        }
+        love.state.app_state = 'running'
+        local stay = love.quit(got[1][1])
+        love.system, love.window = system, window
+        assert.is_true(stay)
+        assert.are.equal(1, calls.n)
+        assert.are.equal(0, minimized)
+      end)
+  end
 
   --- Ctrl+Esc with a board open and no file going to it,
   --- walked as LÖVE walks it: the key's release pushes quit,

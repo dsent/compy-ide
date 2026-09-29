@@ -1000,11 +1000,32 @@ describe('DapFlash', function()
         assert.same('done', j.state)
         local words = joined(said)
         assert.truthy(words:find('took the file', 1, true))
+        -- the board was not restarted: a press does it
+        assert.truthy(words:find('Press its reset button', 1, true))
         assert.is_nil(words:find('did not take', 1, true))
         assert.is_nil(words:find('old program', 1, true))
         assert.same('CLOSED', chip.stream)
       end)
   end
+
+  --- a close that could not go leaves the stream open for all
+  --- anyone knows: the stop tries it again, and says so
+  it('keeps the stream open when the close on stop cannot go',
+    function()
+      local chip = F.chip({ latency = 0.2 })
+      local j, said, logged, link = job(F.hex(300), chip)
+      stepTo(j, chip, 'close')
+      j.mayBeOpen = true
+      link.send = function() return false end
+      assert.is_nil(j:abandon(0.5, 'The Compy was closed.'))
+      assert.same('failed', j.state)
+      local log = joined(logged)
+      assert.truthy(log:find('end of file reported: no reply', 1,
+        true))
+      assert.is_nil(log:find('no stream open', 1, true))
+      assert.truthy(log:find('close on stop: no reply', 1, true))
+      assert.truthy(joined(said):find('did not take', 1, true))
+    end)
 
   it('takes a stop before the end of file for a failure',
     function()

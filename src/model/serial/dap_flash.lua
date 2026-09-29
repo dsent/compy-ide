@@ -506,7 +506,12 @@ function DapFlash:account(dt, spent, waited, sent)
     waited = 0, sent = 0 }
 end
 
-DapFlash.TOOK = 'The micro:bit took the file. ' .. RESET_NOTE
+--- A stop leaves the board unrestarted: the reset was never
+--- sent, or its answer never came. A press restarts it, and
+--- does no harm if it already has.
+DapFlash.TOOK = 'The micro:bit took the file. Press its reset'
+    .. ' button, on the back next to the USB socket, to start'
+    .. ' the new program.'
 
 --- A stop that finds the chip with the whole file: the flash
 --- is done, and only the board's restart is left undone
@@ -546,15 +551,21 @@ function DapFlash:abandon(seconds, plain)
       while link:room() == 0 and not link.fault and left() > 0 do
         link:pump(left())
       end
-      self.mayBeOpen = false
-      link:send(Dap.packet(Dap.CLOSE), function(raw)
-        self:closed(statusOf(Dap.CLOSE, raw))
-      end)
+      -- the stream stays open for all anyone knows until a
+      -- close has gone
+      if link:send(Dap.packet(Dap.CLOSE), function(raw)
+            self:closed(statusOf(Dap.CLOSE, raw))
+          end) then
+        self.mayBeOpen = false
+      end
     end
-    while self.stopping.close == nil and not link.fault
-        and left() > 0 do
+    while self.stopping.close == nil and not self.mayBeOpen
+        and not link.fault and left() > 0 do
       link:pump(left())
     end
+    self.log('close on stop, end of file reported: '
+      .. (self.stopping.close and self:name(self.stopping.close)
+        or 'no reply'))
     if self.stopping.close == Dap.SUCCESS then
       return self:tookOnStop(plain)
     end
