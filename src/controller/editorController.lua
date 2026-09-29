@@ -1100,6 +1100,9 @@ function EditorController:_search_mode_keys(k)
     self.view:get_current_buffer():scroll_to_line(jump.line)
     self:set_mode('nav')
     self.search:clear()
+  elseif Key.is_enter(k) and not Key.shift() and not Key.ctrl() then
+    --- nothing found to jump to (spec 2.4.3)
+    self:refuse()
   end
 end
 

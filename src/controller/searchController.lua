@@ -142,13 +142,8 @@ function SearchController:keypressed(k)
     local sel = self.model.selection
     local hit = self.model.resultset[sel]
     self.input:update_view()
-    if not hit then
-      --- nothing found: the knock, and search stays
-      --- open (spec 2.4.3)
-      require("util.audio").knock()
-      return
-    end
-    return hit.r
+    --- nothing found: no jump, and search stays open
+    return hit and hit.r
   end
   self.input:update_view()
 end

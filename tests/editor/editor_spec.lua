@@ -1286,6 +1286,7 @@ describe('Editor #editor', function()
       assert.same(before + 1, #played)
       assert.same('assets/sounds/knock.ogg', played[#played])
       assert.same('search', controller:get_mode())
+      assert.same({ 'zzz' }, controller.search.input:get_text())
     end)
 
     it('follows the require on Ctrl+J', function()
