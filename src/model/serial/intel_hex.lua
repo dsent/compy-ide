@@ -103,7 +103,9 @@ end
 --- @return string? why
 local function pieces(data)
   local out, base, segment, ended = {}, 0, false, false
-  for line in (data .. '\n'):gmatch('([^\n]*)\n') do
+  -- lines end in LF, CR LF or CR alone; the empty line
+  -- between a CR and its LF is a blank line
+  for line in (data .. '\n'):gmatch('([^\r\n]*)[\r\n]') do
     line = line:gsub('[%s%z]+$', '')
     if line ~= '' then
       if ended then return nil, 'early end' end
@@ -191,7 +193,7 @@ end
 --- times 16; types 03 and 05 are left out; the end-of-file
 --- record ends the file, and only blank lines may follow it.
 --- Each record's length and checksum must hold. Lines end in
---- LF or CR LF; blanks at a line's end are left out.
+--- LF, CR LF or CR; blanks at a line's end are left out.
 --- @param data string
 --- @return table[]? image runs { at, data } in address order
 --- @return string? why 'cut short', 'early end', 'universal',

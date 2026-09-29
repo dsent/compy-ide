@@ -359,9 +359,23 @@ function Serial:abandon()
   self.job = nil
 end
 
+local CUT = 'A file was going to the micro:bit, and it did not'
+    .. ' take it: the Compy stopped. Send the file again once'
+    .. ' the Compy is back.'
+
+--- Let the board go. A flash under way stops, its stream
+--- closed, waiting at most STOP_S.
+--- @return string? cut the words for a flash that was cut
+---   off, for whoever shows them
 function Serial:stop()
-  if self.job then self.job:abandon(STOP_S) end
+  local cut
+  if self.job then
+    cut = CUT
+    if self.job:erased() then cut = cut .. ' ' .. DapFlash.GONE end
+    self.job:abandon(STOP_S)
+  end
   self.job = nil
   self.backend:stop()
   self.connected = false
+  return cut
 end

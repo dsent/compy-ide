@@ -123,6 +123,19 @@ describe('input surface: inbound events — a project stays live'
         assert.are.equal('loop', result)
       end)
 
+    --- the error screen is the one thing the person sees then
+    it('says on the error screen that a flash was cut off',
+      function()
+        local shown
+        local kept = love.errhand
+        love.errhand = function(msg) shown = msg end
+        Controller.set_love_quit(F.cc)
+        port.stop = function() return 'A file was going.' end
+        love.errhand('boom')
+        love.errhand = kept
+        assert.are.equal('boom\n\nA file was going.', shown)
+      end)
+
     it('shows the error even when letting the board go fails',
       function()
         local shown
@@ -174,6 +187,36 @@ describe('input surface: inbound events — a project stays live'
         assert.are.equal(1, port.abandons)
         assert.are.equal(1, port.stops)
       end)
+
+    --- a quit that only stops a project leaves the IDE, and the
+    --- flash in it, running
+    it('leaves a flash going when the quit only stops a project',
+      function()
+        local calls = stub_stop()
+        port.flashing = true
+        love.state.app_state = 'running'
+        local aborted = love.quit()
+        assert.is_true(aborted)
+        assert.are.equal(1, calls.n)
+        assert.are.equal(0, port.abandons)
+        assert.are.equal(0, port.stops)
+      end)
+
+    it('takes a project\'s push of quit as asked for', function()
+      stub_stop()
+      local event = love.event
+      love.event = { quit = function() end, push = function() end }
+      Controller.set_love_quit(F.cc)
+      port.flashing = true
+      local print_ = _G.print
+      _G.print = function() end
+      love.event.push('quit')
+      local stay = love.quit()
+      _G.print = print_
+      love.event = event
+      assert.is_true(stay)
+      assert.are.equal(0, port.abandons)
+    end)
 
     --- Ctrl+Esc refused during a flash must not close the IDE
     --- on a later quit that only stops a project

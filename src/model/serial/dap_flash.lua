@@ -58,6 +58,7 @@ local NOT_V2 = 'This board is not a micro:bit V2, and the file'
     .. ' file again.'
 local GONE = 'Its old program may be gone until a file goes'
     .. ' onto it.'
+DapFlash.GONE = GONE
 local RESET_NOTE = 'If it does not start with the new program,'
     .. ' press its reset button, on the back next to the USB'
     .. ' socket.'
@@ -131,16 +132,17 @@ end
 --- The old program may be gone once the chip took the chunk
 --- that starts it writing the board's memory
 --- Refusals the chip makes before it erases, which it does in
---- flash_manager_init (flash_manager.c: erase_chip): a bad
---- record, 21 and 22, from the hex reader before any data
---- goes on (file_stream.c write_hex); an image it will not
---- take, 26 to 28 from flash_decoder_get_flash and 29 from
---- flash_decoder_validate_target_image, both before
---- flash_manager_init in flash_decoder_write. 13 comes after
---- the erase (target_flash.c), and 23 to 25 are not raised
---- in 0257.
-local BEFORE_ERASE = { [21] = true, [22] = true, [26] = true,
-  [27] = true, [28] = true, [29] = true }
+--- flash_manager_init (flash_manager.c: erase_chip): an image
+--- it will not take, 26 to 28 from flash_decoder_get_flash and
+--- 29 from flash_decoder_validate_target_image, both before
+--- flash_manager_init in flash_decoder_write. A bad record,
+--- 21 or 22, may come after it: the hex reader hands on the
+--- records before it in the same chunk (file_stream.c
+--- write_hex), which can start the erase. 13 comes after the
+--- erase (target_flash.c), and 23 to 25 are not raised in
+--- 0257.
+local BEFORE_ERASE = { [26] = true, [27] = true, [28] = true,
+  [29] = true }
 
 --- The old program may be gone once the chunk that carries the
 --- erase point went to the chip: a micro:bit V2 erases the
@@ -405,7 +407,10 @@ local PHASES = {
 --- link can.
 --- @param fault string
 --- @return boolean
-local GONE_STATUS = { [-2] = true, [-19] = true, [-108] = true }
+--- ENOENT (killed), EPROTO and EILSEQ (a transfer cut off, the
+--- first an unplug usually brings), ENODEV, ESHUTDOWN
+local GONE_STATUS = { [-2] = true, [-19] = true, [-71] = true,
+  [-84] = true, [-108] = true }
 
 function DapFlash:unplugged(fault)
   local status = tonumber(fault:match('status (%-%d+)'))

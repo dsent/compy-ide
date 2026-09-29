@@ -668,7 +668,11 @@ describe('DapFlash', function()
       assert.is_true(refusing(17))
       assert.is_true(refusing(16))
       assert.is_true(refusing(13))
-      for _, before in ipairs({ 21, 22, 26, 27, 28, 29 }) do
+      -- a bad record may come after records that started the
+      -- erase in the same chunk
+      assert.is_true(refusing(21))
+      assert.is_true(refusing(22))
+      for _, before in ipairs({ 26, 27, 28, 29 }) do
         assert.is_false(refusing(before), before)
       end
 
@@ -773,6 +777,21 @@ describe('DapFlash', function()
       end
     end)
 
+  --- an end of file on an earlier chunk leaves chunks the chip
+  --- will not take
+  it('fails when the end of file comes before the last chunk',
+    function()
+      local chip = F.chip()
+      chip.over[0x8C] = function(_, c)
+        c.n = (c.n or 0) + 1
+        if c.n == 2 then return string.char(0x8C, 19) end
+      end
+      local j, said = job(F.hex(40), chip)
+      assert.same('failed', run(j, chip))
+      assert.same(0, count(chip.got, 0x89))
+      assert.is_nil(joined(said):find('took the file', 1, true))
+    end)
+
   --- the chip reports the end of the file on the last chunk;
   --- without that report it has not read the whole file
   it('fails when the last chunk brings no end of file',
@@ -799,9 +818,11 @@ describe('DapFlash', function()
       { 'reply transfer status -2', nil, 'was unplugged' },
       { 'reply transfer status -22', nil, 'lost touch' },
       { 'reap errno 191', nil, 'lost touch' },
-      { 'reply transfer status -71', false, 'was unplugged' },
-      { 'reply transfer status -71', true, 'lost touch' },
-      { 'reply transfer status -71', nil, 'lost touch' },
+      { 'reply transfer status -71', true, 'was unplugged' },
+      { 'reply transfer status -84', true, 'was unplugged' },
+      { 'reply transfer status -32', false, 'was unplugged' },
+      { 'reply transfer status -32', true, 'lost touch' },
+      { 'reply transfer status -32', nil, 'lost touch' },
     }
     for _, c in ipairs(cases) do
       local chip = F.chip()
@@ -1111,6 +1132,22 @@ describe('Serial flash', function()
         assert.truthy(err:find(c[3], 1, true), c[3])
       end
     end)
+
+  it('gives the words for a flash a stop cut off', function()
+    local chip = F.chip({ latency = 0.001 })
+    local s = connected(chip)
+    assert.is_nil(s:stop())
+    local s2 = connected(chip)
+    assert.is_true(s2:flash(F.hex(300), quiet))
+    for _ = 1, 200 do
+      if s2.job and s2.job.sent >= s2.job.eraseChunk then break end
+      s2:update(1 / 30)
+      chip.now = chip.now + 1 / 30
+    end
+    local cut = s2:stop()
+    assert.truthy(cut:find('did not take it', 1, true))
+    assert.truthy(cut:find('old program', 1, true))
+  end)
 
   it('ends a flash with words when the Compy is closed',
     function()

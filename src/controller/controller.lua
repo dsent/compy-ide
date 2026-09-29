@@ -739,7 +739,12 @@ Controller = {
     if explore and explore ~= Controller.errhand then
       Controller.errhand = function(msg)
         if Serial and SerialPort then
-          pcall(SerialPort.stop, SerialPort)
+          local ok, cut = pcall(SerialPort.stop, SerialPort)
+          -- a flash cut off is said on the error screen, the
+          -- one thing the person sees now
+          if ok and cut then
+            msg = tostring(msg) .. '\n\n' .. cut
+          end
         end
         return explore(msg)
       end
@@ -759,13 +764,24 @@ Controller = {
     --- A quit pushed from inside the app, by the IDE or a
     --- project, is one the person asked for; only Android's
     --- own quit comes without it
-    local push = love.event and love.event.quit
-    if push and push ~= Controller.event_quit then
+    local event = love.event
+    if event and event.quit and event.quit ~= Controller.event_quit
+    then
+      local quit_ = event.quit
       Controller.event_quit = function(...)
         Application.mark_exit_asked()
-        return push(...)
+        return quit_(...)
       end
-      love.event.quit = Controller.event_quit
+      event.quit = Controller.event_quit
+    end
+    if event and event.push and event.push ~= Controller.event_push
+    then
+      local push = event.push
+      Controller.event_push = function(name, ...)
+        if name == 'quit' then Application.mark_exit_asked() end
+        return push(name, ...)
+      end
+      event.push = Controller.event_push
     end
     love.quit = function()
       local asked = Application.consume_exit_asked()
@@ -780,10 +796,15 @@ Controller = {
             .. ' again.')
           return true
         end
-        port:abandon()
       end
+      -- whether the IDE stays is decided first: a flash goes on
+      -- in an IDE that stays, and ends, with words, in one that
+      -- does not
       local stay = quit()
-      if not stay and port then port:stop() end
+      if not stay and port then
+        if port:isFlashing() then port:abandon() end
+        port:stop()
+      end
       return stay
     end
   end,

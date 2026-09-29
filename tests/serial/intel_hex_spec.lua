@@ -283,6 +283,13 @@ describe('IntelHex', function()
       assert.same(once, twice)
     end)
 
+  it('reads lines that end in CR alone', function()
+    local lf = rec(0, 0, seq(16)) .. rec(0, 16, seq(16, 16)) .. EOF
+    local cr = lf:gsub('\r\n', '\r')
+    assert.same(assert(IntelHex.parse(lf)),
+      assert(IntelHex.parse(cr)))
+  end)
+
   it('reads records of any length the format allows',
     function()
       local image = assert(IntelHex.parse(rec(0, 0, seq(255))
@@ -350,6 +357,10 @@ describe('Dap.prepare', function()
       assert.same('outside', select(2, Dap.prepare(across .. EOF)))
       local uicr = rec(4, 0, { 0x10, 0 }) .. rec(0, 0x1FFF, { 1 })
       assert.truthy(Dap.prepare(uicr .. EOF))
+      local past_uicr = rec(4, 0, { 0x10, 0 })
+          .. rec(0, 0x2000, { 1 })
+      assert.same('outside', select(2, Dap.prepare(past_uicr
+        .. EOF)))
       local ficr = rec(4, 0, { 0x10, 0 }) .. rec(0, 0x0FFF, { 1 })
       assert.same('outside', select(2, Dap.prepare(ficr .. EOF)))
       local ram = rec(4, 0, { 0x20, 0 }) .. rec(0, 0, { 1 })
