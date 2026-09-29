@@ -1444,6 +1444,17 @@ describe('Editor #editor', function()
           fresh:get_text_content()[1])
       end)
 
+      --- the desktop's order: the key, then its glyph
+      it('Space confirming a restore types nothing', function()
+        cp_time = 1752400000
+        mock.keystroke('C-S-k', press)
+        controller:keypressed('space')
+        controller:textinput(' ')
+        assert.same({ 'restore:main.lua' }, calls)
+        assert.same('nav', controller:get_mode())
+        assert.is_true(controller.input:is_empty())
+      end)
+
       it('restore without a checkpoint refuses', function()
         mock.keystroke('C-S-k', press)
         assert.same({}, calls)

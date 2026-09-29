@@ -587,7 +587,12 @@ function EditorController:_confirm(act)
     local name = self:get_active_buffer().name
     if con:restore_checkpoint(name) then
       local text = con:_readfile(name)
+      --- the reload opens the file again, which drops any
+      --- question; the confirming Space's glyph may be
+      --- still to come
+      local swallow = self._swallow_glyph
       self:reload_active(text)
+      self._swallow_glyph = swallow
     end
     return
   end
