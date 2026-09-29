@@ -541,6 +541,16 @@ function DapFlash:abandon(seconds, plain)
   local function left()
     return math.floor((deadline - self.clock()) * 1000)
   end
+  -- every chunk has gone and some answers are still on their
+  -- way: they come first, within the same deadline, so the
+  -- last one's end of file moves the flash on to its close
+  -- before the verdict is made
+  if self.phase == 'write' and self.sent == self.chunks then
+    while self.phase == 'write' and link:unanswered() > 0
+        and not link.fault and left() > 0 do
+      link:pump(left())
+    end
+  end
   -- the chip has the whole file once it closed the stream as
   -- done (phase reset), or when it does so now: the end of
   -- the file was reported, and the close goes, or has gone,

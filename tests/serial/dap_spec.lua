@@ -1010,6 +1010,80 @@ describe('DapFlash', function()
       end)
   end
 
+  --- every chunk sent, some answers still on their way: a stop
+  --- takes them in, within its deadline, before its verdict
+  local function stepToLastWrites(j, chip)
+    for _ = 1, 20000 do
+      if j.phase == 'write' and j.sent == j.chunks
+          and j.acked < j.chunks then
+        return
+      end
+      j:step(1 / 30)
+      chip.now = chip.now + 1 / 30
+    end
+    error('never stopped with answers on their way')
+  end
+
+  it('takes a stop with the last answers on their way for a'
+    .. ' success when they report the end of file', function()
+      local chip = F.chip({ latency = 0.1 })
+      local data = Dap.prepare(F.hex(20))
+      local j, said = job(data, chip)
+      stepToLastWrites(j, chip)
+      local t0 = chip.now
+      assert.is_true(j:abandon(1, 'The Compy was closed.'))
+      assert.is_true(chip.now - t0 <= 1 + 1e-9)
+      assert.same('done', j.state)
+      assert.same('CLOSED', chip.stream)
+      assert.same(data, chip.written)
+      local words = joined(said)
+      assert.truthy(words:find('took the file', 1, true))
+      assert.is_nil(words:find('did not take', 1, true))
+      assert.same(1, count(chip.got, 0x89))
+    end)
+
+  it('gives the error screen success words for a stop with the'
+    .. ' last answers on their way', function()
+      local chip = F.chip({ latency = 0.1 })
+      local j = job(Dap.prepare(F.hex(20)), chip)
+      stepToLastWrites(j, chip)
+      local b = FakeBackend.new()
+      local s = Serial.new(b)
+      b:attach()
+      s.job = j
+      assert.same(DapFlash.TOOK, s:stop())
+    end)
+
+  it('takes a stop for a failure when a last answer is a refusal',
+    function()
+      local chip = F.chip({ latency = 0.1 })
+      chip.over[0x8C] = function(packet)
+        if packet:find(':00000001FF', 1, true) then
+          return string.char(0x8C, 21)
+        end
+      end
+      local j, said = job(Dap.prepare(F.hex(20)), chip)
+      stepToLastWrites(j, chip)
+      assert.is_nil(j:abandon(1, 'The Compy was closed.'))
+      assert.same('failed', j.state)
+      assert.truthy(joined(said):find('did not take', 1, true))
+    end)
+
+  it('takes a stop for a failure when the last answers never come'
+    .. ', within its deadline', function()
+      local chip = F.chip({ latency = 0.1 })
+      local j, said, _, link = job(Dap.prepare(F.hex(20)), chip)
+      stepToLastWrites(j, chip)
+      link.pump = function(_, ms)
+        chip.now = chip.now + (ms or 1) / 1000
+      end
+      local t0 = chip.now
+      assert.is_nil(j:abandon(1, 'The Compy was closed.'))
+      assert.is_true(chip.now - t0 <= 1 + 1e-9)
+      assert.same('failed', j.state)
+      assert.truthy(joined(said):find('did not take', 1, true))
+    end)
+
   --- a close that could not go leaves the stream open for all
   --- anyone knows: the stop tries it again, and says so
   it('keeps the stream open when the close on stop cannot go',

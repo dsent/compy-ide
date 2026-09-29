@@ -3,7 +3,10 @@ require('model.serial.dap')
 --- A hex file read and written afresh for the chip
 --- (Dap.prepare), a share per update, so the screen keeps
 --- moving while a big file is read: each update gives it at
---- most BUDGET seconds.
+--- most BUDGET seconds. The bound holds for a file whose
+--- records come in address order, as firmware's do; for one
+--- out of order it is best effort, since the sort of its
+--- pieces runs in one update (IntelHex.parse).
 ---
 --- It answers as a flash does (step, erased, abandon), and
 --- comes before one: once step says 'ready', text holds the
