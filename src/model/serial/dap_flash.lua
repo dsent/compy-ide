@@ -130,8 +130,33 @@ end
 
 --- The old program may be gone once the chip took the chunk
 --- that starts it writing the board's memory
+--- Refusals the chip makes while it reads a chunk, before it
+--- hands the chunk's data on, and so before any erase: a bad
+--- record (21, 22), an image it will not take (28, 29)
+--- (intelhex.c, flash_decoder.c)
+local BEFORE_ERASE = { [21] = true, [22] = true, [28] = true,
+  [29] = true }
+
+--- The old program may be gone once the chunk that carries the
+--- erase point went to the chip: a micro:bit V2 erases the
+--- whole chip within that write, whatever its reply, or none.
+--- Not when the chip refused an earlier chunk, which leaves
+--- its stream in error, nor when it refused that chunk before
+--- reading its data through.
+--- @return boolean
+function DapFlash:erased()
+  if self.sent < self.eraseChunk then return false end
+  local at = self.refusedAt
+  if at and at < self.eraseChunk then return false end
+  if at == self.eraseChunk and BEFORE_ERASE[self.refusedStatus]
+  then
+    return false
+  end
+  return true
+end
+
 function DapFlash:mayBeGone()
-  if self.accepted >= self.eraseChunk then self.say(GONE) end
+  if self:erased() then self.say(GONE) end
 end
 
 --- The verdict after a close the chip reported done: the
@@ -276,7 +301,9 @@ function DapFlash:wrote(i, status)
   self.acked = i
   self.statuses.write = self:name(status)
   local last = i == self.chunks
-  if status == Dap.SUCCESS then self.accepted = i end
+  if status == Dap.SUCCESS or status == Dap.DONE then
+    self.accepted = i
+  end
   if status == Dap.SUCCESS and not last then return end
   if last and status == Dap.DONE then
     self.log('write: end of file reported by the chip')
@@ -292,6 +319,7 @@ function DapFlash:wrote(i, status)
   end
   self.log(string.format('write %d of %d refused: %s', i,
     self.chunks, self:name(status)))
+  self.refusedAt, self.refusedStatus = i, status
   self:refuse(Dap.plain(status), 'write ' .. self:name(status))
 end
 

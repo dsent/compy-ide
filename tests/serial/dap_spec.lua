@@ -647,6 +647,54 @@ describe('DapFlash', function()
       assert.is_nil(joined(said):find('old program', 1, true))
     end)
 
+  --- a micro:bit V2 erases the whole chip within the write
+  --- that carries the erase point, whatever its reply
+  it('says the old program may be gone once the chunk that'
+    .. ' erases went', function()
+      local function refusing(status)
+        local chip = F.chip()
+        local j
+        chip.over[0x8C] = function(_, c)
+          c.n = (c.n or 0) + 1
+          if c.n == j.eraseChunk then
+            return string.char(0x8C, status)
+          end
+        end
+        local said
+        j, said = job(F.hex(40), chip)
+        assert.same('failed', run(j, chip))
+        return joined(said):find('old program', 1, true) ~= nil
+      end
+      assert.is_true(refusing(17))
+      assert.is_true(refusing(16))
+      assert.is_false(refusing(21))
+
+      local quiet_chip = F.chip()
+      local j
+      quiet_chip.over[0x8C] = function(_, c)
+        c.n = (c.n or 0) + 1
+        if c.n >= j.eraseChunk then c.silent = true end
+      end
+      local said
+      j, said = job(F.hex(40), quiet_chip)
+      assert.same('failed', run(j, quiet_chip))
+      assert.truthy(joined(said):find('old program', 1, true))
+    end)
+
+  it('says so when the erase point is in the last chunk and'
+    .. ' the close fails', function()
+      local chip = F.chip()
+      chip.over[0x8B] = function(_, c)
+        c.stream = 'CLOSED'
+        return string.char(0x8B, 17)
+      end
+      local j, said = job(F.hex(3), chip)
+      assert.same(j.chunks, j.eraseChunk)
+      assert.same('failed', run(j, chip))
+      assert.same(j.chunks, j.sent)
+      assert.truthy(joined(said):find('old program', 1, true))
+    end)
+
   it('finds the chunk that starts the chip writing', function()
     local text = assert(Dap.prepare(
       io.open('src/examples/microbit/MICROBIT.hex'):read('*a')))

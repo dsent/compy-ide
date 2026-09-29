@@ -812,6 +812,17 @@ function AndroidBackend:pollPermission()
   if self:hasPermission(self.dev.dev) then
     return self:openReady()
   end
+  -- a board unplugged while Android asks is let go at once:
+  -- plugged in again, it is a new device, and is asked again
+  if now() >= (self.presentDue or 0) then
+    self.presentDue = now() + PRESENCE_S
+    if not self:present() then
+      jniDropGlobal(self.env, self.dev.dev)
+      self:dropDevice()
+      self.due = 0
+      return
+    end
+  end
   if now() < self.due then return end
   jniDropGlobal(self.env, self.dev.dev)
   self:dropDevice()

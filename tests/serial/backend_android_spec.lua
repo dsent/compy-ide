@@ -317,6 +317,21 @@ describe('AndroidBackend drive hold', function()
       assert.same('CMSIS-DAP interface not claimed', err)
     end)
 
+  --- plugged in again, a board is a new device, and Android
+  --- asks again
+  it('lets go at once of a board unplugged while Android asks',
+    function()
+      local b = backend(port())
+      b.state = 'permission'
+      b.due = math.huge
+      b.hasPermission = function() return false end
+      b.present = function() return false end
+      assert.is_nil(b:pollPermission())
+      assert.same('idle', b.state)
+      assert.same(0, b.due)
+      assert.is_nil(b:absence())
+    end)
+
   it('says the board waits for permission', function()
     local b = backend(port())
     b.state = 'permission'
