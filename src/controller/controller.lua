@@ -692,13 +692,29 @@ Controller = {
   set_love_quit = function(CC)
     local cfg = CC.cfg
 
-    --- The window goes to the back, and the IDE leaves: from
-    --- here an error cannot be shown to anyone
+    --- The IDE leaves, and its window goes to the back once
+    --- the micro:bit is let go (go_back below): the run should
+    --- end as soon after as it can, since Android pauses a
+    --- window at the back. From here an error cannot be shown
+    --- to anyone.
     local function go_home()
       Controller.leaving = true
-      Application.return_home_before_exit()
+      Controller.home = true
     end
     Controller.leaving = false
+    Controller.home = false
+
+    --- The window goes to the back, once
+    local function go_back()
+      if not Controller.home then return end
+      Controller.home = false
+      local ok, err = pcall(Application.return_home_before_exit)
+      if not ok then
+        local out = rawget(_G, 'orig_print') or print
+        pcall(out, 'The IDE could not go to the back as it quit: '
+          .. tostring(err))
+      end
+    end
 
     local function quit()
       --- flush pending writes before the process can exit
@@ -758,6 +774,7 @@ Controller = {
           if Serial and SerialPort then
             pcall(SerialPort.stop, SerialPort)
           end
+          go_back()
           return function() return 1 end
         end
         if Serial and SerialPort then
@@ -781,8 +798,10 @@ Controller = {
     --- While a file goes to the board, a quit the person
     --- asked for waits, with words that say so. A quit
     --- Android asks for (it is closing the IDE, and waits for
-    --- it) is never refused: the flash stops, its stream
-    --- closed within a second, and says so.
+    --- it) is not refused for the flash: when the IDE leaves,
+    --- the flash stops, its stream closed within a second, and
+    --- says so; when the quit only stops a project, the IDE
+    --- and its flash go on.
     --- A quit pushed from inside the app, by the IDE or a
     --- project, is one the person asked for; only Android's
     --- own quit comes without it
@@ -840,6 +859,7 @@ Controller = {
             .. ' IDE quit: ' .. tostring(err))
         end
         pcall(out, 'Quit accepted: this run of the IDE ends')
+        go_back()
       end
       return stay
     end

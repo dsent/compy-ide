@@ -445,19 +445,47 @@ describe('input surface: inbound events — a project stays live'
             true))
         end)
 
-      --- the window is at the back by then: an error screen
-      --- there would wait for a key that never comes
-      it('ends the run when an error comes on the way out',
+      it('ends the run when the window cannot go to the back',
         function()
           love.window.minimize = function() error('no window') end
           ctrl_esc()
           local retval, frames = boot(10)
           assert.is_nil(shown)
-          assert.are.equal(1, retval)
-          assert.are.equal(2, frames)
+          assert.are.equal(0, retval)
+          assert.are.equal(1, frames)
           assert.truthy(logged:find('no window', 1, true))
           assert.is_false(SerialPort:isConnected())
         end)
+
+      --- Android pauses a window at the back, and a run still
+      --- going then leaves its pause behind: the window goes
+      --- last, once the board is let go
+      it('sends the window to the back after the board is let'
+        .. ' go', function()
+          local closedAtMinimize
+          love.window.minimize = function()
+            minimized = minimized + 1
+            closedAtMinimize = calls[#calls] == 'close'
+          end
+          ctrl_esc()
+          assert.are.equal(0, (boot(10)))
+          assert.are.equal(1, minimized)
+          assert.is_true(closedAtMinimize)
+        end)
+
+      --- an error screen on a window at the back would wait
+      --- for a key that never comes
+      it('ends the run when an error comes on the way out',
+        function()
+          Controller.leaving = true
+          Controller.home = true
+          local loop = love.errhand('boom')
+          assert.is_nil(shown)
+          assert.are.equal(1, loop())
+          assert.are.equal(1, minimized)
+          assert.truthy(logged:find('boom', 1, true))
+          assert.is_false(SerialPort:isConnected())
+    end)
     end)
 
   it('a shown widget is what makes the project count as alive',

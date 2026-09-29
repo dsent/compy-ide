@@ -1,3 +1,10 @@
+--- On Android, a line in the device log for each step of a
+--- start, so a start that stops shows where: this one comes
+--- before LÖVE starts its audio and opens its window
+if love and love._os == 'Android' then
+  print('COMPYSTART conf.lua read: audio and window come next')
+end
+
 require('util.lua')
 
 --- CLI arguments

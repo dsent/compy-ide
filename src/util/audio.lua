@@ -45,4 +45,10 @@ for _,name in pairs(names) do
   end
 end
 
+-- see conf.lua
+if love.system and love.system.getOS
+    and love.system.getOS() == 'Android' then
+  print('COMPYSTART the IDE\'s sounds are loaded')
+end
+
 return audio

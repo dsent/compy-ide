@@ -1,3 +1,8 @@
+--- see conf.lua: LÖVE's audio and window are up by now
+if love.system and love.system.getOS() == 'Android' then
+  print('COMPYSTART main.lua read: audio and window are up')
+end
+
 local redirect_to = require("model.io.redirect")
 local OS = require("util.os")
 local AndroidStorage = require("util.androidStorage")
@@ -430,5 +435,10 @@ function love.load()
       harmony.screenshot('startup')
       harmony.run()
     end
+  end
+  -- see conf.lua
+  if OS.get_name() == 'Android' then
+    local out = rawget(_G, 'orig_print') or print
+    out('COMPYSTART love.load done: the IDE is up')
   end
 end
