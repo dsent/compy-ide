@@ -1267,6 +1267,27 @@ describe('Editor #editor', function()
       assert.same('assets/sounds/knock.ogg', played[#played])
     end)
 
+    it('knocks on Enter when the search finds nothing', function()
+      local controller, press = wire(TU.mock_view_cfg())
+      local src = "local function findme() end"
+      local save = TU.get_save_function(src)
+      controller:open('search.lua', src .. '\n', save)
+      love.system = {
+        getClipboardText = function() return '' end,
+        setClipboardText = function() end,
+      }
+
+      mock.keystroke('C-f', press)
+      controller:textinput('zzz')
+      local before = #mock.played_sounds()
+      mock.keystroke('return', press)
+
+      local played = mock.played_sounds()
+      assert.same(before + 1, #played)
+      assert.same('assets/sounds/knock.ogg', played[#played])
+      assert.same('search', controller:get_mode())
+    end)
+
     it('follows the require on Ctrl+J', function()
       require("tests.helpers.codesnippets")
       local controller, press = wire(TU.mock_view_cfg())

@@ -140,9 +140,15 @@ function SearchController:keypressed(k)
     --- no linebreaks in search
     if Key.shift() or Key.ctrl() then return end
     local sel = self.model.selection
-    local r = self.model.resultset[sel].r
+    local hit = self.model.resultset[sel]
     self.input:update_view()
-    return r
+    if not hit then
+      --- nothing found: the knock, and search stays
+      --- open (spec 2.4.3)
+      require("util.audio").knock()
+      return
+    end
+    return hit.r
   end
   self.input:update_view()
 end
