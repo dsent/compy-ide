@@ -400,7 +400,6 @@ describe('micro:bit exec #microbit', function()
         assert.same({
           "MICROBIT.hex is sent. The micro:bit's light blinks",
           'while it writes it, then it restarts with it.',
-          'MICROBIT.hex holds firmware too old to say its version',
         }, said)
       end)
 
@@ -473,6 +472,9 @@ describe('micro:bit exec #microbit', function()
           .. ' MICROBIT.hex', 1, true))
         assert.truthy(told:find('Give your script another name', 1,
           true))
+        assert.truthy(told:find('writefile("robot.lua", readfile("'
+          .. script .. '"))', 1, true))
+        assert.truthy(told:find('upload("robot.lua")', 1, true))
       end)
   end
 
@@ -482,6 +484,21 @@ describe('micro:bit exec #microbit', function()
     files['MICROBIT.hex'] = f:read('*a')
     f:close()
   end
+
+  --- the card does not tell microbit.hex from MICROBIT.hex
+  it('embed will not write microbit.hex in any case', function()
+    local tools = load_tools()
+    firmware()
+    local shipped = files['MICROBIT.hex']
+    files['x.lua'] = 'print(1)\n'
+    for _, name in ipairs({ 'MICROBIT.hex', 'microbit.hex',
+      'MicroBit.HEX' }) do
+      assert.has_error(function() tools.embed(name, 'x.lua') end)
+    end
+    assert.are.equal(shipped, files['MICROBIT.hex'])
+    assert.is_nil(files['microbit.hex'])
+    assert.is_nil(files['MicroBit.HEX'])
+  end)
 
   it('upload sends the hex it wrote for a lua file', function()
     local tools = load_tools()
@@ -659,6 +676,119 @@ describe('micro:bit exec #microbit', function()
         said = {}
         uploaded(tools)
         assert.same({ 'robot.hex written' }, said)
+      end)
+
+      --- the console's writefile: it says how the write went,
+      --- and returns nothing either way
+      --- @param tools table
+      local function failingWrites(tools)
+        tools.writefile = function(name)
+          tools.print('cannot write ' .. name)
+        end
+      end
+
+      it('sends nothing when the hex cannot be saved', function()
+        local tools = load_tools()
+        failingWrites(tools)
+        files['robot.lua'] = 'print("robot")\n'
+        said = {}
+        uploaded(tools)
+        assert.is_false(flashed)
+        local told = table.concat(said, ' ')
+        assert.truthy(told:find('cannot write robot.hex', 1, true))
+        assert.truthy(told:find('robot.hex could not be saved', 1,
+          true))
+        assert.falsy(told:find('written', 1, true))
+      end)
+
+      it('sends no older hex left on the card when the write'
+        .. ' fails', function()
+          local tools = load_tools()
+          failingWrites(tools)
+          files['robot.hex'] = 'an older build'
+          files['robot.lua'] = 'print("robot")\n'
+          uploaded(tools)
+          assert.is_false(flashed)
+          assert.equal('an older build', files['robot.hex'])
+        end)
+
+      for _, text in ipairs({ '', ' \n\t\n' }) do
+        it('refuses an empty file in words ('
+          .. #text .. ' characters)', function()
+            local tools = load_tools()
+            files['robot.lua'] = text
+            said = {}
+            assert.has_no_error(function() uploaded(tools) end)
+            assert.is_false(flashed)
+            assert.is_nil(files['robot.hex'])
+            local told = table.concat(said, ' ')
+            assert.truthy(told:find('robot.lua is empty', 1, true))
+            assert.truthy(told:find('edit("robot.lua")', 1, true))
+          end)
+      end
+
+      it('says nothing of a version the firmware does not carry',
+        function()
+          local tools = load_tools()
+          require('model.serial.intel_hex')
+          local on
+          tools.flash_microbit = function(data, hooks)
+            flashed = true
+            on = hooks
+            return true
+          end
+          files['robot.lua'] = 'print("robot")\n'
+          said = {}
+          tools.upload('robot.lua')
+          assert.is_true(flashed)
+          on.read(IntelHex.parse(files['robot.hex']))
+          assert.same({}, said)
+        end)
+
+      describe('onto the drive', function()
+        local old_os
+        before_each(function()
+          old_os = os_name
+          os_name = 'Linux'
+        end)
+        after_each(function() os_name = old_os end)
+
+        it('copies the hex it built, and says so', function()
+          local tools = load_tools()
+          files['robot.lua'] = 'print("robot")\n'
+          said = {}
+          local sent = uploaded(tools)
+          assert.are.equal(files['robot.hex'], sent)
+          local base = runtime()
+          assert.are.equal(base,
+            hex.script(hex.parse(sent)):sub(1, #base))
+          assert.same({
+            "robot.hex is sent. The micro:bit's light blinks",
+            'while it writes it, then it restarts with it.',
+          }, said)
+        end)
+      end)
+
+      it('copies to the drive on an older Android Compy', function()
+        local old = {}
+        for _, k in ipairs({ 'send', 'reset', 'isConnected' }) do
+          old[k] = port[k]
+        end
+        port = old
+        local tools = load_tools()
+        local hooks = 'none'
+        files['robot.lua'] = 'print("robot")\n'
+        local sent
+        tools.flash_microbit = function(data, on)
+          sent, hooks, flashed = data, on, true
+          return true
+        end
+        tools.upload('robot.lua')
+        assert.is_nil(hooks)
+        assert.are.equal(files['robot.hex'], sent)
+        local base = runtime()
+        assert.are.equal(base,
+          hex.script(hex.parse(sent)):sub(1, #base))
       end)
     end)
 

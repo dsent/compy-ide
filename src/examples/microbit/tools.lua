@@ -493,6 +493,14 @@ function extract(hex_name, lua_name)
   writefile(name, hex.script(blocksOf(hex_name or HEX)))
 end
 
+--- Whether a name is the robots' firmware's, in any case: the
+--- card does not tell microbit.hex from MICROBIT.hex
+--- @param name string
+--- @return boolean
+local function isFirmware(name)
+  return name:upper() == HEX:upper()
+end
+
 --- Put a Lua script into a hex file. MICROBIT.hex is always
 --- the firmware read from, and never the one written to: it
 --- is the one copy that has to stay as it came.
@@ -500,7 +508,8 @@ end
 --- @param lua_name string?
 function embed(hex_name, lua_name)
   assert(hex_name, "name the hex file to write")
-  assert(hex_name ~= HEX, HEX .. " cannot be overwritten")
+  local firmware = isFirmware(hex_name)
+  assert(not firmware, HEX .. " cannot be overwritten")
   local blocks = blocksOf(HEX)
   hex.embed(blocks, read(lua_name or LUA))
   writefile(hex_name, hex.write(blocks))
@@ -518,14 +527,6 @@ local function hexNameOf(filename)
   end
   local upper = ending == "LUA"
   return base .. (upper and ".HEX" or ".hex")
-end
-
---- Whether a name is the robots' firmware's, in any case: the
---- card does not tell microbit.hex from MICROBIT.hex
---- @param name string
---- @return boolean
-local function isFirmware(name)
-  return name:upper() == HEX:upper()
 end
 
 --- The end of a long bracket around a script, long enough
@@ -555,26 +556,51 @@ local function withRuntime(runtime, script, filename)
       script .. "\n" .. close .. ", " .. name .. "))()\n"
 end
 
---- Say that a Lua file does not fit beside the firmware
+--- A Lua file's text; nil, said, when it holds no program
 --- @param filename string
-local function tooLong(filename)
+--- @return string?
+local function scriptOf(filename)
+  local script = read(filename)
+  if script:find("%S") then
+    return script
+  end
+  local edit = "edit(%q), then upload it again."
+  print(filename .. " is empty. Write your program with")
+  print(edit:format(filename))
+  return nil
+end
+
+--- Whether a script fits where the firmware keeps its own,
+--- said when it does not
+--- @param blocks table[]
+--- @param whole string
+--- @param filename string
+--- @return boolean
+local function fits(blocks, whole, filename)
+  local _, meta = hex.meta(blocks)
+  if #whole <= meta.space then
+    return true
+  end
   print(filename .. " is too long to fit on the micro:bit")
   print("next to its firmware. Make it shorter, then upload")
   print("it again.")
+  return false
 end
 
 --- MICROBIT.hex with a Lua file run after its own script, so
 --- the board keeps its REPL and robot commands; nil, said,
---- when the two do not fit
+--- when the file is empty or the two do not fit
 --- @param filename string
 --- @return string?
 local function build(filename)
+  local script = scriptOf(filename)
+  if not script then
+    return nil
+  end
   local blocks = blocksOf(HEX)
   local runtime = hex.script(blocks)
-  local whole = withRuntime(runtime, read(filename), filename)
-  local _, meta = hex.meta(blocks)
-  if meta.space < #whole then
-    tooLong(filename)
+  local whole = withRuntime(runtime, script, filename)
+  if not fits(blocks, whole, filename) then
     return nil
   end
   hex.embed(blocks, whole)
@@ -589,16 +615,36 @@ end
 local function overwrites(filename, hex_name)
   if isFirmware(hex_name) then
     print(filename .. " would overwrite " .. HEX .. ", the")
-    print("robots' firmware. Give your script another name.")
+    print("robots' firmware. Give your script another name:")
+    local copy = "writefile(\"robot.lua\", readfile(%q))"
+    print(copy:format(filename))
+    print("then upload(\"robot.lua\").")
     return true
   end
+  return false
+end
+
+--- Whether a hex file built for upload is on the card as
+--- built: the console's writefile says how it went, but
+--- does not tell. Said when it is not, since what the card
+--- holds under that name may be an older build.
+--- @param hex_name string
+--- @param data string
+--- @return boolean
+local function saved(hex_name, data)
+  writefile(hex_name, data)
+  if readfile(hex_name) == data then
+    return true
+  end
+  print(hex_name .. " could not be saved, so nothing was")
+  print("sent to the micro:bit.")
   return false
 end
 
 --- The hex file upload sends, and what it holds: the file
 --- itself, or for a Lua file, a hex file of its name that
 --- runs the script too; nil, said, when that would overwrite
---- the robots' firmware or does not fit
+--- the robots' firmware, cannot be built or is not saved
 --- @param filename string
 --- @return string? name
 --- @return string? data
@@ -611,9 +657,18 @@ local function hexFor(filename)
     return nil
   end
   local data = build(filename)
-  if data then
-    writefile(hex_name, data)
+  local kept = data and saved(hex_name, data)
+  if kept then
     return hex_name, data
+  end
+end
+
+--- Say which firmware a hex file holds, when it says
+--- @param name string
+--- @param version string?
+local function holds(name, version)
+  if version then
+    print(name .. " holds firmware " .. version)
   end
 end
 
@@ -624,8 +679,7 @@ end
 local function uploadHooks(name)
   return {
     read = function(image)
-      print(name .. " holds firmware " ..
-        (hex.version(image) or "too old to say its version"))
+      holds(name, hex.version(image))
     end,
     sending = function()
       compy.audio.hyperjump()
@@ -664,8 +718,7 @@ local function uploadToDrive(name, data)
   assert(ok, err)
   print(name .. " is sent. The micro:bit's light blinks")
   print("while it writes it, then it restarts with it.")
-  print(name .. " holds firmware " ..
-    (version or "too old to say its version"))
+  holds(name, version)
 end
 
 --- Whether the file goes down the cable: on a Compy that
