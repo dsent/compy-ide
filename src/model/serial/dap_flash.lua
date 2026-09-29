@@ -567,6 +567,13 @@ function DapFlash:abandon(seconds, plain)
       .. (self.stopping.close and self:name(self.stopping.close)
         or 'no reply'))
     if self.stopping.close == Dap.SUCCESS then
+      -- the reset goes once, not waited for: the words still
+      -- say to press the button, which does no harm
+      if not link.fault and link:room() > 0
+          and link:send(Dap.packet(Dap.RESET_TARGET),
+            function() end) then
+        self.log('reset on stop: sent')
+      end
       return self:tookOnStop(plain)
     end
   elseif self.phase == 'reset' then

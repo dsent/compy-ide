@@ -1005,6 +1005,8 @@ describe('DapFlash', function()
         assert.is_nil(words:find('did not take', 1, true))
         assert.is_nil(words:find('old program', 1, true))
         assert.same('CLOSED', chip.stream)
+        -- the reset goes once in either phase
+        assert.same(1, count(chip.got, 0x89))
       end)
   end
 
