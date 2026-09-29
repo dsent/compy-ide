@@ -179,4 +179,76 @@ describe('editor key contract #input', function()
       assert.same({}, saved)
     end)
   end)
+
+  describe('leaving through the real finish_edit', function()
+    -- The stubbed exits above keep the buffers, so they never
+    -- saw what the key does after they are gone: the chord's
+    -- own 's' went on to the mode's handler, which asked the
+    -- emptied editor for its buffer and raised
+    -- (editorView.lua, get_current_buffer).
+    before_each(function()
+      love.state.prev_state = 'ready'
+    end)
+
+    local handlers = {
+      '_normal_mode_keys', '_search_mode_keys', '_reorg_mode_keys',
+    }
+
+    after_each(function()
+      F.session.release('s')
+      F.session.release('lshift')
+      F.session.release('lctrl')
+      for _, h in ipairs(handlers) do ed[h] = nil end
+      love.debug = nil
+    end)
+
+    --- the key that selects each mode from navigation
+    local enter = {
+      edit    = open_dirty_block,
+      search  = function()
+        F.session.press('lctrl')
+        F.session.press('f')
+        F.session.release('f')
+        F.session.release('lctrl')
+      end,
+      reorder = function()
+        F.session.press('lctrl')
+        F.session.press('m')
+        F.session.release('m')
+        F.session.release('lctrl')
+      end,
+    }
+
+    for _, mode in ipairs({ 'nav', 'edit', 'search', 'reorder' }) do
+      it('leaves from ' .. mode .. ' to the console', function()
+        if enter[mode] then enter[mode]() end
+        assert.same(mode, ed:get_mode())
+        --- once the editor is closed, the chord's own key
+        --- reaches no mode handler
+        local handled = false
+        for _, h in ipairs(handlers) do
+          ed[h] = function(_, k) handled = handled or k == 's' end
+        end
+
+        F.session.press('lctrl')
+        F.session.press('lshift')
+        F.session.press('s')
+
+        assert.is_false(handled)
+        assert.same('ready', love.state.app_state)
+        assert.is_nil(ed:get_active_buffer())
+      end)
+    end
+
+    it('Shift+Esc on the last buffer leaves under DEBUG', function()
+      love.debug = { }
+      F.session.press('lshift')
+      F.session.press('escape')
+      F.session.release('escape')
+      F.session.release('lshift')
+
+      assert.same('ready', love.state.app_state)
+      assert.is_nil(ed:get_active_buffer())
+    end)
+  end)
 end)

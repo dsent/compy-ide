@@ -67,10 +67,14 @@ EditorController = class.create(new)
 --- (D-EXACT-RESERVE, "Scope"), and nothing runs while the
 --- editor owns the route.
 --- @param k string
+--- @return boolean left --- the editor is closed, so the
+--- key must reach no mode handler after it
 function EditorController:_leave_keys(k)
   if k == "s" and Key.shift() and not Key.alt() then
     self.console:finish_edit()
+    return true
   end
+  return false
 end
 
 --- @param v EditorView
@@ -1602,7 +1606,7 @@ function EditorController:keypressed(k)
       self:format_file()
       return
     end
-    self:_leave_keys(k)
+    if self:_leave_keys(k) then return end
   end
 
   if mode == 'reorder' then
@@ -1613,12 +1617,13 @@ function EditorController:keypressed(k)
     self:_normal_mode_keys(k)
   end
 
-  if love.debug then
+  --- Shift+Esc on the last buffer has closed the editor by
+  --- now, so the buffer is asked for only on the key
+  --- that uses it
+  if love.debug and k == 'f5' then
     local buf = self:get_active_buffer()
     local bufview = self.view:get_buffer(buf:get_id())
-    if k == 'f5' then
-      if Key.ctrl() then buf:rechunk() end
-      bufview:refresh()
-    end
+    if Key.ctrl() then buf:rechunk() end
+    bufview:refresh()
   end
 end
