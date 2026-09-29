@@ -541,55 +541,105 @@ local function closing(script)
   return "]" .. level .. "]"
 end
 
---- The firmware's own script, then a Lua file's in a chunk of
---- its own: what the file declares stays there, and a mistake
---- in it leaves the REPL the firmware's script has started
+--- A script as a long string: a line break before its end
+--- only when the script's last character would join it
+--- @param script string
+--- @return string
+local function quoted(script)
+  local close = closing(script)
+  local open = (close:gsub("%]", "["))
+  local joins = script:find("[%]=]$") ~= nil
+  local tail = joins and "\n" or ""
+  return open .. "\n" .. script .. tail .. close
+end
+
+--- Where the firmware's script arms the port and shows its
+--- prompt, found last: the last thing it does, after which
+--- the REPL and the event handlers run
+local ARMING = ".*()\nserial_session%.prompt%(%)"
+
+--- The Lua file, run where the firmware's script is about to
+--- arm the port. Nothing else runs Lua meanwhile: on_event,
+--- through which the firmware calls in, is set aside until
+--- the file returns. A mistake stops only the file, and is
+--- printed and scrolled.
+local RUN_FILE = table.concat({
+  "",
+  "do local firmware_on_event = on_event; on_event = nil",
+  "local file, err = loadstring(%s, %s)",
+  "if file then local ran; ran, err = pcall(file)",
+  "  if ran then err = nil end end",
+  "if err then print(tostring(err))",
+  "  microbit.display.scroll(tostring(err)) end",
+  "on_event = on_event or firmware_on_event end"
+}, "\n")
+
+--- The largest Lua file upload puts on the board. The board
+--- holds the file twice while it reads it, in about 100 KB
+--- of memory shared with the firmware's own script.
+local MAX_SCRIPT = 8000
+
+--- Say that MICROBIT.hex has no place for a Lua file
+local function noPlace()
+  print(HEX .. " here is not the firmware the Compy came")
+  print("with, and has no place for your program. Put it")
+  print("into a firmware file with embed, then upload that.")
+end
+
+--- The firmware's own script with a Lua file run in it; nil,
+--- said, when the firmware's script has no place for one
 --- @param runtime string
 --- @param script string
 --- @param filename string
---- @return string
+--- @return string?
 local function withRuntime(runtime, script, filename)
-  local close = closing(script)
-  local open = (close:gsub("%]", "["))
+  local at = runtime:match(ARMING)
+  if not at then
+    noPlace()
+    return nil
+  end
   local name = string.format("%q", "@" .. filename)
-  return runtime .. "\nassert(loadstring(" .. open .. "\n" ..
-      script .. "\n" .. close .. ", " .. name .. "))()\n"
+  local run = RUN_FILE:format(quoted(script), name)
+  return runtime:sub(1, at - 1) .. run .. runtime:sub(at)
 end
 
---- A Lua file's text; nil, said, when it holds no program
+--- Say that a Lua file is empty
+--- @param filename string
+local function empty(filename)
+  local edit = "edit(%q), then upload it again."
+  print(filename .. " is empty. Write your program with")
+  print(edit:format(filename))
+end
+
+--- Say that a Lua file is too long for the board
+--- @param filename string
+local function tooLong(filename)
+  print(filename .. " is too long for the micro:bit, which")
+  local limit = "takes a program of up to %d characters."
+  print(limit:format(MAX_SCRIPT))
+  print("Make it shorter, then upload it again.")
+end
+
+--- A Lua file's text; nil, said, when it holds no program or
+--- is too long for the board
 --- @param filename string
 --- @return string?
 local function scriptOf(filename)
   local script = read(filename)
-  if script:find("%S") then
-    return script
+  if not script:find("%S") then
+    empty(filename)
+    return nil
   end
-  local edit = "edit(%q), then upload it again."
-  print(filename .. " is empty. Write your program with")
-  print(edit:format(filename))
-  return nil
+  if MAX_SCRIPT < #script then
+    tooLong(filename)
+    return nil
+  end
+  return script
 end
 
---- Whether a script fits where the firmware keeps its own,
---- said when it does not
---- @param blocks table[]
---- @param whole string
---- @param filename string
---- @return boolean
-local function fits(blocks, whole, filename)
-  local _, meta = hex.meta(blocks)
-  if #whole <= meta.space then
-    return true
-  end
-  print(filename .. " is too long to fit on the micro:bit")
-  print("next to its firmware. Make it shorter, then upload")
-  print("it again.")
-  return false
-end
-
---- MICROBIT.hex with a Lua file run after its own script, so
+--- MICROBIT.hex with a Lua file run in its own script, so
 --- the board keeps its REPL and robot commands; nil, said,
---- when the file is empty or the two do not fit
+--- when the file is empty or too long
 --- @param filename string
 --- @return string?
 local function build(filename)
@@ -600,7 +650,7 @@ local function build(filename)
   local blocks = blocksOf(HEX)
   local runtime = hex.script(blocks)
   local whole = withRuntime(runtime, script, filename)
-  if not fits(blocks, whole, filename) then
+  if not whole then
     return nil
   end
   hex.embed(blocks, whole)
@@ -788,7 +838,8 @@ local COMMANDS = {
 local FIRMWARE = {
   "hexmap(hex)             what a hex file holds",
   "extract(hex, lua)       its script out to a file",
-  "embed(hex, lua)         a script into a new hex",
+  "embed(hex, lua)         a script into a new hex, in",
+  "                        place of the firmware's own",
   "upload(file)            a hex file onto the board, or a",
   "                        lua file, put in a hex first"
 }
