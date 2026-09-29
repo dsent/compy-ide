@@ -256,6 +256,43 @@ describe('micro:bit exec #microbit', function()
     assert.is_false(flashed)
   end)
 
+  --- this example on a Compy from before files went down the
+  --- cable: its serial table has send, reset and isConnected
+  --- only (0d8a66d5), and flash_microbit copies to the drive
+  describe('on an older Compy', function()
+    it('sends, execs and restarts without isFlashing', function()
+      local old = {}
+      for _, k in ipairs({ 'send', 'reset', 'isConnected' }) do
+        old[k] = port[k]
+      end
+      port = old
+      local tools = load_tools()
+      assert.has_no_error(function() tools.restart_microbit() end)
+      assert.has_no_error(function() tools.send('f.lua') end)
+      assert.has_no_error(function() tools.exec('f.lua') end)
+    end)
+
+    it('copies to the drive on Android', function()
+      local old = {}
+      for _, k in ipairs({ 'send', 'reset', 'isConnected' }) do
+        old[k] = port[k]
+      end
+      port = old
+      local tools = load_tools()
+      local hooks = 'none'
+      tools.flash_microbit = function(_, on)
+        flashed = true
+        hooks = on
+        return true
+      end
+      files['MICROBIT.hex'] = ':00000001FF\n'
+      assert.has_no_error(function() tools.upload() end)
+      assert.is_true(flashed)
+      assert.is_nil(hooks)
+      assert.truthy(table.concat(said, ' '):find('is sent', 1, true))
+    end)
+  end)
+
   --- the Compy reads the file a share at a time, and tells
   --- the example what it read and when the sending begins
   it('upload says which firmware it read, and sounds as the'

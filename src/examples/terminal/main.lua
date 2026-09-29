@@ -98,7 +98,7 @@ local function restartBoard()
   if not serial.isConnected() then
     return "[plug the micro:bit in]"
   end
-  if serial.isFlashing() then
+  if serial.isFlashing and serial.isFlashing() then
     return "[a file is on its way to the micro:bit: wait until" ..
         " the Compy says how it went]"
   end

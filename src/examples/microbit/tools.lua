@@ -53,7 +53,9 @@ end
 --- it would break the file off
 --- @return boolean
 local function flashing()
-  if serial.isFlashing() then
+  -- an older Compy sends no file down the cable, and says so
+  -- by lacking isFlashing
+  if serial.isFlashing and serial.isFlashing() then
     print("A file is on its way to the micro:bit. Wait until")
     print("the Compy says how it went.")
     return true
@@ -623,7 +625,9 @@ end
 function upload(filename)
   local name = filename or HEX
   local data = read(name)
-  if love.system.getOS() == "Android" then
+  -- a Compy that sends files down the cable says so with
+  -- isFlashing; an older one copies to the drive, as before
+  if love.system.getOS() == "Android" and serial.isFlashing then
     uploadOverCable(name, data)
   else
     uploadToDrive(name, data)
