@@ -1,4 +1,7 @@
 require('util.jni')
+require('model.serial.dap')
+require('model.serial.dap_link')
+require('model.serial.usbfs')
 
 --- USB CDC-ACM over the Android USB host API, driven from
 --- Lua through the LuaJIT FFI. Ported from the robot USB
@@ -18,6 +21,10 @@ require('util.jni')
 --- @field start function
 --- @field poll function
 --- @field send function
+--- @field takeStorage function
+--- @field giveStorage function
+--- @field dap function
+--- @field board function
 --- @field stop function
 AndroidBackend = {}
 AndroidBackend.__index = AndroidBackend
@@ -25,6 +32,15 @@ AndroidBackend.__index = AndroidBackend
 local VID_MICROBIT = 0x0D28
 local CDC_COMM = 2
 local CDC_DATA = 10
+--- The board's drive. The IDE holds it for as long as it
+--- has the board open, so Android never mounts it: files go
+--- to the board through its interface chip instead.
+local MASS_STORAGE = 8
+--- CMSIS-DAP v2: the vendor interface with bulk endpoints,
+--- the one the micro:bit Foundation's own tools use. A V2
+--- also lists a vendor interface without endpoints (WebUSB)
+--- and HID (CMSIS-DAP v1); neither is used.
+local VENDOR = 0xFF
 local EP_BULK = 2
 local DIR_IN = 0x80
 local RX_SIZE = 64
@@ -63,6 +79,9 @@ local function now()
   if love and love.timer then return love.timer.getTime() end
   return os.time()
 end
+
+--- @param msg string
+local function log(msg) Dap.log(msg) end
 
 --- @return AndroidBackend
 function AndroidBackend.new()
@@ -200,7 +219,21 @@ function AndroidBackend:askPermission(dev)
   jniDropLocal(env, intCls)
 end
 
---- CDC control interface id, data interface, bulk endpoints
+--- The CMSIS-DAP interface to use, the first candidate; the
+--- refs of the others are dropped
+--- @param daps table[]
+--- @return table? dap
+local function pickDap(env, daps)
+  local pick = daps[1]
+  for _, d in ipairs(daps) do
+    if d ~= pick then jniDropGlobal(env, d.iface) end
+  end
+  return pick
+end
+
+--- CDC control interface id, data interface, bulk
+--- endpoints, the drive's interface, the CMSIS-DAP
+--- interface, and a line on every interface for the log
 --- @return table
 function AndroidBackend:endpoints(dev)
   local env = self.env
@@ -214,6 +247,10 @@ function AndroidBackend:endpoints(dev)
   local ifClass = jniMethod(env, ifCls,
     'getInterfaceClass', '()I')
   local ifId = jniMethod(env, ifCls, 'getId', '()I')
+  local ifSub = jniMethod(env, ifCls,
+    'getInterfaceSubclass', '()I')
+  local ifProto = jniMethod(env, ifCls,
+    'getInterfaceProtocol', '()I')
   local epCount = jniMethod(env, ifCls,
     'getEndpointCount', '()I')
   local getEp = jniMethod(env, ifCls, 'getEndpoint',
@@ -222,11 +259,55 @@ function AndroidBackend:endpoints(dev)
     'android/hardware/usb/UsbEndpoint')
   local epType = jniMethod(env, epCls, 'getType', '()I')
   local epDir = jniMethod(env, epCls, 'getDirection', '()I')
-  local found = {}
+  local epAddr = jniMethod(env, epCls, 'getAddress', '()I')
+  local epMax = jniMethod(env, epCls,
+    'getMaxPacketSize', '()I')
+  local found = { lines = {}, daps = {} }
   for i = 0, jniCallInt(env, dev, ifCount) - 1 do
     local iface = jniCallObj(env, dev, getIf, i)
     local cls = jniCallInt(env, iface, ifClass)
-    if cls == CDC_COMM and not found.commId then
+    local eps = {}
+    local line = string.format(
+      'interface index %d id %d class %d subclass %d'
+      .. ' protocol %d endpoints', i,
+      jniCallInt(env, iface, ifId), cls,
+      jniCallInt(env, iface, ifSub),
+      jniCallInt(env, iface, ifProto))
+    for j = 0, jniCallInt(env, iface, epCount) - 1 do
+      local ep = jniCallObj(env, iface, getEp, j)
+      local e = {
+        type = jniCallInt(env, ep, epType),
+        dirIn = jniCallInt(env, ep, epDir) == DIR_IN,
+        addr = jniCallInt(env, ep, epAddr),
+        max = jniCallInt(env, ep, epMax),
+        index = j,
+      }
+      eps[#eps + 1] = e
+      line = line .. string.format(' 0x%02X/%s/%d', e.addr,
+        ({ [0] = 'ctrl', 'iso', 'bulk', 'int' })[e.type]
+        or tostring(e.type), e.max)
+      jniDropLocal(env, ep)
+    end
+    found.lines[#found.lines + 1] = line
+    if cls == VENDOR then
+      local inE, outE
+      for _, e in ipairs(eps) do
+        if e.type == EP_BULK then
+          if e.dirIn and not inE then inE = e end
+          if not e.dirIn and not outE then outE = e end
+        end
+      end
+      if inE and outE then
+        found.daps[#found.daps + 1] = {
+          iface = jniGlobal(env, iface),
+          id = jniCallInt(env, iface, ifId),
+          inAddr = inE.addr, outAddr = outE.addr,
+        }
+      end
+    end
+    if cls == MASS_STORAGE and not found.msc then
+      found.msc = jniGlobal(env, iface)
+    elseif cls == CDC_COMM and not found.commId then
       found.commId = jniCallInt(env, iface, ifId)
       found.comm = jniGlobal(env, iface)
     elseif cls == CDC_DATA and not found.data then
@@ -248,6 +329,7 @@ function AndroidBackend:endpoints(dev)
   jniDropLocal(env, epCls)
   jniDropLocal(env, ifCls)
   jniDropLocal(env, devCls)
+  found.dap = pickDap(env, found.daps)
   return found
 end
 
@@ -289,12 +371,24 @@ function AndroidBackend:openDevice(entry)
   local connCls = jniClass(env,
     'android/hardware/usb/UsbDeviceConnection')
   local eps = self:endpoints(entry.dev)
+  for _, line in ipairs(eps.lines) do log(line) end
   if not (eps.comm and eps.data and eps.epIn and eps.epOut
       and eps.commId) then
     jniCallVoid(env, conn,
       jniMethod(env, connCls, 'close', '()V'))
     jniDropLocal(env, conn)
     jniDropLocal(env, connCls)
+    for _, k in ipairs({ 'comm', 'data', 'epIn', 'epOut',
+      'msc' }) do
+      jniDropGlobal(env, eps[k])
+    end
+    if eps.dap then jniDropGlobal(env, eps.dap.iface) end
+    -- the interface chip's maintenance mode, entered when
+    -- the board is plugged in with its reset button held,
+    -- lists its drive and nothing else
+    if eps.msc and not eps.comm and not eps.data then
+      return nil, 'maintenance mode'
+    end
     return nil, 'CDC interface set incomplete'
   end
   local port = {
@@ -304,11 +398,14 @@ function AndroidBackend:openDevice(entry)
     epIn = eps.epIn,
     epOut = eps.epOut,
     commId = eps.commId,
+    msc = eps.msc,
+    dap = eps.dap,
     claimM = jniMethod(env, connCls, 'claimInterface',
       '(Landroid/hardware/usb/UsbInterface;Z)Z'),
     releaseM = jniMethod(env, connCls, 'releaseInterface',
       '(Landroid/hardware/usb/UsbInterface;)Z'),
     closeM = jniMethod(env, connCls, 'close', '()V'),
+    fdM = jniMethod(env, connCls, 'getFileDescriptor', '()I'),
     bulkM = jniMethod(env, connCls, 'bulkTransfer',
       '(Landroid/hardware/usb/UsbEndpoint;[BII)I'),
     ctrlM = jniMethod(env, connCls, 'controlTransfer',
@@ -330,12 +427,70 @@ function AndroidBackend:openDevice(entry)
     return nil, 'data interface refused'
   end
   port.acm = self:configureAcm(port)
+  self:claimDap(port)
   return port
 end
 
---- The one close path: interfaces, connection, refs
+--- The CMSIS-DAP interface, claimed with force on the same
+--- connection, and the link to the chip on it. Its absence
+--- or a refusal is logged, not fatal: the serial terminal
+--- works without it.
+function AndroidBackend:claimDap(port)
+  local env = self.env
+  local dap = port.dap
+  if not dap then
+    log('no CMSIS-DAP v2 interface: no vendor interface with'
+      .. ' bulk endpoints')
+    return
+  end
+  log(string.format('chose interface id %d: vendor class,'
+    .. ' bulk endpoints (CMSIS-DAP v2); in 0x%02X, out 0x%02X',
+    dap.id, dap.inAddr, dap.outAddr))
+  local ok, took = pcall(jniCallBool, env, port.conn,
+    port.claimM, dap.iface, true)
+  if not (ok and took) then
+    log('claim of the CMSIS-DAP interface refused: '
+      .. tostring(took))
+    return
+  end
+  dap.claimed = true
+  local fok, fd = pcall(jniCallInt, env, port.conn, port.fdM)
+  if not fok or fd < 0 then
+    log('no file descriptor for the connection: '
+      .. tostring(fd))
+    return
+  end
+  port.link = DapLink.new(Usbfs.new(fd), dap.outAddr,
+    dap.inAddr, log, now)
+  log('CMSIS-DAP interface claimed, descriptor ' .. fd)
+end
+
+--- The one close path: interfaces, connection, refs. A
+--- drive still taken is handed back first: closing alone
+--- would leave it with no driver until the board is
+--- plugged in again.
 function AndroidBackend:release(port)
   local env = self.env
+  if port.storageTaken then
+    port.storageTaken = false
+    local ok, gave = pcall(jniCallBool, env, port.conn,
+      port.releaseM, port.msc)
+    log('drive handed back on close: ' .. tostring(ok and gave))
+  end
+  -- the link stops touching the descriptor before it closes
+  if port.link then
+    port.link:kill()
+    port.link = nil
+  end
+  local dap = port.dap
+  if dap then
+    if dap.claimed then
+      pcall(jniCallBool, env, port.conn, port.releaseM,
+        dap.iface)
+    end
+    jniDropGlobal(env, dap.iface)
+    port.dap = nil
+  end
   if port.claimed ~= false then
     pcall(jniCallBool, env, port.conn, port.releaseM,
       port.comm)
@@ -343,6 +498,7 @@ function AndroidBackend:release(port)
       port.data)
   end
   pcall(jniCallVoid, env, port.conn, port.closeM)
+  jniDropGlobal(env, port.msc)
   jniDropGlobal(env, port.rx)
   jniDropGlobal(env, port.epIn)
   jniDropGlobal(env, port.epOut)
@@ -446,6 +602,105 @@ function AndroidBackend:reset()
   return true
 end
 
+--- Take the board's drive from Android: claimed with force,
+--- which detaches Android's storage driver, so Android lets
+--- go of the drive. The serial interfaces stay as they are.
+--- @return boolean? ok
+--- @return string? err
+function AndroidBackend:takeStorage()
+  if self.state ~= 'open' then
+    return nil, 'no device connected'
+  end
+  local port = self.port
+  if not port.msc then
+    return nil, 'no mass-storage interface'
+  end
+  local ok, took = pcall(jniCallBool, self.env, port.conn,
+    port.claimM, port.msc, true)
+  if not ok then return nil, tostring(took) end
+  if not took then
+    return nil, 'mass-storage interface refused'
+  end
+  port.storageTaken = true
+  return true
+end
+
+--- Give the drive back. Android's release hands the
+--- interface to its storage driver again, which reads the
+--- drive afresh.
+--- @return boolean? ok
+--- @return string? err
+function AndroidBackend:giveStorage()
+  if self.state ~= 'open' then
+    return nil, 'no device connected'
+  end
+  local port = self.port
+  if not port.storageTaken then
+    return nil, 'mass-storage interface not taken'
+  end
+  port.storageTaken = false
+  local ok, gave = pcall(jniCallBool, self.env, port.conn,
+    port.releaseM, port.msc)
+  if not ok then return nil, tostring(gave) end
+  if not gave then
+    return nil, 'mass-storage interface not released'
+  end
+  return true
+end
+
+--- The link to the board's interface chip, for a flash
+--- @return DapLink? link
+--- @return string? err
+function AndroidBackend:dap()
+  if self.state ~= 'open' then
+    return nil, 'no device connected'
+  end
+  if not self.port.link then
+    return nil, 'no CMSIS-DAP interface'
+  end
+  return self.port.link
+end
+
+--- Why the board on the bus could not be opened, when one
+--- was there at the last look: 'maintenance mode', or
+--- another reason for the log
+--- @return string?
+function AndroidBackend:absence()
+  if self.state == 'open' then return nil end
+  return self.refused
+end
+
+--- What the chip said about the board on open: its unique
+--- id and the interface firmware's version, once answered
+--- @return table? info { id, firmware }
+function AndroidBackend:board()
+  if self.state ~= 'open' then return nil end
+  return self.port.board
+end
+
+--- Ask the chip who it is, without waiting: the answers come
+--- through pollOpen. The first proof that commands arrive,
+--- and it takes in replies left over from before.
+function AndroidBackend:probe(port)
+  local link = port.link
+  if not link then return end
+  local t0 = now()
+  local board = {}
+  link:send(Dap.packet(Dap.UNIQUE_ID), function(raw)
+    board.id = Dap.text(Dap.UNIQUE_ID, raw)
+    log(string.format('unique id: %s (%.3f s)',
+      tostring(board.id), now() - t0))
+  end)
+  link:send(Dap.packet(Dap.INFO, string.char(Dap.INFO_FIRMWARE)),
+    function(raw)
+      board.firmware = Dap.text(Dap.INFO, raw)
+      log(string.format('interface firmware: %s (%.3f s)',
+        board.firmware ~= '' and tostring(board.firmware)
+        or 'not said', now() - t0))
+      port.board = board
+    end)
+end
+
 --- Called on detach and on stop
 function AndroidBackend:closePort(notify)
   self:drop()
@@ -461,7 +716,10 @@ function AndroidBackend:pollIdle()
   if now() < self.due then return end
   self.due = now() + SCAN_S
   local found = self:scan()
-  if #found == 0 then return end
+  if #found == 0 then
+    self.refused = nil
+    return
+  end
   self.dev = found[1]
   for i = 2, #found do
     jniDropGlobal(self.env, found[i].dev)
@@ -482,6 +740,7 @@ end
 --- @return string? fault
 function AndroidBackend:openReady()
   local port, fault = self:openDevice(self.dev)
+  self.refused = fault
   if not port then
     jniDropGlobal(self.env, self.dev.dev)
     self:dropDevice()
@@ -490,6 +749,10 @@ function AndroidBackend:openReady()
   end
   self.port = port
   self.state = 'open'
+  local ok, err = self:takeStorage()
+  log('drive hold on open: ' .. (ok and 'taken'
+    or ('not taken, ' .. tostring(err))))
+  self:probe(port)
   self.sink.attach({ name = self.dev.name, acm = port.acm })
   if self.extras_told then
     return 'extra micro:bit ignored'
@@ -525,6 +788,7 @@ end
 
 --- @return string? fault
 function AndroidBackend:pollOpen()
+  if self.port.link then self.port.link:pump() end
   local chunk = self:read()
   if chunk ~= '' then self.sink.bytes(chunk) end
   local fault = self:write()

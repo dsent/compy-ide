@@ -529,26 +529,24 @@ function compile(lua_name, hex_name)
   embed(hex_name or (lua_name:gsub("%.lua$", "") .. ".hex"))
 end
 
---- Put a hex file on the board. The board is looked for each
---- time, since it usually goes in after Compy has started.
---- Copying takes a few seconds and the screen does not move
---- until it is done, so a sound says the copying has begun.
---- The board then writes the file into its memory by itself
---- and restarts; the Compy cannot see whether it took it.
+--- Put a hex file on the board. The Compy sends it down the
+--- USB cable, says every few seconds how far it has got, and
+--- at the end whether the board took it; the board restarts
+--- with it. A sound says the sending has begun.
 --- @param filename string?
 function upload(filename)
   local name = filename or HEX
   local data = read(name)
   local version = hex.version(hex.parse(data))
   assert(not isSending(), "exec is still sending a file")
-  assert(detect_microbit(), "no micro:bit plugged in")
-  compy.audio.hyperjump()
-  local ok, err = flash_microbit(data)
-  assert(ok, err)
-  print(name .. " is sent. The micro:bit's light blinks")
-  print("while it writes it, then it restarts with it.")
   print(name .. " holds firmware " ..
     (version or "too old to say its version"))
+  local ok, err = flash_microbit(data)
+  if not ok then
+    print(err)
+    return
+  end
+  compy.audio.hyperjump()
 end
 
 -- help --------------------------------------------------------

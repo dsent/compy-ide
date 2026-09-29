@@ -212,7 +212,10 @@ local setup_storage = function(mode)
   end
 
   local project_path = FS.join_path(storage_path, 'projects')
-  local microbit_path = usb.detect()
+  --- on Android the board is reached through its USB
+  --- connection, never its drive
+  local microbit_path = OS.get_name() ~= 'Android'
+      and usb.detect() or nil
   local paths = {
     storage_path = storage_path,
     project_path = project_path,

@@ -34,5 +34,21 @@ function NullBackend:reset()
   return nil, 'no serial on this platform'
 end
 
+function NullBackend:takeStorage()
+  return nil, 'no serial on this platform'
+end
+
+function NullBackend:giveStorage()
+  return nil, 'no serial on this platform'
+end
+
+function NullBackend:dap()
+  return nil, 'no serial on this platform'
+end
+
+function NullBackend:board()
+  return nil
+end
+
 function NullBackend:stop()
 end

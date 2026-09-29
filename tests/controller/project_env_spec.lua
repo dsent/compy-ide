@@ -462,6 +462,7 @@ describe('ConsoleController project env #project', function()
       assert.are.equal(before + 1, fake.drops)
     end)
 
+    --- the desktop writes to the board's drive
     it('goes before a flash begins', function()
       CC:open_project(ProjectService.DEFAULT)
       local before = fake.drops
@@ -470,9 +471,45 @@ describe('ConsoleController project env #project', function()
         at_flash = fake.drops
         return true
       end
-      assert.is_true(CC:flash_microbit(':data:'))
+      local detect = CC.detect_microbit
+      CC.detect_microbit = function() return '/media/MICROBIT' end
+      local print_ = _G.print
+      _G.print = function() end
+      local ok = CC:flash_microbit(':data:')
+      _G.print = print_
+      CC.detect_microbit = detect
+      assert.is_true(ok)
       assert.are.equal(before + 1, at_flash)
     end)
+
+    --- Android never touches the board's drive: the file goes
+    --- down the cable, and the board is the one the serial
+    --- connection has open
+    it('goes down the cable on Android, never to the drive',
+      function()
+        CC:open_project(ProjectService.DEFAULT)
+        CC:get_current_project().flash_microbit = function()
+          error('the drive was written')
+        end
+        local usb = require('util.usb')
+        local detect = usb.detect
+        usb.detect = function() error('the drive was looked for') end
+        local getOS = love.system.getOS
+        love.system.getOS = function() return 'Android' end
+        local sent
+        SerialPort.flash = function(_, data, say)
+          sent = { data = data, say = say }
+          return true
+        end
+        local ok, err = pcall(CC.flash_microbit, CC, ':data:')
+        local found = CC:detect_microbit()
+        love.system.getOS = getOS
+        usb.detect = detect
+        assert.is_true(ok, err)
+        assert.are.equal(':data:', sent.data)
+        assert.are.equal(print, sent.say)
+        assert.is_nil(found)
+      end)
   end)
 
   --- A module the project requires runs in the project's env;

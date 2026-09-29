@@ -176,13 +176,13 @@ function Project:get_path(name)
   return FS.join_path(self.path, name)
 end
 
---- Flash a .hex firmware to the micro:bit.
---- Uses the device path detected at startup (or refreshed
---- on-demand via project_env.detect_microbit). Writes to a temp
---- file (no extension) on the device root, syncs, then atomically
---- renames to microbit.hex. The board writes the file into its
---- memory by itself afterwards; Android keeps showing the drive as
---- it was, so the board's answer cannot be read from it.
+--- Flash a .hex firmware to the micro:bit through its drive,
+--- on a Linux desktop; Android sends it down the USB cable
+--- instead (Serial:flash). Uses the drive path detected at
+--- startup or refreshed by detect_microbit. Writes to a temp
+--- file (no extension) on the drive's root, syncs, then
+--- renames it to microbit.hex. The board writes the file into
+--- its memory by itself afterwards.
 --- @param data string
 --- @return boolean success
 --- @return string? error

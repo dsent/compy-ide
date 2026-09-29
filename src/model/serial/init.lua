@@ -1,6 +1,7 @@
 require('model.serial.line_reader')
 require('model.serial.dispatcher')
 require('model.serial.echo')
+require('model.serial.dap_flash')
 
 --- Backend contract:
 ---   backend:start(sink)  sink.attach(info), sink.detach(),
@@ -10,6 +11,12 @@ require('model.serial.echo')
 ---   backend:drop()       what send queued and has not
 ---                        written yet goes
 ---   backend:reset() -> true | nil, err  the board restarts
+---   backend:dap() -> link | nil, err  commands to the
+---                        board's interface chip, see DapLink
+---   backend:board() -> { id, firmware } | nil  what the
+---                        chip said about itself on open
+---   backend:absence() -> why | nil  (optional) why a board
+---                        on the bus is not open
 ---   backend:stop()
 
 --- @class Serial
@@ -26,10 +33,16 @@ require('model.serial.echo')
 --- @field programContinued function
 --- @field programEnded function
 --- @field echo Echo
+--- @field flash function
+--- @field isFlashing function
+--- @field board function
 --- @field update function
 --- @field stop function
 Serial = {}
 Serial.__index = Serial
+
+local FLASHING = 'The micro:bit is taking a file. Wait until'
+    .. ' the Compy says how it went.'
 
 --- @param backend table
 --- @param max_line integer?
@@ -137,6 +150,7 @@ end
 --- @return boolean? ok
 --- @return string? err
 function Serial:reset()
+  if self.job then return nil, FLASHING end
   self:drop()
   self.reader:reset()
   self.echo:clear()
@@ -180,11 +194,82 @@ function Serial:programEnded()
   self.dispatcher:resume_env('console')
 end
 
+local function clock()
+  if love and love.timer then return love.timer.getTime() end
+  return os.clock()
+end
+
+local NOT_CONNECTED = 'No micro:bit is plugged in. Plug the'
+    .. ' micro:bit into the Compy with its USB cable, then try'
+    .. ' again.'
+local MAINTENANCE = 'The micro:bit started in maintenance'
+    .. ' mode, because its reset button was held as it was'
+    .. ' plugged in. Unplug it, then plug it back in without'
+    .. ' holding the button.'
+local NO_FILE = 'There is no file to send.'
+local CUT_SHORT = 'The file is cut short: its last line is'
+    .. ' missing. Get the file again, then send it once more.'
+local UNIVERSAL = 'This file holds programs for both'
+    .. ' micro:bit versions, and the Compy sends only a file'
+    .. ' made for a micro:bit V2.'
+local NO_DAP = 'This micro:bit does not take files from the'
+    .. ' Compy. Unplug it, plug it back in, then try again.'
+
+--- Put a hex file on the board through its interface chip,
+--- without its drive. Returns at once; the work runs a share
+--- per update, and say gives the progress and the verdict.
+--- @param data string
+--- @param say function
+--- @return boolean? ok
+--- @return string? err in plain words
+function Serial:flash(data, say)
+  if self.job then return nil, FLASHING end
+  if not self.connected then
+    local why = self.backend.absence and self.backend:absence()
+    if why == 'maintenance mode' then return nil, MAINTENANCE end
+    return nil, NOT_CONNECTED
+  end
+  if type(data) ~= 'string' or data == '' then
+    return nil, NO_FILE
+  end
+  if not Dap.hexComplete(data) then return nil, CUT_SHORT end
+  if Dap.isUniversal(data) then return nil, UNIVERSAL end
+  local link, err = self.backend:dap()
+  if not link then
+    Dap.log('flash refused: ' .. tostring(err))
+    return nil, NO_DAP
+  end
+  -- the board restarts with the new firmware, and what was
+  -- queued for the old one would be typed into its new REPL
+  self:drop()
+  self.job = DapFlash.new(data, link, say, Dap.log, clock,
+    self.pace)
+  return true
+end
+
+--- @return boolean
+function Serial:isFlashing()
+  return self.job ~= nil
+end
+
+--- What the board's chip said about itself, once it has
+--- @return table? info { id, firmware }
+function Serial:board()
+  return self.connected and self.backend:board() or nil
+end
+
 --- Call once per update loop
 --- @return table[] errors
 --- @param dt number
 function Serial:update(dt)
   self:fault(self.backend:poll())
+  if self.job then
+    if self.job:step(dt) ~= 'running' then self.job = nil end
+  elseif dt and dt > 0 then
+    -- the frame's pace without a flash, which a flash keeps
+    self.pace = self.pace and (0.9 * self.pace + 0.1 * dt)
+        or dt
+  end
   self.echo:tick(dt)
   self.dispatcher:push('tick', dt)
   local errors = self.dispatcher:pump()
@@ -196,6 +281,7 @@ function Serial:update(dt)
 end
 
 function Serial:stop()
+  self.job = nil
   self.backend:stop()
   self.connected = false
 end

@@ -730,7 +730,17 @@ Controller = {
       end
       Application.return_home_before_exit()
     end
-    love.quit = quit
+    --- An IDE that ends lets the micro:bit go: its drive
+    --- goes back to Android, which binds its storage driver
+    --- again only on this explicit release, never when the
+    --- process just dies
+    love.quit = function()
+      local stay = quit()
+      if not stay and Serial and SerialPort then
+        SerialPort:stop()
+      end
+      return stay
+    end
   end,
 
   --- Background durability net (spec 2.6): a child

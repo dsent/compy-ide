@@ -2,9 +2,11 @@ local OS = require("util.os") --- pulls in string
 local FS = require("util.filesystem")
 
 --- Detect a connected USB mass-storage device (micro:bit,
---- or a flashdrive configured via conf.lua). Runs on demand so
---- devices plugged in after startup are found (hot-plug).
---- Works on Linux and Android (Android is the main target).
+--- or a flashdrive configured via conf.lua) on a Linux
+--- desktop. Runs on demand so devices plugged in after
+--- startup are found (hot-plug). On Android the IDE reaches
+--- the micro:bit through its USB connection instead, and
+--- holds its drive so Android never mounts it.
 local usb = {}
 
 usb.MICROBIT_LABEL = 'MICROBIT'
@@ -13,7 +15,6 @@ usb.MICROBIT_MARKER = 'DETAILS.TXT'
 
 local supported_os = {
   Linux = true,
-  Android = true,
 }
 
 
@@ -60,19 +61,11 @@ end
 --- @param path string
 --- @return boolean
 function usb.is_removable_fat(fstype, path)
-  --- Android shows apps a USB drive only through FUSE, at
-  --- /storage/ and its volume id, e.g. /storage/2702-1974;
-  --- internal storage is FUSE too, at /storage/emulated/0
-  if fstype == 'fuse' then
-    return string.matches_r(path,
-      '^/storage/%x%x%x%x%-%x%x%x%x$')
-  end
   if fstype ~= 'vfat' and fstype ~= 'exfat' and fstype ~= 'msdos'
       and fstype ~= 'fuseblk' then
     return false
   end
-  return string.matches_r(path, '^/storage/')
-      or string.matches_r(path, '^/mnt/')
+  return string.matches_r(path, '^/mnt/')
       or string.matches_r(path, '^/media/')
       or string.matches_r(path, '^/run/media/')
 end
@@ -102,25 +95,19 @@ local function read_small(path)
   return c
 end
 
---- Resolve a block device (e.g. /dev/sdb1, /dev/block/vold/8:1)
---- to its sysfs path.
+--- Resolve a block device (e.g. /dev/sdb1) to its sysfs path.
 --- @param dev string
 --- @return string? sysfs path
 local function block_sysfs(dev)
   local base = dev:match('([^/]+)$')
   if not base or base == '' then return nil end
-  if base:match('%d+:%d+') then
-    --- Android vold style: /sys/dev/block/8:1
-    local ok, r = OS.runcmd('readlink -f /sys/dev/block/' .. base)
-    if ok and r and r ~= '' then return r end
-  end
   local ok, r = OS.runcmd('readlink -f /sys/class/block/' .. base)
   if ok and r and r ~= '' then return r end
   return nil
 end
 
---- Walk sysfs up to the USB device to find idVendor/idProduct.
---- Works on Linux and Android (no udevadm needed).
+--- Walk sysfs up to the USB device to find idVendor/idProduct,
+--- where udevadm is missing.
 --- @param dev string
 --- @return string? vid
 --- @return string? pid
@@ -193,8 +180,8 @@ function usb.detect()
       return m.path
     end
   end
-  --- then the DAPLink marker file (real micro:bit, VID/PID read
-  --- may have failed on Android)
+  --- then the DAPLink marker file (a real micro:bit whose
+  --- VID/PID could not be read)
   for _, m in ipairs(candidates) do
     if marker_present(m.path) then
       return m.path

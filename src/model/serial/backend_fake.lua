@@ -85,6 +85,28 @@ function FakeBackend:rx(bytes)
   self.sink.bytes(bytes)
 end
 
+--- The link to the board's chip: a test sets .link, or
+--- .dapRefuse to have it refused
+--- @return table? link
+--- @return string? err
+function FakeBackend:dap()
+  if self.dapRefuse then return nil, self.dapRefuse end
+  if not self.link then return nil, 'no link' end
+  return self.link
+end
+
+--- What a test put in .why
+--- @return string?
+function FakeBackend:absence()
+  return self.why
+end
+
+--- What a test put in .info
+--- @return table?
+function FakeBackend:board()
+  return self.info
+end
+
 --- Report a fault on the next poll
 --- @param text string
 function FakeBackend:breaks(text)

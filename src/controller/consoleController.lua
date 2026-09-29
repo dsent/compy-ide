@@ -395,26 +395,55 @@ function ConsoleController:writefile(name, content)
   end
 end
 
+--- @return boolean
+local function on_android()
+  return love.system.getOS() == 'Android'
+end
+
+local DRIVE_SENT = 'The file is on the micro:bit\'s drive. Its'
+    .. ' light blinks while it takes the file, then it'
+    .. ' restarts with it.'
+
+--- Put a hex file on the micro:bit. On Android it goes down
+--- the USB cable to the board's interface chip, never to its
+--- drive: this returns at once, and the console says how it
+--- goes and how it ended. On a desktop it is written to the
+--- board's drive, looked for afresh each time.
 --- @param content any
---- @return boolean success
---- @return string? err
+--- @return boolean? success
+--- @return string? err in plain words
 function ConsoleController:flash_microbit(content)
+  if on_android() then
+    return SerialPort:flash(content, print)
+  end
   local P = self.model.projects
   local p = P.current
   if not p then
     return false
   end
+  if not self:detect_microbit() then
+    return false, P.messages.no_microbit_board
+  end
   -- the board restarts with the new firmware, and what was
   -- queued for the old one would be typed into its new REPL
   SerialPort:drop()
-  return p:flash_microbit(content)
+  local ok, err = p:flash_microbit(content)
+  if ok then print(DRIVE_SENT) end
+  return ok, err
 end
 
---- Re-run USB device detection (e.g. after plugging a micro:bit
---- in later than startup). Stores the result in
+--- Look for the micro:bit. On Android it is the board the
+--- USB serial connection has open, named by the unique id
+--- its chip gave, or 'micro:bit' until it has. On a desktop
+--- it is the board's drive, whose path is kept in
 --- love.paths.microbit_path.
---- @return string? path nil if no device found
+--- @return string? found nil if no board is plugged in
 function ConsoleController:detect_microbit()
+  if on_android() then
+    if not SerialPort:isConnected() then return nil end
+    local board = SerialPort:board()
+    return board and board.id or 'micro:bit'
+  end
   local path = usb.detect()
   if type(love) == 'table' and love.paths then
     love.paths.microbit_path = path
@@ -1436,15 +1465,6 @@ function ConsoleController.prepare_project_env(cc)
     end
   end
 
-  --- @param f function
-  local check_microbit_path    = function(f, ...)
-    if not love.paths.microbit_path then
-      print(P.messages.no_microbit_board)
-    else
-      return f(...)
-    end
-  end
-
   project_env.require          = function(name)
     return project_require(name)
   end
@@ -1540,12 +1560,14 @@ function ConsoleController.prepare_project_env(cc)
   end
 
   --- @param content string
+  --- @return boolean? success
+  --- @return string? err
   project_env.flash_microbit   = function(content)
-    return check_microbit_path(cc.flash_microbit, cc, content)
+    return cc:flash_microbit(content)
   end
 
-  --- re-run USB device detection (hot-plug after startup)
-  --- @return string? path
+  --- look for the micro:bit, see detect_microbit above
+  --- @return string? found
   project_env.detect_microbit  = function()
     return cc.detect_microbit(cc)
   end
