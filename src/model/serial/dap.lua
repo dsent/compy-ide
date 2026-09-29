@@ -231,6 +231,34 @@ local function forTheChip(first)
   return OWN_HIC[hic] == true
 end
 
+--- The chunk, counted from 1, after which the chip has begun
+--- to write the board's memory, and so to erase its old
+--- program: it starts once it has DECIDE_SIZE bytes in a row,
+--- or the first byte of a second run (flash_decoder.c). A
+--- text Dap.prepare wrote: data records in address order.
+--- @param text string
+--- @return integer
+function Dap.eraseChunk(text)
+  local at, got, nextAt = 0, 0, nil
+  local base = 0
+  for line in text:gmatch('[^\n]*\n') do
+    at = at + #line
+    local count = tonumber(line:sub(2, 3), 16)
+    local offset = tonumber(line:sub(4, 7), 16)
+    local kind = tonumber(line:sub(8, 9), 16)
+    if kind == 4 then
+      base = tonumber(line:sub(10, 13), 16) * 0x10000
+    elseif kind == 0 then
+      local addr = base + offset
+      if nextAt and addr ~= nextAt then break end
+      got = got + count
+      nextAt = addr + count
+      if got >= DECIDE_SIZE then break end
+    end
+  end
+  return math.ceil(at / Dap.CHUNK)
+end
+
 --- The file the chip is sent: the given hex read into an
 --- image (IntelHex.parse), checked, and written afresh
 --- (IntelHex.encode), or why it cannot go:

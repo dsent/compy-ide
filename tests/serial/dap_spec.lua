@@ -207,7 +207,10 @@ describe('Usbfs', function()
     function()
       local k = kernel()
       local u = Usbfs.new(7, k.sys)
-      assert.is_nil(u:reap())
+      -- nothing yet is not an error: a link would break on it
+      local none, why = u:reap()
+      assert.is_nil(none)
+      assert.is_nil(why)
       k.gone = 19
       local done, err = u:reap()
       assert.is_nil(done)
@@ -271,18 +274,22 @@ describe('DapLink', function()
     assert.is_true(chip.now - t0 <= 0.005 + 1e-9)
   end)
 
+  --- a reply that is not the waiting command's is passed
+  --- over, even with a command waiting
   it('passes over replies left from before', function()
     local chip = F.chip()
-    chip:leftover(string.char(0x8C, 0))
-    chip:leftover(string.char(0x80, 4) .. '9904')
     local logged = {}
-    local link = linkTo(chip, logged)
+    local link = linkTo(chip, logged, true)
+    link.synced = true
+    chip:leftover(string.char(0x8C, 0))
+    chip:leftover(string.char(0x81, 0))
     local got
     link:send(Dap.packet(0x80), function(r) got = r end)
     link:pump()
     assert.same(0x80, got:byte(1))
     assert.same(2, link.stale)
-    assert.truthy(joined(logged):find('passed over', 1, true))
+    assert.truthy(joined(logged):find('passed over a reply to'
+      .. ' 0x8C, waiting for 0x80', 1, true))
   end)
 
   --- a process that died with four commands in flight leaves
@@ -625,6 +632,34 @@ describe('DapFlash', function()
         true))
     end)
 
+  --- the chip erases nothing before it starts writing: 48
+  --- bytes in a row, or a second run
+  it('says the old program may be gone only once the chip'
+    .. ' may have erased it', function()
+      local chip = F.chip()
+      chip.over[0x8C] = function(packet, c)
+        c.n = (c.n or 0) + 1
+        if c.n == 2 then return string.char(0x8C, 21) end
+      end
+      local j, said = job(F.hex(40), chip)
+      assert.is_true(j.eraseChunk >= 2)
+      assert.same('failed', run(j, chip))
+      assert.is_nil(joined(said):find('old program', 1, true))
+    end)
+
+  it('finds the chunk that starts the chip writing', function()
+    local text = assert(Dap.prepare(
+      io.open('src/examples/microbit/MICROBIT.hex'):read('*a')))
+    -- a type 04 record, then 16-byte records: the third holds
+    -- the 48th byte
+    local third = select(2, text:find(':10002000%x+\n'))
+    assert.same(math.ceil(third / 62), Dap.eraseChunk(text))
+    local two = IntelHex.encode({ { at = 0, data = 'abcd' },
+      { at = 0x100, data = 'efgh' } })
+    local second = select(2, two:find(':04010000%x+\n'))
+    assert.same(math.ceil(second / 62), Dap.eraseChunk(two))
+  end)
+
   it('says the board was unplugged when the link dies',
     function()
       local chip = F.chip()
@@ -711,6 +746,8 @@ describe('DapFlash', function()
       { 'reap errno 19', nil, 'was unplugged' },
       { 'reply transfer status -108', nil, 'was unplugged' },
       { 'reply transfer status -2', nil, 'was unplugged' },
+      { 'reply transfer status -22', nil, 'lost touch' },
+      { 'reap errno 191', nil, 'lost touch' },
       { 'reply transfer status -71', false, 'was unplugged' },
       { 'reply transfer status -71', true, 'lost touch' },
       { 'reply transfer status -71', nil, 'lost touch' },
@@ -779,7 +816,9 @@ describe('DapFlash', function()
     local chip = F.chip({ latency = 0.001 })
     local j, said = job(F.hex(300), chip)
     for _ = 1, 100 do
-      if chip.stream == 'OPEN' and j.accepted > 0 then break end
+      if chip.stream == 'OPEN' and j.accepted >= j.eraseChunk then
+        break
+      end
       j:step(1 / 30)
       chip.now = chip.now + 1 / 30
     end
@@ -942,7 +981,9 @@ describe('Serial flash', function()
       local s = Serial.new(b)
       b.why = 'permission'
       local _, err = s:flash(F.hex(3), quiet)
-      assert.truthy(err:find('Answer the question on the screen',
+      assert.truthy(err:find('If the question is on the screen,'
+        .. ' answer it', 1, true))
+      assert.truthy(err:find('plug it back in to be asked again',
         1, true))
       b.why = 'CDC interface set incomplete'
       _, err = s:flash(F.hex(3), quiet)

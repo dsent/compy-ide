@@ -80,6 +80,7 @@ function DapFlash.new(data, link, say, log, clock)
   self.sent = 0
   self.acked = 0
   self.accepted = 0
+  self.eraseChunk = Dap.eraseChunk(data)
   self.retried = false
   self.statuses = {}
   self.started = clock()
@@ -124,7 +125,13 @@ function DapFlash:fail(plain, why)
     math.min(self.acked * Dap.CHUNK, #self.data),
     #self.data, why))
   self.say('The micro:bit did not take the file. ' .. plain)
-  if self.accepted > 0 then self.say(GONE) end
+  self:mayBeGone()
+end
+
+--- The old program may be gone once the chip took the chunk
+--- that starts it writing the board's memory
+function DapFlash:mayBeGone()
+  if self.accepted >= self.eraseChunk then self.say(GONE) end
 end
 
 --- The verdict after a close the chip reported done: the
@@ -365,11 +372,13 @@ local PHASES = {
 --- link can.
 --- @param fault string
 --- @return boolean
+local GONE_STATUS = { [-2] = true, [-19] = true, [-108] = true }
+
 function DapFlash:unplugged(fault)
-  if fault == 'device gone' or fault:find('errno 19', 1, true)
-      or fault:find('status -19', 1, true)
-      or fault:find('status -108', 1, true)
-      or fault:find('status -2', 1, true) then
+  local status = tonumber(fault:match('status (%-%d+)'))
+  local errno = tonumber(fault:match('errno (%d+)'))
+  if fault == 'device gone' or errno == 19
+      or GONE_STATUS[status] then
     return true
   end
   local present = self.link.present
@@ -464,7 +473,7 @@ function DapFlash:abandon(seconds, plain)
   if self.state ~= 'running' then return end
   if plain then
     self.say('The micro:bit did not take the file. ' .. plain)
-    if self.accepted > 0 then self.say(GONE) end
+    self:mayBeGone()
   end
   self.state = 'failed'
   self.log(string.format('ABANDONED in phase %s, %d of %d'

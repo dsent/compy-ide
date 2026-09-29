@@ -200,6 +200,27 @@ describe('AndroidBackend drive hold', function()
       assert.same(1, writes)
     end)
 
+  --- the chip may hold a control request back while it
+  --- writes a page: a board taking a file is not asked
+  it('asks a board taking a file no control request',
+    function()
+      local p = port(F.chip())
+      local b = backend(p)
+      b:openReady()
+      local asks = 0
+      b.read = function() return '' end
+      b.write = function() end
+      b.present = function() return true end
+      b.answers = function() asks = asks + 1 return true end
+      b.due = 0
+      b:poll(true)
+      assert.same(0, asks)
+      assert.same('open', b.state)
+      b.due = 0
+      b:poll(false)
+      assert.same(1, asks)
+    end)
+
   it('hands back no drive it did not take', function()
     local p = port()
     local b = backend(p)
