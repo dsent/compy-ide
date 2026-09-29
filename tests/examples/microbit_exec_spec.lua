@@ -13,8 +13,33 @@ package.preload['utf8'] = package.preload['utf8']
 require('model.serial.init')
 require('model.serial.backend_fake')
 
-local WRAP = 'assert(loadstring[['
-local UNWRAP = ']])()'
+local WRAP = 'assert(loadstring[=['
+local UNWRAP = ']=])()'
+
+--- @return string? luac5.1, when installed
+local function luac()
+  local probe = io.popen('command -v luac5.1')
+  local path = probe:read('*l')
+  probe:close()
+  return path
+end
+
+--- What luac5.1 says of a chunk: nothing when the board's Lua,
+--- which is 5.1 itself, reads it
+--- @param compiler string
+--- @param chunk string
+--- @return string
+local function luacSays(compiler, chunk)
+  local path = os.tmpname()
+  local f = assert(io.open(path, 'w'))
+  f:write(chunk)
+  f:close()
+  local run = io.popen(compiler .. ' -p ' .. path .. ' 2>&1')
+  local said = run:read('*a')
+  run:close()
+  os.remove(path)
+  return said
+end
 local RAN = 'f.lua is on the board'
 
 describe('micro:bit exec #microbit', function()
@@ -108,6 +133,50 @@ describe('micro:bit exec #microbit', function()
       --- on when loaded, off while sending, on again after
       assert.same({ true, false, true }, echoes)
     end)
+
+  --- the board's Lua refuses a [[ inside [[ ]], and a ]=] in
+  --- the file would end [=[ ]=] early
+  it('wraps a file in a bracket nothing in it ends', function()
+    files['g.lua'] = 'print("]=]")\n'
+    local tools = load_tools()
+    tools.exec('g.lua')
+    assert.same({ 'assert(loadstring[==[\r' }, backend.sent)
+  end)
+
+  --- The lines exec sends for a file, all of them, as the
+  --- board takes them
+  --- @param tools table
+  --- @param filename string
+  --- @return string
+  local function sentChunk(tools, filename)
+    tools.exec(filename)
+    local count = 0
+    for _ in files[filename]:gmatch('[^\n]*\n') do
+      count = count + 1
+    end
+    for _ = 1, count + 1 do board() end
+    local lines = {}
+    for i, line in ipairs(backend.sent) do
+      lines[i] = line:gsub('\r$', '')
+    end
+    return table.concat(lines, '\n')
+  end
+
+  for _, text in ipairs({ 'print("[[")\n', '--[[ open\n',
+    'print("]]")\nprint("]=]")\n' }) do
+    it('sends a chunk the board\'s Lua reads ('
+      .. text:gsub('\n', ' ') .. ')', function()
+        local compiler = luac()
+        if not compiler then
+          pending('luac5.1 is not installed')
+          return
+        end
+        files['g.lua'] = text
+        local tools = load_tools()
+        assert.equal('', luacSays(compiler, sentChunk(tools,
+          'g.lua')))
+      end)
+  end
 
   it('runs a second time the same way', function()
     local tools = load_tools()
@@ -719,14 +788,6 @@ describe('micro:bit exec #microbit', function()
 
       --- The board's Lua is 5.1 itself, stricter than LuaJIT
       --- here: it refuses a [[ inside [[ ]]
-      --- @return string? luac5.1, when installed
-      local function luac()
-        local probe = io.popen('command -v luac5.1')
-        local path = probe:read('*l')
-        probe:close()
-        return path
-      end
-
       for _, text in ipairs({ 'print("[[")\n', '--[[ open\n',
         'print("]]")\n', 'print([==[ a ]] b ]==])',
         'print([=[ x ]=])\n' }) do
@@ -740,16 +801,8 @@ describe('micro:bit exec #microbit', function()
             local tools = load_tools()
             files['robot.lua'] = text
             uploaded(tools)
-            local path = os.tmpname()
-            local f = assert(io.open(path, 'w'))
-            f:write(hex.script(hex.parse(files['robot.hex'])))
-            f:close()
-            local run = io.popen(compiler .. ' -p ' .. path
-              .. ' 2>&1')
-            local said = run:read('*a')
-            run:close()
-            os.remove(path)
-            assert.equal('', said)
+            assert.equal('', luacSays(compiler,
+              hex.script(hex.parse(files['robot.hex']))))
           end)
       end
 

@@ -22,10 +22,6 @@ local LUA = "MICROBIT.lua"
 -- that the metadata points at one at all
 local PEEK = 256
 
--- A chunk of its own, so what the code declares stays in it
-local WRAP = "assert(loadstring[["
-local UNWRAP = "]])()"
-
 --- A project file, or a stop saying there is none
 --- @param filename string
 --- @return string
@@ -104,15 +100,32 @@ local STOPPED = "the board stopped answering. Type" ..
 --- The file exec is sending, while it sends
 local sending = nil
 
---- The lines exec sends: the file in a chunk of its own
+--- The end of a long bracket around a script, long enough
+--- that nothing in the script ends it first. It is never
+--- [[ ]]: the board's Lua refuses a [[ inside one of those.
+--- @param script string
+--- @return string
+local function closing(script)
+  local level = "="
+  while script:find("]" .. level .. "]", 1, true) do
+    level = level .. "="
+  end
+  return "]" .. level .. "]"
+end
+
+--- The lines exec sends: the file in a chunk of its own, so
+--- what the code declares stays in it
 --- @param filename string
 --- @return string[]
 local function chunkLines(filename)
-  local lines = { WRAP }
-  for line in fileForBoard(filename):gmatch("([^\r]*)\r") do
+  local text = fileForBoard(filename)
+  local close = closing(text)
+  local open = (close:gsub("%]", "["))
+  local lines = { "assert(loadstring" .. open }
+  for line in text:gmatch("([^\r]*)\r") do
     lines[#lines + 1] = line
   end
-  lines[#lines + 1] = UNWRAP
+  lines[#lines + 1] = close .. ")()"
   return lines
 end
 
@@ -376,7 +389,7 @@ local function takeOver()
 end
 
 --- Run a project file on the board as one chunk, wrapped in
---- assert(loadstring [[ ... ]])(), sent a line at a time. The
+--- assert(loadstring [=[ ... ]=])(), sent a line at a time. The
 --- board's echo of the file is not shown; what it answers is.
 --- @param filename string
 function exec(filename)
@@ -527,19 +540,6 @@ local function hexNameOf(filename)
   end
   local upper = ending == "LUA"
   return base .. (upper and ".HEX" or ".hex")
-end
-
---- The end of a long bracket around a script, long enough
---- that nothing in the script ends it first. It is never
---- [[ ]]: the board's Lua refuses a [[ inside one of those.
---- @param script string
---- @return string
-local function closing(script)
-  local level = "="
-  while script:find("]" .. level .. "]", 1, true) do
-    level = level .. "="
-  end
-  return "]" .. level .. "]"
 end
 
 --- A script as a long string: a line break before its end
