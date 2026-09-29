@@ -176,7 +176,7 @@ describe('input surface: inbound events — a project stays live'
         assert.are.equal(0, port.stops)
         assert.are.equal(0, port.abandons)
         assert.are.equal(0, calls.n)
-        assert.truthy(said:find('still going to the micro:bit', 1,
+        assert.truthy(said:find('on its way to the micro:bit', 1,
           true))
         assert.truthy(said:find('quit again', 1, true))
       end)
@@ -260,6 +260,62 @@ describe('input surface: inbound events — a project stays live'
       assert.is_true(stay)
       assert.are.equal(0, port.abandons)
       assert.truthy(said:find('quit again', 1, true))
+    end)
+
+    --- Android waits for its quit on its UI thread: an IDE
+    --- that stayed would hold it for good
+    it('leaves on Android\'s quit on Android, a project running',
+      function()
+        local calls = stub_stop()
+        port.flashing = true
+        love.state.app_state = 'running'
+        local system = love.system
+        love.system = { getOS = function() return 'Android' end }
+        local window = love.window
+        love.window = { minimize = function() end }
+        local aborted = love.quit()
+        love.system, love.window = system, window
+        assert.is_not_true(aborted)
+        assert.are.equal(1, calls.n)
+        assert.are.equal(1, port.abandons)
+        assert.are.equal(1, port.stops)
+      end)
+
+    --- each quit asked for is one event: a second in the same
+    --- frame is asked for too
+    it('refuses both of two quits asked for at once', function()
+      stub_stop()
+      local event = love.event
+      love.event = { quit = function() end }
+      Controller.set_love_quit(F.cc)
+      port.flashing = true
+      local print_ = _G.print
+      _G.print = function() end
+      love.event.quit()
+      love.event.quit()
+      local first, second = love.quit(), love.quit()
+      _G.print = print_
+      love.event = event
+      assert.is_true(first)
+      assert.is_true(second)
+      assert.are.equal(0, port.abandons)
+    end)
+
+    --- a mark whose quit never came (Android drops queued
+    --- events as it closes the IDE) does not make Android's
+    --- own quit one the person asked for
+    it('takes an old mark for no quit asked', function()
+      stub_stop()
+      local timer = love.timer
+      local t = 100
+      love.timer = { getTime = function() return t end }
+      require('util.application').mark_exit_asked()
+      t = t + 1
+      port.flashing = true
+      local aborted = love.quit()
+      love.timer = timer
+      assert.is_not_true(aborted)
+      assert.are.equal(1, port.abandons)
     end)
 
     it('asks once: the next quit is Android\'s', function()

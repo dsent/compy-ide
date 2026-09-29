@@ -798,10 +798,11 @@ Controller = {
     --- While a file goes to the board, a quit the person
     --- asked for waits, with words that say so. A quit
     --- Android asks for (it is closing the IDE, and waits for
-    --- it) is not refused for the flash: when the IDE leaves,
-    --- the flash stops, its stream closed within a second, and
-    --- says so; when the quit only stops a project, the IDE
-    --- and its flash go on.
+    --- it) is never refused, and on Android the IDE always
+    --- leaves then, a project running or not: the flash stops,
+    --- its stream closed within a second, and says so. On a
+    --- computer, a quit that only stops a project leaves the
+    --- IDE, and its flash, going.
     --- A quit pushed from inside the app, by the IDE or a
     --- project, is one the person asked for; only Android's
     --- own quit comes without it
@@ -832,7 +833,7 @@ Controller = {
           -- the quit is not going ahead: Ctrl+Esc's request
           -- must not carry over to a later quit
           Application.consume_application_exit_request()
-          print('A file is still going to the micro:bit. Wait'
+          print('A file is on its way to the micro:bit. Wait'
             .. ' until the Compy says how it went, then quit'
             .. ' again.')
           return true
@@ -842,6 +843,13 @@ Controller = {
       -- in an IDE that stays, and ends, with words, in one that
       -- does not
       local stay = quit()
+      -- Android waits for its own quit on its UI thread, and
+      -- would wait for good on an IDE that stays: then the IDE
+      -- leaves, whatever it would have stayed for
+      if stay and not asked and love.system
+          and love.system.getOS() == 'Android' then
+        stay = false
+      end
       if not stay then
         Controller.leaving = true
         -- nothing here may keep the run going: a fault is
