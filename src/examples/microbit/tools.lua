@@ -491,7 +491,6 @@ end
 function extract(hex_name, lua_name)
   local name = lua_name or LUA
   writefile(name, hex.script(blocksOf(hex_name or HEX)))
-  print("wrote " .. name)
 end
 
 --- Put a Lua script into a hex file. MICROBIT.hex is always
@@ -505,7 +504,6 @@ function embed(hex_name, lua_name)
   local blocks = blocksOf(HEX)
   hex.embed(blocks, read(lua_name or LUA))
   writefile(hex_name, hex.write(blocks))
-  print("wrote " .. hex_name)
 end
 
 --- The hex file's name for a Lua file, its ending in the
@@ -530,23 +528,93 @@ local function isFirmware(name)
   return name:upper() == HEX:upper()
 end
 
---- The hex file upload sends: the file itself, or for a Lua
---- file, a hex file of its name with the script put in; nil,
---- said, when that would overwrite the robots' firmware
+--- The end of a long bracket around a script, long enough
+--- that nothing in the script ends it first
+--- @param script string
+--- @return string
+local function closing(script)
+  local level = ""
+  while script:find("]" .. level .. "]", 1, true) do
+    level = level .. "="
+  end
+  return "]" .. level .. "]"
+end
+
+--- The firmware's own script, then a Lua file's in a chunk of
+--- its own: what the file declares stays there, and a mistake
+--- in it leaves the REPL the firmware's script has started
+--- @param runtime string
+--- @param script string
+--- @param filename string
+--- @return string
+local function withRuntime(runtime, script, filename)
+  local close = closing(script)
+  local open = (close:gsub("%]", "["))
+  local name = string.format("%q", "@" .. filename)
+  return runtime .. "\nassert(loadstring(" .. open .. "\n" ..
+      script .. "\n" .. close .. ", " .. name .. "))()\n"
+end
+
+--- Say that a Lua file does not fit beside the firmware
+--- @param filename string
+local function tooLong(filename)
+  print(filename .. " is too long to fit on the micro:bit")
+  print("next to its firmware. Make it shorter, then upload")
+  print("it again.")
+end
+
+--- MICROBIT.hex with a Lua file run after its own script, so
+--- the board keeps its REPL and robot commands; nil, said,
+--- when the two do not fit
 --- @param filename string
 --- @return string?
-local function hexFor(filename)
-  local hex_name = hexNameOf(filename)
-  if not hex_name then
-    return filename
+local function build(filename)
+  local blocks = blocksOf(HEX)
+  local runtime = hex.script(blocks)
+  local whole = withRuntime(runtime, read(filename), filename)
+  local _, meta = hex.meta(blocks)
+  if meta.space < #whole then
+    tooLong(filename)
+    return nil
   end
+  hex.embed(blocks, whole)
+  return hex.write(blocks)
+end
+
+--- Whether a Lua file's hex would overwrite the robots'
+--- firmware, said when it would
+--- @param filename string
+--- @param hex_name string
+--- @return boolean
+local function overwrites(filename, hex_name)
   if isFirmware(hex_name) then
     print(filename .. " would overwrite " .. HEX .. ", the")
     print("robots' firmware. Give your script another name.")
+    return true
+  end
+  return false
+end
+
+--- The hex file upload sends, and what it holds: the file
+--- itself, or for a Lua file, a hex file of its name that
+--- runs the script too; nil, said, when that would overwrite
+--- the robots' firmware or does not fit
+--- @param filename string
+--- @return string? name
+--- @return string? data
+local function hexFor(filename)
+  local hex_name = hexNameOf(filename)
+  if not hex_name then
+    return filename, read(filename)
+  end
+  if overwrites(filename, hex_name) then
     return nil
   end
-  embed(hex_name, filename)
-  return hex_name
+  local data = build(filename)
+  if data then
+    writefile(hex_name, data)
+    return hex_name, data
+  end
 end
 
 --- What the Compy tells the upload: the file it read, and
@@ -617,12 +685,13 @@ local function mayUpload()
   return not flashing()
 end
 
---- The hex file to send, nil when there is none; on the
---- drive the board is looked for first, so without one no
---- file is written
+--- The hex file to send and what it holds, nil when there is
+--- none; on the drive the board is looked for first, so
+--- without one no file is written
 --- @param filename string
 --- @param cable boolean
---- @return string?
+--- @return string? name
+--- @return string? data
 local function fileToSend(filename, cable)
   if not cable then
     assert(detect_microbit(), "no micro:bit plugged in")
@@ -630,20 +699,21 @@ local function fileToSend(filename, cable)
   return hexFor(filename)
 end
 
---- Put a hex file on the board, or a Lua file: that is put
---- into a hex file of its name first
+--- Put a hex file on the board, or a Lua file: that goes
+--- into a hex file of its name first, after the firmware's
+--- own script, which it keeps
 --- @param filename string?
 function upload(filename)
   if not mayUpload() then
     return
   end
   local cable = overCable()
-  local name = fileToSend(filename or HEX, cable)
+  local name, data = fileToSend(filename or HEX, cable)
   if not name then
     return
   end
   local send = cable and uploadOverCable or uploadToDrive
-  send(name, read(name))
+  send(name, data)
 end
 
 -- help --------------------------------------------------------

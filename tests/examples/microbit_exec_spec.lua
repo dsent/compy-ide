@@ -453,8 +453,8 @@ describe('micro:bit exec #microbit', function()
       files['robot.lua'] = 'print("robot")\n'
       tools.upload('robot.lua')
       assert.is_true(flashed)
-      assert.are.equal(files['robot.lua'],
-        hex.script(hex.parse(files['robot.hex'])))
+      local script = hex.script(hex.parse(files['robot.hex']))
+      assert.truthy(script:find(files['robot.lua'], 1, true))
     end)
 
   --- the card does not tell microbit.hex from MICROBIT.hex
@@ -504,9 +504,163 @@ describe('micro:bit exec #microbit', function()
     files['ROBOT.LUA'] = 'print("robot")\n'
     tools.upload('ROBOT.LUA')
     assert.is_true(flashed)
-    assert.are.equal(files['ROBOT.LUA'],
-      hex.script(hex.parse(files['ROBOT.HEX'])))
+    local script = hex.script(hex.parse(files['ROBOT.HEX']))
+    assert.truthy(script:find(files['ROBOT.LUA'], 1, true))
   end)
+
+  --- MICROBIT.hex's script is the board's REPL, print and robot
+  --- commands. A hex built from a Lua file that held only that
+  --- file left the board silent (00a5ad02): it keeps the
+  --- firmware's script, and runs the file after it.
+  describe('a lua file upload keeps the firmware\'s script',
+    function()
+      local hex = require('examples.microbit.hex')
+
+      --- The script the shipped firmware carries
+      --- @return string
+      local function runtime()
+        return hex.script(hex.parse(files['MICROBIT.hex']))
+      end
+
+      --- The hex upload built for robot.lua, and what it sent
+      --- @param tools table
+      --- @return string? sent
+      local function uploaded(tools)
+        local sent
+        tools.flash_microbit = function(data)
+          sent = data
+          flashed = true
+          return true
+        end
+        tools.upload('robot.lua')
+        return sent
+      end
+
+      --- Every field of it, and every call's, is another such,
+      --- as the firmware's API is to its script here; what the
+      --- board is told is not looked at, save the serial port
+      --- @return table
+      local function anything()
+        return setmetatable({}, {
+          __index = function(t, k)
+            local v = anything()
+            rawset(t, k, v)
+            return v
+          end,
+          __call = function() end
+        })
+      end
+
+      --- Run a hex's script as the firmware does, over a board
+      --- that takes any call: what it wrote to the port, the
+      --- globals it left, and its error, if it stopped on one
+      --- @param data string
+      --- @return string out
+      --- @return table env
+      --- @return string? err
+      local function boot(data)
+        local out = {}
+        local microbit = anything()
+        microbit.serial.send = function(c) out[#out + 1] = c end
+        local env = setmetatable({ microbit = microbit },
+          { __index = _G })
+        env.loadstring = function(code, name)
+          local fn, err = loadstring(code, name)
+          if fn then
+            setfenv(fn, env)
+          end
+          return fn, err
+        end
+        local chunk = assert(loadstring(
+          hex.script(hex.parse(data)), 'embedded'))
+        setfenv(chunk, env)
+        local ok, err = pcall(chunk)
+        return table.concat(out), env, not ok and tostring(err)
+          or nil
+      end
+
+      before_each(firmware)
+
+      it('holds the firmware\'s script, then the file\'s',
+        function()
+          local tools = load_tools()
+          files['robot.lua'] = 'print("blink-ok")\n'
+          uploaded(tools)
+          local script = hex.script(hex.parse(files['robot.hex']))
+          local base = runtime()
+          assert.are.equal(base, script:sub(1, #base))
+          assert.truthy(script:find(files['robot.lua'], #base + 1,
+            true))
+        end)
+
+      it('runs the file once the REPL is ready', function()
+        local tools = load_tools()
+        files['robot.lua'] = 'print("blink-ok")\n'
+        local out, env, err = boot(uploaded(tools))
+        assert.is_nil(err)
+        assert.is_function(env.on_event)
+        local repl = assert(out:find('Lua 5.1 REPL', 1, true))
+        local prompt = assert(out:find('> ', repl, true))
+        assert.truthy(out:find('blink-ok\r\n', prompt, true))
+      end)
+
+      it('runs a file that holds long brackets as it stands',
+        function()
+          local tools = load_tools()
+          files['robot.lua'] = 'print("a]]b")\nprint("c]=]d")\n'
+            .. 'print([[e]])'
+          local out, _, err = boot(uploaded(tools))
+          assert.is_nil(err)
+          assert.truthy(out:find('a]]b\r\nc]=]d\r\ne\r\n', 1,
+            true))
+        end)
+
+      it('keeps the REPL when the file has a mistake, and names'
+        .. ' the file', function()
+          local tools = load_tools()
+          files['robot.lua'] = 'print("one")\nprint(\n'
+          local out, env, err = boot(uploaded(tools))
+          assert.truthy(err and err:find('robot.lua:', 1, true))
+          assert.is_function(env.on_event)
+          assert.truthy(out:find('> ', 1, true))
+        end)
+
+      it('sends exactly the hex it wrote', function()
+        local tools = load_tools()
+        files['robot.lua'] = 'print("robot")\n'
+        local sent = uploaded(tools)
+        assert.are.equal(files['robot.hex'], sent)
+        local base = runtime()
+        assert.are.equal(base,
+          hex.script(hex.parse(sent)):sub(1, #base))
+      end)
+
+      it('refuses a file too long to fit beside the firmware',
+        function()
+          local tools = load_tools()
+          local _, meta = hex.meta(hex.parse(files['MICROBIT.hex']))
+          files['robot.lua'] = ('-'):rep(meta.space - #runtime())
+          said = {}
+          assert.has_no_error(function() uploaded(tools) end)
+          assert.is_false(flashed)
+          assert.is_nil(files['robot.hex'])
+          local told = table.concat(said, ' ')
+          assert.truthy(told:find('robot.lua is too long', 1, true))
+          assert.truthy(told:find('Make it shorter', 1, true))
+        end)
+
+      it('says once that it wrote the hex', function()
+        local tools = load_tools()
+        tools.writefile = function(name, text)
+          files[name] = text
+          tools.print(name .. ' written')
+        end
+        files['robot.lua'] = 'print("robot")\n'
+        said = {}
+        uploaded(tools)
+        assert.same({ 'robot.hex written' }, said)
+      end)
+    end)
 
   --- nothing is built or written while a file is on its way
   it('upload writes nothing while a flash runs', function()
