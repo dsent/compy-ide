@@ -649,6 +649,11 @@ function AndroidBackend:dap()
     return nil, 'no device connected'
   end
   if not self.port.link then
+    -- the interface is there, but was not claimed or gave no
+    -- descriptor: plugging the board in again may help
+    if self.port.dap then
+      return nil, 'CMSIS-DAP interface not claimed'
+    end
     return nil, 'no CMSIS-DAP interface'
   end
   -- a drive Android still has mounted is one it may write to
@@ -659,12 +664,14 @@ function AndroidBackend:dap()
   return self.port.link
 end
 
---- Why the board on the bus could not be opened, when one
---- was there at the last look: 'maintenance mode', or
---- another reason for the log
+--- Why the board on the bus is not open, when one was there
+--- at the last look: 'permission' while Android asks whether
+--- the Compy may use it, 'maintenance mode', or another
+--- reason for the log
 --- @return string?
 function AndroidBackend:absence()
   if self.state == 'open' then return nil end
+  if self.state == 'permission' then return 'permission' end
   return self.refused
 end
 

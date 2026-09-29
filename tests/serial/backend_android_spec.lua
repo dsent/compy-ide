@@ -276,10 +276,29 @@ describe('AndroidBackend drive hold', function()
   it('refuses the link on a board without the interface',
     function()
       local p = port()
+      p.dap = nil
       local b = backend(p)
       b:openReady()
       local link, err = b:dap()
       assert.is_nil(link)
       assert.same('no CMSIS-DAP interface', err)
     end)
+
+  --- a replug may help a claim that failed, never a board
+  --- that lacks the interface
+  it('tells a claim that failed from a missing interface',
+    function()
+      local p = port()
+      local b = backend(p)
+      b:openReady()
+      local link, err = b:dap()
+      assert.is_nil(link)
+      assert.same('CMSIS-DAP interface not claimed', err)
+    end)
+
+  it('says the board waits for permission', function()
+    local b = backend(port())
+    b.state = 'permission'
+    assert.same('permission', b:absence())
+  end)
 end)

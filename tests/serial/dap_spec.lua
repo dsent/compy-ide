@@ -914,7 +914,8 @@ describe('Serial flash', function()
     local ok, err = s:flash(':0400000A9900C0DEBB\r\n'
       .. ':00000001FF\r\n', quiet)
     assert.is_nil(ok)
-    assert.truthy(err:find('V2', 1, true))
+    assert.truthy(err:find('both micro:bit versions', 1, true))
+    assert.truthy(err:find('from a computer', 1, true))
   end)
 
   it('says to plug the board in when there is none', function()
@@ -934,6 +935,24 @@ describe('Serial flash', function()
     assert.truthy(err:find('without holding the button', 1,
       true))
   end)
+
+  it('says what to do about a board plugged in but not open',
+    function()
+      local b = FakeBackend.new()
+      local s = Serial.new(b)
+      b.why = 'permission'
+      local _, err = s:flash(F.hex(3), quiet)
+      assert.truthy(err:find('Answer the question on the screen',
+        1, true))
+      b.why = 'CDC interface set incomplete'
+      _, err = s:flash(F.hex(3), quiet)
+      assert.truthy(err:find('plugged in, but the Compy could not'
+        .. ' reach it', 1, true))
+      b.why = nil
+      _, err = s:flash(F.hex(3), quiet)
+      assert.truthy(err:find('No micro:bit is plugged in', 1,
+        true))
+    end)
 
   it('refuses a second flash, and a restart, while one runs',
     function()
@@ -982,6 +1001,8 @@ describe('Serial flash', function()
     function()
       local cases = {
         { 'drive not held', nil, 'plug it back in' },
+        { 'CMSIS-DAP interface not claimed',
+          '9904' .. string.rep('0', 44), 'plug it back in' },
         { 'no CMSIS-DAP interface', '9900' .. string.rep('0', 44),
           'micro:bit V1' },
         { 'no CMSIS-DAP interface', '9904' .. string.rep('0', 44),
@@ -1025,7 +1046,9 @@ describe('Serial flash', function()
       local ok, err = s:flash(':0400000001020304F2\n'
         .. ':00000001FF\n', quiet)
       assert.is_nil(ok)
-      assert.truthy(err:find('too little', 1, true))
+      assert.truthy(err:find('too little to be a program', 1,
+        true))
+      assert.is_nil(err:find('Get the file again', 1, true))
       assert.same(0, #chip.got)
     end)
 

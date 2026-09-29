@@ -151,7 +151,12 @@ end
 
 --- A refusal after the stream opened: the stream is closed
 --- once every command in flight has its reply, then the
---- verdict comes
+--- verdict comes. The writes still in flight after a refused
+--- one meet a stream in its error state, which trips an
+--- assert in the chip (file_stream.c); the chip keeps it and
+--- shows ASSERT.TXT on its drive the next time the drive is
+--- mounted. The flash itself is not harmed, and sending one
+--- write at a time to avoid it would cost most of the speed.
 --- @param plain string
 --- @param why string
 function DapFlash:refuse(plain, why)

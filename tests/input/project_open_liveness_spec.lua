@@ -175,6 +175,45 @@ describe('input surface: inbound events — a project stays live'
         assert.are.equal(1, port.stops)
       end)
 
+    --- Ctrl+Esc refused during a flash must not close the IDE
+    --- on a later quit that only stops a project
+    it('forgets a refused Ctrl+Esc', function()
+      local calls = stub_stop()
+      port.flashing = true
+      local print_ = _G.print
+      _G.print = function() end
+      local event = love.event
+      love.event = { quit = function() end }
+      require('util.application').request_application_exit()
+      love.event = event
+      assert.is_true(love.quit())
+      _G.print = print_
+      port.flashing = false
+      love.state.app_state = 'running'
+      assert.is_true(love.quit())
+      assert.are.equal(1, calls.n)
+    end)
+
+    --- a project's own love.event.quit, as pong's Esc, is a
+    --- quit asked for from inside the app
+    it('takes a project\'s quit as asked for', function()
+      stub_stop()
+      local event = love.event
+      love.event = { quit = function() end }
+      Controller.set_love_quit(F.cc)
+      port.flashing = true
+      local print_ = _G.print
+      local said
+      _G.print = function(text) said = text end
+      love.event.quit()
+      local stay = love.quit()
+      _G.print = print_
+      love.event = event
+      assert.is_true(stay)
+      assert.are.equal(0, port.abandons)
+      assert.truthy(said:find('quit again', 1, true))
+    end)
+
     it('asks once: the next quit is Android\'s', function()
       stub_stop()
       port.flashing = true

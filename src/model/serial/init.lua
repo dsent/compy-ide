@@ -212,6 +212,12 @@ end
 local NOT_CONNECTED = 'No micro:bit is plugged in. Plug the'
     .. ' micro:bit into the Compy with its USB cable, then try'
     .. ' again.'
+local PERMISSION = 'The Compy is asking whether it may use the'
+    .. ' micro:bit. Answer the question on the screen, then try'
+    .. ' again.'
+local NOT_OPENED = 'The micro:bit is plugged in, but the Compy'
+    .. ' could not reach it. Unplug it, plug it back in, then'
+    .. ' try again.'
 local MAINTENANCE = 'The micro:bit started in maintenance'
     .. ' mode, because its reset button was held as it was'
     .. ' plugged in. Unplug it, then plug it back in without'
@@ -232,8 +238,9 @@ local DAMAGED = 'The file is damaged: some of its lines are'
 local OVERLAP = 'The file is damaged: it puts two different'
     .. ' things in the same place.' .. AGAIN
 local EMPTY = 'The file holds no program.' .. AGAIN
-local TOO_SMALL = 'The file holds too little of a program for'
-    .. ' the micro:bit to take.' .. AGAIN
+local TOO_SMALL = 'The file holds too little to be a program'
+    .. ' for the micro:bit. Use a file with a whole micro:bit'
+    .. ' program in it.'
 local OUTSIDE = 'This file is not made for a micro:bit V2: it'
     .. ' puts part of itself where a micro:bit V2 keeps no'
     .. ' program. Use a file made for a micro:bit V2.'
@@ -267,6 +274,8 @@ function Serial:flash(data, say)
   if not self.connected then
     local why = self.backend.absence and self.backend:absence()
     if why == 'maintenance mode' then return nil, MAINTENANCE end
+    if why == 'permission' then return nil, PERMISSION end
+    if why then return nil, NOT_OPENED end
     return nil, NOT_CONNECTED
   end
   if type(data) ~= 'string' or data == '' then

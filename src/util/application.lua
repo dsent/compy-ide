@@ -10,6 +10,12 @@ local function request_exit()
   love.event.quit()
 end
 
+--- The quit event about to come is asked for by the IDE or a
+--- project in it
+local function mark_exit_asked()
+  exit_asked = true
+end
+
 --- Whether the quit event being handled was asked for by the
 --- IDE; the answer is given once
 --- @return boolean
@@ -41,5 +47,6 @@ return {
   request_application_exit = request_application_exit,
   consume_application_exit_request = consume_application_exit_request,
   consume_exit_asked = consume_exit_asked,
+  mark_exit_asked = mark_exit_asked,
   return_home_before_exit = return_home_before_exit,
 }

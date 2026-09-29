@@ -756,11 +756,25 @@ Controller = {
     --- Android asks for (it is closing the IDE, and waits for
     --- it) is never refused: the flash stops, its stream
     --- closed within a second, and says so.
+    --- A quit pushed from inside the app, by the IDE or a
+    --- project, is one the person asked for; only Android's
+    --- own quit comes without it
+    local push = love.event and love.event.quit
+    if push and push ~= Controller.event_quit then
+      Controller.event_quit = function(...)
+        Application.mark_exit_asked()
+        return push(...)
+      end
+      love.event.quit = Controller.event_quit
+    end
     love.quit = function()
       local asked = Application.consume_exit_asked()
       local port = Serial and SerialPort
       if port and port:isFlashing() then
         if asked then
+          -- the quit is not going ahead: Ctrl+Esc's request
+          -- must not carry over to a later quit
+          Application.consume_application_exit_request()
           print('A file is still going to the micro:bit. Wait'
             .. ' until the Compy says how it went, then quit'
             .. ' again.')
