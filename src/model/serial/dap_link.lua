@@ -17,11 +17,13 @@ require('model.serial.dap')
 --- A reply that does not answer the oldest command is left
 --- over from before this connection (the chip keeps unread
 --- replies across a closed connection) and is passed over.
---- Those replies still fill the chip's queue, so the link
---- starts with one command alone, SYNC, which nothing else
---- sends: once its reply is back, everything left from
---- before has come out ahead of it, and the full DEPTH is
---- open. Until then room() is 0.
+--- Those replies still fill the chip's queue. So the link
+--- starts by draining it: DRAIN_POSTS reply transfers go out
+--- with no command, and whatever they bring is passed over,
+--- until DRAIN_S go by without a reply. Then one command goes
+--- alone, SYNC, which nothing else sends: once its reply is
+--- back, everything left from before has come out ahead of
+--- it, and the full DEPTH is open. Until then room() is 0.
 ---
 --- The io is { submit(endpoint, data|size) -> ok, err,
 --- reap() -> done | nil | nil, err, wait(ms) -> ready },
@@ -36,6 +38,10 @@ DapLink.DEPTH = 4
 --- ID_DAP_UART_GetLineCoding: it reads the serial line's
 --- settings and changes nothing (DAP_vendor.c)
 DapLink.SYNC = 0x81
+--- More than the chip can hold: a queue of 8 on the
+--- nRF52820 and the reply staged on its endpoint
+DapLink.DRAIN_POSTS = 10
+DapLink.DRAIN_S = 0.25
 
 --- @param io table
 --- @param epOut integer
@@ -59,11 +65,26 @@ function DapLink.new(io, epOut, epIn, log, clock)
   return self
 end
 
---- Send SYNC; the link opens when its reply comes
---- @return boolean? ok
---- @return string? err
+--- Drain what the chip kept from before; pump sends SYNC
+--- once it has been quiet for DRAIN_S
 function DapLink:start()
-  return self:push(Dap.packet(DapLink.SYNC), function()
+  self.draining = true
+  self.quietSince = self.clock()
+  for _ = 1, DapLink.DRAIN_POSTS do
+    local ok, err = self.io:submit(self.epIn, Dap.PACKET)
+    if not ok then return self:broke('drain: ' .. err) end
+    self.posted = self.posted + 1
+  end
+end
+
+--- Send SYNC once the chip has been quiet long enough
+function DapLink:sync()
+  if not self.draining or self.fault then return end
+  if self.clock() - self.quietSince < DapLink.DRAIN_S then
+    return
+  end
+  self.draining = false
+  self:push(Dap.packet(DapLink.SYNC), function()
     self.synced = true
     self.log(string.format('in step with the chip, %d replies'
       .. ' from before passed over', self.stale))
@@ -166,6 +187,7 @@ function DapLink:finished(done)
         .. done.status)
     end
     self.replies = self.replies + 1
+    self.quietSince = self.clock()
     if done.actual > 0 then self:reply(done.data) end
     self:post()
   elseif done.status ~= 0 or done.actual ~= Dap.PACKET then
@@ -197,6 +219,7 @@ function DapLink:pump(ms)
       break
     end
   end
+  self:sync()
   self:post()
   return self.replies - before
 end

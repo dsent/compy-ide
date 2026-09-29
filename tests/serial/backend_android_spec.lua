@@ -113,12 +113,15 @@ describe('AndroidBackend drive hold', function()
       b.write = function() end
       b.due = math.huge
       b:pollOpen()
+      assert.same({}, chip.got)
+      chip.now = DapLink.DRAIN_S
+      b:pollOpen()
       assert.same({ 0x81 }, chip.got)
-      chip.now = 1
+      chip.now = chip.now + 1
       b:pollOpen()
       assert.same({ 0x81, 0x80, 0x00 }, chip.got)
       assert.is_nil(b:board())
-      chip.now = 3
+      chip.now = chip.now + 2
       b:pollOpen()
       assert.same(chip.id, b:board().id)
       assert.same('0257', b:board().firmware)

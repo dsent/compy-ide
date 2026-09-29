@@ -37,6 +37,7 @@ local function linkTo(chip, logged, unsynced)
     local t = chip.now
     while not link.synced and not link.fault do
       link:pump(1)
+      chip.now = chip.now + 0.01
       assert.is_true(chip.now - t < 10, 'link never in step')
     end
     chip.got = {}
@@ -383,12 +384,41 @@ describe('DapLink', function()
     assert.same(0, link:room())
     assert.is_nil(link:send(Dap.packet(0x80), quiet))
     link:start()
-    assert.same({ 0x81 }, chip.got)
+    link:pump()
+    assert.same({}, chip.got)
     assert.same(0, link:room())
+    chip.now = chip.now + DapLink.DRAIN_S
+    link:pump()
+    assert.same({ 0x81 }, chip.got)
     for _ = 1, 10 do link:pump(1) end
     assert.is_true(link.synced)
     assert.same(DapLink.DEPTH, link:room())
     assert.same(4, link.stale)
+    assert.same(0, chip.drops)
+  end)
+
+  --- an IDE that died while it synced leaves sync replies
+  --- behind; one of them must not open the window early
+  it('drains old sync replies before its own sync', function()
+    local chip = F.chip({ latency = 0.001 })
+    for _ = 1, 5 do
+      chip:leftover(string.char(0x81, 0, 0xC2, 1, 0, 0, 0, 8))
+    end
+    local link = linkTo(chip, nil, true)
+    link:start()
+    link:pump()
+    assert.is_false(link.synced)
+    assert.same(5, link.stale)
+    chip.now = chip.now + DapLink.DRAIN_S
+    link:pump()
+    for _ = 1, 10 do link:pump(1) end
+    assert.is_true(link.synced)
+    local got = {}
+    link:send(Dap.packet(0x80), function(r) got[1] = r end)
+    link:send(Dap.packet(0x00, '\9'), function(r) got[2] = r end)
+    for _ = 1, 10 do link:pump(1) end
+    assert.same(0x80, got[1]:byte(1))
+    assert.same(0x00, got[2]:byte(1))
     assert.same(0, chip.drops)
   end)
 
