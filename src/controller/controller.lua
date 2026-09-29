@@ -735,6 +735,21 @@ Controller = {
     --- driver until the board is plugged in again, so the
     --- IDE that starts next, often in the same process,
     --- takes it without a tussle with Android
+    --- An error that ends the IDE lets the micro:bit go too,
+    --- before the error screen, which can leave without
+    --- love.quit: a flash under way closes its stream, within
+    --- a second, and the connection closes. Guarded, so a
+    --- fault here cannot keep the error from being shown.
+    local explore = love.errhand
+    if explore and explore ~= Controller.errhand then
+      Controller.errhand = function(msg)
+        if Serial and SerialPort then
+          pcall(SerialPort.stop, SerialPort)
+        end
+        return explore(msg)
+      end
+      love.errhand = Controller.errhand
+    end
     love.quit = function()
       if Serial and SerialPort and SerialPort:isFlashing() then
         print('The micro:bit is taking a file. Wait until the'

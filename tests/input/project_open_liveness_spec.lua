@@ -104,6 +104,33 @@ describe('input surface: inbound events — a project stays live'
       assert.are.equal(1, port.stops)
     end)
 
+    --- the error screen can leave without love.quit
+    it('lets the board go before an error is shown, once',
+      function()
+        local shown
+        local kept = love.errhand
+        love.errhand = function(msg) shown = msg return 'loop' end
+        Controller.set_love_quit(F.cc)
+        Controller.set_love_quit(F.cc)
+        local result = love.errhand('boom')
+        love.errhand = kept
+        assert.are.equal(1, port.stops)
+        assert.are.equal('boom', shown)
+        assert.are.equal('loop', result)
+      end)
+
+    it('shows the error even when letting the board go fails',
+      function()
+        local shown
+        local kept = love.errhand
+        love.errhand = function(msg) shown = msg end
+        Controller.set_love_quit(F.cc)
+        port.stop = function() error('usb gone') end
+        love.errhand('boom')
+        love.errhand = kept
+        assert.are.equal('boom', shown)
+      end)
+
     it('stays while a file goes to the board', function()
       local calls = stub_stop()
       port.flashing = true
