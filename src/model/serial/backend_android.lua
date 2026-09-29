@@ -22,7 +22,6 @@ require('model.serial.usbfs')
 --- @field poll function
 --- @field send function
 --- @field takeStorage function
---- @field giveStorage function
 --- @field dap function
 --- @field board function
 --- @field stop function
@@ -466,17 +465,24 @@ function AndroidBackend:claimDap(port)
   log('CMSIS-DAP interface claimed, descriptor ' .. fd)
 end
 
---- The one close path: interfaces, connection, refs. A
---- drive still taken is handed back first: closing alone
---- would leave it with no driver until the board is
---- plugged in again.
+--- The one close path: interfaces, connection, refs.
+---
+--- The drive is never handed back while the board stays
+--- plugged in. Released, it would go back to Android's
+--- storage driver (AOSP android_hardware_UsbDeviceConnection
+--- .cpp: releaseInterface reconnects the kernel driver), and
+--- Android would mount it just as the next IDE, often the
+--- same process started again, takes it with force; that
+--- tussle hung the IDE's restart on the device. Closing the
+--- connection lets go of the drive without a driver, as a
+--- process that ends does, so it stays off until the board
+--- is plugged in again.
 function AndroidBackend:release(port)
   local env = self.env
   if port.storageTaken then
     port.storageTaken = false
-    local ok, gave = pcall(jniCallBool, env, port.conn,
-      port.releaseM, port.msc)
-    log('drive handed back on close: ' .. tostring(ok and gave))
+    log('drive left without a driver: back when the board'
+      .. ' is plugged in again')
   end
   -- the link stops touching the descriptor before it closes
   if port.link then
@@ -626,29 +632,6 @@ function AndroidBackend:takeStorage()
   return true
 end
 
---- Give the drive back. Android's release hands the
---- interface to its storage driver again, which reads the
---- drive afresh.
---- @return boolean? ok
---- @return string? err
-function AndroidBackend:giveStorage()
-  if self.state ~= 'open' then
-    return nil, 'no device connected'
-  end
-  local port = self.port
-  if not port.storageTaken then
-    return nil, 'mass-storage interface not taken'
-  end
-  port.storageTaken = false
-  local ok, gave = pcall(jniCallBool, self.env, port.conn,
-    port.releaseM, port.msc)
-  if not ok then return nil, tostring(gave) end
-  if not gave then
-    return nil, 'mass-storage interface not released'
-  end
-  return true
-end
-
 --- The link to the board's interface chip, for a flash
 --- @return DapLink? link
 --- @return string? err
@@ -792,20 +775,28 @@ function AndroidBackend:answers()
   return rc >= 0
 end
 
+--- While a file goes to the board (busy), the board is
+--- halted and says nothing, so its serial output is not
+--- waited on, and whether it answers is left to the link,
+--- which a gone board breaks: the chip may hold a control
+--- request back while it writes a page.
+--- @param busy boolean?
 --- @return string? fault
-function AndroidBackend:pollOpen()
+function AndroidBackend:pollOpen(busy)
   if self.port.link then
     self.port.link:pump()
     self:probe(self.port)
   end
-  local chunk = self:read()
-  if chunk ~= '' then self.sink.bytes(chunk) end
+  if not busy then
+    local chunk = self:read()
+    if chunk ~= '' then self.sink.bytes(chunk) end
+  end
   local fault = self:write()
   if fault then return fault end
   if now() < self.due then return end
   self.due = now() + PRESENCE_S
   local listed = self:present()
-  if listed and self:answers() then return end
+  if listed and (busy or self:answers()) then return end
   self:closePort(true)
   if listed then
     return 'device stopped answering, still on the bus'
@@ -813,9 +804,10 @@ function AndroidBackend:pollOpen()
 end
 
 --- One step of device work; call once per update loop
+--- @param busy boolean? a file is going to the board
 --- @return string? fault
-function AndroidBackend:poll()
-  if self.state == 'open' then return self:pollOpen() end
+function AndroidBackend:poll(busy)
+  if self.state == 'open' then return self:pollOpen(busy) end
   if self.state == 'permission' then
     return self:pollPermission()
   end

@@ -20,7 +20,8 @@ require('model.serial.dap')
 --- Those replies still fill the chip's queue. So the link
 --- starts by draining it: DRAIN_POSTS reply transfers go out
 --- with no command, and whatever they bring is passed over,
---- until DRAIN_S go by without a reply. Then one command goes
+--- until DRAIN_S go by without a reply, or DRAIN_MAX_S in all
+--- have gone by. Then one command goes
 --- alone, SYNC, which nothing else sends: once its reply is
 --- back, everything left from before has come out ahead of
 --- it, and the full DEPTH is open. Until then room() is 0.
@@ -42,6 +43,7 @@ DapLink.SYNC = 0x81
 --- nRF52820 and the reply staged on its endpoint
 DapLink.DRAIN_POSTS = 10
 DapLink.DRAIN_S = 0.25
+DapLink.DRAIN_MAX_S = 2
 
 --- @param io table
 --- @param epOut integer
@@ -70,6 +72,7 @@ end
 function DapLink:start()
   self.draining = true
   self.quietSince = self.clock()
+  self.drainSince = self.quietSince
   for _ = 1, DapLink.DRAIN_POSTS do
     local ok, err = self.io:submit(self.epIn, Dap.PACKET)
     if not ok then return self:broke('drain: ' .. err) end
@@ -80,7 +83,9 @@ end
 --- Send SYNC once the chip has been quiet long enough
 function DapLink:sync()
   if not self.draining or self.fault then return end
-  if self.clock() - self.quietSince < DapLink.DRAIN_S then
+  local now = self.clock()
+  if now - self.quietSince < DapLink.DRAIN_S
+      and now - self.drainSince < DapLink.DRAIN_MAX_S then
     return
   end
   self.draining = false

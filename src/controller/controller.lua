@@ -730,10 +730,11 @@ Controller = {
       end
       Application.return_home_before_exit()
     end
-    --- An IDE that ends lets the micro:bit go: its drive
-    --- goes back to Android, which binds its storage driver
-    --- again only on this explicit release, never when the
-    --- process just dies
+    --- An IDE that ends lets the micro:bit go: its USB
+    --- connection closes, and the drive stays without a
+    --- driver until the board is plugged in again, so the
+    --- IDE that starts next, often in the same process,
+    --- takes it without a tussle with Android
     love.quit = function()
       if Serial and SerialPort and SerialPort:isFlashing() then
         print('The micro:bit is taking a file. Wait until the'

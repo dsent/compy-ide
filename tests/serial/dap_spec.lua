@@ -308,6 +308,28 @@ describe('DapLink', function()
     assert.same(0, chip.drops)
   end)
 
+  --- a chip that keeps talking must not keep the link from
+  --- getting in step
+  it('sends its sync by DRAIN_MAX_S however long replies'
+    .. ' come', function()
+      local chip = F.chip()
+      local link, io = linkTo(chip, nil, true)
+      link:start()
+      local t0 = chip.now
+      while #chip.got == 0 and chip.now - t0 < 5 do
+        -- one more reply every 50 ms, and a transfer to take it
+        chip:leftover(string.char(0x8C, 0))
+        io:submit(EP_IN, Dap.PACKET)
+        link.posted = link.posted + 1
+        link:pump()
+        chip.now = chip.now + 0.05
+      end
+      local took = chip.now - t0
+      assert.is_true(took >= DapLink.DRAIN_MAX_S)
+      assert.is_true(took <= DapLink.DRAIN_MAX_S + 0.1)
+      assert.same(0x81, chip.got[1])
+    end)
+
   --- an IDE that died while it synced leaves sync replies
   --- behind; one of them must not open the window early
   it('drains old sync replies before its own sync', function()
@@ -403,7 +425,7 @@ describe('DapFlash', function()
       local t0 = chip.now
       j:step(1 / 30)
       assert.is_true(chip.now - t0 <= j.budget + 0.001)
-      assert.is_true(j.budget <= DapFlash.SHARE_MAX / 30 + 1e-9)
+      assert.is_true(j.budget <= DapFlash.BUDGET + 1e-9)
       chip.now = chip.now + 1 / 30
     end
   end)
@@ -424,18 +446,58 @@ describe('DapFlash', function()
     return late, n, j
   end
 
-  it('keeps the frame rate as it speeds up', function()
-    local late, n = frames(0.004, 0.0005)
-    assert.same(0, late)
-    assert.is_true(n > 10)
+  --- the screen goes down to about 30 frames a second, and
+  --- no frame runs past FRAME_MAX for the flash's sake
+  it('takes the screen down to about 30 frames a second, no'
+    .. ' further', function()
+      local _, n, j = frames(0.010, 0.0005)
+      assert.is_true(n > 10)
+      assert.same(DapFlash.BUDGET, j.budget)
+      assert.is_true(0.010 + DapFlash.BUDGET <= DapFlash.FRAME_MAX)
+    end)
+
+  it('halves its time when a frame runs long, and takes it'
+    .. ' back after', function()
+      local chip = F.chip({ latency = 0.001 })
+      local j = job(F.hex(300), chip)
+      j:adapt(1 / 30)
+      assert.same(DapFlash.BUDGET, j.budget)
+      j:adapt(0.2)
+      assert.same(DapFlash.BUDGET / 2, j.budget)
+      for _ = 1, 10 do j:adapt(0.2) end
+      assert.same(DapFlash.BUDGET_MIN, j.budget)
+      for _ = 1, 20 do j:adapt(1 / 30) end
+      assert.same(DapFlash.BUDGET, j.budget)
+    end)
+
+  it('logs once a second where the time went', function()
+    local chip = F.chip({ latency = 0.0005 })
+    local j, _, logged = job(F.hex(2000), chip)
+    run(j, chip)
+    local lines = {}
+    for _, l in ipairs(logged) do
+      if l:find('^pace: ') then lines[#lines + 1] = l end
+    end
+    assert.is_true(#lines >= 1)
+    assert.truthy(lines[1]:find('chunks/update', 1, true))
+    assert.truthy(lines[1]:find('chunks/s', 1, true))
+    assert.truthy(lines[1]:find('unanswered', 1, true))
   end)
 
-  it('backs off when a frame runs late, and stays below',
-    function()
-      local late, n = frames(0.010, 0.0005)
-      assert.is_true(late >= 1)
-      assert.is_true(late / n < 0.05)
-    end)
+  --- a chip that never lets the link get in step must still
+  --- end the flash with a verdict
+  it('gives up on a link that never gets in step', function()
+    local chip = F.chip()
+    local said = {}
+    local link = linkTo(chip, nil, true)
+    local j = DapFlash.new(F.hex(5), link,
+      function(l) said[#said + 1] = l end, quiet,
+      function() return chip.now end)
+    assert.same('failed', run(j, chip))
+    assert.same(0, #chip.got)
+    assert.truthy(joined(said):find('stopped answering', 1,
+      true))
+  end)
 
   it('writes many chunks per update when the chip is quick',
     function()

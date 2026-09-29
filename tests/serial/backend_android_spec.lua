@@ -129,8 +129,11 @@ describe('AndroidBackend drive hold', function()
       assert.same(3, #chip.got)
     end)
 
-  it('hands the drive back, and stops the link, before the'
-    .. ' connection closes', function()
+  --- handed back, the drive would be mounted by Android just
+  --- as the next IDE, often the same process started again,
+  --- takes it with force: that hung the IDE's restart
+  it('never hands the drive back, and stops the link before'
+    .. ' the connection closes', function()
       local chip = F.chip()
       local p = port(chip)
       local b = backend(p)
@@ -143,10 +146,56 @@ describe('AndroidBackend drive hold', function()
       for _, c in ipairs(calls) do
         order[#order + 1] = c.mid .. ':' .. tostring(c.arg)
       end
-      assert.same({ 'release:msc', 'release:dap', 'release:comm',
+      assert.same({ 'release:dap', 'release:comm',
         'release:data', 'close:nil' }, order)
       assert.is_false(p.storageTaken)
       assert.same('idle', b.state)
+    end)
+
+  --- LÖVE on Android starts again inside the same process
+  --- after a quit: the next backend must open the board as
+  --- the first did, and the first must be done with it
+  it('lets the board go on stop, so the next start opens it'
+    .. ' afresh', function()
+      local chip = F.chip()
+      local p = port(chip)
+      local first = backend(p)
+      first:openReady()
+      local firstIo = p.link.io
+      first:stop()
+      first:stop()
+      assert.same('idle', first.state)
+      local submits = firstIo.submits
+      local p2 = port(chip)
+      local second = backend(p2)
+      calls = {}
+      second:openReady()
+      assert.same('open', second.state)
+      assert.same({ mid = 'claim', arg = 'msc', force = true },
+        { mid = calls[1].mid, arg = calls[1].arg,
+          force = calls[1].force })
+      second.read = function() return '' end
+      second.write = function() end
+      second.due = math.huge
+      chip.now = chip.now + DapLink.DRAIN_S
+      second:pollOpen()
+      assert.same(submits, firstIo.submits)
+      assert.is_true(p2.link.io.submits > 0)
+    end)
+
+  it('waits on no serial output while a file goes to the'
+    .. ' board', function()
+      local p = port(F.chip())
+      local b = backend(p)
+      b:openReady()
+      local reads = 0
+      b.read = function() reads = reads + 1 return '' end
+      b.write = function() end
+      b.due = math.huge
+      b:poll(true)
+      assert.same(0, reads)
+      b:poll(false)
+      assert.same(1, reads)
     end)
 
   it('hands back no drive it did not take', function()

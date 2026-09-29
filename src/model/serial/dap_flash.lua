@@ -9,14 +9,14 @@ require('model.serial.dap')
 --- update; between updates the kernel keeps the chunks in
 --- flight moving, and the chip works through them.
 ---
---- The time an update may spend adapts to the frame: it
---- grows by STEP_UP while frames keep the pace they had
---- before the flash, and halves when a frame takes longer
---- than SLACK times that pace, so the screen keeps its frame
---- rate. A budget that made a frame late becomes a ceiling
---- just below it, which rises again by STEP_UP every
---- RELAX frames that keep the pace. It stays between
---- BUDGET_MIN and SHARE_MAX of the pace.
+--- An update may spend BUDGET on the flash: at most four
+--- chunks can wait for the chip between updates, so the
+--- flash moves mostly while an update waits on it, and the
+--- screen goes down to about 30 frames a second while it
+--- runs. A frame longer than FRAME_MAX halves the budget,
+--- down to BUDGET_MIN; each shorter one gives back
+--- STEP_UP, up to BUDGET. Once a second the log says where
+--- the time went.
 ---
 --- Every way out leaves the chip in a known state: nothing
 --- open (a refusal before open, or a close after one that
@@ -32,11 +32,12 @@ require('model.serial.dap')
 DapFlash = {}
 DapFlash.__index = DapFlash
 
-DapFlash.BUDGET_MIN = 0.002
-DapFlash.STEP_UP = 0.001
-DapFlash.SLACK = 1.15
-DapFlash.SHARE_MAX = 0.6
-DapFlash.RELAX = 60
+DapFlash.BUDGET = 0.020
+DapFlash.BUDGET_MIN = 0.004
+DapFlash.STEP_UP = 0.002
+DapFlash.FRAME_MAX = 0.050
+--- How often the log says where the time went
+DapFlash.PACE_S = 1
 --- How long the oldest command may wait for its reply.
 --- Erasing and writing a page holds a reply back for the
 --- time the chip takes to do it.
@@ -66,9 +67,8 @@ local GONE = 'Its old program may be gone until a file goes'
 --- @param say function
 --- @param log function
 --- @param clock function seconds
---- @param pace number? seconds a frame took before the flash
 --- @return DapFlash
-function DapFlash.new(data, link, say, log, clock, pace)
+function DapFlash.new(data, link, say, log, clock)
   local self = setmetatable({}, DapFlash)
   self.data = data
   self.chunks = math.ceil(#self.data / Dap.CHUNK)
@@ -85,8 +85,9 @@ function DapFlash.new(data, link, say, log, clock, pace)
   self.started = clock()
   self.phaseStarted = self.started
   self.told = self.started
-  self.pace = pace
-  self.budget = DapFlash.BUDGET_MIN
+  self.budget = DapFlash.BUDGET
+  self.pace = { since = self.started, steps = 0, frame = 0,
+    spent = 0, waited = 0, sent = 0 }
   self.state = 'running'
   say('Sending the file to the micro:bit. Its light'
     .. ' blinks while it takes it.')
@@ -343,6 +344,9 @@ function DapFlash:watch()
     return true
   end
   local waited = self.link:waited()
+  if not self.link.synced then
+    waited = self.clock() - self.started
+  end
   if waited and waited > DapFlash.REPLY_S then
     self:fail(NO_ANSWER, string.format(
       'no reply in %d s, %d commands unanswered',
@@ -366,21 +370,40 @@ end
 --- @param dt number? seconds
 function DapFlash:adapt(dt)
   if not dt or dt <= 0 then return end
-  self.pace = self.pace or dt
-  local top = DapFlash.SHARE_MAX * self.pace
-  if dt <= self.pace * DapFlash.SLACK then
-    self.kept = (self.kept or 0) + 1
-    if self.ceiling and self.kept % DapFlash.RELAX == 0 then
-      self.ceiling = self.ceiling + DapFlash.STEP_UP
-    end
-    self.budget = math.min(self.budget + DapFlash.STEP_UP, top,
-      self.ceiling or top)
+  if dt > DapFlash.FRAME_MAX then
+    self.budget = math.max(DapFlash.BUDGET_MIN, self.budget / 2)
   else
-    self.ceiling = self.budget - DapFlash.STEP_UP
-    self.kept = 0
-    self.budget = self.budget / 2
+    self.budget = math.min(DapFlash.BUDGET,
+      self.budget + DapFlash.STEP_UP)
   end
-  self.budget = math.max(DapFlash.BUDGET_MIN, self.budget)
+end
+
+--- Where the time went, once every PACE_S: the frame, the
+--- flash's share of it, the part of that spent waiting on
+--- the chip, chunks per update and per second, commands
+--- still unanswered
+--- @param dt number?
+--- @param spent number
+--- @param waited number
+--- @param sent integer
+function DapFlash:account(dt, spent, waited, sent)
+  local p = self.pace
+  p.steps = p.steps + 1
+  p.frame = p.frame + (dt or 0)
+  p.spent = p.spent + spent
+  p.waited = p.waited + waited
+  p.sent = p.sent + sent
+  local now = self.clock()
+  local span = now - p.since
+  if span < DapFlash.PACE_S then return end
+  self.log(string.format('pace: %d updates, frame %.1f ms,'
+    .. ' flash %.1f ms of it (%.1f waiting), budget %.1f ms,'
+    .. ' %.1f chunks/update, %.0f chunks/s, %d unanswered',
+    p.steps, 1000 * p.frame / p.steps, 1000 * p.spent / p.steps,
+    1000 * p.waited / p.steps, 1000 * self.budget,
+    p.sent / p.steps, p.sent / span, self.link:unanswered()))
+  self.pace = { since = now, steps = 0, frame = 0, spent = 0,
+    waited = 0, sent = 0 }
 end
 
 --- The IDE is stopping with the flash under way: close the
@@ -423,17 +446,23 @@ function DapFlash:step(dt)
   self:adapt(dt)
   local began = self.clock()
   local deadline = began + self.budget
+  local sentBefore, waited = self.sent, 0
   while true do
     self.link:pump()
     if self.state ~= 'running' or self:watch() then break end
     PHASES[self.phase](self)
     if self.state ~= 'running' or self:watch() then break end
-    local left = deadline - self.clock()
-    local ms = math.floor(left * 1000)
+    local t = self.clock()
+    local ms = math.floor((deadline - t) * 1000)
     if ms < 1 or self.link:unanswered() == 0 then break end
     self.link:pump(ms)
+    waited = waited + self.clock() - t
   end
   self.lastSpent = self.clock() - began
-  if self.state == 'running' then self:progress() end
+  if self.state == 'running' then
+    self:account(dt, self.lastSpent, waited,
+      self.sent - sentBefore)
+    self:progress()
+  end
   return self.state
 end

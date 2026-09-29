@@ -6,7 +6,9 @@ require('model.serial.dap_flash')
 --- Backend contract:
 ---   backend:start(sink)  sink.attach(info), sink.detach(),
 ---                        sink.bytes(chunk)
----   backend:poll() -> nil | fault, one step per update
+---   backend:poll(busy) -> nil | fault, one step per
+---                        update; busy while a file goes
+---                        to the board
 ---   backend:send(data) -> true | nil, err
 ---   backend:drop()       what send queued and has not
 ---                        written yet goes
@@ -269,7 +271,7 @@ function Serial:flash(data, say)
   -- queued for the old one would be typed into its new REPL
   self:drop()
   self.job = DapFlash.new(text, link, say, Dap.log,
-    self.clock or clock, self.pace)
+    self.clock or clock)
   return true
 end
 
@@ -288,13 +290,11 @@ end
 --- @return table[] errors
 --- @param dt number
 function Serial:update(dt)
-  self:fault(self.backend:poll())
-  if self.job then
-    if self.job:step(dt) ~= 'running' then self.job = nil end
-  elseif dt and dt > 0 then
-    -- the frame's pace without a flash, which a flash keeps
-    self.pace = self.pace and (0.9 * self.pace + 0.1 * dt)
-        or dt
+  -- a board taking a file is halted and says nothing: the
+  -- backend need not wait on its serial output
+  self:fault(self.backend:poll(self.job ~= nil))
+  if self.job and self.job:step(dt) ~= 'running' then
+    self.job = nil
   end
   self.echo:tick(dt)
   self.dispatcher:push('tick', dt)
