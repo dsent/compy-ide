@@ -318,6 +318,14 @@ describe('editor key contract #input', function()
       end)
     end
 
+    it('Ctrl+Alt+R keeps the way back for Ctrl+T', function()
+      F.session.press('lctrl')
+      F.session.press('lalt')
+      F.session.press('r')
+
+      assert.same('main.lua', love.state.editor.buffer.filename)
+    end)
+
     it('closing a project forgets the quick switch', function()
       love.state.editor = ed:get_state()
       F.cc:_close_project()

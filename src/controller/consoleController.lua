@@ -1916,12 +1916,13 @@ end
 --- The editor closes first: the gate's project shortcuts
 --- (Ctrl+Q, Ctrl+Shift+R, Ctrl+Alt+R) reach here before the
 --- editor sees their key, and its buffers belong to the
---- project they were opened in.
+--- project they were opened in. Ctrl+T keeps its way back,
+--- which closing the project then forgets.
 function ConsoleController:stop_project_run()
   if self.stopping then return end
   if love.state.app_state == 'editor'
       and self.editor:get_active_buffer() then
-    self:finish_edit()
+    love.state.editor = self:finish_edit()
   end
   self.stopping = true
   local ok, err = pcall(self._stop_project_run, self)
