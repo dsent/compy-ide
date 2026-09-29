@@ -393,6 +393,10 @@ function love.load()
   local CM = ConsoleModel(baseconf)
   redirect_to(CM)
   local CC = ConsoleController(CM, ctrl)
+  -- Ctrl+Esc restarts the IDE in the same process without
+  -- stopping the program, so the mouse may still be as the
+  -- program left it; the console starts from its own.
+  CC:flush_program_state()
   local CV = ConsoleView(baseconf, CC)
 
   ctrl.setup_callback_handlers(CC)
