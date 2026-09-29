@@ -119,6 +119,7 @@ function EditorController:open(name, content, save)
   end
 
   local b = BufferModel(name, content, save, ch, hl, pp, tr)
+  self:_drop_dialog()
   self.model.buffers:push_front(b)
   self.view:open(b)
   self:set_mode('nav')
@@ -159,6 +160,7 @@ function EditorController:pop_buffer()
   local bs = self.model.buffers
   local n_buffers = bs:length()
   if n_buffers < 2 then return end
+  self:_drop_dialog()
   self:_remember_position()
   bs:pop_front()
   local b = bs:first()
@@ -339,6 +341,7 @@ end
 
 --- @return {name: string, content: string[]}[]
 function EditorController:close()
+  self:_drop_dialog()
   self.input:clear()
   --- the gate's shortcuts close the editor in any mode,
   --- search included; the next file starts in navigation
@@ -618,6 +621,16 @@ function EditorController:_confirm(act)
     buf:push_history(after, before, sel, sel)
   end
   self:leave_edit()
+end
+
+--- @private
+--- A question belongs to the buffer it asks about: when
+--- that buffer leaves the front, the question goes too,
+--- so no later Enter can answer it
+function EditorController:_drop_dialog()
+  if self.pending_confirm then self.input:clear_error() end
+  self.pending_confirm = nil
+  self._swallow_glyph = nil
 end
 
 --- @param t string

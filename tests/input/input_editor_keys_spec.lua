@@ -200,6 +200,8 @@ describe('editor key contract #input', function()
       F.session.release('lctrl')
       for _, h in ipairs(handlers) do ed[h] = nil end
       love.debug = nil
+      --- a case that opens a file again leaves it to the next
+      ed:close()
     end)
 
     --- the key that selects each mode from navigation
@@ -220,7 +222,10 @@ describe('editor key contract #input', function()
     }
 
     for _, mode in ipairs({ 'nav', 'edit', 'search', 'reorder' }) do
-      it('leaves from ' .. mode .. ' to the console', function()
+      --- from an open changed block the chord leaves
+      --- without asking, as the unguarded exits above do
+      local how = mode == 'edit' and ' (w/o confirmation)' or ''
+      it('leaves from ' .. mode .. ' to the console' .. how, function()
         if enter[mode] then enter[mode]() end
         assert.same(mode, ed:get_mode())
         --- once the editor is closed, the chord's own key
@@ -239,6 +244,32 @@ describe('editor key contract #input', function()
         assert.is_nil(ed:get_active_buffer())
       end)
     end
+
+    it('a question does not outlive the editor', function()
+      local orig_run = F.cc.run_project
+      finally(function() F.cc.run_project = orig_run end)
+      F.cc.run_project = function() end
+      open_dirty_block()
+      F.session.press('lshift')
+      F.session.press('escape')
+      F.session.release('escape')
+      F.session.release('lshift')
+      assert.same('discard', ed.pending_confirm)
+
+      F.session.press('lctrl')
+      F.session.press('t')
+      F.session.release('t')
+      F.session.release('lctrl')
+      assert.same('ready', love.state.app_state)
+
+      ed = open_file()
+      love.state.app_state = 'editor'
+      F.session.press('return')
+
+      --- Enter opened the block: no hidden question took it
+      assert.same('edit', ed:get_mode())
+      assert.same(0, #ed:get_active_buffer().history)
+    end)
 
     it('Shift+Esc on the last buffer leaves under DEBUG', function()
       love.debug = { }
