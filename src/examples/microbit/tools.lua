@@ -508,15 +508,43 @@ function embed(hex_name, lua_name)
   print("wrote " .. hex_name)
 end
 
---- The hex file upload sends: the file itself, or for a Lua
---- file, a hex file of its name with the script put in
+--- The hex file's name for a Lua file, its ending in the
+--- case it was typed in: robot.lua gives robot.hex, ROBOT.LUA
+--- gives ROBOT.HEX; nil for any other file
 --- @param filename string
---- @return string
+--- @return string?
+local function hexNameOf(filename)
+  local base, ending = filename:match("^(.*)%.([Ll][Uu][Aa])$")
+  if not base then
+    return nil
+  end
+  local upper = ending == "LUA"
+  return base .. (upper and ".HEX" or ".hex")
+end
+
+--- Whether a name is the robots' firmware's, in any case: the
+--- card does not tell microbit.hex from MICROBIT.hex
+--- @param name string
+--- @return boolean
+local function isFirmware(name)
+  return name:upper() == HEX:upper()
+end
+
+--- The hex file upload sends: the file itself, or for a Lua
+--- file, a hex file of its name with the script put in; nil,
+--- said, when that would overwrite the robots' firmware
+--- @param filename string
+--- @return string?
 local function hexFor(filename)
-  if not filename:find("%.lua$") then
+  local hex_name = hexNameOf(filename)
+  if not hex_name then
     return filename
   end
-  local hex_name = filename:gsub("%.lua$", ".hex")
+  if isFirmware(hex_name) then
+    print(filename .. " would overwrite " .. HEX .. ", the")
+    print("robots' firmware. Give your script another name.")
+    return nil
+  end
   embed(hex_name, filename)
   return hex_name
 end
@@ -546,7 +574,6 @@ end
 --- @param name string
 --- @param data string
 local function uploadOverCable(name, data)
-  assert(not isSending(), "exec is still sending a file")
   local ok, err = flash_microbit(data, uploadHooks(name))
   if not ok then
     print(err)
@@ -564,7 +591,6 @@ end
 --- @param data string
 local function uploadToDrive(name, data)
   local version = hex.version(hex.parse(data))
-  assert(detect_microbit(), "no micro:bit plugged in")
   compy.audio.hyperjump()
   local ok, err = flash_microbit(data)
   assert(ok, err)
@@ -582,18 +608,42 @@ local function overCable()
   return love.system.getOS() == "Android" and cableFlash()
 end
 
+--- Whether upload may begin: exec is not sending, stopped
+--- with words when it is, and no file is on its way already,
+--- false, said, when one is
+--- @return boolean
+local function mayUpload()
+  assert(not isSending(), "exec is still sending a file")
+  return not flashing()
+end
+
+--- The hex file to send, nil when there is none; on the
+--- drive the board is looked for first, so without one no
+--- file is written
+--- @param filename string
+--- @param cable boolean
+--- @return string?
+local function fileToSend(filename, cable)
+  if not cable then
+    assert(detect_microbit(), "no micro:bit plugged in")
+  end
+  return hexFor(filename)
+end
+
 --- Put a hex file on the board, or a Lua file: that is put
 --- into a hex file of its name first
 --- @param filename string?
 function upload(filename)
-  assert(not isSending(), "exec is still sending a file")
-  local name = hexFor(filename or HEX)
-  local data = read(name)
-  if overCable() then
-    uploadOverCable(name, data)
-  else
-    uploadToDrive(name, data)
+  if not mayUpload() then
+    return
   end
+  local cable = overCable()
+  local name = fileToSend(filename or HEX, cable)
+  if not name then
+    return
+  end
+  local send = cable and uploadOverCable or uploadToDrive
+  send(name, read(name))
 end
 
 -- help --------------------------------------------------------

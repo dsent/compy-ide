@@ -414,6 +414,22 @@ describe('micro:bit exec #microbit', function()
         1, true))
       assert.is_false(flashed)
     end)
+
+    --- without a board no hex file is written for a script
+    it('writes no hex for a lua file without a board', function()
+      local tools = load_tools()
+      tools.detect_microbit = function() return nil end
+      local f = assert(io.open('src/examples/microbit/MICROBIT.hex'))
+      files['MICROBIT.hex'] = f:read('*a')
+      f:close()
+      files['robot.lua'] = 'print(1)\n'
+      local ok, err = pcall(tools.upload, 'robot.lua')
+      assert.is_false(ok)
+      assert.truthy(tostring(err):find('no micro:bit plugged in',
+        1, true))
+      assert.is_nil(files['robot.hex'])
+      assert.is_false(flashed)
+    end)
   end)
 
   it('restart_microbit waits while a file goes to the board',
@@ -441,13 +457,69 @@ describe('micro:bit exec #microbit', function()
         hex.script(hex.parse(files['robot.hex'])))
     end)
 
-  it('upload leaves MICROBIT.hex as it is', function()
+  --- the card does not tell microbit.hex from MICROBIT.hex
+  for _, script in ipairs({ 'MICROBIT.lua', 'microbit.lua' }) do
+    it('upload leaves MICROBIT.hex as it is, and says why ('
+      .. script .. ')', function()
+        local tools = load_tools()
+        files['MICROBIT.hex'] = ':00000001FF\n'
+        files[script] = 'print(1)\n'
+        assert.has_no_error(function() tools.upload(script) end)
+        assert.is_false(flashed)
+        assert.are.equal(':00000001FF\n', files['MICROBIT.hex'])
+        assert.is_nil(files['microbit.hex'])
+        local told = table.concat(said, ' ')
+        assert.truthy(told:find(script .. ' would overwrite'
+          .. ' MICROBIT.hex', 1, true))
+        assert.truthy(told:find('Give your script another name', 1,
+          true))
+      end)
+  end
+
+  --- the firmware the scripts go into
+  local function firmware()
+    local f = assert(io.open('src/examples/microbit/MICROBIT.hex'))
+    files['MICROBIT.hex'] = f:read('*a')
+    f:close()
+  end
+
+  it('upload sends the hex it wrote for a lua file', function()
     local tools = load_tools()
-    files['MICROBIT.hex'] = ':00000001FF\n'
-    files['MICROBIT.lua'] = 'print(1)\n'
-    assert.has_error(function() tools.upload('MICROBIT.lua') end)
+    firmware()
+    files['robot.lua'] = 'print("robot")\n'
+    local sent
+    tools.flash_microbit = function(data)
+      sent = data
+      return true
+    end
+    tools.upload('robot.lua')
+    assert.is_truthy(files['robot.hex'])
+    assert.are.equal(files['robot.hex'], sent)
+  end)
+
+  it('upload takes a lua file named in capitals', function()
+    local tools = load_tools()
+    local hex = require('examples.microbit.hex')
+    firmware()
+    files['ROBOT.LUA'] = 'print("robot")\n'
+    tools.upload('ROBOT.LUA')
+    assert.is_true(flashed)
+    assert.are.equal(files['ROBOT.LUA'],
+      hex.script(hex.parse(files['ROBOT.HEX'])))
+  end)
+
+  --- nothing is built or written while a file is on its way
+  it('upload writes nothing while a flash runs', function()
+    local tools = load_tools()
+    firmware()
+    files['x.lua'] = 'print(1)\n'
+    serial.job = { step = function() return 'running' end }
+    assert.has_no_error(function() tools.upload('x.lua') end)
+    serial.job = nil
+    assert.is_nil(files['x.hex'])
     assert.is_false(flashed)
-    assert.are.equal(':00000001FF\n', files['MICROBIT.hex'])
+    assert.truthy(table.concat(said, ' '):find(
+      'on its way to the micro:bit', 1, true))
   end)
 
   it('restart_microbit restarts the board', function()
