@@ -1977,7 +1977,8 @@ end
 --- program's: a program that crashed, or never cleans up,
 --- leaves the same console as one that does. Every path that
 --- ends a run calls it, and run_project again before a run
---- starts, for a path that ended one without it.
+--- starts, for a path that ended one without it, and main.lua
+--- once when the IDE starts.
 function ConsoleController:flush_program_state()
   self.paused_mouse = nil
   set_mouse(CONSOLE_MOUSE)

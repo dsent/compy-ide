@@ -1430,8 +1430,9 @@ chord and of what our re-homing adopted.
   puts the mouse back — relative mode off, not grabbed, visible, the system
   cursor — on every stop path after the project's hook, on the failed-run
   branch (the reset alone: the hook still does not fire there), when a
-  program's code ends with no widget shown and no pointer handler left, and
-  before every run starts. A pause gives the console that mouse and
+  program's code ends with no widget shown and no pointer handler left,
+  before every run starts, and when the IDE starts (Ctrl+Esc restarts it in
+  the same process without a stop). A pause gives the console that mouse and
   `continue()` gives the program back its own. Keyboard modes and audio are
   still as this entry describes.
 
