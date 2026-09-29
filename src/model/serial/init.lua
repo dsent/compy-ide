@@ -328,8 +328,9 @@ function Serial:prepared(prep)
     return
   end
   self.job = DapFlash.new(prep.text, link, prep.say, Dap.log,
-    self.clock or clock)
-  DapPrepare.tell(Dap.log, prep.on.sending)
+    self.clock or clock, function()
+      DapPrepare.tell(Dap.log, prep.on.sending)
+    end)
 end
 
 --- Words for a board the Compy cannot flash: a replug helps
@@ -402,6 +403,9 @@ function Serial:abandon()
   self.job = nil
 end
 
+local STOPPED_READING = 'The Compy stopped before the file went'
+    .. ' to the micro:bit, which keeps its program. Send the file'
+    .. ' again once the Compy is back.'
 local CUT = 'A file was going to the micro:bit, and it did not'
     .. ' take it: the Compy stopped. Send the file again once'
     .. ' the Compy is back.'
@@ -414,15 +418,15 @@ function Serial:stop()
   local cut
   if self.job then
     if getmetatable(self.job) == DapPrepare then
-      cut = DapPrepare.CLOSED
+      cut = STOPPED_READING
       self.job:abandon(STOP_S)
+    elseif self.job:abandon(STOP_S) then
+      cut = DapFlash.TOOK
     else
-      local erased = self.job:erased()
-      if self.job:abandon(STOP_S) then
-        cut = DapFlash.TOOK
-      else
-        cut = CUT
-        if erased then cut = cut .. ' ' .. DapFlash.GONE end
+      -- the answers the stop took in say where the chip was
+      cut = CUT
+      if self.job:erased() then
+        cut = cut .. ' ' .. DapFlash.GONE
       end
     end
   end

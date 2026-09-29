@@ -68,8 +68,10 @@ local RESET_NOTE = 'If it does not start with the new program,'
 --- @param say function
 --- @param log function
 --- @param clock function seconds
+--- @param sending function? called once the board is checked
+---   and the stream is open, as the words for it are said
 --- @return DapFlash
-function DapFlash.new(data, link, say, log, clock)
+function DapFlash.new(data, link, say, log, clock, sending)
   local self = setmetatable({}, DapFlash)
   self.data = data
   self.chunks = math.ceil(#self.data / Dap.CHUNK)
@@ -91,8 +93,7 @@ function DapFlash.new(data, link, say, log, clock)
   self.pace = { since = self.started, steps = 0, frame = 0,
     spent = 0, waited = 0, sent = 0 }
   self.state = 'running'
-  say('Sending the file to the micro:bit. Its light'
-    .. ' blinks while it takes it.')
+  self.sending = sending
   log(string.format('start: %d bytes, %d chunks of %d',
     #self.data, self.chunks, Dap.CHUNK))
   return self
@@ -265,11 +266,27 @@ function DapFlash:check()
   self:enter('open')
 end
 
+--- The board is checked and its stream open: the file is on
+--- its way, said once, with whatever the caller hears then
+function DapFlash:sayStart()
+  if self.started_said then return end
+  self.started_said = true
+  self.say('Sending the file to the micro:bit. Its light'
+    .. ' blinks while it takes it.')
+  if self.sending then
+    local ok, err = pcall(self.sending)
+    if not ok then
+      self.log('sending hook failed: ' .. tostring(err))
+    end
+  end
+end
+
 --- @param status integer
 function DapFlash:onOpen(status)
   self.statuses.open = self:name(status)
   self.log('open: ' .. self:name(status))
   if status == Dap.SUCCESS then
+    self:sayStart()
     return self:enter('write')
   end
   if status == Dap.INTERNAL and not self.retried then
@@ -404,19 +421,17 @@ local PHASES = {
   reset = DapFlash.resetPhase,
 }
 
---- The link has broken, or the chip has gone quiet
---- @return boolean ended
+--- ENOENT (killed), EPROTO and EILSEQ (a transfer cut off, the
+--- first an unplug usually brings), ENODEV, ESHUTDOWN
+local GONE_STATUS = { [-2] = true, [-19] = true, [-71] = true,
+  [-84] = true, [-108] = true }
+
 --- Did the board leave the bus? The link says so outright
 --- when the port closed under it, the kernel through
 --- ENODEV or ESHUTDOWN; otherwise the bus is asked, when the
 --- link can.
 --- @param fault string
 --- @return boolean
---- ENOENT (killed), EPROTO and EILSEQ (a transfer cut off, the
---- first an unplug usually brings), ENODEV, ESHUTDOWN
-local GONE_STATUS = { [-2] = true, [-19] = true, [-71] = true,
-  [-84] = true, [-108] = true }
-
 function DapFlash:unplugged(fault)
   local status = tonumber(fault:match('status (%-%d+)'))
   local errno = tonumber(fault:match('errno (%d+)'))
@@ -541,15 +556,20 @@ function DapFlash:abandon(seconds, plain)
   local function left()
     return math.floor((deadline - self.clock()) * 1000)
   end
-  -- every chunk has gone and some answers are still on their
-  -- way: they come first, within the same deadline, so the
-  -- last one's end of file moves the flash on to its close
-  -- before the verdict is made
-  if self.phase == 'write' and self.sent == self.chunks then
-    while self.phase == 'write' and link:unanswered() > 0
+  -- with a stream that may be open, the answers still on
+  -- their way come first, within the same deadline, before
+  -- any verdict: the last one's end of file moves the flash
+  -- on to its close, and a refusal among them says where the
+  -- chip stopped, which decides whether its old program may
+  -- be gone
+  if self.mayBeOpen then
+    while self.state == 'running' and link:unanswered() > 0
         and not link.fault and left() > 0 do
       link:pump(left())
     end
+  end
+  if self.state ~= 'running' then
+    return self.state == 'done' or nil
   end
   -- the chip has the whole file once it closed the stream as
   -- done (phase reset), or when it does so now: the end of
@@ -600,9 +620,13 @@ function DapFlash:abandon(seconds, plain)
   -- which it keeps and shows on its drive; an OPEN goes only
   -- once the link is in step
   if not self.mayBeOpen then
-    -- a close that went on the way here and got no answer
-    self.log(self.stopping and 'close on stop: no reply'
-      or 'close on stop: no stream open')
+    -- a close that went on the way here: its answer, if any,
+    -- is already in the log
+    if not self.stopping then
+      self.log('close on stop: no stream open')
+    elseif self.stopping.close == nil then
+      self.log('close on stop: no reply')
+    end
     return
   end
   while link:room() == 0 and not link.fault and left() > 0 do

@@ -90,9 +90,6 @@ print("[Ctrl+R restarts the micro:bit]")
 local BUTTON = "press its reset button, on the back next to" ..
     " the USB socket"
 
--- The way back from a board that no longer reads what is
--- typed, stuck in a loop or in listen(): it restarts, as its
--- reset button makes it, and greets you again.
 --- Whether a file is on its way to the board now; an older
 --- Compy, without isFlashing, sends none down the cable
 --- @return boolean
@@ -100,6 +97,9 @@ local function onItsWay()
   return serial.isFlashing ~= nil and serial.isFlashing()
 end
 
+-- The way back from a board that no longer reads what is
+-- typed, stuck in a loop or in listen(): it restarts, as its
+-- reset button makes it, and greets you again.
 --- @return string what to tell
 local function restartBoard()
   if not serial.isConnected() then

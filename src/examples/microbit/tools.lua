@@ -585,12 +585,6 @@ function compile(lua_name, hex_name)
   embed(hex_name or (lua_name:gsub("%.lua$", "") .. ".hex"))
 end
 
---- Put a hex file on the board over the USB cable, as a
---- Compy does: the Compy reads the file a share at a time,
---- says which firmware it holds, then says every few seconds
---- how far it has got, and at the end whether the board took
---- it; the board restarts with it. A sound says the sending
---- has begun.
 --- What the Compy tells the upload: the file it read, and
 --- the sending beginning
 --- @param name string
@@ -607,6 +601,12 @@ local function uploadHooks(name)
   }
 end
 
+--- Put a hex file on the board over the USB cable, as a
+--- Compy does: the Compy reads the file a share at a time,
+--- says which firmware it holds, then says every few seconds
+--- how far it has got, and at the end whether the board took
+--- it; the board restarts with it. A sound says the sending
+--- has begun.
 --- @param name string
 --- @param data string
 local function uploadOverCable(name, data)

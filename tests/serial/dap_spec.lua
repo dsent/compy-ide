@@ -1093,6 +1093,10 @@ describe('DapFlash', function()
       stepTo(j, chip, 'close')
       j.mayBeOpen = true
       link.send = function() return false end
+      -- no answer is taken in from here on
+      link.pump = function(_, ms)
+        chip.now = chip.now + (ms or 1) / 1000
+      end
       assert.is_nil(j:abandon(0.5, 'The Compy was closed.'))
       assert.same('failed', j.state)
       local log = joined(logged)
@@ -1101,6 +1105,59 @@ describe('DapFlash', function()
       assert.is_nil(log:find('no stream open', 1, true))
       assert.truthy(log:find('close on stop: no reply', 1, true))
       assert.truthy(joined(said):find('did not take', 1, true))
+    end)
+
+  --- a stop takes in the answers already on their way before
+  --- it says whether the old program may be gone: a refusal
+  --- before the erase point keeps it
+  for _, how in ipairs({ 'abandon', 'stop' }) do
+    it('says the old program stays after a refusal before the'
+      .. ' erase, stopped with writes in flight (' .. how .. ')',
+      function()
+        local chip = F.chip({ latency = 0.1 })
+        local first = true
+        chip.over[0x8C] = function()
+          if first then
+            first = false
+            return string.char(0x8C, 29)
+          end
+        end
+        local j, said = job(F.hex(300), chip)
+        for _ = 1, 2000 do
+          if j.phase == 'write' and j.sent >= 4 and j.acked == 0 then
+            break
+          end
+          j:step(1 / 30)
+          chip.now = chip.now + 1 / 30
+        end
+        assert.is_true(j.sent >= j.eraseChunk)
+        assert.same(0, j.acked)
+        local words
+        if how == 'stop' then
+          local b = FakeBackend.new()
+          local s = Serial.new(b)
+          b:attach()
+          s.job = j
+          words = s:stop()
+        else
+          assert.is_nil(j:abandon(1, 'The Compy was closed.'))
+          words = joined(said)
+        end
+        assert.truthy(words:find('did not take', 1, true))
+        assert.is_nil(words:find('old program', 1, true))
+      end)
+  end
+
+  --- a refused close on stop has its answer in the log already
+  it('logs no missing reply for a close on stop that was refused',
+    function()
+      local chip = F.chip({ latency = 0.2, closeStatus = 2 })
+      local j, _, logged = job(F.hex(300), chip)
+      stepTo(j, chip, 'close')
+      assert.is_nil(j:abandon(1, 'The Compy was closed.'))
+      local log = joined(logged)
+      assert.truthy(log:find('close: INTERNAL', 1, true), log)
+      assert.is_nil(log:find('close on stop: no reply', 1, true))
     end)
 
   --- a close that went and got no answer is not a stream
@@ -1475,8 +1532,17 @@ describe('Serial flash', function()
         s:update(1 / 30)
       end
       assert.is_true(getmetatable(s.job) == DapFlash)
+      -- the start is said once the board is checked and its
+      -- stream open
+      for _ = 1, 50 do
+        if said[#said]:find('Sending the file', 1, true) then
+          break
+        end
+        s:update(1 / 30)
+      end
       assert.truthy(said[#said]:find('Sending the file', 1,
         true))
+      assert.same(1, count(chip.got, 0x8A))
     end)
 
   it('stops reading at once when the board is unplugged',
@@ -1520,8 +1586,37 @@ describe('Serial flash', function()
         s:update(1 / 30)
         chip.now = chip.now + 1 / 30
       end
-      assert.same({ 'read 1 0', 'sending 0' }, order)
+      -- the sending begins once the board is checked (id and
+      -- firmware asked) and its stream is open
+      assert.same({ 'read 1 0', 'sending 3' }, order)
+      assert.same({ 0x80, 0x00, 0x8A }, { chip.got[1], chip.got[2],
+        chip.got[3] })
       assert.same(Dap.prepare(F.hex(40)), chip.written)
+    end)
+
+  --- a board refused (a V1, or one the Compy does not know)
+  --- hears no sound and reads no start words
+  it('says no start and makes no sound for a refused board',
+    function()
+      for _, id in ipairs({ '9900' .. string.rep('0', 44),
+        '1234' .. string.rep('0', 44) }) do
+        local chip = F.chip({ id = id })
+        local s = connected(chip)
+        local said, sounds = {}, 0
+        assert.is_true(s:flash(F.hex(40),
+          function(l) said[#said + 1] = l end,
+          { sending = function() sounds = sounds + 1 end }))
+        for _ = 1, 200 do
+          if not s:isFlashing() then break end
+          s:update(1 / 30)
+          chip.now = chip.now + 1 / 30
+        end
+        local words = joined(said)
+        assert.same(0, sounds)
+        assert.is_nil(words:find('Sending', 1, true))
+        assert.truthy(words:find('did not take', 1, true))
+        assert.same(0, count(chip.got, 0x8A))
+      end
     end)
 
   --- what the caller does with the image changes nothing
@@ -1608,6 +1703,15 @@ describe('Serial flash', function()
         local words = how == 'stop' and cut or said[#said]
         assert.truthy(words:find('keeps its program', 1, true), how)
         assert.is_nil(words:find('did not take', 1, true), how)
+        -- Android's quit closes the Compy; the error screen's
+        -- stop does not
+        if how == 'stop' then
+          assert.truthy(words:find('The Compy stopped before', 1,
+            true))
+        else
+          assert.truthy(words:find('The Compy was closed before', 1,
+            true))
+        end
         assert.same(0, #chip.got)
       end
     end)
