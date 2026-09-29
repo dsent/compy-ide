@@ -493,8 +493,10 @@ describe('input surface: inbound events — a project stays live'
           minimize = function() minimized = minimized + 1 end,
         }
         love.state.app_state = 'running'
-        local stay = love.quit(got[1][1])
+        -- the stubs go back even when the quit raises
+        local ok, stay = pcall(love.quit, got[1][1])
         love.system, love.window = system, window
+        assert(ok, stay)
         assert.is_true(stay)
         assert.are.equal(1, calls.n)
         assert.are.equal(0, minimized)

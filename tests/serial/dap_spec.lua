@@ -1029,6 +1029,23 @@ describe('DapFlash', function()
       assert.truthy(joined(said):find('did not take', 1, true))
     end)
 
+  --- a close that went and got no answer is not a stream
+  --- that was never open
+  it('logs no reply for a close on stop the chip never answers',
+    function()
+      local chip = F.chip({ latency = 0.2 })
+      local j, _, logged, link = job(F.hex(300), chip)
+      stepTo(j, chip, 'close')
+      -- no reply is taken in from here on
+      link.pump = function(_, ms)
+        chip.now = chip.now + (ms or 1) / 1000
+      end
+      assert.is_nil(j:abandon(0.5, 'The Compy was closed.'))
+      local log = joined(logged)
+      assert.truthy(log:find('close on stop: no reply', 1, true))
+      assert.is_nil(log:find('no stream open', 1, true))
+    end)
+
   it('takes a stop before the end of file for a failure',
     function()
       local chip = F.chip({ latency = 0.2 })

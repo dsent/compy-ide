@@ -7,6 +7,13 @@ local application_exit_requested = false
 --- tag holds the exit status the quit was asked with (a
 --- number, or 'restart'); an event Android drops takes its
 --- tag with it.
+---
+--- Known limits: a project's love.thread gets LÖVE's own quit
+--- and push, so a thread's quit goes out untagged and reads as
+--- Android's, which ends the IDE on Android. A project that
+--- polls events itself and pushes them again tags Android's
+--- quit as asked, and love.event.clear() or a full drain of
+--- the queue swallows it.
 local TAG = 'compy:quit'
 
 --- The quit event's value for a quit asked with status

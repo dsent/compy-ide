@@ -590,7 +590,9 @@ function DapFlash:abandon(seconds, plain)
   -- which it keeps and shows on its drive; an OPEN goes only
   -- once the link is in step
   if not self.mayBeOpen then
-    self.log('close on stop: no stream open')
+    -- a close that went on the way here and got no answer
+    self.log(self.stopping and 'close on stop: no reply'
+      or 'close on stop: no stream open')
     return
   end
   while link:room() == 0 and not link.fault and left() > 0 do

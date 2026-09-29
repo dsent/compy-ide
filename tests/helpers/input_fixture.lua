@@ -270,8 +270,10 @@ function F.run_source(src)
     local chunk = assert(loadstring(src, 'main.lua'))
     return setfenv(chunk, env), nil, '/tmp/p'
   end
-  CC:run_project('p')
+  -- the stubs go back even when the run raises
+  local ok, err = pcall(CC.run_project, CC, 'p')
   P.current, P.run = prev_current, prev_run
+  if not ok then error(err, 0) end
 end
 
 -- The project-facing public surface (compy.input.show/hide); it
@@ -380,8 +382,10 @@ function F.run_project(fn)
   P.run = function()
     return function() if fn then fn() end end, nil, '/tmp/p'
   end
-  CC:run_project('p')
+  -- the stubs go back even when the run raises
+  local ok, err = pcall(CC.run_project, CC, 'p')
   P.current, P.run = prev_current, prev_run
+  if not ok then error(err, 0) end
 end
 
 -- A SECOND project widget, published as the current one. The
