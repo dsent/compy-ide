@@ -219,12 +219,12 @@ local EARLY_END = 'The file is damaged: it ends before its'
     .. ' last line. Get the file again, then send it once more.'
 local DAMAGED = 'The file is damaged: some of its lines are'
     .. ' broken. Get the file again, then send it once more.'
-local LONG = 'The file has lines longer than the micro:bit can'
-    .. ' read. Make it again with a micro:bit editor, then send'
-    .. ' it.'
+local LAYOUT = 'The file is laid out in a way the micro:bit'
+    .. ' reads wrongly. Make it again with a micro:bit editor,'
+    .. ' then send it.'
 local FAULTS = {
   ['cut short'] = CUT_SHORT, universal = UNIVERSAL,
-  ['early end'] = EARLY_END, ['long records'] = LONG,
+  ['early end'] = EARLY_END, layout = LAYOUT,
   damaged = DAMAGED,
 }
 local NOT_READY = 'The Compy cannot send files to this micro:bit'

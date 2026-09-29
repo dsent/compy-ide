@@ -214,7 +214,17 @@ local function recordFault(rec)
   local kind = tonumber(rec:sub(7, 8), 16)
   if kind >= 0x0A and kind <= 0x0E then return 'universal' end
   if kind > 5 then return 'damaged' end
-  if count > Dap.RECORD_DATA_MAX then return 'long records' end
+  if count > Dap.RECORD_DATA_MAX then return 'layout' end
+  if (kind == 2 or kind == 4) and count ~= 2 then
+    return 'damaged'
+  end
+  -- a segment base the chip keeps only above 64 KB: it
+  -- places the data after it at the 64 KB boundary below,
+  -- the wrong address, and says nothing
+  if kind == 2 and tonumber(rec:sub(9, 12), 16) % 0x1000 ~= 0
+  then
+    return 'layout'
+  end
   return nil, kind
 end
 
@@ -232,7 +242,9 @@ end
 ---   image in blocks (record types 0A to 0E); the chip picks
 ---   its own blocks only when every write starts on a block,
 ---   and a write here carries 62 bytes
---- - 'long records': a record of more than 32 data bytes
+--- - 'layout': what the chip would write to the wrong place:
+---   a record of more than 32 data bytes, or a segment
+---   address (type 02) that is not on a 64 KB boundary
 --- - 'damaged': anything else the chip would misread: a bad
 ---   digit, a wrong length or checksum, an unknown type
 --- @param data string

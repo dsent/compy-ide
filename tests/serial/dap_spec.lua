@@ -190,9 +190,21 @@ describe('Dap hex checks', function()
         (256 - sum % 256) % 256) .. '\r\n'
     end
     assert.is_nil(Dap.hexFault(record(32) .. ':00000001FF'))
-    assert.same('long records',
+    assert.same('layout',
       Dap.hexFault(record(33) .. ':00000001FF'))
   end)
+
+  --- the chip keeps a segment base only above 64 KB, and
+  --- writes what follows at the boundary below
+  it('refuse a segment address the chip places wrongly',
+    function()
+      local tail = ':04000000AABBCCDDEE\r\n:00000001FF'
+      assert.same('layout',
+        Dap.hexFault(':020000021234B6\r\n' .. tail))
+      assert.is_nil(Dap.hexFault(':020000021000EC\r\n' .. tail))
+      assert.same('damaged',
+        Dap.hexFault(':0100000210ED\r\n' .. tail))
+    end)
 
   it('send nothing after the end record', function()
     local body = Dap.hexBody(F.hex(2) .. '\r\n\r\n\0')
