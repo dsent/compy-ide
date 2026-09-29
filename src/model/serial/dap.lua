@@ -182,48 +182,79 @@ local function lastVisible(data)
   return i
 end
 
---- Does the text end on the hex end-of-file record? The chip
---- takes a hex file as finished only on it. Line ends, blank
---- lines and other control characters may follow.
---- @param data string
---- @return boolean
-function Dap.hexComplete(data)
-  local i = lastVisible(data)
-  local j = i
-  while j > 0 and not data:sub(j, j):match('[\r\n]') do
-    j = j - 1
-  end
-  local last = data:sub(j + 1, i):match('^%s*(.-)%s*$')
-  return last:upper() == ':00000001FF'
+--- The value of each hex digit's byte
+local DIGIT = {}
+for i = 0, 15 do
+  DIGIT[string.byte(string.format('%X', i))] = i
+  DIGIT[string.byte(string.format('%x', i))] = i
 end
 
---- What keeps a hex file from the chip, if anything:
---- 'cut short' without the end-of-file record last,
---- 'early end' with an end-of-file record before the last
---- record (the chip stops at the first and says it took the
---- file, leaving the rest unwritten), 'universal' for a
---- Universal Hex. A Universal Hex holds a V1 and a V2 image
---- in blocks, marked by record types 0A to 0E; the chip
---- picks its own blocks only when every write starts on a
---- block, and a write here carries 62 bytes.
+--- The most data one record may carry: the chip decodes a
+--- record into a buffer of 37 bytes, 32 of them data, and a
+--- longer record runs past it (intelhex.c, hex_line_t)
+Dap.RECORD_DATA_MAX = 32
+
+--- One record's digits, less its ':': nil when the chip
+--- reads it as the record it is, else what is wrong
+--- @param rec string
+--- @return string? why
+--- @return integer? kind the record type
+local function recordFault(rec)
+  local n = #rec
+  if n < 10 or n % 2 == 1 then return 'damaged' end
+  local sum = 0
+  for i = 1, n, 2 do
+    local hi, lo = DIGIT[rec:byte(i)], DIGIT[rec:byte(i + 1)]
+    if not hi or not lo then return 'damaged' end
+    sum = sum + hi * 16 + lo
+  end
+  local count = tonumber(rec:sub(1, 2), 16)
+  if n ~= (count + 5) * 2 then return 'damaged' end
+  if sum % 256 ~= 0 then return 'damaged' end
+  local kind = tonumber(rec:sub(7, 8), 16)
+  if kind >= 0x0A and kind <= 0x0E then return 'universal' end
+  if kind > 5 then return 'damaged' end
+  if count > Dap.RECORD_DATA_MAX then return 'long records' end
+  return nil, kind
+end
+
+--- What keeps a hex file from the chip, if anything. The file
+--- is read as the chip reads it (intelhex.c): a line end
+--- anywhere is skipped, a ':' starts a record, and every
+--- other byte is taken for a hex digit. What follows the
+--- end-of-file record is never sent (hexBody), so line ends,
+--- blanks and other control characters may follow it.
+---
+--- - 'cut short': no end-of-file record
+--- - 'early end': a record after the end-of-file record; the
+---   chip would stop at it and say it took the file
+--- - 'universal': a Universal Hex, which holds a V1 and a V2
+---   image in blocks (record types 0A to 0E); the chip picks
+---   its own blocks only when every write starts on a block,
+---   and a write here carries 62 bytes
+--- - 'long records': a record of more than 32 data bytes
+--- - 'damaged': anything else the chip would misread: a bad
+---   digit, a wrong length or checksum, an unknown type
 --- @param data string
 --- @return string? why
 function Dap.hexFault(data)
-  if not Dap.hexComplete(data) then return 'cut short' end
-  local ends, universal = 0, false
-  for kind in data:gmatch(':%x%x%x%x%x%x(%x%x)') do
-    local k = tonumber(kind, 16)
-    if k == 1 then ends = ends + 1 end
-    if k >= 0x0A and k <= 0x0E then universal = true end
+  local text = data:sub(1, lastVisible(data)):gsub('[\r\n]', '')
+  if text == '' then return 'cut short' end
+  if text:sub(1, 1) ~= ':' then return 'damaged' end
+  local ended = false
+  for rec in text:gmatch(':([^:]*)') do
+    if ended then return 'early end' end
+    local why, kind = recordFault(rec)
+    if why then return why end
+    ended = kind == 1
   end
-  if universal then return 'universal' end
-  if ends ~= 1 then return 'early end' end
+  if not ended then return 'cut short' end
 end
 
 --- The file as the chip gets it: everything up to the end of
 --- the end-of-file record. The chip takes nothing after the
 --- record, so the chunk that carries it is the last one.
---- @param data string a complete hex, see hexComplete
+--- @param data string a file hexFault finds nothing wrong in
 --- @return string
 function Dap.hexBody(data)
   return data:sub(1, lastVisible(data))

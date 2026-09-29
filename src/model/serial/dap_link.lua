@@ -17,6 +17,11 @@ require('model.serial.dap')
 --- A reply that does not answer the oldest command is left
 --- over from before this connection (the chip keeps unread
 --- replies across a closed connection) and is passed over.
+--- Those replies still fill the chip's queue, so the link
+--- starts with one command alone, SYNC, which nothing else
+--- sends: once its reply is back, everything left from
+--- before has come out ahead of it, and the full DEPTH is
+--- open. Until then room() is 0.
 ---
 --- The io is { submit(endpoint, data|size) -> ok, err,
 --- reap() -> done | nil | nil, err, wait(ms) -> ready },
@@ -28,6 +33,9 @@ DapLink = {}
 DapLink.__index = DapLink
 
 DapLink.DEPTH = 4
+--- ID_DAP_UART_GetLineCoding: it reads the serial line's
+--- settings and changes nothing (DAP_vendor.c)
+DapLink.SYNC = 0x81
 
 --- @param io table
 --- @param epOut integer
@@ -47,7 +55,19 @@ function DapLink.new(io, epOut, epIn, log, clock)
   self.stale = 0
   self.replies = 0
   self.fault = nil
+  self.synced = false
   return self
+end
+
+--- Send SYNC; the link opens when its reply comes
+--- @return boolean? ok
+--- @return string? err
+function DapLink:start()
+  return self:push(Dap.packet(DapLink.SYNC), function()
+    self.synced = true
+    self.log(string.format('in step with the chip, %d replies'
+      .. ' from before passed over', self.stale))
+  end)
 end
 
 --- @param why string
@@ -65,7 +85,7 @@ end
 --- How many more commands may go now
 --- @return integer
 function DapLink:room()
-  if self.fault then return 0 end
+  if self.fault or not self.synced then return 0 end
   return DapLink.DEPTH - #self.pending
 end
 
@@ -97,9 +117,19 @@ end
 --- @return string? err
 function DapLink:send(packet, onReply)
   if self.fault then return nil, self.fault end
+  if not self.synced then return nil, 'not in step yet' end
   if #self.pending >= DapLink.DEPTH then
     return nil, 'too many commands in flight'
   end
+  return self:push(packet, onReply)
+end
+
+--- @param packet string
+--- @param onReply function
+--- @return boolean? ok
+--- @return string? err
+function DapLink:push(packet, onReply)
+  if self.fault then return nil, self.fault end
   local ok, err = self.io:submit(self.epOut, packet)
   if not ok then
     self:broke('send: ' .. err)

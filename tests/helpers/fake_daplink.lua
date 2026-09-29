@@ -114,6 +114,8 @@ function M.chip(opts)
     end
     if cmd == 0x80 then
       return string.char(cmd, #self.id) .. self.id
+    elseif cmd == 0x81 then
+      return string.char(cmd, 0x00, 0xC2, 0x01, 0, 0, 0, 8)
     elseif cmd == 0x00 then
       if packet:byte(2) == 9 and self.firmware ~= '' then
         local s = self.firmware .. '\0'

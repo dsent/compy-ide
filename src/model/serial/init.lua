@@ -217,12 +217,25 @@ local UNIVERSAL = 'This file holds programs for both'
     .. ' made for a micro:bit V2.'
 local EARLY_END = 'The file is damaged: it ends before its'
     .. ' last line. Get the file again, then send it once more.'
+local DAMAGED = 'The file is damaged: some of its lines are'
+    .. ' broken. Get the file again, then send it once more.'
+local LONG = 'The file has lines longer than the micro:bit can'
+    .. ' read. Make it again with a micro:bit editor, then send'
+    .. ' it.'
+local FAULTS = {
+  ['cut short'] = CUT_SHORT, universal = UNIVERSAL,
+  ['early end'] = EARLY_END, ['long records'] = LONG,
+  damaged = DAMAGED,
+}
 local NOT_READY = 'The Compy cannot send files to this micro:bit'
     .. ' yet. Unplug it, plug it back in, then try again.'
 
 --- Put a hex file on the board through its interface chip,
---- without its drive. Returns at once; the work runs a share
+--- without its drive. The file is checked first, record by
+--- record, as the chip will read it, so a damaged one never
+--- reaches the board. Returns at once; the work runs a share
 --- per update, and say gives the progress and the verdict.
+--- Tests may set self.clock to the chip's time.
 --- @param data string
 --- @param say function
 --- @return boolean? ok
@@ -238,9 +251,7 @@ function Serial:flash(data, say)
     return nil, NO_FILE
   end
   local fault = Dap.hexFault(data)
-  if fault == 'cut short' then return nil, CUT_SHORT end
-  if fault == 'universal' then return nil, UNIVERSAL end
-  if fault then return nil, EARLY_END end
+  if fault then return nil, FAULTS[fault] or DAMAGED end
   local link, err = self.backend:dap()
   if not link then
     Dap.log('flash refused: ' .. tostring(err))

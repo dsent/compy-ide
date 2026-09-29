@@ -39,6 +39,7 @@ local function port(chip)
   if chip then
     p.link = DapLink.new(F.bus(chip), 0x05, 0x85,
       function() end, function() return chip.now end)
+    p.link:start()
   end
   return p
 end
@@ -102,21 +103,28 @@ describe('AndroidBackend drive hold', function()
       assert.same(1, b.attached)
     end)
 
-  it('asks the chip who it is without waiting', function()
-    local chip = F.chip({ latency = 1 })
-    local p = port(chip)
-    local b = backend(p)
-    b:openReady()
-    assert.same({ 0x80, 0x00 }, chip.got)
-    assert.is_nil(b:board())
-    b.read = function() return '' end
-    b.write = function() end
-    b.due = math.huge
-    chip.now = 2
-    b:pollOpen()
-    assert.same(chip.id, b:board().id)
-    assert.same('0257', b:board().firmware)
-  end)
+  it('asks the chip who it is without waiting, once in step',
+    function()
+      local chip = F.chip({ latency = 1 })
+      local p = port(chip)
+      local b = backend(p)
+      b:openReady()
+      b.read = function() return '' end
+      b.write = function() end
+      b.due = math.huge
+      b:pollOpen()
+      assert.same({ 0x81 }, chip.got)
+      chip.now = 1
+      b:pollOpen()
+      assert.same({ 0x81, 0x80, 0x00 }, chip.got)
+      assert.is_nil(b:board())
+      chip.now = 3
+      b:pollOpen()
+      assert.same(chip.id, b:board().id)
+      assert.same('0257', b:board().firmware)
+      b:pollOpen()
+      assert.same(3, #chip.got)
+    end)
 
   it('hands the drive back, and stops the link, before the'
     .. ' connection closes', function()

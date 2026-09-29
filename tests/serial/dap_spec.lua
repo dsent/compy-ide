@@ -24,13 +24,23 @@ local EP_OUT, EP_IN = 0x05, 0x85
 
 local function quiet() end
 
---- A link to a fake chip, on the chip's clock
-local function linkTo(chip, logged)
+--- A link to a fake chip, on the chip's clock, in step
+--- with it unless told otherwise
+local function linkTo(chip, logged, unsynced)
   local log = logged and function(l) logged[#logged + 1] = l end
       or quiet
   local io = F.bus(chip)
   local link = DapLink.new(io, EP_OUT, EP_IN, log,
     function() return chip.now end)
+  if not unsynced then
+    link:start()
+    local t = chip.now
+    while not link.synced and not link.fault do
+      link:pump(1)
+      assert.is_true(chip.now - t < 10, 'link never in step')
+    end
+    chip.got = {}
+  end
   return link, io
 end
 
@@ -136,10 +146,52 @@ end)
 
 describe('Dap hex checks', function()
   it('want the end record last', function()
-    assert.is_true(Dap.hexComplete(F.hex(2)))
-    assert.is_true(Dap.hexComplete(F.hex(2) .. '\r\n\0'))
-    assert.is_false(Dap.hexComplete(':10000000AB\r\n'))
-    assert.is_false(Dap.hexComplete(F.hex(2) .. ':1000'))
+    assert.is_nil(Dap.hexFault(F.hex(2)))
+    assert.is_nil(Dap.hexFault(F.hex(2) .. '\r\n\0 \t'))
+    local body = F.hex(2):gsub(':00000001FF\r\n$', '')
+    assert.same('cut short', Dap.hexFault(body))
+    assert.same('cut short', Dap.hexFault(''))
+    assert.same('early end', Dap.hexFault(F.hex(2) .. ':1000'))
+    assert.same('damaged', Dap.hexFault(':1000' .. F.hex(2)))
+  end)
+
+  --- the chip skips line ends anywhere, and misreads what is
+  --- not a hex digit
+  it('read the records as the chip reads them', function()
+    local split = F.hex(1):gsub(':00000001FF', ':0000\r\n0001FF')
+    assert.is_nil(Dap.hexFault(split))
+    local hidden = F.hex(1):gsub('\r\n:00000001FF',
+      ':0000\n0001FF')
+    assert.is_nil(Dap.hexFault(hidden))
+    assert.same('early end', Dap.hexFault(
+      ':0000\n0001FF\r\n' .. F.hex(1)))
+    assert.same('damaged', Dap.hexFault(' ' .. F.hex(1)))
+    assert.same('damaged', Dap.hexFault(
+      F.hex(1):gsub('ABAB', 'AB B', 1)))
+  end)
+
+  it('refuse a record whose checksum is wrong', function()
+    local bad = F.hex(3):gsub('(:10002000%x+)(%x%x)\r', function(r, c)
+      return r .. string.format('%02X', (tonumber(c, 16) + 1)
+        % 256) .. '\r'
+    end)
+    assert.same('damaged', Dap.hexFault(bad))
+  end)
+
+  --- the chip's record buffer holds 32 data bytes
+  it('refuse a record longer than the chip reads', function()
+    local function record(n)
+      local sum, body = n, string.format('%02X000000', n)
+      for _ = 1, n do
+        body = body .. '01'
+        sum = sum + 1
+      end
+      return ':' .. body .. string.format('%02X',
+        (256 - sum % 256) % 256) .. '\r\n'
+    end
+    assert.is_nil(Dap.hexFault(record(32) .. ':00000001FF'))
+    assert.same('long records',
+      Dap.hexFault(record(33) .. ':00000001FF'))
   end)
 
   it('send nothing after the end record', function()
@@ -159,7 +211,6 @@ describe('Dap hex checks', function()
   it('tell an end record before the last record', function()
     local twice = F.hex(1) .. F.hex(1)
     assert.same('early end', Dap.hexFault(twice))
-    assert.same('cut short', Dap.hexFault(':10000000AB\r\n'))
   end)
 
   it('find the example firmware a plain V2 hex', function()
@@ -278,7 +329,7 @@ describe('DapLink', function()
     link:send(Dap.packet(0x80), function(r) got = r end)
     for _ = 1, 10 do link:pump() end
     assert.is_nil(got)
-    chip.now = 3
+    chip.now = chip.now + 3
     link:pump()
     assert.truthy(got)
     assert.is_nil(link.fault)
@@ -288,26 +339,45 @@ describe('DapLink', function()
     local chip = F.chip({ latency = 0.002 })
     local link, io = linkTo(chip)
     local got
+    local t0, waits = chip.now, io.waits
     link:send(Dap.packet(0x80), function(r) got = r end)
     link:pump(5)
     assert.truthy(got)
-    assert.same(1, io.waits)
-    assert.is_true(chip.now <= 0.005 + 1e-9)
+    assert.same(waits + 1, io.waits)
+    assert.is_true(chip.now - t0 <= 0.005 + 1e-9)
   end)
 
   it('passes over replies left from before', function()
     local chip = F.chip()
     chip:leftover(string.char(0x8C, 0))
-    chip:leftover(string.char(0x8C, 0))
+    chip:leftover(string.char(0x80, 4) .. '9904')
     local logged = {}
     local link = linkTo(chip, logged)
     local got
     link:send(Dap.packet(0x80), function(r) got = r end)
     link:pump()
-    link:pump()
     assert.same(0x80, got:byte(1))
     assert.same(2, link.stale)
     assert.truthy(joined(logged):find('passed over', 1, true))
+  end)
+
+  --- a process that died with four commands in flight leaves
+  --- their replies in the chip; new commands on top of them
+  --- would fill its queue and be dropped
+  it('sends one command alone until it is in step', function()
+    local chip = F.chip({ latency = 0.001 })
+    for _ = 1, 4 do chip:leftover(string.char(0x8C, 0)) end
+    local link = linkTo(chip, nil, true)
+    assert.same(0, link:room())
+    assert.is_nil(link:send(Dap.packet(0x80), quiet))
+    link:start()
+    assert.same({ 0x81 }, chip.got)
+    assert.same(0, link:room())
+    for _ = 1, 10 do link:pump(1) end
+    assert.is_true(link.synced)
+    assert.same(DapLink.DEPTH, link:room())
+    assert.same(4, link.stale)
+    assert.same(0, chip.drops)
   end)
 
   it('breaks on a transfer error, and then stays still',
@@ -614,15 +684,15 @@ describe('DapFlash', function()
       assert.is_true(chip.now - t0 <= 1 + 1e-9)
     end)
 
-  it('passes over replies left from an earlier flash',
-    function()
-      local chip = F.chip()
+  it('passes over replies left from an earlier flash, and'
+    .. ' the chip drops nothing', function()
+      local chip = F.chip({ latency = 0.002 })
       for _ = 1, 3 do chip:leftover(string.char(0x8C, 0)) end
       chip:leftover(string.char(0x80, 4) .. '9904')
-      chip:leftover(string.char(0x00, 5) .. '0257\0')
-      local j = job(F.hex(30), chip)
+      local j = job(F.hex(300), chip)
       assert.same('done', run(j, chip))
       assert.same('CLOSED', chip.stream)
+      assert.same(0, chip.drops)
     end)
 
   it('says how far it has got every few seconds', function()
@@ -661,7 +731,8 @@ describe('Serial flash', function()
     function()
       local chip = F.chip()
       local s = connected(chip)
-      local ok, err = s:flash(':10000000AB\r\n', quiet)
+      local body = F.hex(3):gsub(':00000001FF\r\n$', '')
+      local ok, err = s:flash(body, quiet)
       assert.is_nil(ok)
       assert.truthy(err:find('cut short', 1, true))
       assert.same(0, #chip.got)
@@ -732,6 +803,17 @@ describe('Serial flash', function()
         assert.is_nil(ok)
         assert.truthy(err:find('plug it back in', 1, true))
       end
+    end)
+
+  it('refuses a damaged file before sending anything',
+    function()
+      local chip = F.chip()
+      local s = connected(chip)
+      local bad = F.hex(40):gsub('ABAB', 'ABAC', 1)
+      local ok, err = s:flash(bad, quiet)
+      assert.is_nil(ok)
+      assert.truthy(err:find('damaged', 1, true))
+      assert.same(0, #chip.got)
     end)
 
   it('refuses a file with an end record in the middle',

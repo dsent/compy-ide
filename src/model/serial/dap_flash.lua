@@ -61,7 +61,8 @@ local NOT_V2 = 'This board is not a micro:bit V2, and the file'
 local GONE = 'Its old program may be gone until a file goes'
     .. ' onto it.'
 
---- @param data string a complete hex, see Dap.hexComplete
+--- @param data string a hex Dap.hexFault finds nothing
+---   wrong in
 --- @param link DapLink
 --- @param say function
 --- @param log function
@@ -168,12 +169,22 @@ local function statusOf(cmd, raw)
   return Dap.status(cmd, raw) or -1
 end
 
+--- Whether the phase may send n commands now: once per
+--- phase, when the link has room for them
+--- @param n integer
+--- @return boolean
+function DapFlash:ready(n)
+  if self.asked or self.link:room() < n then return false end
+  self.asked = true
+  return true
+end
+
 function DapFlash:askPhase()
   if self.asked then
     if self.id and self.fwText then self:check() end
     return
   end
-  self.asked = true
+  if not self:ready(2) then return end
   self:send(Dap.packet(Dap.UNIQUE_ID), function(raw)
     self.id = Dap.text(Dap.UNIQUE_ID, raw) or ''
   end)
@@ -219,15 +230,13 @@ function DapFlash:onOpen(status)
 end
 
 function DapFlash:openPhase()
-  if self.asked then return end
-  self.asked = true
+  if not self:ready(1) then return end
   self:send(Dap.packet(Dap.OPEN, string.char(Dap.STREAM_HEX)),
     function(raw) self:onOpen(statusOf(Dap.OPEN, raw)) end)
 end
 
 function DapFlash:reopenPhase()
-  if self.asked then return end
-  self.asked = true
+  if not self:ready(1) then return end
   self:send(Dap.packet(Dap.CLOSE), function(raw)
     self.log('close of the stream left open: '
       .. self:name(statusOf(Dap.CLOSE, raw)))
@@ -284,8 +293,9 @@ function DapFlash:closed(status)
 end
 
 function DapFlash:closePhase()
-  if self.asked or self.link:unanswered() > 0 then return end
-  self.asked = true
+  if self.link:unanswered() > 0 or not self:ready(1) then
+    return
+  end
   self:send(Dap.packet(Dap.CLOSE), function(raw)
     self:closed(statusOf(Dap.CLOSE, raw))
   end)
@@ -294,8 +304,9 @@ end
 --- After a refusal: the chunks still in flight are answered
 --- as refused too, then the stream is closed
 function DapFlash:unwindPhase()
-  if self.asked or self.link:unanswered() > 0 then return end
-  self.asked = true
+  if self.link:unanswered() > 0 or not self:ready(1) then
+    return
+  end
   self:send(Dap.packet(Dap.CLOSE), function(raw)
     self.log('close after refusal: '
       .. self:name(statusOf(Dap.CLOSE, raw)))
@@ -305,8 +316,7 @@ function DapFlash:unwindPhase()
 end
 
 function DapFlash:resetPhase()
-  if self.asked then return end
-  self.asked = true
+  if not self:ready(1) then return end
   self:send(Dap.packet(Dap.RESET_TARGET), function(raw)
     self.log('reset: reply ' .. statusOf(Dap.RESET_TARGET, raw))
     self:enter('done')

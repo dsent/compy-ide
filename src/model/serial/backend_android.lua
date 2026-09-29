@@ -462,6 +462,7 @@ function AndroidBackend:claimDap(port)
   end
   port.link = DapLink.new(Usbfs.new(fd), dap.outAddr,
     dap.inAddr, log, now)
+  port.link:start()
   log('CMSIS-DAP interface claimed, descriptor ' .. fd)
 end
 
@@ -683,12 +684,13 @@ function AndroidBackend:board()
   return self.port.board
 end
 
---- Ask the chip who it is, without waiting: the answers come
---- through pollOpen. The first proof that commands arrive,
---- and it takes in replies left over from before.
+--- Ask the chip who it is, without waiting, once the link is
+--- in step with it: the answers come through pollOpen. The
+--- first proof that commands arrive.
 function AndroidBackend:probe(port)
   local link = port.link
-  if not link then return end
+  if not link or port.probed or link:room() < 2 then return end
+  port.probed = true
   local t0 = now()
   local board = {}
   link:send(Dap.packet(Dap.UNIQUE_ID), function(raw)
@@ -757,7 +759,6 @@ function AndroidBackend:openReady()
   local ok, err = self:takeStorage()
   log('drive hold on open: ' .. (ok and 'taken'
     or ('not taken, ' .. tostring(err))))
-  self:probe(port)
   self.sink.attach({ name = self.dev.name, acm = port.acm })
   if self.extras_told then
     return 'extra micro:bit ignored'
@@ -793,7 +794,10 @@ end
 
 --- @return string? fault
 function AndroidBackend:pollOpen()
-  if self.port.link then self.port.link:pump() end
+  if self.port.link then
+    self.port.link:pump()
+    self:probe(self.port)
+  end
   local chunk = self:read()
   if chunk ~= '' then self.sink.bytes(chunk) end
   local fault = self:write()
