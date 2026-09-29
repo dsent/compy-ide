@@ -587,6 +587,9 @@ Controller = {
   --- @param CC ConsoleController
   set_love_update = function(CC)
     local function update(dt)
+      -- a quit asked for is told from Android's by the update
+      -- it was asked in (Application)
+      Application.update_began()
       if love.PROFILE then
         Prof.update()
       end
@@ -785,7 +788,18 @@ Controller = {
             msg = tostring(msg) .. '\n\n' .. cut
           end
         end
-        return explore(msg)
+        local loop = explore(msg)
+        if type(loop) ~= 'function' then return loop end
+        -- the error screen, once left, ends the run: the window
+        -- goes to the back, as for a quit, so Android starts
+        -- the IDE again
+        return function(...)
+          local r = loop(...)
+          if r ~= nil then
+            pcall(Application.return_home_before_exit)
+          end
+          return r
+        end
       end
       love.errhand = Controller.errhand
     end
@@ -833,23 +847,35 @@ Controller = {
           -- the quit is not going ahead: Ctrl+Esc's request
           -- must not carry over to a later quit
           Application.consume_application_exit_request()
-          print('A file is on its way to the micro:bit. Wait'
-            .. ' until the Compy says how it went, then quit'
-            .. ' again.')
+          print('The Compy stays open while a file goes to the'
+            .. ' micro:bit. Once it says how it went, you can'
+            .. ' quit.')
           return true
         end
       end
       -- whether the IDE stays is decided first: a flash goes on
       -- in an IDE that stays, and ends, with words, in one that
       -- does not
-      local stay = quit()
-      -- Android waits for its own quit on its UI thread, and
-      -- would wait for good on an IDE that stays: then the IDE
-      -- leaves, whatever it would have stayed for
-      if stay and not asked and love.system
-          and love.system.getOS() == 'Android' then
+      local androids = not asked and love.system
+          and love.system.getOS() == 'Android'
+      local qok, stay = xpcall(quit, debug.traceback)
+      if not qok then
+        local out = rawget(_G, 'orig_print') or print
+        pcall(out, 'The quit could not decide whether the IDE'
+          .. ' stays: ' .. tostring(stay))
+        -- Android's own quit must end the IDE; any other shows
+        -- the error, as it always did
+        if not androids then error(stay, 0) end
         stay = false
       end
+      -- Android waits for its own quit on its UI thread, and
+      -- would wait for good on an IDE that stays: then the IDE
+      -- leaves, whatever it would have stayed for, its window
+      -- sent to the back as any quit's
+      if stay and androids then
+        stay = false
+      end
+      if not stay and androids then go_home() end
       if not stay then
         Controller.leaving = true
         -- nothing here may keep the run going: a fault is

@@ -96,6 +96,7 @@ describe('input surface: inbound events — a project stays live'
       port = { flashing = false, stops = 0, abandons = 0 }
       function port:isFlashing() return self.flashing end
       function port:stop() self.stops = self.stops + 1 end
+      function port:update() return {} end
       function port:abandon()
         self.abandons = self.abandons + 1
         self.flashing = false
@@ -176,9 +177,9 @@ describe('input surface: inbound events — a project stays live'
         assert.are.equal(0, port.stops)
         assert.are.equal(0, port.abandons)
         assert.are.equal(0, calls.n)
-        assert.truthy(said:find('on its way to the micro:bit', 1,
-          true))
-        assert.truthy(said:find('quit again', 1, true))
+        assert.truthy(said:find('while a file goes to the'
+          .. ' micro:bit', 1, true))
+        assert.truthy(said:find('you can quit', 1, true))
       end)
 
     --- Android closing the IDE waits for it: refusing could
@@ -259,7 +260,7 @@ describe('input surface: inbound events — a project stays live'
       love.event = event
       assert.is_true(stay)
       assert.are.equal(0, port.abandons)
-      assert.truthy(said:find('quit again', 1, true))
+      assert.truthy(said:find('you can quit', 1, true))
     end)
 
     --- Android waits for its quit on its UI thread: an IDE
@@ -272,13 +273,18 @@ describe('input surface: inbound events — a project stays live'
         local system = love.system
         love.system = { getOS = function() return 'Android' end }
         local window = love.window
-        love.window = { minimize = function() end }
+        local minimized = 0
+        love.window = {
+          minimize = function() minimized = minimized + 1 end,
+        }
         local aborted = love.quit()
         love.system, love.window = system, window
         assert.is_not_true(aborted)
         assert.are.equal(1, calls.n)
         assert.are.equal(1, port.abandons)
         assert.are.equal(1, port.stops)
+        -- the window goes to the back, as for any quit
+        assert.are.equal(1, minimized)
       end)
 
     --- each quit asked for is one event: a second in the same
@@ -306,17 +312,97 @@ describe('input surface: inbound events — a project stays live'
     --- own quit one the person asked for
     it('takes an old mark for no quit asked', function()
       stub_stop()
-      local timer = love.timer
-      local t = 100
-      love.timer = { getTime = function() return t end }
-      require('util.application').mark_exit_asked()
-      t = t + 1
+      local app = require('util.application')
+      app.mark_exit_asked()
+      -- the IDE's own update counts them
+      F.love_update(0.016)
+      F.love_update(0.016)
       port.flashing = true
       local aborted = love.quit()
-      love.timer = timer
       assert.is_not_true(aborted)
       assert.are.equal(1, port.abandons)
     end)
+
+    --- a quit pushed in an update is polled before the next,
+    --- however long that update took
+    it('takes a project\'s quit as asked for after a slow frame',
+      function()
+        stub_stop()
+        local app = require('util.application')
+        local timer = love.timer
+        local t = 100
+        love.timer = { getTime = function() return t end }
+        app.update_began()
+        app.mark_exit_asked()
+        t = t + 5
+        port.flashing = true
+        local print_ = _G.print
+        _G.print = function() end
+        local stay = love.quit()
+        _G.print = print_
+        love.timer = timer
+        assert.is_true(stay)
+        assert.are.equal(0, port.abandons)
+      end)
+
+    --- a project's quit that fails, on Android's own quit:
+    --- the IDE still leaves, and says why in the log
+    it('leaves on Android\'s quit even when the quit fails',
+      function()
+        F.cc.stop_project_run = function() error('stop broke') end
+        port.flashing = true
+        love.state.app_state = 'running'
+        local system, window = love.system, love.window
+        local minimized = 0
+        love.system = { getOS = function() return 'Android' end }
+        love.window = {
+          minimize = function() minimized = minimized + 1 end,
+        }
+        local logged = ''
+        _G.orig_print = function(l) logged = logged .. l end
+        local aborted = love.quit()
+        love.system, love.window = system, window
+        assert.is_not_true(aborted)
+        assert.are.equal(1, port.stops)
+        assert.are.equal(1, minimized)
+        assert.truthy(logged:find('stop broke', 1, true))
+      end)
+
+    it('shows the error when a quit asked for fails', function()
+      F.cc.stop_project_run = function() error('stop broke') end
+      love.state.app_state = 'running'
+      local app = require('util.application')
+      app.mark_exit_asked()
+      assert.has_error(function() love.quit() end)
+      assert.are.equal(0, port.stops)
+    end)
+
+    --- the error screen, once left, ends the run: its window
+    --- goes to the back, so Android starts the IDE again
+    it('sends the window to the back as the error screen ends',
+      function()
+        local kept = love.errhand
+        local ends = false
+        love.errhand = function()
+          return function() if ends then return 1 end end
+        end
+        Controller.errhand = nil
+        Controller.set_love_quit(F.cc)
+        local loop = love.errhand('boom')
+        love.errhand = kept
+        local system, window = love.system, love.window
+        local minimized = 0
+        love.system = { getOS = function() return 'Android' end }
+        love.window = {
+          minimize = function() minimized = minimized + 1 end,
+        }
+        assert.is_nil(loop())
+        assert.are.equal(0, minimized)
+        ends = true
+        assert.are.equal(1, loop())
+        love.system, love.window = system, window
+        assert.are.equal(1, minimized)
+      end)
 
     it('asks once: the next quit is Android\'s', function()
       stub_stop()

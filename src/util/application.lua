@@ -2,48 +2,44 @@ local OS = require("util.os")
 
 local application_exit_requested = false
 --- Quit events asked for by the IDE or a project, not by
---- Android closing the IDE, and when the last was asked. A
---- quit event is handled in the frame it is pushed or the
---- next, so a mark older than ASKED_S belongs to an event
---- that never came (Android drops queued events as it closes
---- the IDE) and does not count.
-local exit_asked = 0
-local exit_asked_at = nil
-local ASKED_S = 0.5
+--- Android closing the IDE: one mark each, holding the update
+--- it was made in. A quit event is polled before the update
+--- after the one it was pushed in, whatever a frame takes, so
+--- a mark more than one update old belongs to an event that
+--- never came (Android drops queued events as it closes the
+--- IDE) and does not count.
+--- @type integer[]
+local asked = {}
+local updates = 0
 
---- @return number? seconds
-local function now()
-  local timer = love and love.timer
-  return timer and timer.getTime and timer.getTime() or nil
+--- An update begins (Controller's love.update)
+local function update_began()
+  updates = updates + 1
 end
 
 --- The quit event about to come is asked for by the IDE or a
 --- project in it
 local function mark_exit_asked()
-  exit_asked = exit_asked + 1
-  exit_asked_at = now()
+  asked[#asked + 1] = updates
 end
 
 --- A quit asked for, counted once: love.event.quit marks it
 --- itself once the IDE has wrapped it (Controller)
 local function request_exit()
-  local before = exit_asked
+  local before = #asked
   love.event.quit()
-  if exit_asked == before then mark_exit_asked() end
+  if #asked == before then mark_exit_asked() end
 end
 
 --- Whether the quit event being handled was asked for by the
 --- IDE or a project; each mark answers one event
 --- @return boolean
 local function consume_exit_asked()
-  if exit_asked == 0 then return false end
-  local t = now()
-  if t and exit_asked_at and t - exit_asked_at > ASKED_S then
-    exit_asked = 0
-    return false
+  while #asked > 0 do
+    local at = table.remove(asked, 1)
+    if updates - at <= 1 then return true end
   end
-  exit_asked = exit_asked - 1
-  return true
+  return false
 end
 
 local function request_application_exit()
@@ -69,5 +65,6 @@ return {
   consume_application_exit_request = consume_application_exit_request,
   consume_exit_asked = consume_exit_asked,
   mark_exit_asked = mark_exit_asked,
+  update_began = update_began,
   return_home_before_exit = return_home_before_exit,
 }
