@@ -183,9 +183,10 @@ describe('IntelHex', function()
       end
     end)
 
-  it('wraps a record past FFFF to the start of its block',
+  --- a segment base wraps the offset within the segment
+  it('wraps a record past FFFF under a segment base',
     function()
-      local text = rec(4, 0, { 0, 2 }) .. rec(0, 0xFFF8, seq(16))
+      local text = rec(2, 0, { 0x20, 0x00 }) .. rec(0, 0xFFF8, seq(16))
           .. EOF
       local image = assert(IntelHex.parse(text))
       assert.same(0x20000, image[1].at)
@@ -193,6 +194,32 @@ describe('IntelHex', function()
       assert.same(0x2FFF8, image[2].at)
       placesExactly(image)
     end)
+
+  --- a linear base does not: its addresses run on (the case
+  --- the fifth review found)
+  it('runs a record past FFFF on under a linear base',
+    function()
+      local text = rec(4, 0, { 0, 2 }) .. rec(0, 0xFFFF,
+        { 0xAA, 0xBB }) .. EOF
+      local image = assert(IntelHex.parse(text))
+      assert.same({ { at = 0x2FFFF, data = '\170\187' } }, image)
+      placesExactly(image)
+      local none = rec(0, 0xFFF8, seq(16)) .. EOF
+      assert.same({ { at = 0xFFF8, data = string.char(unpack(seq(16))) } },
+        assert(IntelHex.parse(none)))
+    end)
+
+  it('reads hex digits in either case, and mixed', function()
+    local upper = assert(IntelHex.parse(':01000000AB54\r\n' .. EOF))
+    local mixed = assert(IntelHex.parse(':01000000aB54\r\n' .. EOF))
+    local lower = assert(IntelHex.parse(':01000000ab54\r\n' .. EOF))
+    assert.same('\171', upper[1].data)
+    assert.same(upper, mixed)
+    assert.same(upper, lower)
+    local base = assert(IntelHex.parse(':020000040001f9\r\n'
+      .. ':01000000aB54\r\n' .. EOF))
+    assert.same(0x10000, base[1].at)
+  end)
 
   it('leaves holes as holes', function()
     local text = rec(0, 0x0000, seq(4)) .. rec(0, 0x2000, seq(4))
@@ -277,6 +304,8 @@ describe('Dap.prepare', function()
       assert.truthy(Dap.prepare(last .. EOF))
       local past = rec(4, 0, { 0, 8 }) .. rec(0, 0, { 1 })
       assert.same('outside', select(2, Dap.prepare(past .. EOF)))
+      local across = rec(4, 0, { 0, 7 }) .. rec(0, 0xFFFF, { 1, 2 })
+      assert.same('outside', select(2, Dap.prepare(across .. EOF)))
       local uicr = rec(4, 0, { 0x10, 0 }) .. rec(0, 0x1FFF, { 1 })
       assert.truthy(Dap.prepare(uicr .. EOF))
       local ficr = rec(4, 0, { 0x10, 0 }) .. rec(0, 0x0FFF, { 1 })

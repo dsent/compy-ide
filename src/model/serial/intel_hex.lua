@@ -29,13 +29,6 @@ for i = 0, 15 do
   DIGIT[string.byte(string.format('%x', i))] = i
 end
 
---- The byte each pair of hex digits spells
-local PAIR = {}
-for i = 0, 255 do
-  PAIR[string.format('%02X', i)] = string.char(i)
-  PAIR[string.format('%02x', i)] = string.char(i)
-end
-
 --- The two hex digits that spell each byte
 local HEX_OF = {}
 for i = 0, 255 do
@@ -51,19 +44,21 @@ local function record(line)
   if not digits or #digits < 10 or #digits % 2 == 1 then
     return nil, 'damaged'
   end
-  local sum = 0
+  local sum, bytes = 0, {}
   for i = 1, #digits, 2 do
-    sum = sum + DIGIT[digits:byte(i)] * 16
+    local b = DIGIT[digits:byte(i)] * 16
         + DIGIT[digits:byte(i + 1)]
+    sum = sum + b
+    bytes[#bytes + 1] = b
   end
-  local count = tonumber(digits:sub(1, 2), 16)
-  if #digits ~= (count + 5) * 2 or sum % 256 ~= 0 then
+  local count = bytes[1]
+  if #bytes ~= count + 5 or sum % 256 ~= 0 then
     return nil, 'damaged'
   end
   return {
-    kind = tonumber(digits:sub(7, 8), 16),
-    offset = tonumber(digits:sub(3, 6), 16),
-    data = digits:sub(9, 8 + count * 2):gsub('..', PAIR),
+    kind = bytes[4],
+    offset = bytes[2] * 256 + bytes[3],
+    data = string.char(unpack(bytes, 5, 4 + count)),
     count = count,
   }
 end
@@ -75,13 +70,20 @@ local function word(r)
   return r.data:byte(1) * 256 + r.data:byte(2)
 end
 
---- The pieces a data record puts in memory: one, or two
---- when its offset wraps past FFFF, which carries on at the
---- start of the same 64 KB block
+--- The pieces a data record puts in memory. Under a linear
+--- base (type 04, or none yet) byte i goes to base + offset
+--- + i. Under a segment base (type 02) the offset wraps past
+--- FFFF to the start of the segment, so a record makes two
+--- pieces when it runs past it.
 --- @param pieces table[]
 --- @param base integer
 --- @param r table
-local function place(pieces, base, r)
+--- @param segment boolean
+local function place(pieces, base, r, segment)
+  if not segment then
+    pieces[#pieces + 1] = { at = base + r.offset, data = r.data }
+    return
+  end
   local first = math.min(#r.data, BLOCK - r.offset)
   if first > 0 then
     pieces[#pieces + 1] = { at = base + r.offset,
@@ -98,7 +100,7 @@ end
 --- @return table[]? pieces { at, data }
 --- @return string? why
 local function pieces(data)
-  local out, base, ended = {}, 0, false
+  local out, base, segment, ended = {}, 0, false, false
   for line in (data .. '\n'):gmatch('([^\n]*)\n') do
     line = line:gsub('[%s%z]+$', '')
     if line ~= '' then
@@ -107,13 +109,14 @@ local function pieces(data)
       if not r then return nil, why end
       local k = r.kind
       if k == 0 then
-        place(out, base, r)
+        place(out, base, r, segment)
       elseif k == 1 then
         if r.count ~= 0 then return nil, 'damaged' end
         ended = true
       elseif k == 2 or k == 4 then
         if r.count ~= 2 then return nil, 'damaged' end
-        base = k == 2 and word(r) * 16 or word(r) * BLOCK
+        segment = k == 2
+        base = segment and word(r) * 16 or word(r) * BLOCK
       elseif k >= 0x0A and k <= 0x0E then
         return nil, 'universal'
       elseif k ~= 3 and k ~= 5 then
@@ -164,9 +167,11 @@ local function merge(list)
   return image
 end
 
---- Read a hex file with its standard meaning: a data
---- record's byte i goes to base + ((offset + i) mod 65536),
---- base being a type 04 value times 65536 or a type 02 value
+--- Read a hex file with its standard meaning (Intel, Hexadecimal
+--- Object File Format Specification, 1988): a data record's
+--- byte i goes to base + offset + i under a type 04 base, the
+--- value times 65536 (or before any base), and to base +
+--- ((offset + i) mod 65536) under a type 02 base, the value
 --- times 16; types 03 and 05 are left out; the end-of-file
 --- record ends the file, and only blank lines may follow it.
 --- Each record's length and checksum must hold. Lines end in
