@@ -47,7 +47,14 @@ DapFlash.PROGRESS_S = 3
 
 local AGAIN = 'Unplug the micro:bit, plug it back in, then'
     .. ' send the file again.'
-local NO_ANSWER = 'The micro:bit stopped answering. ' .. AGAIN
+--- A chip that missed one command answers the next flash once
+--- the link is back in step: sending again comes first
+local RETRY = 'Send the file again. If it stops again, unplug the'
+    .. ' micro:bit, plug it back in, then send the file once'
+    .. ' more.'
+local NO_ANSWER = 'The micro:bit stopped answering. ' .. RETRY
+local NOTHING_SENT = 'It did not answer, and nothing went to it,'
+    .. ' so it keeps its program. ' .. RETRY
 local UNPLUGGED = 'The micro:bit was unplugged before it had'
     .. ' the whole file. Plug it back in, then send the file'
     .. ' again.'
@@ -96,6 +103,8 @@ function DapFlash.new(data, link, say, log, clock, sending)
   self.sending = sending
   log(string.format('start: %d bytes, %d chunks of %d',
     #self.data, self.chunks, Dap.CHUNK))
+  -- a flash before this one ended with commands unanswered
+  link:resync()
   return self
 end
 
@@ -464,9 +473,13 @@ function DapFlash:watch()
     self:fail(self:unplugged(fault) and UNPLUGGED or LOST,
       'link: ' .. fault)
   else
-    self:fail(NO_ANSWER, string.format(
-      'no reply in %d s, %d commands unanswered',
-      DapFlash.REPLY_S, self.link:unanswered()))
+    -- replies carry no number: once one is lost, each reply
+    -- after it is taken for the command before its own
+    local n = self.link:unanswered()
+    self:fail(self.sent == 0 and NOTHING_SENT or NO_ANSWER,
+      string.format('no reply in %d s, %d commands unanswered;'
+        .. ' a lost reply makes the chunk numbers since it up'
+        .. ' to %d low', DapFlash.REPLY_S, n, n))
   end
   return true
 end

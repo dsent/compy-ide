@@ -75,16 +75,32 @@ function DapLink.new(io, epOut, epIn, log, clock)
 end
 
 --- Drain what the chip kept from before; pump sends SYNC
---- once it has been quiet for DRAIN_S
+--- once it has been quiet for DRAIN_S. Reply transfers
+--- already posted stay, and count toward DRAIN_POSTS.
 function DapLink:start()
+  self.synced = false
   self.draining = true
   self.quietSince = self.clock()
   self.drainSince = self.quietSince
-  for _ = 1, DapLink.DRAIN_POSTS do
+  while self.posted < DapLink.DRAIN_POSTS do
     local ok, err = self.io:submit(self.epIn, Dap.PACKET)
     if not ok then return self:broke('drain: ' .. err) end
     self.posted = self.posted + 1
   end
+end
+
+--- Get back in step after commands went unanswered: a
+--- command the chip dropped never has a reply, so the next
+--- reply to that command byte would be taken for it, and the
+--- oldest wait would never end. The unanswered commands are
+--- given up, and the link drains and syncs as it does at
+--- start; replies still to come for them are passed over.
+function DapLink:resync()
+  if self.fault or #self.pending == 0 then return end
+  self.log(string.format('%d commands never answered: getting'
+    .. ' back in step with the chip', #self.pending))
+  self.pending = {}
+  self:start()
 end
 
 --- Send SYNC once the chip has been quiet long enough

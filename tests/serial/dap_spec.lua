@@ -503,7 +503,9 @@ describe('DapFlash', function()
       function() return chip.now end)
     assert.same('failed', run(j, chip))
     assert.same(0, #chip.got)
-    assert.truthy(joined(said):find('stopped answering', 1,
+    assert.truthy(joined(said):find('nothing went to it, so it'
+      .. ' keeps its program', 1, true))
+    assert.truthy(joined(said):find('Send the file again', 1,
       true))
   end)
 
@@ -618,18 +620,57 @@ describe('DapFlash', function()
     assert.truthy(joined(said):find('memory', 1, true))
   end)
 
-  it('tells to unplug a chip that stopped answering',
-    function()
-      local chip = F.chip()
-      local j, said, logged = job(F.hex(200), chip)
-      j:step(1 / 30)
+  it('says to send again, then to unplug, when the chip'
+    .. ' stopped answering', function()
+      local chip = F.chip({ latency = 0.003 })
+      local j, said, logged = job(F.hex(2000), chip)
+      while j.sent == 0 do
+        j:step(1 / 30)
+        chip.now = chip.now + 1 / 30
+      end
       chip.silent = true
       assert.same('failed', run(j, chip))
-      assert.truthy(joined(said):find('stopped answering', 1,
+      local told = joined(said)
+      assert.truthy(told:find('stopped answering', 1, true))
+      local again = assert(told:find('Send the file again', 1,
         true))
-      assert.truthy(joined(said):find('Unplug', 1, true))
+      assert.truthy(again < assert(told:find('unplug', 1, true)))
       assert.truthy(joined(logged):find('no reply in 5 s', 1,
         true))
+    end)
+
+  --- A write lost on its way: the chip never answers it, and
+  --- the hex it reads misses those bytes. On a Compy the
+  --- chip refused a checksum mid-file, then stayed silent
+  --- until the port was opened again: the link, which lives
+  --- as long as the port, still waited for the lost reply.
+  it('sends again on the same link after a write went'
+    .. ' unanswered', function()
+      local chip = F.chip({ latency = 0.001 })
+      local receive, writes = chip.receive, 0
+      chip.receive = function(c, packet)
+        if packet:byte(1) == 0x8C then
+          writes = writes + 1
+          if writes == 50 then return end
+        end
+        return receive(c, packet)
+      end
+      local data = F.hex(300)
+      local first, said, logged, link = job(data, chip)
+      assert.same('failed', run(first, chip))
+      assert.truthy(joined(said):find('Send the file again', 1,
+        true))
+      assert.truthy(joined(logged):find('chunk numbers', 1,
+        true))
+      assert.is_true(link:unanswered() > 0)
+      local again = {}
+      local second = DapFlash.new(data, link,
+        function(l) again[#again + 1] = l end, quiet,
+        function() return chip.now end)
+      assert.same('done', run(second, chip))
+      assert.truthy(joined(again):find('took the file', 1, true))
+      assert.same('CLOSED', chip.stream)
+      assert.same(1, chip.resets)
     end)
 
   --- the chip erases nothing before it starts writing: 48
