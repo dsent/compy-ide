@@ -667,7 +667,10 @@ describe('DapFlash', function()
       end
       assert.is_true(refusing(17))
       assert.is_true(refusing(16))
-      assert.is_false(refusing(21))
+      assert.is_true(refusing(13))
+      for _, before in ipairs({ 21, 22, 26, 27, 28, 29 }) do
+        assert.is_false(refusing(before), before)
+      end
 
       local quiet_chip = F.chip()
       local j

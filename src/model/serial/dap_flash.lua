@@ -130,12 +130,17 @@ end
 
 --- The old program may be gone once the chip took the chunk
 --- that starts it writing the board's memory
---- Refusals the chip makes while it reads a chunk, before it
---- hands the chunk's data on, and so before any erase: a bad
---- record (21, 22), an image it will not take (28, 29)
---- (intelhex.c, flash_decoder.c)
-local BEFORE_ERASE = { [21] = true, [22] = true, [28] = true,
-  [29] = true }
+--- Refusals the chip makes before it erases, which it does in
+--- flash_manager_init (flash_manager.c: erase_chip): a bad
+--- record, 21 and 22, from the hex reader before any data
+--- goes on (file_stream.c write_hex); an image it will not
+--- take, 26 to 28 from flash_decoder_get_flash and 29 from
+--- flash_decoder_validate_target_image, both before
+--- flash_manager_init in flash_decoder_write. 13 comes after
+--- the erase (target_flash.c), and 23 to 25 are not raised
+--- in 0257.
+local BEFORE_ERASE = { [21] = true, [22] = true, [26] = true,
+  [27] = true, [28] = true, [29] = true }
 
 --- The old program may be gone once the chunk that carries the
 --- erase point went to the chip: a micro:bit V2 erases the
