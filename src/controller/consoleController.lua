@@ -553,9 +553,10 @@ function ConsoleController:run_project(name)
           -- the one speaking and the console listens again.
           SerialPort:programIdle()
           love.state.app_state = 'ready'
-          -- With nothing left to answer, not a widget and not a
-          -- pointer handler, the program has ended, and the
-          -- console needs its mouse now.
+          -- Without a widget or a pointer handler nothing of the
+          -- program answers the pointer, and the console is on
+          -- screen: it needs its mouse now, even if keys or the
+          -- board still reach the program.
           if not self.main_ctrl.user_is_interactive() then
             self:flush_program_state()
           end

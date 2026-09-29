@@ -105,8 +105,11 @@ describe('a program\'s mouse after it stops #input', function()
       assert.same(CONSOLE, mouse())
     end)
 
-  it('a switch to another project gives it the console\'s'
-    .. ' mouse', function()
+  -- open_project closes the current project before it opens
+  -- the next; the next one here fails to open, which leaves the
+  -- close under test and nothing else.
+  it('switching projects closes the running one onto the'
+    .. ' console\'s mouse', function()
       local undo = project(function() end)
       run_capturing()
       local P = F.cc.model.projects

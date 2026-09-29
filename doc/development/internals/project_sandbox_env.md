@@ -100,11 +100,11 @@ returns (D-STOP-IS-FW) — so an absent hook is skipped, a raising one is logged
 continues, and a project cannot refuse to stop, defer the stop, or break it by failing. The consequence a project author has to
 plan around is the one this cannot fix: **a project that raises before reaching a clean state never
 gets to run its teardown at all**, because the raise, not the stop, is what ends the run. That gap is
-the failure mode the "proposed robust fix" above is a counter-measure for — identified and
-registered, not implemented. The register entry is
+the failure mode the "proposed robust fix" above is a counter-measure for — implemented for the
+mouse, registered for the rest. The register entry is
 `doc/development/technical_debt/input.md`, "A project that raises leaves global device state dirty;
-no force-reset exists", which names the same crash path from the other side:
-`run_project`'s failed-run branch drops to `project_open` without ever calling `stop_project_run`,
+only the mouse is force-reset", which names the same crash path from the other side:
+`run_project`'s failed-run branch drops to `ready` without ever calling `stop_project_run`,
 so the hook is uninstalled but never fired. See `doc/development/decisions/input.md`, D-STOP-IS-FW,
 for the hook's contract (framework-owned teardown, called from inside it, return value unread) and
 D-ROUTE-LIFETIME for the teardown invariant itself.
@@ -124,6 +124,6 @@ Each says what you get by following it, so the list can be scanned rather than s
 - **Why the input route outlives the run** — every channel is held from activation until the
   project *stops*, so a non-blocking project sitting in `project_open` keeps them all:
   [`../decisions/input.md`](../decisions/input.md), D-ROUTE-LIFETIME.
-- **The T3 leak, registered rather than fixed**:
+- **The T3 leak, fixed for the mouse and registered for the rest**:
   [`../technical_debt/input.md`](../technical_debt/input.md), *"A project that raises leaves
-  global device state dirty; no force-reset exists"*.
+  global device state dirty; only the mouse is force-reset"*.

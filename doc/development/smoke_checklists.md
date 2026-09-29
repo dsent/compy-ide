@@ -171,7 +171,7 @@ nothing but this table.)*
 
 | | do | expect |
 |---|---|---|
-| G1 | leave the game with `Ctrl+Esc` and use the console (**IDE launch**, as D9) | **[new]** the pointer behaves as it did before the game was started — the project puts relative mode back in `compy.before_exit`. *(Stop paths only: if the project ever crashes to the error screen the mode stays set, which is known platform debt, not this fix's scope.)* |
+| G1 | leave the game with `Ctrl+Esc` and use the console (**IDE launch**, as D9) | **[new]** the pointer behaves as it did before the game was started — the project puts relative mode back in `compy.before_exit`. *(The IDE now puts the mouse back itself when any run ends, so a pass here no longer tells the project's restore from the IDE's.)* |
 
 ### What a failure here means
 

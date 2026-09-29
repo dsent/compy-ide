@@ -1377,7 +1377,7 @@ chord and of what our re-homing adopted.
 - **Revisit:** if a Web build is released, or when CI grows a second
   interpreter.
 
-### A project that raises leaves global device state dirty; no force-reset exists
+### A project that raises leaves global device state dirty; only the mouse is force-reset
 
 - **State:** the sandbox deep-clones the `love` table but shares leaf C
   functions, so a project's imperative `love.*` calls — `setKeyRepeat`,
