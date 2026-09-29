@@ -560,30 +560,54 @@ local ARMING = ".*()\nserial_session%.prompt%(%)"
 
 --- The Lua file, run where the firmware's script is about to
 --- arm the port. Nothing else runs Lua meanwhile: on_event,
---- through which the firmware calls in, is set aside until
---- the file returns. A mistake stops only the file, and is
---- printed and scrolled.
-local RUN_FILE = table.concat({
+--- through which the firmware calls in, is set aside, and an
+--- on_event the file defines is held until the file returns.
+--- A mistake stops only the file, and is printed and its
+--- start scrolled; the prompt comes after it all the same.
+local RUN_START = table.concat({
   "",
-  "do local firmware_on_event = on_event; on_event = nil",
-  "local file, err = loadstring(%s, %s)",
-  "if file then local ran; ran, err = pcall(file)",
-  "  if ran then err = nil end end",
-  "if err then print(tostring(err))",
-  "  microbit.display.scroll(tostring(err)) end",
-  "on_event = on_event or firmware_on_event end"
+  "do",
+  "local firmware, env = on_event, { }",
+  "on_event = nil",
+  "local function set(t, k, v)",
+  "  if k == 'on_event' then rawset(t, k, v)",
+  "  else _G[k] = v end",
+  "end",
+  "setmetatable(env, { __index = _G, __newindex = set })",
+  "local file, err = loadstring(%s, %s)"
+}, "\n")
+
+--- The end of the Lua file's run, after it is read
+local RUN_END = table.concat({
+  "local ran = file ~= nil",
+  "if ran then ran, err = pcall(setfenv(file, env)) end",
+  "local function say()",
+  "  local text = tostring(err)",
+  "  print(text)",
+  "  microbit.display.scroll(text:sub(1, 60))",
+  "end",
+  "if not ran then pcall(say) end",
+  "on_event = rawget(env, 'on_event') or firmware",
+  "end"
 }, "\n")
 
 --- The largest Lua file upload puts on the board. The board
---- holds the file twice while it reads it, in about 100 KB
---- of memory shared with the firmware's own script.
+--- holds the file as text and as parsed code while it reads
+--- it, in about 100 KB of memory shared with the firmware's
+--- own script. The figure is an estimate, not yet measured on
+--- a board.
 local MAX_SCRIPT = 8000
 
---- Say that MICROBIT.hex has no place for a Lua file
-local function noPlace()
+--- Say that MICROBIT.hex has no place for a Lua file, and
+--- how to send the file alone
+--- @param filename string
+local function noPlace(filename)
+  local hex_name = hexNameOf(filename)
   print(HEX .. " here is not the firmware the Compy came")
-  print("with, and has no place for your program. Put it")
-  print("into a firmware file with embed, then upload that.")
+  print("with, and has no place for your program. To send it")
+  print("alone, without the board's prompt, type")
+  print(("embed(%q, %q)"):format(hex_name, filename))
+  print(("then upload(%q)."):format(hex_name))
 end
 
 --- The firmware's own script with a Lua file run in it; nil,
@@ -595,11 +619,12 @@ end
 local function withRuntime(runtime, script, filename)
   local at = runtime:match(ARMING)
   if not at then
-    noPlace()
+    noPlace(filename)
     return nil
   end
   local name = string.format("%q", "@" .. filename)
-  local run = RUN_FILE:format(quoted(script), name)
+  local start = RUN_START:format(quoted(script), name)
+  local run = start .. "\n" .. RUN_END
   return runtime:sub(1, at - 1) .. run .. runtime:sub(at)
 end
 

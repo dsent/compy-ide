@@ -607,6 +607,7 @@ describe('micro:bit exec #microbit', function()
         end
         local env = setmetatable({ microbit = microbit },
           { __index = _G })
+        env._G = env
         env.loadstring = function(code, name)
           local fn, err = loadstring(code, name)
           if fn then
@@ -648,14 +649,50 @@ describe('micro:bit exec #microbit', function()
           assert.truthy(ran < assert(out:find('<armed>', 1, true)))
         end)
 
-      it('keeps an on_event the file sets', function()
-        local tools = load_tools()
-        files['robot.lua'] =
-          'function on_event() return "mine" end\n'
-        local _, env, err = boot(uploaded(tools))
-        assert.is_nil(err)
-        assert.equal('mine', env.on_event())
-      end)
+      --- set at once, it would let the firmware call in while
+      --- the file still runs
+      it('holds an on_event the file sets until the file returns',
+        function()
+          local tools = load_tools()
+          files['robot.lua'] =
+            'function on_event() return "mine" end\n'
+            .. 'print(rawget(_G, "on_event") == nil, on_event())\n'
+          local out, env, err = boot(uploaded(tools))
+          assert.is_nil(err)
+          assert.truthy(out:find('true\tmine\r\n', 1, true))
+          assert.equal('mine', env.on_event())
+        end)
+
+      it('leaves the file\'s other globals to the prompt',
+        function()
+          local tools = load_tools()
+          files['robot.lua'] = 'answer = 42\n'
+          local _, env, err = boot(uploaded(tools))
+          assert.is_nil(err)
+          assert.equal(42, rawget(env, 'answer'))
+        end)
+
+      it('says a file stopped with no message, then the prompt',
+        function()
+          local tools = load_tools()
+          files['robot.lua'] = 'print("before")\nerror()\n'
+          local out, env, err = boot(uploaded(tools))
+          assert.is_nil(err)
+          local at = assert(out:find('before\r\nnil\r\n', 1, true))
+          assert.truthy(out:find('<armed>', at, true))
+          assert.is_function(env.on_event)
+        end)
+
+      it('shows the prompt when the mistake cannot be said',
+        function()
+          local tools = load_tools()
+          files['robot.lua'] = 'error(setmetatable({}, { __tostring'
+            .. ' = function() error("boom") end }))\n'
+          local out, env, err = boot(uploaded(tools))
+          assert.is_nil(err)
+          assert.truthy(out:find('<armed>', 1, true))
+          assert.is_function(env.on_event)
+        end)
 
       it('runs a file that holds long brackets as it stands',
         function()
@@ -682,8 +719,8 @@ describe('micro:bit exec #microbit', function()
               _, why = pcall(fn)
             end
             local at = assert(out:find(why .. '\r\n', 1, true))
-            assert.truthy(out:find('<scrolled ' .. why .. '>', at,
-              true))
+            assert.truthy(out:find('<scrolled ' .. why:sub(1, 60)
+              .. '>', at, true))
             local prompt = assert(out:find('> ', at, true))
             assert.truthy(out:find('<armed>', prompt, true))
             assert.is_function(env.on_event)
@@ -698,13 +735,18 @@ describe('micro:bit exec #microbit', function()
         keeps(sent)
       end)
 
-      it('takes a file as long as the board allows', function()
-        local tools = load_tools()
-        files['robot.lua'] = ('-'):rep(CAP)
-        local _, _, err = boot(uploaded(tools))
-        assert.is_true(flashed)
-        assert.is_nil(err)
-      end)
+      it('takes and runs a program as long as the board allows',
+        function()
+          local tools = load_tools()
+          local code = ('x = 1\n'):rep(1330) .. 'print("end")\n'
+          code = (' '):rep(CAP - #code) .. code
+          assert.equal(CAP, #code)
+          files['robot.lua'] = code
+          local out, _, err = boot(uploaded(tools))
+          assert.is_true(flashed)
+          assert.is_nil(err)
+          assert.truthy(out:find('end\r\n', 1, true))
+        end)
 
       it('refuses a file one character longer, in words',
         function()
@@ -731,8 +773,12 @@ describe('micro:bit exec #microbit', function()
           assert.has_no_error(function() uploaded(tools) end)
           assert.is_false(flashed)
           assert.is_nil(files['robot.hex'])
-          assert.truthy(table.concat(said, ' '):find(
-            'no place for your program', 1, true))
+          local told = table.concat(said, ' ')
+          assert.truthy(told:find('no place for your program', 1,
+            true))
+          assert.truthy(told:find('embed("robot.hex", "robot.lua")',
+            1, true))
+          assert.truthy(told:find('upload("robot.hex")', 1, true))
         end)
 
       it('says once that it wrote the hex', function()
