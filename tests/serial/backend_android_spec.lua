@@ -1,13 +1,13 @@
 --- The Android backend holds the micro:bit's drive for as
---- long as it has the board open, and hands it back as it
---- lets the board go: Android rebinds its storage driver only
---- on an explicit release (AOSP
---- android_hardware_UsbDeviceConnection.cpp), so a release
---- skipped or run after the connection closed leaves the
---- board without a drive until it is plugged in again. These
---- rules, and the link to the chip that closes before the
---- connection does, are held here with the JNI calls
---- recorded instead of made.
+--- long as it has the board open, and never hands it back
+--- while the board stays plugged in: a release would give it
+--- to Android's storage driver again (AOSP
+--- android_hardware_UsbDeviceConnection.cpp), which mounts it
+--- just as the next IDE takes it. Closing the connection
+--- leaves the drive without a driver until the board is
+--- plugged in again. These rules, and the link to the chip
+--- that closes before the connection does, are held here with
+--- the JNI calls recorded instead of made.
 
 require('model.serial.backend_android')
 require('model.serial.dap_link')
@@ -237,8 +237,11 @@ describe('AndroidBackend drive hold', function()
       assert.is_nil(b:openReady())
       assert.same('maintenance mode', b:absence())
       assert.same(0, b.attached)
+      local first = b.due
       b.dev = { dev = 'dev', name = 'same board' }
       assert.is_nil(b:openReady())
+      -- refused again for the same reason: tried less often
+      assert.is_true(b.due - first >= 3)
       b.dev = { dev = 'dev', name = 'again' }
       b.openDevice = function() return p end
       b:openReady()

@@ -241,12 +241,14 @@ end
 
 function DapFlash:openPhase()
   if not self:ready(1) then return end
+  self.mayBeOpen = true
   self:send(Dap.packet(Dap.OPEN, string.char(Dap.STREAM_HEX)),
     function(raw) self:onOpen(statusOf(Dap.OPEN, raw)) end)
 end
 
 function DapFlash:reopenPhase()
   if not self:ready(1) then return end
+  self.mayBeOpen = false
   self:send(Dap.packet(Dap.CLOSE), function(raw)
     self.log('close of the stream left open: '
       .. self:name(statusOf(Dap.CLOSE, raw)))
@@ -310,6 +312,7 @@ function DapFlash:closePhase()
   if self.link:unanswered() > 0 or not self:ready(1) then
     return
   end
+  self.mayBeOpen = false
   self:send(Dap.packet(Dap.CLOSE), function(raw)
     self:closed(statusOf(Dap.CLOSE, raw))
   end)
@@ -321,6 +324,7 @@ function DapFlash:unwindPhase()
   if self.link:unanswered() > 0 or not self:ready(1) then
     return
   end
+  self.mayBeOpen = false
   self:send(Dap.packet(Dap.CLOSE), function(raw)
     self.log('close after refusal: '
       .. self:name(statusOf(Dap.CLOSE, raw)))
@@ -359,7 +363,8 @@ local PHASES = {
 function DapFlash:unplugged(fault)
   if fault == 'device gone' or fault:find('errno 19', 1, true)
       or fault:find('status -19', 1, true)
-      or fault:find('status -108', 1, true) then
+      or fault:find('status -108', 1, true)
+      or fault:find('status -2', 1, true) then
     return true
   end
   local present = self.link.present
@@ -460,6 +465,13 @@ function DapFlash:abandon(seconds, plain)
   self.log(string.format('ABANDONED in phase %s, %d of %d'
     .. ' chunks answered', self.phase, self.acked, self.chunks))
   local link = self.link
+  -- a close with no stream open trips an assert in the chip,
+  -- which it keeps and shows on its drive; an OPEN goes only
+  -- once the link is in step
+  if not self.mayBeOpen then
+    self.log('close on stop: no stream open')
+    return
+  end
   local deadline = self.clock() + seconds
   local function left()
     return math.floor((deadline - self.clock()) * 1000)

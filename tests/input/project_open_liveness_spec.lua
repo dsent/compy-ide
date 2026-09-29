@@ -80,9 +80,9 @@ describe('input surface: inbound events — a project stays live'
       assert.is_not_true(aborted)
     end)
 
-  --- the micro:bit link: a quit lets the board go, so its
-  --- drive goes back to Android, and waits while a file goes
-  --- to the board
+  --- the micro:bit link: a quit lets the board go, closing
+  --- its connection, and waits while a file goes to the board
+  --- when the person asked for it
   describe('with a micro:bit', function()
     local kept, keptSerial, port
     before_each(function()

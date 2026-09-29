@@ -235,6 +235,9 @@ end
 --- image (IntelHex.parse), checked, and written afresh
 --- (IntelHex.encode), or why it cannot go:
 --- IntelHex.parse's reasons, 'empty' for no data at all,
+--- 'too small' for one run under DECIDE_SIZE bytes (the chip
+--- starts writing only once it has that much in a row, or a
+--- second run, so such a file is never written),
 --- 'outside' for a byte outside REGIONS, 'interface' for an
 --- image the chip would take for software of its own
 --- @param data string
@@ -244,6 +247,9 @@ function Dap.prepare(data)
   local image, why = IntelHex.parse(data)
   if not image then return nil, why end
   if #image == 0 then return nil, 'empty' end
+  if #image == 1 and #image[1].data < DECIDE_SIZE then
+    return nil, 'too small'
+  end
   for _, run in ipairs(image) do
     if not inside(run) then return nil, 'outside' end
   end

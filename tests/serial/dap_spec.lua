@@ -441,7 +441,7 @@ describe('DapFlash', function()
       dt = math.ceil(spent * 60 - 1e-9) / 60
       chip.now = chip.now + dt - j.lastSpent
       n = n + 1
-      if dt > 1 / 60 + 1e-9 then late = late + 1 end
+      if dt > DapFlash.FRAME_MAX then late = late + 1 end
     end
     return late, n, j
   end
@@ -450,7 +450,8 @@ describe('DapFlash', function()
   --- no frame runs past FRAME_MAX for the flash's sake
   it('takes the screen down to about 30 frames a second, no'
     .. ' further', function()
-      local _, n, j = frames(0.010, 0.0005)
+      local late, n, j = frames(0.010, 0.0005)
+      assert.same(0, late)
       assert.is_true(n > 10)
       assert.same(DapFlash.BUDGET, j.budget)
       assert.is_true(0.010 + DapFlash.BUDGET <= DapFlash.FRAME_MAX)
@@ -709,6 +710,7 @@ describe('DapFlash', function()
     local cases = {
       { 'reap errno 19', nil, 'was unplugged' },
       { 'reply transfer status -108', nil, 'was unplugged' },
+      { 'reply transfer status -2', nil, 'was unplugged' },
       { 'reply transfer status -71', false, 'was unplugged' },
       { 'reply transfer status -71', true, 'lost touch' },
       { 'reply transfer status -71', nil, 'lost touch' },
@@ -806,6 +808,40 @@ describe('DapFlash', function()
       assert.same('failed', j.state)
       assert.same(told, #said)
       assert.is_true(chip.now - t0 < 1)
+    end)
+
+  --- a close with no stream open trips an assert in the chip
+  it('sends no close on stop when no stream is open',
+    function()
+      local chip = F.chip({ latency = 0.5 })
+      local j = job(F.hex(300), chip)
+      j:step(1 / 30)
+      assert.same('ask', j.phase)
+      j:abandon(1)
+      assert.same(0, count(chip.got, 0x8B))
+      local chip2 = F.chip({ slow = { [0x89] = 10 } })
+      local j2 = job(F.hex(5), chip2)
+      for _ = 1, 200 do
+        if j2.phase == 'reset' then break end
+        j2:step(1 / 30)
+        chip2.now = chip2.now + 1 / 30
+      end
+      assert.same('reset', j2.phase)
+      j2:abandon(1)
+      assert.same(1, count(chip2.got, 0x8B))
+    end)
+
+  it('stops at once when the link is not yet in step',
+    function()
+      local chip = F.chip()
+      local link = linkTo(chip, nil, true)
+      link:start()
+      local j = DapFlash.new(F.hex(5), link, quiet, quiet,
+        function() return chip.now end)
+      j:step(1 / 30)
+      j:abandon(1)
+      assert.same('failed', j.state)
+      assert.same({}, chip.got)
     end)
 
   it('waits no longer than it may for a close on stop',
@@ -957,7 +993,7 @@ describe('Serial flash', function()
         local s, b = connected()
         b.dapRefuse = c[1]
         b.id = c[2]
-        local ok, err = s:flash(F.hex(1), quiet)
+        local ok, err = s:flash(F.hex(3), quiet)
         assert.is_nil(ok)
         assert.truthy(err:find(c[3], 1, true), c[3])
       end
@@ -980,6 +1016,17 @@ describe('Serial flash', function()
       assert.same('CLOSED', chip.stream)
       assert.truthy(joined(said):find('being closed', 1, true))
       assert.is_true(s:isConnected())
+    end)
+
+  it('refuses a file too small for the chip to write',
+    function()
+      local chip = F.chip()
+      local s = connected(chip)
+      local ok, err = s:flash(':0400000001020304F2\n'
+        .. ':00000001FF\n', quiet)
+      assert.is_nil(ok)
+      assert.truthy(err:find('too little', 1, true))
+      assert.same(0, #chip.got)
     end)
 
   it('refuses a damaged file before sending anything',

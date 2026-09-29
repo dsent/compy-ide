@@ -232,6 +232,8 @@ local DAMAGED = 'The file is damaged: some of its lines are'
 local OVERLAP = 'The file is damaged: it puts two different'
     .. ' things in the same place.' .. AGAIN
 local EMPTY = 'The file holds no program.' .. AGAIN
+local TOO_SMALL = 'The file holds too little of a program for'
+    .. ' the micro:bit to take.' .. AGAIN
 local OUTSIDE = 'This file is not made for a micro:bit V2: it'
     .. ' puts part of itself where a micro:bit V2 keeps no'
     .. ' program. Use a file made for a micro:bit V2.'
@@ -242,6 +244,7 @@ local FAULTS = {
   ['cut short'] = CUT_SHORT, universal = UNIVERSAL,
   ['early end'] = EARLY_END, damaged = DAMAGED,
   overlap = OVERLAP, empty = EMPTY, outside = OUTSIDE,
+  ['too small'] = TOO_SMALL,
   interface = INTERFACE,
 }
 local NOT_READY = 'The Compy cannot send files to this micro:bit'

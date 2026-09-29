@@ -72,6 +72,10 @@ local ACM_SEND_BREAK = 0x23
 local BREAK_MS = 100
 local PERMISSION_S = 60
 local SCAN_S = 1
+--- A board on the bus that could not be opened is tried again
+--- this often, once it has been refused twice for the same
+--- reason
+local REFUSED_S = 5
 local PRESENCE_S = 1
 
 local function now()
@@ -370,7 +374,12 @@ function AndroidBackend:openDevice(entry)
   local connCls = jniClass(env,
     'android/hardware/usb/UsbDeviceConnection')
   local eps = self:endpoints(entry.dev)
-  for _, line in ipairs(eps.lines) do log(line) end
+  -- once per board: a board that cannot be opened is tried
+  -- again and again
+  if entry.name ~= self.surveyed then
+    self.surveyed = entry.name
+    for _, line in ipairs(eps.lines) do log(line) end
+  end
   if not (eps.comm and eps.data and eps.epIn and eps.epOut
       and eps.commId) then
     jniCallVoid(env, conn,
@@ -736,6 +745,7 @@ function AndroidBackend:pollIdle()
   local found = self:scan()
   if #found == 0 then
     self.refused = nil
+    self.surveyed = nil
     return
   end
   self.dev = found[1]
@@ -763,7 +773,7 @@ function AndroidBackend:openReady()
   if not port then
     jniDropGlobal(self.env, self.dev.dev)
     self:dropDevice()
-    self.due = now() + SCAN_S
+    self.due = now() + (again and REFUSED_S or SCAN_S)
     -- upload() says what to do about maintenance mode; the
     -- console is not told every SCAN_S
     if fault == 'maintenance mode' then

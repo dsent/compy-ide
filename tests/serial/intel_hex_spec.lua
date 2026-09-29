@@ -328,7 +328,8 @@ describe('Dap.prepare', function()
       local hex = require('examples.microbit.hex')
       local marked = hex.write({ {
         addr = 0x1000,
-        data = 'microbit-lua firmware abc1234\0',
+        data = 'microbit-lua firmware abc1234\0'
+            .. string.rep('\255', 32),
       } })
       local text = assert(Dap.prepare(marked))
       assert.same('abc1234', hex.version(hex.parse(text)))
@@ -339,6 +340,8 @@ describe('Dap.prepare', function()
 
   it('takes the last byte of the program flash and of the'
     .. ' UICR page, and nothing past them', function()
+      -- a second run, so the chip starts writing
+      local EOF = rec(4, 0, { 0, 0 }) .. rec(0, 0, seq(4)) .. EOF
       local last = rec(4, 0, { 0, 7 }) .. rec(0, 0xFFFF, { 1 })
       assert.truthy(Dap.prepare(last .. EOF))
       local past = rec(4, 0, { 0, 8 }) .. rec(0, 0, { 1 })
@@ -351,6 +354,19 @@ describe('Dap.prepare', function()
       assert.same('outside', select(2, Dap.prepare(ficr .. EOF)))
       local ram = rec(4, 0, { 0x20, 0 }) .. rec(0, 0, { 1 })
       assert.same('outside', select(2, Dap.prepare(ram .. EOF)))
+    end)
+
+  --- the chip starts writing only once it has 48 bytes in a
+  --- row, or a second run; a file of less is never written
+  it('refuses a file too small for the chip to write',
+    function()
+      assert.same('too small', select(2, Dap.prepare(
+        rec(0, 0, seq(16)) .. rec(0, 16, seq(16)) .. rec(0, 32,
+          seq(15)) .. EOF)))
+      assert.truthy(Dap.prepare(rec(0, 0, seq(16))
+        .. rec(0, 16, seq(16)) .. rec(0, 32, seq(16)) .. EOF))
+      assert.truthy(Dap.prepare(rec(0, 0, seq(4))
+        .. rec(0, 0x100, seq(4)) .. EOF))
     end)
 
   it('refuses a file with no data', function()
