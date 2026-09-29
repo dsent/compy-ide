@@ -158,10 +158,25 @@ describe('input surface: inbound events — a project stays live'
     --- through Application.request_exit
     local function asked_quit()
       local event = love.event
-      love.event = { quit = function() end }
+      local value
+      love.event = { quit = function(v) value = v end }
       require('util.application').request_exit()
       love.event = event
-      return love.quit()
+      return love.quit(value)
+    end
+
+    --- love.event as the IDE wraps it, the values of the quit
+    --- events pushed kept in order
+    local function wrapped_event()
+      local pushed = {}
+      love.event = {
+        quit = function(v) pushed[#pushed + 1] = v end,
+        push = function(name, v)
+          if name == 'quit' then pushed[#pushed + 1] = v end
+        end,
+      }
+      Controller.set_love_quit(F.cc)
+      return pushed
     end
 
     it('stays, and says so, when asked to quit while a file'
@@ -211,13 +226,12 @@ describe('input surface: inbound events — a project stays live'
     it('takes a project\'s push of quit as asked for', function()
       stub_stop()
       local event = love.event
-      love.event = { quit = function() end, push = function() end }
-      Controller.set_love_quit(F.cc)
+      local pushed = wrapped_event()
       port.flashing = true
       local print_ = _G.print
       _G.print = function() end
       love.event.push('quit')
-      local stay = love.quit()
+      local stay = love.quit(pushed[1])
       _G.print = print_
       love.event = event
       assert.is_true(stay)
@@ -232,10 +246,11 @@ describe('input surface: inbound events — a project stays live'
       local print_ = _G.print
       _G.print = function() end
       local event = love.event
-      love.event = { quit = function() end }
+      local value
+      love.event = { quit = function(v) value = v end }
       require('util.application').request_application_exit()
       love.event = event
-      assert.is_true(love.quit())
+      assert.is_true(love.quit(value))
       _G.print = print_
       port.flashing = false
       love.state.app_state = 'running'
@@ -248,14 +263,13 @@ describe('input surface: inbound events — a project stays live'
     it('takes a project\'s quit as asked for', function()
       stub_stop()
       local event = love.event
-      love.event = { quit = function() end }
-      Controller.set_love_quit(F.cc)
+      local pushed = wrapped_event()
       port.flashing = true
       local print_ = _G.print
       local said
       _G.print = function(text) said = text end
       love.event.quit()
-      local stay = love.quit()
+      local stay = love.quit(pushed[1])
       _G.print = print_
       love.event = event
       assert.is_true(stay)
@@ -292,14 +306,14 @@ describe('input surface: inbound events — a project stays live'
     it('refuses both of two quits asked for at once', function()
       stub_stop()
       local event = love.event
-      love.event = { quit = function() end }
-      Controller.set_love_quit(F.cc)
+      local pushed = wrapped_event()
       port.flashing = true
       local print_ = _G.print
       _G.print = function() end
       love.event.quit()
       love.event.quit()
-      local first, second = love.quit(), love.quit()
+      local first = love.quit(pushed[1])
+      local second = love.quit(pushed[2])
       _G.print = print_
       love.event = event
       assert.is_true(first)
@@ -307,42 +321,44 @@ describe('input surface: inbound events — a project stays live'
       assert.are.equal(0, port.abandons)
     end)
 
-    --- a mark whose quit never came (Android drops queued
-    --- events as it closes the IDE) does not make Android's
-    --- own quit one the person asked for
-    it('takes an old mark for no quit asked', function()
-      stub_stop()
-      local app = require('util.application')
-      app.mark_exit_asked()
-      -- the IDE's own update counts them
-      F.love_update(0.016)
-      F.love_update(0.016)
-      port.flashing = true
-      local aborted = love.quit()
-      assert.is_not_true(aborted)
-      assert.are.equal(1, port.abandons)
-    end)
+    --- a quit asked for whose event Android dropped takes its
+    --- tag with it: Android's own quit, untagged, is not asked
+    it('takes an untagged quit for Android\'s, after a dropped'
+      .. ' one', function()
+        stub_stop()
+        local event = love.event
+        wrapped_event()
+        love.event.quit()
+        love.event = event
+        port.flashing = true
+        local aborted = love.quit(nil)
+        assert.is_not_true(aborted)
+        assert.are.equal(1, port.abandons)
+      end)
 
-    --- a quit pushed in an update is polled before the next,
-    --- however long that update took
-    it('takes a project\'s quit as asked for after a slow frame',
+    --- a project's own quit with a status, as love.event.quit(0)
+    --- or love.event.quit('restart'), is asked for too
+    it('takes a project\'s quit with a status as asked for',
       function()
         stub_stop()
-        local app = require('util.application')
-        local timer = love.timer
-        local t = 100
-        love.timer = { getTime = function() return t end }
-        app.update_began()
-        app.mark_exit_asked()
-        t = t + 5
+        local event = love.event
+        local pushed = wrapped_event()
         port.flashing = true
         local print_ = _G.print
         _G.print = function() end
-        local stay = love.quit()
+        love.event.quit(0)
+        love.event.quit('restart')
+        love.event.push('quit', 3)
+        local stays = { love.quit(pushed[1]), love.quit(pushed[2]),
+          love.quit(pushed[3]) }
         _G.print = print_
-        love.timer = timer
-        assert.is_true(stay)
+        love.event = event
+        assert.same({ true, true, true }, stays)
         assert.are.equal(0, port.abandons)
+        local app = require('util.application')
+        assert.same({ true, 0 }, { app.untag(pushed[1]) })
+        assert.same({ true, 'restart' }, { app.untag(pushed[2]) })
+        assert.same({ true, 3 }, { app.untag(pushed[3]) })
       end)
 
     --- a project's quit that fails, on Android's own quit:
@@ -372,8 +388,7 @@ describe('input surface: inbound events — a project stays live'
       F.cc.stop_project_run = function() error('stop broke') end
       love.state.app_state = 'running'
       local app = require('util.application')
-      app.mark_exit_asked()
-      assert.has_error(function() love.quit() end)
+      assert.has_error(function() love.quit(app.quit_tag()) end)
       assert.are.equal(0, port.stops)
     end)
 
@@ -432,32 +447,29 @@ describe('input surface: inbound events — a project stays live'
         'jniDropGlobal' }
       local kept, calls, shown, minimized, queue, logged
 
-      --- LÖVE 11.5's love.run, one frame of it: the quit's
-      --- first argument is the run's return value
-      local function love_run_frame()
-        love.event.pump()
-        for name, a in love.event.poll() do
-          if name == 'quit' then
-            if not love.quit or not love.quit() then
-              return a or 0
-            end
-          end
-        end
-        love.update(0.016)
-      end
-
-      --- LÖVE 11.5's boot: the frame runs under the error
-      --- handler, whose loop replaces it after an error, until
-      --- a frame returns a value
+      --- LÖVE 11.5's boot, over the IDE's own love.run: the
+      --- frame runs under the error handler, whose loop replaces
+      --- it after an error, until a frame returns a value
       local function boot(frames)
-        local func = love_run_frame
+        local load, graphics = love.load, love.graphics
+        love.load = nil
+        love.graphics = setmetatable(
+          { isActive = function() return false end },
+          { __index = graphics })
+        local func = require('util.application').run()
+        love.load = load
+        local function restore() love.graphics = graphics end
         local function errhand(msg)
           func = (love.errorhandler or love.errhand)(msg)
         end
         for n = 1, frames do
           local _, retval = xpcall(func, errhand)
-          if retval then return retval, n end
+          if retval then
+            restore()
+            return retval, n
+          end
         end
+        restore()
       end
 
       before_each(function()

@@ -32,6 +32,15 @@ Harmony = {
 }
 Harmony.__index = Harmony
 
+--- The exit status a quit event's value holds: the IDE tags
+--- the quits it and its projects ask for (util.application)
+--- @param a any
+--- @return any
+local function untagged(a)
+  local _, status = require("util.application").untag(a)
+  return status
+end
+
 local function new(_lock)
   local inject = function()
     local function harmonius_run()
@@ -58,9 +67,9 @@ local function new(_lock)
             if sazed_says then
               local n = Harmony.unpre(name)
               if n == "quit" then
-                if not love.quit or not love.quit() then
+                if not love.quit or not love.quit(a) then
                   -- break
-                  return a or 0
+                  return untagged(a) or 0
                 end
               end
               ---@diagnostic disable-next-line: undefined-field
@@ -70,8 +79,8 @@ local function new(_lock)
                   name == "quit"
                   or name == "keypressed" and a == 'escape'
               then
-                if not love.quit or not love.quit() then
-                  return a or 0
+                if not love.quit or not love.quit(a) then
+                  return untagged(a) or 0
                 end
               end
             end

@@ -587,9 +587,6 @@ Controller = {
   --- @param CC ConsoleController
   set_love_update = function(CC)
     local function update(dt)
-      -- a quit asked for is told from Android's by the update
-      -- it was asked in (Application)
-      Application.update_began()
       if love.PROFILE then
         Prof.update()
       end
@@ -818,29 +815,33 @@ Controller = {
     --- computer, a quit that only stops a project leaves the
     --- IDE, and its flash, going.
     --- A quit pushed from inside the app, by the IDE or a
-    --- project, is one the person asked for; only Android's
-    --- own quit comes without it
+    --- project, is one the person asked for: it goes out
+    --- tagged, its exit status kept in the tag, and the IDE's
+    --- love.run (Application.run) hands the tag to love.quit.
+    --- Only Android's own quit comes without one.
     local event = love.event
     if event and event.quit and event.quit ~= Controller.event_quit
     then
       local quit_ = event.quit
-      Controller.event_quit = function(...)
-        Application.mark_exit_asked()
-        return quit_(...)
+      Controller.event_quit = function(status)
+        return quit_(Application.quit_tag(status))
       end
       event.quit = Controller.event_quit
     end
     if event and event.push and event.push ~= Controller.event_push
     then
       local push = event.push
-      Controller.event_push = function(name, ...)
-        if name == 'quit' then Application.mark_exit_asked() end
-        return push(name, ...)
+      Controller.event_push = function(name, a, ...)
+        if name == 'quit' then
+          return push(name, Application.quit_tag(a), ...)
+        end
+        return push(name, a, ...)
       end
       event.push = Controller.event_push
     end
-    love.quit = function()
-      local asked = Application.consume_exit_asked()
+    --- @param value any the quit event's value
+    love.quit = function(value)
+      local asked = Application.untag(value)
       local port = Serial and SerialPort
       if port and port:isFlashing() then
         if asked then

@@ -25,6 +25,12 @@ local usb = require("util.usb")
 
 require("lib.error_explorer")
 
+--- The IDE's main loop: LÖVE's own, handing love.quit the quit
+--- event's value (Application.run). Harmony brings its own.
+if not love.harmony then
+  love.run = require("util.application").run
+end
+
 --- global on purpose: view modules use bare `gfx`
 gfx = love.graphics
 

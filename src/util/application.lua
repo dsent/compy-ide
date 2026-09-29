@@ -1,45 +1,83 @@
 local OS = require("util.os")
 
 local application_exit_requested = false
---- Quit events asked for by the IDE or a project, not by
---- Android closing the IDE: one mark each, holding the update
---- it was made in. A quit event is polled before the update
---- after the one it was pushed in, whatever a frame takes, so
---- a mark more than one update old belongs to an event that
---- never came (Android drops queued events as it closes the
---- IDE) and does not count.
---- @type integer[]
-local asked = {}
-local updates = 0
+--- A quit the IDE or a project asks for carries a tag as the
+--- quit event's value, so love.quit can tell it from the quit
+--- Android sends as it closes the IDE, which carries none. The
+--- tag holds the exit status the quit was asked with (a
+--- number, or 'restart'); an event Android drops takes its
+--- tag with it.
+local TAG = 'compy:quit'
 
---- An update begins (Controller's love.update)
-local function update_began()
-  updates = updates + 1
-end
-
---- The quit event about to come is asked for by the IDE or a
---- project in it
-local function mark_exit_asked()
-  asked[#asked + 1] = updates
-end
-
---- A quit asked for, counted once: love.event.quit marks it
---- itself once the IDE has wrapped it (Controller)
-local function request_exit()
-  local before = #asked
-  love.event.quit()
-  if #asked == before then mark_exit_asked() end
-end
-
---- Whether the quit event being handled was asked for by the
---- IDE or a project; each mark answers one event
---- @return boolean
-local function consume_exit_asked()
-  while #asked > 0 do
-    local at = table.remove(asked, 1)
-    if updates - at <= 1 then return true end
+--- The quit event's value for a quit asked with status
+--- @param status any the value love.event.quit was given
+--- @return string tag
+local function quit_tag(status)
+  if type(status) == 'string' and status:sub(1, #TAG) == TAG then
+    return status
   end
-  return false
+  if type(status) == 'number' then
+    return TAG .. ':n:' .. string.format('%.17g', status)
+  end
+  if type(status) == 'string' then
+    return TAG .. ':s:' .. status
+  end
+  return TAG
+end
+
+--- Whether a quit event's value is a tag, and the exit status
+--- it holds (the value itself when it is none)
+--- @param value any
+--- @return boolean asked
+--- @return any status
+local function untag(value)
+  if type(value) ~= 'string' or value:sub(1, #TAG) ~= TAG then
+    return false, value
+  end
+  local kind, rest = value:sub(#TAG + 1):match('^:(%a):(.*)$')
+  if kind == 'n' then return true, tonumber(rest) end
+  if kind == 's' then return true, rest end
+  return true, nil
+end
+
+local function request_exit()
+  love.event.quit(quit_tag())
+end
+
+--- LÖVE 11.5's own love.run, with one change: love.quit is
+--- given the quit event's value, and the status the run ends
+--- with is the one the quit was asked with
+--- @return function loop
+local function run()
+  if love.load then
+    love.load(love.arg.parseGameArguments(arg), arg)
+  end
+  -- the first frame's dt leaves out the time love.load took
+  if love.timer then love.timer.step() end
+  local dt = 0
+  return function()
+    if love.event then
+      love.event.pump()
+      for name, a, b, c, d, e, f in love.event.poll() do
+        if name == 'quit' then
+          if not love.quit or not love.quit(a) then
+            local _, status = untag(a)
+            return status or 0
+          end
+        end
+        love.handlers[name](a, b, c, d, e, f)
+      end
+    end
+    if love.timer then dt = love.timer.step() end
+    if love.update then love.update(dt) end
+    if love.graphics and love.graphics.isActive() then
+      love.graphics.origin()
+      love.graphics.clear(love.graphics.getBackgroundColor())
+      if love.draw then love.draw() end
+      love.graphics.present()
+    end
+    if love.timer then love.timer.sleep(0.001) end
+  end
 end
 
 local function request_application_exit()
@@ -63,8 +101,8 @@ return {
   request_exit = request_exit,
   request_application_exit = request_application_exit,
   consume_application_exit_request = consume_application_exit_request,
-  consume_exit_asked = consume_exit_asked,
-  mark_exit_asked = mark_exit_asked,
-  update_began = update_began,
+  quit_tag = quit_tag,
+  untag = untag,
+  run = run,
   return_home_before_exit = return_home_before_exit,
 }
