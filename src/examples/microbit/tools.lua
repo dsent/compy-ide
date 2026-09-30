@@ -705,10 +705,10 @@ local RUN_BACK = table.concat({
 local RUN_ARM = "rawset(G, 'on_event', mine or firmware)\nend"
 
 --- A mistake, said: the whole of it printed, and on the
---- lights "error" and its line in the file, or the message's
---- first sentence when it names no line of the file. Its
---- words for a mistake that says nothing, and the pattern
---- for a line of the file.
+--- lights "error" and its line in the file, or, when it names
+--- no line of the file, its first sentence, up to 40
+--- characters. Its words for a mistake that says nothing, and
+--- the pattern for a line of the file.
 local RUN_SAY = table.concat({
   "local function say()",
   "  local text = err == nil and %q or tostring(err)",
