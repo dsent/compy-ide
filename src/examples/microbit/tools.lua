@@ -84,11 +84,18 @@ local QUIET_S = 5
 local SETTLE_S = 0.2
 --- How often exec says how far it has got
 local PROGRESS_S = 3
+--- How long exec waits for the board to take a line, from when
+--- it went or its echo last moved on: a board whose prompt
+--- waits behind a program of its own, busy with something
+--- else, takes it late
+local TAKE_S = 60
 --- The way back when the board runs a program of its own from
 --- upload: restart_microbit only starts that program again
 local UPLOADED = "If a program of yours is on it from upload,"
     .. " upload() puts the Compy's firmware back."
 local STOPPED = "the board stopped answering. Type" ..
+    " restart_microbit(), then try again. " .. UPLOADED
+local NOT_TAKEN = "the board did not take it. Type" ..
     " restart_microbit(), then try again. " .. UPLOADED
 
 --- The file exec is sending, while it sends
@@ -299,12 +306,20 @@ local function stopAt(why)
   finish("exec stopped at " .. where() .. ": " .. why)
 end
 
---- The next line on its way, or the end of the file
-local function sendNext()
-  sending.at = sending.at + 1
+--- A line just sent: nothing heard of it, no time waited
+local function fresh()
   sending.heard = ""
   sending.quiet = 0
   sending.since = 0
+  sending.waited = 0
+  sending.echoed = 0
+  sending.warned = false
+end
+
+--- The next line on its way, or the end of the file
+local function sendNext()
+  sending.at = sending.at + 1
+  fresh()
   local line = sending.lines[sending.at]
   if not line then
     finish(sending.name .. " is on the board")
@@ -364,17 +379,13 @@ local function tell(dt)
   end
 end
 
---- No prompt QUIET_S after the last line: once the board has
---- taken it, the file is still running, as a program that
---- loops is, and echo shows the rest as it comes
---- @param after string?
+--- No prompt QUIET_S after the board took the last line: the
+--- file is still running, as a program that loops is, and
+--- echo shows the rest as it comes
+--- @param after string
 local function quietLast(after)
-  if after then
-    local running = " is on the board and still running"
-    finish(sending.name .. running, sending.lines.frame, after)
-  else
-    stopAt(STOPPED)
-  end
+  local running = " is on the board and still running"
+  finish(sending.name .. running, sending.lines.frame, after)
 end
 
 --- What the board said, less this exec's frame at its end and
@@ -458,25 +469,26 @@ end
 --- The file ran past QUIET_S: ended after all, when its frame
 --- has come; still on its way, while the end of what came may
 --- be its start; else still running, and echo shows the rest
---- @param after string?
+--- @param after string
 local function longLast(after)
-  local text, status = frameIn(after or "")
+  local text, status = frameIn(after)
   if status then
     show(text)
     finish(verdict(status))
-  elseif not (after and endComing(after)) then
+  elseif not endComing(after) then
     quietLast(after)
   end
 end
 
---- The last line runs the file: a prompt the board has been
---- quiet after means the file has run, as far as the board's
---- bytes can tell; a program that writes "> " and pauses looks
---- the same. No prompt QUIET_S after the line went, however
---- much the file prints, and the file is still running.
-local function lastLine()
-  local after = afterEcho()
-  local said = after and after:match("^(.*)> $")
+--- The last line runs the file, once the board has taken it:
+--- a prompt the board has been quiet after means the file has
+--- run, as far as the board's bytes can tell; a program that
+--- writes "> " and pauses looks the same. No prompt QUIET_S
+--- after the board took the line, however much the file
+--- prints, and the file is still running.
+--- @param after string
+local function lastLine(after)
+  local said = after:match("^(.*)> $")
   local done = said and SETTLE_S <= sending.quiet
   if done then
     local text, status = framed(said)
@@ -489,24 +501,80 @@ local function lastLine()
   end
 end
 
---- A line the board has not taken QUIET_S after it went, or
---- has said nothing for as long: a board that runs a program
---- of its own may send all the while, and never echo it
---- @return boolean
-local function unanswered()
-  local unechoed = QUIET_S < sending.since and not afterEcho()
-  return QUIET_S < sending.quiet or unechoed
+--- How much of the line in flight's echo has come, at the end
+--- of what the board said
+--- @return integer
+local function echoed()
+  local echo = sending.lines[sending.at] .. "\r\r\n"
+  local heard = sending.heard
+  for n = math.min(#heard, #echo), 1, -1 do
+    if heard:sub(-n) == echo:sub(1, n) then
+      return n
+    end
+  end
+  return 0
 end
 
---- Time passing while exec waits on the board
+--- What came before an echo that has not come is not kept: an
+--- echo still to come begins in the last of it
+local function forget()
+  local keep = #(sending.lines[sending.at]) + 3
+  if 2 * keep < #(sending.heard) then
+    sending.heard = sending.heard:sub(-keep)
+  end
+end
+
+--- The echo moving on is the board taking the line: the wait
+--- for the rest starts again
+local function moved()
+  local came = echoed()
+  if sending.echoed < came then
+    sending.echoed = came
+    sending.waited = 0
+  end
+end
+
+--- Say, once, that the board has not taken the line yet
+local function warn()
+  sending.warned = true
+  print("exec: the board has not taken " .. where() .. " yet,"
+      .. " and exec is still waiting; restart_microbit() stops"
+      .. " it. " .. UPLOADED)
+end
+
+--- The board has not taken the line in flight: its prompt may
+--- wait behind a program of the board's own, busy with
+--- something else, or a program from upload may be on it, which
+--- has no prompt. So exec says so once, QUIET_S on, and waits
+--- up to TAKE_S from when the line went or its echo moved on.
+--- The wait for the prompt starts once the board has taken it.
+local function untaken()
+  sending.since = 0
+  moved()
+  forget()
+  local due = QUIET_S < sending.waited
+  local unsaid = due and not sending.warned
+  if TAKE_S < sending.waited then
+    stopAt(NOT_TAKEN)
+  elseif unsaid then
+    warn()
+  end
+end
+
+--- Time passing while exec waits on the board: for it to take
+--- the line in flight, then for its prompt
 --- @param dt number
 local function waiting(dt)
   tell(dt)
   sending.quiet = sending.quiet + dt
   sending.since = sending.since + dt
-  if sending.at == #(sending.lines) then
-    lastLine()
-  elseif unanswered() then
+  sending.waited = sending.waited + dt
+  local after = afterEcho()
+  if not after then
+    untaken()
+  elseif sending.at == #(sending.lines) then
+    lastLine(after)
+  elseif QUIET_S < sending.quiet then
     stopAt(STOPPED)
   end
 end

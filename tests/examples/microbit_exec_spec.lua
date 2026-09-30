@@ -411,8 +411,9 @@ describe('micro:bit exec #microbit', function()
 
   --- a program from upload runs on the board: it may send all
   --- the while and never echo what exec sends
-  it('stops on a board that sends but never takes the line, and'
-    .. ' says upload() brings the Compy back', function()
+  it('says a board that sends but never takes the line has not'
+    .. ' taken it, waits a minute, then stops, and says upload()'
+    .. ' brings the Compy back', function()
       local tools = load_tools()
       tools.exec('f.lua')
       said = {}
@@ -421,10 +422,63 @@ describe('micro:bit exec #microbit', function()
         serial:update(1)
       end
       local told = table.concat(said, ' ')
-      assert.truthy(told:find('stopped answering', 1, true))
+      assert.truthy(told:find('has not taken line 1 of 2 of f.lua'
+        .. ' yet, and exec is still waiting; restart_microbit()'
+        .. ' stops it', 1, true))
       assert.truthy(told:find('upload() puts the Compy\'s'
         .. ' firmware back', 1, true))
+      assert.is_not_nil(port.onBytes)
+      for _ = 1, 54 do
+        backend:rx('alive\r\n')
+        serial:update(1)
+      end
+      told = table.concat(said, ' ')
+      local _, n = told:gsub('has not taken', '')
+      assert.equal(1, n)
+      assert.truthy(said[#said]:find('did not take it. Type'
+        .. ' restart_microbit(), then try again. If a program of'
+        .. ' yours is on it from upload, upload() puts the Compy\'s'
+        .. ' firmware back.', 1, true))
       assert.is_nil(port.onBytes)
+      assert.equal(1, sent())
+    end)
+
+  --- the board's prompt waits behind a handler that prints and
+  --- sleeps: the line is taken once the handler ends
+  it('waits for a board busy with a handler, and goes on once it'
+    .. ' takes the line', function()
+      local tools = load_tools()
+      tools.exec('f.lua')
+      said = {}
+      for _ = 1, 8 do
+        backend:rx('healthy\r\n')
+        serial:update(1)
+      end
+      board()
+      assert.equal(2, sent())
+      local told = table.concat(said, ' ')
+      assert.truthy(told:find('has not taken line 1', 1, true))
+      assert.is_nil(told:find('stopped', 1, true))
+      assert.is_not_nil(port.onBytes)
+    end)
+
+  --- an echo coming in slowly is the board taking the line
+  it('waits on an echo that keeps coming, however slowly',
+    function()
+      local tools = load_tools()
+      tools.exec('f.lua')
+      said = {}
+      local echo = WRAP .. '\r\r\n'
+      for at = 1, #echo, 5 do
+        backend:rx(echo:sub(at, at + 4))
+        serial:update(1)
+      end
+      assert.is_true(#echo > 5 * 12)
+      backend:rx('>> ')
+      serial:update(0)
+      assert.equal(2, sent())
+      assert.is_nil(table.concat(said, ' '):find('has not taken', 1,
+        true))
     end)
 
   --- The last line's echo, then the file printing every half
@@ -548,24 +602,41 @@ describe('micro:bit exec #microbit', function()
     assert.is_nil(port.onBytes)
   end)
 
-  it('stops when the board stops answering', function()
-    local tools = load_tools()
-    tools.exec('f.lua')
-    board()
-    said = {}
-    for _ = 1, 6 do serial:update(1) end
-    assert.equal(2, sent())
-    assert.truthy(said[#said]:find('stopped answering', 1, true))
-    assert.is_nil(port.onBytes)
-    assert.is_nil(port.onTick)
-  end)
+  it('waits a minute for a board that says nothing, then stops',
+    function()
+      local tools = load_tools()
+      tools.exec('f.lua')
+      board()
+      said = {}
+      for _ = 1, 6 do serial:update(1) end
+      assert.truthy(said[#said]:find('has not taken line 1', 1,
+        true))
+      assert.is_not_nil(port.onTick)
+      for _ = 1, 55 do serial:update(1) end
+      assert.equal(2, sent())
+      assert.truthy(said[#said]:find('did not take it', 1, true))
+      assert.is_nil(port.onBytes)
+      assert.is_nil(port.onTick)
+    end)
+
+  it('stops when the board takes a line and stops answering',
+    function()
+      local tools = load_tools()
+      tools.exec('f.lua')
+      board()
+      board(nil, '')
+      for _ = 1, 6 do serial:update(1) end
+      assert.equal(2, sent())
+      assert.truthy(said[#said]:find('stopped answering', 1, true))
+      assert.is_nil(port.onTick)
+    end)
 
   it('stops when the last line never reaches the board', function()
     local tools = load_tools()
     tools.exec('f.lua')
     for _ = 1, 5 do board() end
-    for _ = 1, 6 do serial:update(1) end
-    assert.truthy(said[#said]:find('stopped answering', 1, true))
+    for _ = 1, 61 do serial:update(1) end
+    assert.truthy(said[#said]:find('did not take it', 1, true))
   end)
 
   --- a program that loops never brings the prompt back
@@ -633,7 +704,7 @@ describe('micro:bit exec #microbit', function()
     board()
     local other = function() end
     port.onBytes = other
-    for _ = 1, 6 do serial:update(1) end
+    for _ = 1, 61 do serial:update(1) end
     assert.equal(other, port.onBytes)
     assert.is_nil(port.onTick)
   end)
