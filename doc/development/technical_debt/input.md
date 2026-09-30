@@ -524,7 +524,7 @@ future author adding an editor branch meets the constraint at the site).
   accepting the session's reading of #45's comment.
 - **Roadmap:** `MERGE-01-08`, **closed 2026-09-07**. It was blocked on an owner ruling rather than on work, and the ruling is the header of this entry: *do not intervene*.
 
-### T-LEAVE-KEYS-LOSES-BLOCK — the editor's whole-editor exits do not write an open changed block: two losing doors, both older than #45
+### T-LEAVE-KEYS-LOSES-BLOCK — the editor's whole-editor exits do not write an open changed block: two losing doors older than #45, three at the project boundary
 
 **RULED AND MOVED TO `BACKLOG`, 2026-09-07** (owner, at `OP-04`): *"ship both, document the
 defect."* The loss ships knowingly. It left `ACTIVE` because an `ACTIVE` slug is a commitment to fix
@@ -584,6 +584,13 @@ architectural half is `T-EXITS-BYPASS-GUARD` below.
     not an open block at `finish_edit`, so it **adds no door to this entry** — it is why the
     inventory was retired, not a fourth entrance.
   **The data-loss surface is therefore two doors, not three, and both predate #45.**
+- **Three project-boundary doors join them (2026-09-30).** `Ctrl+Q`, `Ctrl+Shift+R` and
+  `Ctrl+Alt+R` reach `ConsoleController:stop_project_run` before the editor sees their key, and the
+  stop now closes an open editor through `finish_edit` first, so its buffers cannot outlive their
+  project and save into the next one. Like door 1 they check no mode: an open changed block is not
+  written, in `edit` as in `nav`, and a reorder in progress is dropped. Before, the same chords left
+  the editor's buffers behind, block included, which lost it as surely. The behaviour stays as
+  shipped; a fix sited at `finish_edit` covers these three with doors 1 and 2.
 - **What #45 did about this class, measured: it built the guard and did not wire the exits to it**
   (2026-09-07, owner question — *"#45 did not fix it but did what instead?"*). `git diff af9a5782
   f4cf338c -- src/controller/consoleController.lua | grep finish_edit` is **empty**, and
