@@ -1854,12 +1854,13 @@ end
 --- since with no project there is no widget either.
 function ConsoleController:_close_project()
   local P = self.model.projects
-  --- Ctrl+T's way back into the editor names a file of
-  --- this project
-  love.state.editor = nil
   if P.current then
     self:stop_project_run()
   end
+  --- Ctrl+T's way back into the editor names a file of
+  --- this project; after the stop, which keeps it for a
+  --- restart, and after the exit hook the stop runs
+  love.state.editor = nil
   destroy_input_widget()
   local open = P.current
   if open then

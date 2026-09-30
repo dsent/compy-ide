@@ -288,6 +288,24 @@ describe('the editor across files #input', function()
     end)
   end)
 
+  describe('a project switch', function()
+    it("forgets Ctrl+T's way back into the old project", function()
+      local P = cc.model.projects
+      local close, opreate = P.close, P.opreate
+      undo[#undo + 1] = function() P.close, P.opreate = close, opreate end
+      local b = project('b', { ['main.lua'] = 'b = 1\n' })
+      b.get_loader = function() return function() end end
+      P.close = function() P.current = nil; return true end
+      P.opreate = function() P.current = b; return true end
+      files['other.lua'] = 'a = 1\n'
+      open('other.lua')
+
+      assert.is_true(cc:open_project('b'))
+      assert.same('b', P.current.name)
+      assert.is_nil(love.state.editor)
+    end)
+  end)
+
   describe('a program ending', function()
     it('opens no file from its exit hook', function()
       local P = cc.model.projects
