@@ -848,11 +848,14 @@ that is the editor's own handling, not a reservation: it applies when you are
 editing, not while your project runs. Bare Ctrl+S does nothing there; the
 editor keeps it for itself.
 
-Ctrl+Shift+S, Ctrl+T, Ctrl+Q, Ctrl+Shift+R and Ctrl+Alt+R leave the editor too.
-When a block you have changed is open, each first asks the question Shift+Esc
-asks: Enter or Space discards the change and goes on, anything else keeps the
-block open. Ctrl+Esc exits the IDE from anywhere and does not ask. The contract
-is `doc/development/decisions/input.md`, `D-EDITOR-KEYS`, statement 6.
+Ctrl+Shift+S, Ctrl+Q, Ctrl+Shift+R and Ctrl+Alt+R leave the editor too, and so
+does Ctrl+T while you navigate or edit a block; in search or while moving a
+block, Ctrl+T does nothing. Each first asks the question Shift+Esc asks when
+you would lose a change: a block you have changed and left open, one you left
+open in another file with Ctrl+J, or a file whose last save failed. Enter or
+Space discards the change and goes on, anything else keeps it. Ctrl+Esc exits
+the IDE from anywhere and does not ask. The contract is
+`doc/development/decisions/input.md`, `D-EDITOR-KEYS`, statement 6.
 
 Ctrl+J while you edit a block opens the file it requires and keeps your edit
 with the first file: Shift+Esc back to it shows the edit again, still open.

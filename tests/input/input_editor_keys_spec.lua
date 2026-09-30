@@ -189,6 +189,20 @@ describe('editor key contract #input', function()
       assert.is_false(left)
     end)
 
+    for _, mode in ipairs({ 'search', 'reorder' }) do
+      it('Ctrl+T leaves nothing from ' .. mode, function()
+        F.session.press('lctrl')
+        F.session.press(mode == 'search' and 'f' or 'm')
+        F.session.release(mode == 'search' and 'f' or 'm')
+        assert.same(mode, ed:get_mode())
+        F.session.press('t')
+        F.session.release('t')
+        F.session.release('lctrl')
+        assert.is_false(left)
+        assert.is_false(ran)
+      end)
+    end
+
     it('Ctrl+Shift+S asks, and Escape keeps the block', function()
       open_dirty_block()
       local draft = ed.input:get_text():items()
