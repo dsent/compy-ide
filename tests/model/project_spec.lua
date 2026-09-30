@@ -33,8 +33,8 @@ describe('ProjectService #project', function()
         return c
       end,
       write = function(path, data)
-        local f = io.open(path, 'w')
-        if not f then return nil end
+        local f, err = io.open(path, 'w')
+        if not f then return nil, err end
         f:write(data)
         f:close()
         return true
@@ -84,6 +84,7 @@ describe('ProjectService #project', function()
       getOS = function() return 'Web' end,
     }
     love.filesystem = mock_love_fs()
+    love.filesystem.remove = function(path) return rm_rf(path) end
     --- LÖVE ships its own utf8; in tests, alias the luarocks one
     package.preload['utf8'] = function()
       return require('lua-utf8')
@@ -96,9 +97,6 @@ describe('ProjectService #project', function()
     --- the flasher looks for the board through this FS too
     package.loaded['util.usb'] = nil
     require('model.project.project')
-    --- ProjectService:remove uses FS.rm, which the web FS branch
-    --- gets from love.filesystem.remove — provide it via rm_rf
-    FS.rm = function(target) return rm_rf(target) end
   end)
 
   before_each(function()
@@ -322,6 +320,42 @@ describe('ProjectService #project', function()
           FS.join_path(tmp, 'copy', '.main.lua.tmp')))
         assert.is_not_nil(lfs.attributes(
           FS.join_path(tmp, 'copy', 'main.lua')))
+      end)
+  end)
+
+  describe('a failed save', function()
+    local function read(path)
+      local f = assert(io.open(path, 'rb'))
+      local c = f:read('*a')
+      f:close()
+      return c
+    end
+
+    it('when the write fails, removes its temporary file #project',
+      function()
+        PS:opreate('saves')
+        local target = PS.current:get_path('main.lua')
+        local before = read(target)
+        local temp = FS.replace_temp(target)
+        lfs.mkdir(temp)
+        local ok, err = FS.replace(target, 'x = 2\n')
+        assert.is_false(ok)
+        assert.is_not_nil(err)
+        assert.same(before, read(target))
+        assert.is_nil(lfs.attributes(temp))
+      end)
+
+    it('when the rename fails, removes its temporary file #project',
+      function()
+        PS:opreate('saves')
+        local target = PS.current:get_path('main.lua')
+        local before = read(target)
+        local rename = FS.rename
+        finally(function() FS.rename = rename end)
+        FS.rename = function() return false, 'refused' end
+        assert.is_false(FS.replace(target, 'x = 2\n'))
+        assert.same(before, read(target))
+        assert.is_nil(lfs.attributes(FS.replace_temp(target)))
       end)
   end)
 

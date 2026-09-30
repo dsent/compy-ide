@@ -114,6 +114,9 @@ if love and not TESTING then
       write = function(...)
         return LFS.write(...)
       end,
+      remove = function(...)
+        return LFS.remove(...)
+      end,
       lines = function(...)
         return LFS.lines(...)
       end,
