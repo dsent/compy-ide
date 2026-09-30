@@ -413,7 +413,8 @@ end
 --- board's drive.
 --- @param content any
 --- @param on table? on Android: on.read(image) hears the
----   file read, on.sending() the sending begin
+---   file read, on.sending() the sending begin, on.took() the
+---   board take it
 --- @return boolean? success
 --- @return string? err
 function ConsoleController:flash_microbit(content, on)

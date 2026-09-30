@@ -1310,17 +1310,42 @@ local function holds(name, version)
   end
 end
 
---- What the Compy tells the upload: the file it read, and
---- the sending beginning
+--- What running out of memory looks like, for a Lua file the
+--- board takes as its whole program. The board reads it in
+--- place, from its flash, with about 90 KB of memory free,
+--- and the parsed code grows with how much the file does per
+--- character: a long table of different strings costs about
+--- three times what a program of the same length usually
+--- does. A program that runs out, as it is read or as it runs,
+--- stops the board with a sad face and 020, at every start,
+--- until upload() puts the Compy's firmware back. The only
+--- limit on the file is the firmware's room for a script.
+--- Said once the board has taken the file.
+--- @param filename string the file upload was given
+local function memoryNote(filename)
+  if not hexNameOf(filename) then
+    return
+  end
+  print("A sad face and 020 on the micro:bit mean your")
+  print("program ran out of the board's memory; upload()")
+  print("puts the Compy's firmware back.")
+end
+
+--- What the Compy tells the upload: the file it read, the
+--- sending beginning, and the board taking it
 --- @param name string
+--- @param source string the file upload was given
 --- @return table
-local function uploadHooks(name)
+local function uploadHooks(name, source)
   return {
     read = function(image)
       holds(name, hex.version(image))
     end,
     sending = function()
       compy.audio.hyperjump()
+    end,
+    took = function()
+      memoryNote(source)
     end
   }
 end
@@ -1333,8 +1358,12 @@ end
 --- has begun.
 --- @param name string
 --- @param data string
-local function uploadOverCable(name, data)
-  local ok, err = flash_microbit(data, uploadHooks(name))
+--- @param source string the file upload was given
+local function uploadOverCable(name, data, source)
+  local ok, err = flash_microbit(
+    data,
+    uploadHooks(name, source)
+  )
   if not ok then
     refuse(err or "The Compy could not send " .. name .. ".")
   end
@@ -1349,7 +1378,8 @@ end
 --- whether it took it.
 --- @param name string
 --- @param data string
-local function uploadToDrive(name, data)
+--- @param source string the file upload was given
+local function uploadToDrive(name, data, source)
   local version = hex.version(parsed(name, data))
   compy.audio.hyperjump()
   local ok, err = flash_microbit(data)
@@ -1359,6 +1389,7 @@ local function uploadToDrive(name, data)
   print(name .. " is sent. The micro:bit's light blinks")
   print("while it writes it, then it restarts with it.")
   holds(name, version)
+  memoryNote(source)
 end
 
 --- Whether the file goes down the cable: on a Compy that
@@ -1391,26 +1422,6 @@ local function fileToSend(filename, cable)
   return hexFor(filename)
 end
 
---- What running out of memory looks like, for a Lua file the
---- board takes as its whole program. The board reads it in
---- place, from its flash, with about 90 KB of memory free,
---- and the parsed code grows with how much the file does per
---- character: a long table of different strings costs about
---- three times what a program of the same length usually
---- does. A program that runs out, as it is read or as it runs,
---- stops the board with a sad face and 020, at every start,
---- until upload() puts the Compy's firmware back. The only
---- limit on the file is the firmware's room for a script.
---- @param filename string the file upload sent
-local function memoryNote(filename)
-  if not hexNameOf(filename) then
-    return
-  end
-  print("Once it runs, a sad face and 020 on the micro:bit")
-  print("mean your program ran out of the board's memory;")
-  print("upload() puts the Compy's firmware back.")
-end
-
 --- Put a hex file on the board, or a Lua file: that goes
 --- into a hex file of its name first, as the board's whole
 --- program in place of the Compy's own
@@ -1425,8 +1436,7 @@ function upload(filename)
     return
   end
   local send = cable and uploadOverCable or uploadToDrive
-  send(name, data)
-  memoryNote(filename or HEX)
+  send(name, data, filename or HEX)
 end
 
 -- help --------------------------------------------------------

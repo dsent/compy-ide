@@ -1816,6 +1816,46 @@ describe('Serial flash', function()
       assert.same(0, told)
     end)
 
+  --- the upload's note on memory follows the board's taking of
+  --- the file, and never a file it did not take
+  it('tells the caller the board took the file, after saying so,'
+    .. ' and only then', function()
+      local chip = F.chip({ latency = 0.001 })
+      local s = connected(chip)
+      local said = {}
+      local on = {
+        took = function() said[#said + 1] = 'TOOK' end,
+      }
+      assert.is_true(s:flash(F.hex(40),
+        function(l) said[#said + 1] = l end, on))
+      for _ = 1, 200 do
+        if not s:isFlashing() then break end
+        s:update(1 / 30)
+        chip.now = chip.now + 1 / 30
+      end
+      assert.equal('TOOK', said[#said])
+      assert.truthy(said[#said - 1]:find('took the file', 1, true))
+      -- a board that stops answering past the erase
+      local chip2 = F.chip({ latency = 0.001 })
+      local receive, writes = chip2.receive, 0
+      chip2.receive = function(c, packet)
+        if packet:byte(1) == 0x8C then writes = writes + 1 end
+        if writes > 60 then c.silent = true end
+        return receive(c, packet)
+      end
+      local s2 = connected(chip2)
+      said = {}
+      assert.is_true(s2:flash(F.hex(300),
+        function(l) said[#said + 1] = l end, on))
+      for _ = 1, 2000 do
+        if not s2:isFlashing() then break end
+        s2:update(1 / 30)
+        chip2.now = chip2.now + 1 / 30
+      end
+      assert.is_false(s2:isFlashing())
+      assert.is_nil(joined(said):find('TOOK', 1, true))
+    end)
+
   it('flashes on when what the caller gave fails', function()
     local chip = F.chip()
     local s = connected(chip)

@@ -1546,17 +1546,28 @@ describe('micro:bit exec #microbit', function()
           assert.truthy(told:find('Make it shorter', 1, true))
         end)
 
-      it('says after a Lua file what a board out of memory shows',
-        function()
+      --- UE174 at 44305c21: the note came before the file was
+      --- read; it belongs once the board has taken it
+      it('says what a board out of memory shows once the board has'
+        .. ' taken a Lua file, and not before', function()
           local tools = load_tools()
+          local hooks
+          tools.flash_microbit = function(_, on)
+            hooks = on
+            flashed = true
+            return true
+          end
           files['robot.lua'] = 'print("robot")\n'
           said = {}
-          uploaded(tools)
+          tools.upload('robot.lua')
+          assert.is_nil(table.concat(said, ' '):find('020', 1, true))
+          tools.print('The micro:bit took the file.')
+          hooks.took()
           local told = table.concat(said, ' ')
-          assert.truthy(told:find('a sad face and 020 on the'
-            .. ' micro:bit mean your program ran out of the board\'s'
-            .. ' memory; upload() puts the Compy\'s firmware back.', 1,
-            true))
+          assert.truthy(told:find('The micro:bit took the file. A sad'
+            .. ' face and 020 on the micro:bit mean your program ran out'
+            .. ' of the board\'s memory; upload() puts the Compy\'s'
+            .. ' firmware back.', 1, true), told)
         end)
 
       it('says nothing of memory for a firmware file, or a refused'

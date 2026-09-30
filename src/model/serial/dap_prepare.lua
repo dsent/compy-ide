@@ -14,7 +14,9 @@ require('model.serial.dap')
 ---
 --- on, when given, holds what the caller wants to hear:
 --- on.read(image) once the file passed every check, with its
---- runs { at, data }, and on.sending() as the flash begins.
+--- runs { at, data }, on.sending() as the flash begins, and
+--- on.took() once the board has taken the file (Serial calls
+--- that one).
 --- A fault in either is logged and does not stop the flash.
 
 --- @class DapPrepare
@@ -43,7 +45,8 @@ DapPrepare.tell = tell
 --- @param say function a line for the person
 --- @param log function a line for the device log
 --- @param clock function seconds
---- @param on table? { read = fn(image), sending = fn() }
+--- @param on table? { read = fn(image), sending = fn(),
+---   took = fn() }
 --- @param wiped boolean? a flash before this one may have
 ---   erased the board's program
 --- @return DapPrepare

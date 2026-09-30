@@ -352,6 +352,7 @@ function Serial:prepared(prep)
     self.clock or clock, function()
       DapPrepare.tell(Dap.log, prep.on.sending)
     end)
+  self.took = prep.on.took
 end
 
 --- Words for a board the Compy cannot flash: a replug helps
@@ -400,7 +401,11 @@ function Serial:update(dt)
   elseif job and job:step(dt) ~= 'running' then
     self.job = nil
     self:settled(job)
-    if job.state == 'done' then self:restarted() end
+    if job.state == 'done' then
+      self:restarted()
+      DapPrepare.tell(Dap.log, self.took)
+    end
+    self.took = nil
   end
   self.echo:tick(dt)
   self.dispatcher:push('tick', dt)
