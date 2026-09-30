@@ -745,6 +745,9 @@ end
 function EditorController:_answer(act, exit)
   self:_confirm(act)
   if exit then exit() end
+  --- an exit that asks again asks with no chord key still
+  --- on its way: the next key answers
+  self._asked_by_gate = nil
 end
 
 --- Execute a confirmed dialog action (the dispatch in
@@ -838,10 +841,12 @@ function EditorController:_dialog_textinput(t)
   self.input:clear_error()
   if t == ' ' then
     self._swallow_glyph = true
-    --- the Space's key press follows its glyph here; once
-    --- the exit has closed the editor, the gate drops it
-    if exit then self.console.swallow_key = 'space' end
     self:_answer(act, exit)
+    --- the Space's key press follows its glyph here: the
+    --- gate drops it, whether the exit closed the editor
+    --- or asked again. Armed after the exit, which clears
+    --- what an earlier Space left when a program starts.
+    if exit then self.console.swallow_key = 'space' end
   end
   return true
 end

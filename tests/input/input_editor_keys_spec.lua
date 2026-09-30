@@ -500,6 +500,12 @@ describe('editor key contract #input', function()
       assert.is_false(restored)
     end)
 
+    it('a program starts with no key held back', function()
+      F.cc.swallow_key = 'space'
+      F.run_project()
+      assert.is_nil(F.cc.swallow_key)
+    end)
+
     it('Shift+Esc on the last buffer leaves under DEBUG', function()
       love.debug = { }
       F.session.press('lshift')
