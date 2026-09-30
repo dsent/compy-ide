@@ -59,6 +59,73 @@ describe('micro:bit hex files #microbit', function()
       assert.is_nil(hex.version(hex.parse(hex.write(blocks))))
     end)
 
+  --- a little-endian word
+  local function word(n)
+    return string.char(n % 256, math.floor(n / 256) % 256,
+      math.floor(n / 65536) % 256, math.floor(n / 16777216) % 256)
+  end
+
+  --- The metadata's block: its magic, then start, end, size and
+  --- space
+  local function metaBlock(addr, start, stop, space)
+    return { addr = addr, data = word(0x4C554131) .. word(start)
+      .. word(stop) .. word(stop - start) .. word(space) }
+  end
+
+  --- the shipped firmware puts its metadata just before the
+  --- script: the script may take all the space
+  it('fills the shipped firmware\'s space to its end, and no'
+    .. ' further', function()
+      local blocks = hex.parse(shipped())
+      local addr, meta = hex.meta(blocks)
+      assert.is_true(addr < meta.start)
+      local room = hex.room(addr, meta)
+      assert.equal(meta.space, room)
+      hex.embed(blocks, ('-'):rep(room))
+      local _, after = hex.meta(blocks)
+      assert.equal(room, after.size)
+      assert.equal(after.stop - after.start, after.size)
+      assert.has_error(function()
+        hex.embed(hex.parse(shipped()), ('-'):rep(room + 1))
+      end)
+    end)
+
+  --- a layout with the metadata at the end of flash, inside
+  --- the space it reports: the script stops short of it
+  it('keeps a script short of metadata inside its space',
+    function()
+      local blocks = {
+        { addr = 0x1000, data = 'print(1)' },
+        metaBlock(0x1064, 0x1000, 0x1008, 0x200),
+      }
+      local addr, meta = hex.meta(blocks)
+      assert.equal(0x1064, addr)
+      assert.equal(0x64, hex.room(addr, meta))
+      hex.embed(blocks, ('-'):rep(0x64))
+      local _, after = hex.meta(hex.parse(hex.write(blocks)))
+      assert.equal(0x64, after.size)
+      assert.has_error(function()
+        hex.embed({
+          { addr = 0x1000, data = 'print(1)' },
+          metaBlock(0x1064, 0x1000, 0x1008, 0x200),
+        }, ('-'):rep(0x65))
+      end)
+    end)
+
+  --- as hextract's embed: what follows the old script in its
+  --- block stays after the new one
+  it('keeps what follows the script in its block', function()
+    local blocks = {
+      metaBlock(0x1000, 0x1014, 0x1018, 0x100),
+    }
+    blocks[1].data = blocks[1].data .. 'old!' .. 'tail'
+    hex.embed(blocks, 'new script')
+    assert.equal('new scripttail', blocks[1].data:sub(21))
+    local _, meta = hex.meta(blocks)
+    assert.equal(10, meta.size)
+    assert.equal(0x1014 + 10, meta.stop)
+  end)
+
   it('refuses a record whose checksum does not agree', function()
     assert.has_error(function()
       hex.parse(':00000001FE\n')

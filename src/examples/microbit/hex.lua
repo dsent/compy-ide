@@ -341,19 +341,41 @@ local function restate(blocks, addr, stop, size)
       le_word(size) .. head.data:sub(at + 16)
 end
 
+--- How long a script may be: the space the metadata reports,
+--- from the script's start to the end of flash, less what of
+--- it the metadata itself takes when it sits there. The
+--- firmware puts it just before the script; a layout that
+--- puts it at the end of flash keeps the script short of it.
+--- @param addr integer of the metadata
+--- @param meta table
+--- @return integer
+function hex.room(addr, meta)
+  local after = meta.start <= addr
+  local within = addr < meta.start + meta.space
+  local inside = after and within
+  if inside then
+    return addr - meta.start
+  end
+  return meta.space
+end
+
 --- Put a script in place of the one that is there, and say
 --- so in the metadata. The script sits last in flash, so it
---- may grow into the space the metadata reports.
+--- may grow into the room the metadata leaves it.
 --- @param blocks table[]
 --- @param script string
 function hex.embed(blocks, script)
   local addr, meta = must_meta(blocks)
+  local room = hex.room(addr, meta)
   assert(
-    #script <= meta.space,
-    "script is " .. #script .. ", space is " .. meta.space
+    #script <= room,
+    "script is " .. #script .. ", room is " .. room
   )
+  -- what follows the old script in its block stays after the
+  -- new one, as hextract's embed keeps it
   local block, at = hex.at(blocks, meta.start)
-  block.data = block.data:sub(1, at - 1) .. script
+  local after = block.data:sub(at + meta.size)
+  block.data = block.data:sub(1, at - 1) .. script .. after
   restate(blocks, addr, meta.start + #script, #script)
 end
 
