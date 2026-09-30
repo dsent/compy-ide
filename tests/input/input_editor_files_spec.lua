@@ -274,6 +274,57 @@ describe('the editor across files #input', function()
       assert.same(1, ed:get_active_buffer():get_selection())
     end)
 
+    describe('then an exit', function()
+      local stubbed = { 'quit_project', 'reset', 'restart', 'run_project' }
+      local took
+
+      before_each(function()
+        took = {}
+        for _, f in ipairs(stubbed) do
+          local orig = cc[f]
+          cc[f] = function() took[#took + 1] = f end
+          undo[#undo + 1] = function() cc[f] = orig end
+        end
+        love.state.prev_state = 'ready'
+      end)
+
+      local exits = {
+        { 'Ctrl+Shift+S', { 'lctrl', 'lshift', 's' } },
+        { 'Ctrl+T', { 'lctrl', 't' } },
+        { 'Ctrl+Q', { 'lctrl', 'q' } },
+        { 'Ctrl+Shift+R', { 'lctrl', 'lshift', 'r' } },
+        { 'Ctrl+Alt+R', { 'lctrl', 'lalt', 'r' } },
+      }
+      for _, e in ipairs(exits) do
+        it(e[1] .. ' asks about the draft left behind', function()
+          open()
+          draft("local lib = require('lib')\nkept = 99")
+          chord('lctrl', 'j')
+          assert.same('lib.lua', ed:get_active_buffer().name)
+
+          chord(unpack(e[2]))
+
+          assert.same('discard', ed.pending_confirm)
+          assert.same({}, took)
+          assert.same('main.lua', ed:get_active_buffer().name)
+          assert.same('edit', ed:get_mode())
+          assert.same("local lib = require('lib')\nkept = 99",
+            string.unlines(ed.input:get_text()))
+        end)
+      end
+
+      it('takes the exit once the draft is answered', function()
+        open()
+        draft("local lib = require('lib')\nkept = 99")
+        chord('lctrl', 'j')
+        chord('lctrl', 'q')
+        chord('return')
+
+        assert.same({ 'quit_project' }, took)
+        assert.same({}, writes)
+      end)
+    end)
+
     it('leaves an error message behind', function()
       open()
       ed:refuse({ 'a message about main.lua' })

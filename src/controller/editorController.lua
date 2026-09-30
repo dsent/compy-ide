@@ -655,13 +655,31 @@ end
 --- chord's key itself (Ctrl+Shift+S), so no later key is it
 --- @return boolean asked
 function EditorController:ask_to_leave(exit, own_key)
-  if not self:_block_changed() then return false end
+  --- a draft Ctrl+J parked further down the stack is asked
+  --- about too: its buffer comes to the front, draft and
+  --- all, so the question names a block on screen
+  while not self:_block_changed() do
+    local i = self:_nearest_parked_edit()
+    if not i then return false end
+    for _ = 2, i do self:pop_buffer() end
+  end
   self:discard_edit()
   self.pending_then = exit
   --- a gate chord's own key reaches the editor next; it
   --- must not answer the question it asked
   self._asked_by_gate = not own_key
   return true
+end
+
+--- @private
+--- @return integer? --- where in the buffer stack the
+--- nearest draft Ctrl+J parked while editing waits
+function EditorController:_nearest_parked_edit()
+  local bs = self.model.buffers
+  for i = 2, bs:length() do
+    local parked = bs:get(i).parked
+    if parked and parked.mode == 'edit' then return i end
+  end
 end
 
 --- @private
