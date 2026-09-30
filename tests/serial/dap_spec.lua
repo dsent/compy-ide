@@ -2010,6 +2010,36 @@ describe('Serial flash', function()
       assert.truthy(words:find('may be gone', 1, true))
     end)
 
+  --- a flash that fails before the board's id is known keeps
+  --- its doubt for every board, until a flash succeeds
+  it('lets a doubt of no known board go once a flash succeeds',
+    function()
+      local chip = F.chip({ latency = 0.001 })
+      local receive, writes = chip.receive, 0
+      chip.receive = function(c, packet)
+        if packet:byte(1) == 0x8C then writes = writes + 1 end
+        if writes > 60 then c.silent = true end
+        return receive(c, packet)
+      end
+      local s, b = connected(chip)
+      assert.truthy(heard(s, chip, F.hex(300)):find('may be gone', 1,
+        true))
+      assert.is_true(s.doubt['?'])
+      chip.receive, chip.silent = receive, false
+      b.id = 'A'
+      b.link = linkTo(chip)
+      assert.truthy(heard(s, chip, F.hex(40)):find('took the file',
+        1, true))
+      assert.is_nil(s.doubt['?'])
+      b.id = 'B'
+      b.link = linkTo(chip)
+      local said = {}
+      assert.is_true(s:flash(F.hex(400),
+        function(l) said[#said + 1] = l end))
+      s:abandon()
+      assert.truthy(joined(said):find('keeps its program', 1, true))
+    end)
+
   it('drops the doubt once a flash succeeds', function()
     local chip = F.chip({ latency = 0.001 })
     local s, b = connected(chip)

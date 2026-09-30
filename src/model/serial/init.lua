@@ -448,12 +448,17 @@ end
 
 --- A flash has ended: whether it may have left its board
 --- without its program is kept past the link, for that board
---- alone
+--- alone; a success also ends a doubt of no known board
 --- @param job table
 function Serial:settled(job)
   if not job.link then return end
-  local key = self.flashing or UNKNOWN
+  -- the link goes with the port: an id known by now is the
+  -- same board's
+  local key = self.flashing or self:boardKey() or UNKNOWN
   self.doubt[key] = job.link.wiped == true or nil
+  -- a doubt kept for a board of no known id may have been this
+  -- one's, and a success puts that right
+  if job.state == 'done' then self.doubt[UNKNOWN] = nil end
 end
 
 local STOPPED_READING = 'The Compy stopped before the file went'
