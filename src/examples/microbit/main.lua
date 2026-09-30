@@ -4,7 +4,7 @@
 -- loaded into the console, where you call them.
 --
 -- MICROBIT.hex is the firmware for the TPBot robots, built
--- from https://github.com/dsent/microbit-lua at 86c8e16.
+-- from https://github.com/dsent/microbit-lua at 6cc5820.
 
 print("micro:bit tools")
 print("")
