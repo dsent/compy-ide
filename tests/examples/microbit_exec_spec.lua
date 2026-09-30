@@ -816,11 +816,14 @@ describe('micro:bit exec #microbit', function()
         local told = table.concat(said, ' ')
         assert.truthy(told:find(script .. ' would overwrite'
           .. ' MICROBIT.hex', 1, true))
-        assert.truthy(told:find('a firmware file of another name',
-          1, true))
-        assert.truthy(told:find('embed("mine.hex", "' .. script
-          .. '")', 1, true))
-        assert.truthy(told:find('upload("mine.hex")', 1, true))
+        -- a short one goes on as a Lua file of another name,
+        -- with upload's checks
+        assert.truthy(told:find('Give your script another name', 1,
+          true))
+        assert.truthy(told:find('writefile("robot.lua", readfile("'
+          .. script .. '"))', 1, true))
+        assert.truthy(told:find('upload("robot.lua")', 1, true))
+        assert.is_nil(told:find('embed("mine.hex"', 1, true))
       end)
   end
 

@@ -901,6 +901,26 @@ local function build(filename)
   return hex.write(blocks)
 end
 
+--- The way to put a Lua file named for the firmware on the
+--- board: as a Lua file of another name, with upload's checks;
+--- one longer than upload takes, such as the Compy's own script
+--- extract writes, in a firmware file of another name
+--- @param filename string
+local function renameWay(filename)
+  local text = read(filename):gsub("\r\n?", "\n")
+  if MAX_SCRIPT < #text then
+    print("robots' firmware. Put it in a firmware file of")
+    print("another name, then send that:")
+    print(("embed(\"mine.hex\", %q)"):format(filename))
+    print("upload(\"mine.hex\")")
+  else
+    print("robots' firmware. Give your script another name:")
+    local copy = "writefile(\"robot.lua\", readfile(%q))"
+    print(copy:format(filename))
+    print("upload(\"robot.lua\")")
+  end
+end
+
 --- Whether a Lua file's hex would overwrite the robots'
 --- firmware, said when it would
 --- @param filename string
@@ -909,10 +929,7 @@ end
 local function overwrites(filename, hex_name)
   if isFirmware(hex_name) then
     print(filename .. " would overwrite " .. HEX .. ", the")
-    print("robots' firmware. Put it in a firmware file of")
-    print("another name, then send that:")
-    print(("embed(\"mine.hex\", %q)"):format(filename))
-    print("upload(\"mine.hex\")")
+    renameWay(filename)
     return true
   end
   return false
