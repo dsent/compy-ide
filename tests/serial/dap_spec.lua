@@ -2030,10 +2030,13 @@ describe('Serial flash', function()
     local function answering()
       chip.receive, chip.silent = receive, false
     end
-    local function plug(id)
+    --- the backend knows id, or not; the chip answers the
+    --- flash's own question with chipId, its board's id
+    local function plug(id, chipId)
       b:detach()
       answering()
       b.id = id
+      chip.id = chipId or chip.id
       b:attach()
       b.link = linkTo(chip)
       s:update(0)
@@ -2063,12 +2066,13 @@ describe('Serial flash', function()
       -- the same connection: the probe answers, and the chip
       -- answers again
       answering()
-      b.id = 'A'
+      b.id = chip.id
       b.link = linkTo(chip)
       assert.truthy(heard(s, chip, F.hex(40)):find('took the file',
         1, true))
       assert.same({}, s.doubt)
-      b.id = 'B'
+      chip.id = '9904BBBB'
+      b.id = chip.id
       b.link = linkTo(chip)
       assert.truthy(stopWords(s):find('keeps its program', 1, true))
     end)
@@ -2077,15 +2081,15 @@ describe('Serial flash', function()
   --- A, which may still be without its program
   it('keeps the doubt of a board of no known id when another'
     .. ' takes a file, A, then B, then A', function()
-      local chip = F.chip({ latency = 0.001 })
+      local chip = F.chip({ latency = 0.001, id = '9904AAAA' })
       local s, b = connected(chip)
       local plug = failingPastErase(chip, s, b)
       assert.truthy(heard(s, chip, F.hex(300)):find('may be gone', 1,
         true))
-      plug(nil)
+      plug(nil, '9904BBBB')
       assert.truthy(heard(s, chip, F.hex(40)):find('took the file',
         1, true))
-      plug(nil)
+      plug(nil, '9904AAAA')
       local words = stopWords(s)
       assert.is_nil(words:find('keeps its program', 1, true))
       assert.truthy(words:find('may be gone', 1, true))
