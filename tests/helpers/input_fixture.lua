@@ -101,6 +101,10 @@ local function enrich_gfx()
   gfx.setFont   = function() end
   gfx.setColor  = function() end
   gfx.clear     = function() end
+  gfx.getScissor   = function() end
+  gfx.setScissor   = function() end
+  gfx.getColorMask = function() return true, true, true, true end
+  gfx.setColorMask = function() end
   gfx.push      = function() end
   gfx.pop       = function() end
   -- love.update walks into the snapshot branch as soon as a

@@ -97,10 +97,21 @@ function CanvasModel:get_canvas()
   return self.canvas
 end
 
+--- Clear the whole canvas, whatever graphics state a program
+--- left: a scissor or a colour mask would spare part of it.
+--- The caller's scissor, mask and render target come back.
 function CanvasModel:clear_canvas()
-  return self.canvas:renderTo(function()
+  local sx, sy, sw, sh = gfx.getScissor()
+  local r, g, b, a = gfx.getColorMask()
+  gfx.setScissor()
+  gfx.setColorMask(true, true, true, true)
+  self.canvas:renderTo(function()
     gfx.clear(0, 0, 0, 0)
   end)
+  gfx.setColorMask(r, g, b, a)
+  if sx then
+    gfx.setScissor(sx, sy, sw, sh)
+  end
 end
 
 function CanvasModel:draw_to()

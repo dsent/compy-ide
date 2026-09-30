@@ -28,14 +28,17 @@ Project sets `love.draw` directly. The framework detects this on the next `updat
 
 ### Canvas lifetime
 
-The canvas belongs to the run that drew on it:
+The canvas belongs to the run that drew on it, and to the console between runs:
 
-- A run starts on a blank canvas.
+- A run starts on a blank canvas. A project that fails to load clears it too, so its error shows on a blank console.
 - Every stop clears it: Ctrl+S, Ctrl+T, `stop()`, restart (Ctrl+Alt+R), Ctrl+Q, the program's own quit, and a top-level error. `_stop_project_run` clears it after the project's `before_exit` hook, so what the hook draws goes too.
+- The clear covers the whole canvas whatever scissor or colour mask the program left; `CanvasModel:clear_canvas` puts the caller's graphics state back.
+- A handler that calls `stop()` and goes on drawing is cleared again when its `use_canvas` call unwinds (`stop_count`, `run_live`). A run started during that call (restart) keeps its canvas.
+- Drawing typed at the console shares the canvas: it lasts until the next stop, run or close, and a stop clears it too, with no program running.
 - A paused run (Ctrl+Pause, an error in a handler) has not stopped: its canvas stays, and `continue()` draws on it again.
-- A run that finishes its top-level code with nothing live (no handlers, no widget) is idle, not stopped, as the sine example is: its picture stays until the project stops or is closed.
+- A run that finishes its top-level code is in `ready`, not stopped, and keeps its picture until it stops or the project closes. That covers a run with nothing live (no handlers, no widget), as the sine example is, and a run with live handlers but no `update` or `draw`. Ctrl+S stops a `running` program only, so it leaves a `ready` one alone; `stop()`, Ctrl+T, restart and Ctrl+Q end it.
 
-### `use_canvas(f)` — `src/controller/consoleController.lua:1159`
+### `use_canvas(f)` — `ConsoleController:use_canvas` in `src/controller/consoleController.lua`
 
 ```lua
 function ConsoleController:use_canvas(f)

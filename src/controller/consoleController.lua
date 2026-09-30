@@ -494,14 +494,16 @@ function ConsoleController:run_project(name)
 
   if ok then
     local runner_env = self:get_project_env()
+    -- A run starts on a blank canvas, whatever the last one
+    -- left there; a project that fails to load leaves the
+    -- error on a blank console, not under the old picture.
+    self.model.output:clear_canvas()
     local f, load_err, path = P:run(name, runner_env)
     if f then
       local n = name or P.current.name or 'project'
       Log.info('Running \'' .. n .. '\'')
       self:flush_program_state()
-      -- A run starts on a blank canvas, whatever the last one
-      -- left there.
-      self.model.output:clear_canvas()
+      self.run_live = true
       love.state.app_state = 'running'
       -- Before the project's top-level code, which may show the
       -- widget on its first line. This is the run seam, chosen
@@ -542,6 +544,7 @@ function ConsoleController:run_project(name)
         self:flush_program_state()
         -- The run is over: what it drew before raising goes.
         self.model.output:clear_canvas()
+        self.run_live = false
         love.state.app_state = 'ready'
         print('Error: ', run_err)
       else
@@ -2029,6 +2032,8 @@ function ConsoleController:_stop_project_run()
   -- sine example): it is idle, not stopped, and its picture
   -- stays.
   self.model.output:clear_canvas()
+  self.run_live = false
+  self.stop_count = (self.stop_count or 0) + 1
   View.clear_snapshot()
   self.main_ctrl.set_love_draw(self, self.view)
   self.main_ctrl.clear_user_handlers(self)
@@ -2368,8 +2373,16 @@ function ConsoleController:use_canvas(f)
     canvas, -- this is actually [1] = canvas
     stencil = true
   })
+  local stops = self.stop_count
   local r = { pcall(f) }
   gfx.setCanvas()
+  -- A handler that stopped its own run and went on drawing
+  -- repainted the canvas after the stop's clear: the clear is
+  -- final for the call that was running. A run started since
+  -- (restart) owns the canvas and is left alone.
+  if self.stop_count ~= stops and not self.run_live then
+    self.model.output:clear_canvas()
+  end
   if not r[1] then error(r[2], 0) end
   return unpack(r, 2)
 end
