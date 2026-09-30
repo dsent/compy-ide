@@ -378,24 +378,37 @@ local function putBack()
   end
 end
 
---- Say what happened, and hand the board back. Echo comes back
---- on: it shows what the board says from here on, and first
---- rest, so an end line cut in two at the handover is read
---- whole. A console whose echo takes no rest has it shown
---- here.
---- @param outcome string
+--- What the board said that exec has not shown goes to
+--- echo, which reads it as it reads what comes next: an end
+--- line cut in two is read whole. A console whose echo takes
+--- none of it has it shown here.
 --- @param frame string? the frame echo is to take in place
 ---   of the board's line, for a file still running
---- @param rest string? what the board said that is not shown
-local function finish(outcome, frame, rest)
-  putBack()
-  sending = nil
+--- @param rest string?
+local function pass(frame, rest)
   local taken = echo(nil, frame, rest)
   local unshown = rest and not taken
   if unshown then
     show(rest)
   end
+end
+
+--- Say what happened, and hand the board back. Echo comes back
+--- on: it shows what the board says from here on, and first
+--- before, what came before the outcome; after, what came
+--- after the file's end, goes after the outcome.
+--- @param outcome string
+--- @param frame string?
+--- @param before string?
+--- @param after string?
+local function finish(outcome, frame, before, after)
+  putBack()
+  sending = nil
+  pass(frame, before)
   print(outcome)
+  if after then
+    pass(frame, after)
+  end
 end
 
 --- @param why string
@@ -524,24 +537,29 @@ local function verdict(status)
   if words then
     return sending.name .. words
   end
-  return "the board did not say whether " .. sending.name ..
-      " ran. Type restart_microbit(), then try again."
+  return "the board has not said how " .. sending.name ..
+      " went. It may still be running; if the board does not"
+      .. " answer, type restart_microbit(), then try again."
 end
 
 --- This exec's frame with its status and line break, found in
 --- what the board said: the file has ended. What came before
---- it, less the line break that went before the frame, and
---- the status.
+--- it, less the line break that went before the frame; the
+--- status; and what came after, less the prompt, such as
+--- what an on_event of the file's prints.
 --- @param after string
 --- @return string? text
 --- @return string? status
+--- @return string? rest
 local function frameIn(after)
   local frame = sending.lines.frame
   local at = after:find(frame, 1, true)
   while at do
     local status = after:sub(at + #frame):match("^(%a+)\r\n")
     if status then
-      return (after:sub(1, at - 1):gsub("\r?\n$", "")), status
+      local rest = after:sub(at + #frame + #status + 2)
+      return (after:sub(1, at - 1):gsub("\r?\n$", "")), status,
+        (rest:gsub("^> ", ""))
     end
     at = after:find(frame, at + 1, true)
   end
@@ -568,13 +586,25 @@ end
 --- be its start; else still running, and echo shows the rest
 --- @param after string
 local function longLast(after)
-  local text, status = frameIn(after)
+  local text, status, rest = frameIn(after)
   if status then
     show(text)
-    finish(verdict(status))
+    finish(verdict(status), nil, nil, rest)
   elseif not endComing(after) then
     quietLast(after)
   end
+end
+
+--- The last line's prompt, and the board quiet after it:
+--- what the board said, and how the frame says the file
+--- ended. With no frame, the "> " may be a program's own, one
+--- still running, and echo is given the frame to say its end.
+--- @param said string
+local function prompted(said)
+  local text, status = framed(said)
+  show(text)
+  local unended = status == nil and sending.lines.frame or nil
+  finish(verdict(status), unended)
 end
 
 --- The last line runs the file, once the board has taken it:
@@ -588,9 +618,7 @@ local function lastLine(after)
   local said = after:match("^(.*)> $")
   local done = said and SETTLE_S <= sending.quiet
   if done then
-    local text, status = framed(said)
-    show(text)
-    finish(verdict(status))
+    prompted(said)
   elseif QUIET_S < sending.quiet then
     quietLast(after)
   elseif QUIET_S < sending.since then
@@ -621,6 +649,19 @@ local function forget()
   end
 end
 
+--- What the board says while the line waits is a program's of
+--- its own, or a greeting, and is shown, a whole line at a
+--- time: all but what may be the start of the line's echo
+local function showHeard()
+  local heard = sending.heard
+  local head = heard:sub(1, #heard - echoed())
+  local lines = head:match("^.*[\r\n]")
+  if lines then
+    show(lines)
+    sending.heard = heard:sub(#lines + 1)
+  end
+end
+
 --- The echo moving on is the board taking the line: the wait
 --- for the rest starts again
 local function moved()
@@ -648,6 +689,7 @@ end
 local function untaken()
   sending.since = 0
   moved()
+  showHeard()
   forget()
   local due = QUIET_S < sending.waited
   local unsaid = due and not sending.warned

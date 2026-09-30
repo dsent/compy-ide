@@ -265,16 +265,19 @@ describe('micro:bit exec #microbit', function()
     assert.same('f.lua is on the board', said[#said])
   end)
 
-  it('says the board did not say how a file ended without a'
-    .. ' status', function()
+  it('says the board has not said how a file went without a'
+    .. ' status, and gives echo the frame', function()
       local tools = load_tools()
       tools.exec('f.lua')
       for _ = 1, 5 do board() end
       board('1\r\n', '> ')
       serial:update(0.25)
-      -- the chunk may have failed before the file ran
-      assert.same('the board did not say whether f.lua ran. Type'
+      -- the chunk may have failed before the file ran, or the
+      -- "> " is the program's own
+      assert.same('the board has not said how f.lua went. It may'
+        .. ' still be running; if the board does not answer, type'
         .. ' restart_microbit(), then try again.', said[#said])
+      assert.equal(framed('ok'):match('^\r\n(.-)ok\r\n$'), handed)
     end)
 
   --- The chunk exec sends, run as the board runs it: what it
@@ -506,6 +509,27 @@ describe('micro:bit exec #microbit', function()
       assert.is_not_nil(port.onBytes)
     end)
 
+  --- a program of the board's own prints while the line waits
+  it('shows what a busy board prints while the line waits',
+    function()
+      local tools = load_tools()
+      tools.exec('f.lua')
+      said = {}
+      for i = 1, 3 do
+        backend:rx('busy' .. i .. '\r\n')
+        serial:update(1)
+      end
+      local shown = {}
+      for _, line in ipairs(said) do
+        if not line:find('^exec:') then shown[#shown + 1] = line end
+      end
+      assert.same({ 'busy1', 'busy2', 'busy3' }, shown)
+      board()
+      assert.equal(2, sent())
+      assert.is_nil(table.concat(said, ' '):find('loadstring', 1,
+        true))
+    end)
+
   --- an echo coming in slowly is the board taking the line
   it('waits on an echo that keeps coming, however slowly',
     function()
@@ -627,6 +651,51 @@ describe('micro:bit exec #microbit', function()
       assert.truthy(told:find('1\nf.lua is on the board and still'
         .. ' running\nThe program on the micro:bit has ended.', 1,
         true))
+    end)
+
+  --- an on_event of the file's prints on after its end, within
+  --- the settle each time: all of it shows, after the verdict
+  it('shows what the board prints after the file\'s end',
+    function()
+      local tools = load_tools()
+      consoleEcho(tools)
+      tools.exec('f.lua')
+      for _ = 1, 5 do board() end
+      backend:rx(backend.sent[#backend.sent]:gsub('\r$', '')
+        .. '\r\r\n' .. framed('ok') .. '> ')
+      serial:update(0)
+      for i = 1, 60 do
+        backend:rx('tick' .. i .. '\r\n')
+        serial:update(0.1)
+      end
+      local told = table.concat(said, '\n')
+      assert.truthy(told:find('f.lua is on the board\ntick1\ntick2\n',
+        1, true), told)
+      assert.truthy(told:find('tick59\ntick60', 1, true))
+      assert.is_nil(told:find('\30', 1, true))
+    end)
+
+  --- a program that writes a "> " of its own and waits: exec
+  --- cannot tell, and echo says the end when it comes
+  it('lets echo say the end of a file whose own "> " came first',
+    function()
+      local tools = load_tools()
+      consoleEcho(tools)
+      tools.exec('f.lua')
+      for _ = 1, 5 do board() end
+      backend:rx(backend.sent[#backend.sent]:gsub('\r$', '')
+        .. '\r\r\nYour name> ')
+      serial:update(0)
+      serial:update(0.25)
+      assert.truthy(said[#said]:find('It may still be running', 1,
+        true))
+      backend:rx('Ada\r\n' .. framed('ok') .. '> ')
+      serial:update(0)
+      serial:update(0.3)
+      local told = table.concat(said, '\n')
+      assert.truthy(told:find('The program on the micro:bit has'
+        .. ' ended.', 1, true), told)
+      assert.is_nil(told:find('\30', 1, true))
     end)
 
   --- a file still printing after the wait goes on in echo
