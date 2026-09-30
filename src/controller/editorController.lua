@@ -730,11 +730,15 @@ end
 
 --- @private
 --- The file on screen holds what its failed write could not
---- put on the card: Shift+Esc's question, and confirming
---- lets it go
+--- put on the card: the question says so, with Shift+Esc's
+--- keys, and confirming lets it go
 function EditorController:_ask_unsaved()
   self.pending_confirm = 'leave'
-  self.input:set_error({ DISCARD_QUESTION })
+  self.input:set_error({ string.format(
+    '%s could not be saved. Discard your change?'
+    .. ' Confirm [Enter] / Cancel [Esc]',
+    self:get_active_buffer().name
+  ) })
 end
 
 --- @private

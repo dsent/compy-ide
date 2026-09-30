@@ -852,8 +852,9 @@ Ctrl+Shift+S, Ctrl+Q, Ctrl+Shift+R and Ctrl+Alt+R leave the editor too, and so
 does Ctrl+T while you navigate or edit a block; in search or while moving a
 block, Ctrl+T does nothing. Each first asks the question Shift+Esc asks when
 you would lose a change: a block you have changed and left open, one you left
-open in another file with Ctrl+J, or a file whose last save failed. Enter or
-Space discards the change and goes on, anything else keeps it. Ctrl+Esc exits
+open in another file with Ctrl+J, or a file whose last save failed, which the
+question names. Enter or Space discards the change and goes on, anything else
+keeps it. Ctrl+Esc exits
 the IDE from anywhere and does not ask. The contract is
 `doc/development/decisions/input.md`, `D-EDITOR-KEYS`, statement 6.
 
