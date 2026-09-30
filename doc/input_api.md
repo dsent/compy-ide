@@ -853,10 +853,12 @@ does Ctrl+T while you navigate or edit a block; in search or while moving a
 block, Ctrl+T does nothing. Each first asks the question Shift+Esc asks when
 you would lose a change: a block you have changed and left open, one you left
 open in another file with Ctrl+J, or a file whose last save failed, which the
-question names. Enter or Space discards the change and goes on, anything else
-keeps it. Ctrl+Esc exits
-the IDE from anywhere and does not ask. The contract is
-`doc/development/decisions/input.md`, `D-EDITOR-KEYS`, statement 6.
+question names. The question brings you to the file it asks about. Enter or
+Space discards that change and goes on to the next one, and leaves once none is
+left. Anything else keeps the change: you stay on that file, and the files you
+had opened from it with Ctrl+J are closed. Ctrl+Esc exits the IDE from anywhere
+and does not ask. The contract is `doc/development/decisions/input.md`,
+`D-EDITOR-KEYS`, statement 6.
 
 Ctrl+J while you edit a block opens the file it requires and keeps your edit
 with the first file: Shift+Esc back to it shows the edit again, still open.

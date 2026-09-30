@@ -2529,8 +2529,10 @@ it.
    and `edit`; in search and reorder it does nothing), and the gate's `Ctrl+Q`, `Ctrl+Shift+R` and
    `Ctrl+Alt+R` ask `Shift+Esc`'s own question (`EditorController:ask_to_leave`) when leaving would
    lose a change: a changed open block, a changed draft `Ctrl+J` left in a file below, or a file
-   whose last write failed. Enter or Space discards the change as `Shift+Esc` does and takes the
-   exit, anything else keeps it. `Ctrl+Esc` exits the IDE from any state and does not ask. No key and no dialog is added: this is the
+   whose last write failed. The question brings its file to the front, closing the files above it.
+   Enter or Space discards the change as `Shift+Esc` does and goes on to the next change, taking the
+   exit once none is left; anything else keeps the change, on that file. `Ctrl+Esc` exits the IDE
+   from any state and does not ask. No key and no dialog is added: this is the
    *editor-side `request_leave`* named below. The pinned cases are now *"Ctrl+Shift+S asks before it
    drops a changed block"* and *"Ctrl+T asks before it drops a changed block"*, with the gate's
    chords under *"the project exits ask first"*. What follows is the entry as ruled.

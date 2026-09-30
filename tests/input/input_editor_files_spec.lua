@@ -574,6 +574,20 @@ describe('the editor across files #input', function()
           assert.same({}, took)
         end)
 
+      it('keeping the draft stays on its file, the others closed',
+        function()
+          open()
+          draft("local lib = require('lib')\nkept = 99")
+          chord('lctrl', 'j')
+          chord('lctrl', 'q')
+          chord('escape')
+
+          assert.same(1, ed.model.buffers:length())
+          assert.same('main.lua', ed:get_active_buffer().name)
+          assert.same('edit', ed:get_mode())
+          assert.same({}, took)
+        end)
+
       it('takes the exit once the draft is answered', function()
         open()
         draft("local lib = require('lib')\nkept = 99")
