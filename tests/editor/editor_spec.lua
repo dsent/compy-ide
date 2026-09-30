@@ -1455,6 +1455,26 @@ describe('Editor #editor', function()
         assert.is_true(controller.input:is_empty())
       end)
 
+      --- each place a buffer comes to the front drops the
+      --- question on its own, before anything else could
+      it('opening a file drops the question', function()
+        cp_time = 1752400000
+        mock.keystroke('C-S-k', press)
+        assert.same('restore', controller.pending_confirm)
+        controller:open('other.lua', 'y = 1\n', function() end)
+        assert.is_nil(controller.pending_confirm)
+      end)
+
+      it('returning to a file drops the question', function()
+        controller:open('other.lua', 'y = 1\n', function() end)
+        cp_time = 1752400000
+        mock.keystroke('C-S-k', press)
+        assert.same('restore', controller.pending_confirm)
+        controller:pop_buffer()
+        assert.same('main.lua', controller:get_active_buffer().name)
+        assert.is_nil(controller.pending_confirm)
+      end)
+
       it('restore without a checkpoint refuses', function()
         mock.keystroke('C-S-k', press)
         assert.same({}, calls)
@@ -1901,6 +1921,14 @@ describe('Editor #editor', function()
           assert.same('c', sm.resultset[1].r.name)
           sm:load({})
           assert.same({}, sm.resultset)
+        end)
+
+        it('a file with no definitions searches none', function()
+          controller:open('notes.txt', 'plain text\n', save)
+          controller.search.model:load({ { name = 'stale' } })
+          mock.keystroke('C-f', press)
+          assert.same('search', controller:get_mode())
+          assert.same({}, controller.search.model.resultset)
         end)
 
         it('Escape leaves search without moving the selection', function()
