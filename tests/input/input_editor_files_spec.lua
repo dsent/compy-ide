@@ -117,6 +117,21 @@ describe('the editor across files #input', function()
         end
       end)
 
+      it('a question asked in search is shown in the editor', function()
+        open()
+        draft('x = 99')
+        chord('return')
+        chord('escape')
+        chord('lshift', 'escape')
+        chord('lctrl', 'f')
+        assert.same('search', ed:get_mode())
+
+        chord('lctrl', 'q')
+        assert.same('leave', ed.pending_confirm)
+        assert.same('nav', ed:get_mode())
+        assert.same('', string.unlines(ed.search.input:get_text()))
+      end)
+
       for _, c in ipairs({
         { 'Ctrl+T', { 'lctrl', 't' }, 'run_project' },
         { 'Ctrl+Q', { 'lctrl', 'q' }, 'quit_project' },

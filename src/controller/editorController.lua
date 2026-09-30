@@ -678,6 +678,9 @@ end
 --- chord's key itself (Ctrl+Shift+S), so no later key is it
 --- @return boolean asked
 function EditorController:ask_to_leave(exit, own_key)
+  --- search draws its own input: a question must be asked
+  --- where it can be seen
+  if self.mode == 'search' then self:_back_to_nav() end
   --- a draft Ctrl+J parked further down the stack, or a
   --- file whose write failed, is asked about too: its
   --- buffer comes to the front, draft and all, so the
