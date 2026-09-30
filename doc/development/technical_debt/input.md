@@ -343,6 +343,17 @@ per-run boundary) rather than as a phase of a lifecycle.
 
 ## BACKLOG
 
+### T-SAVE-MAY-RECASE-NAME — a save through a name differing only in case may change the name on the card
+
+- **Where:** `src/util/filesystem.lua`, `FS.replace`: the rename puts the file in place under the
+  name it was saved through.
+- **Scenario:** the project holds `main.lua`, and `edit('Main.lua')` opens it, as the card ignores
+  case. A save renames `.Main.lua.compy-tmp` to `Main.lua`, and the file may now be called
+  `Main.lua`. Before the atomic save, the write went into the existing entry, whose name stayed.
+- **Why it stays (2026-09-30):** inferred from the FAT drivers, not run on a card; nothing on the
+  card breaks, as lookups ignore case. A project copied to a case-sensitive filesystem could miss
+  `main.lua`. A fix renames to the name the listing already holds when the two differ in case alone.
+
 ### T-WRITEFILE-COSTS-A-RENAME — a program's writefile takes about 90 ms on a Compy
 
 - **Where:** `src/model/project/project.lua`, `Project:writefile` → `FS.replace`, with `durable`
