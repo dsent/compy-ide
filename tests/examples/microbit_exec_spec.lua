@@ -427,6 +427,48 @@ describe('micro:bit exec #microbit', function()
       assert.is_nil(port.onBytes)
     end)
 
+  --- The last line's echo, then the file printing every half
+  --- second until just before exec's wait is over
+  --- @param tools table
+  local function printingUntilLate(tools)
+    tools.exec('f.lua')
+    for _ = 1, 5 do board() end
+    backend:rx(backend.sent[#backend.sent]:gsub('\r$', '')
+      .. '\r\r\n')
+    serial:update(0)
+    for _ = 1, 9 do
+      backend:rx('1\r\n')
+      serial:update(0.5)
+    end
+    serial:update(0.4)
+  end
+
+  --- a file that ends as the wait runs out has ended
+  it('reads the end of a file that ends just before the wait is'
+    .. ' over', function()
+      local tools = load_tools()
+      printingUntilLate(tools)
+      backend:rx(framed('ok') .. '> ')
+      serial:update(0.15)
+      serial:update(0.25)
+      assert.equal('f.lua is on the board', said[#said])
+      assert.is_nil(table.concat(said, '\n'):find('\30', 1, true))
+    end)
+
+  it('waits for an end line the wait cut in two', function()
+    local tools = load_tools()
+    printingUntilLate(tools)
+    local line = framed('ok')
+    backend:rx(line:sub(1, 8))
+    serial:update(0.15)
+    assert.is_not_nil(port.onBytes)
+    backend:rx(line:sub(9) .. '> ')
+    serial:update(0)
+    serial:update(0.25)
+    assert.equal('f.lua is on the board', said[#said])
+    assert.is_nil(table.concat(said, '\n'):find('\30', 1, true))
+  end)
+
   --- a file still printing after the wait goes on in echo
   it('hands a file that keeps printing over to echo', function()
     local tools = load_tools()

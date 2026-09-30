@@ -409,28 +409,81 @@ local function verdict(status)
       " ran. Type restart_microbit(), then try again."
 end
 
---- The last line runs the file: a prompt the board has been
---- quiet after means the file has run, as far as the board's
---- bytes can tell; a program that writes "> " and pauses looks
---- the same. No prompt QUIET_S after the line went, however
---- much the file prints, and echo shows the rest.
-local function lastLine()
-  local after = afterEcho()
-  local said = after and after:match("^(.*)> $")
-  local done = said and SETTLE_S <= sending.quiet
-  local quiet = QUIET_S < sending.quiet
-  local long = quiet or QUIET_S < sending.since
-  if done then
-    local text, status = framed(said)
+--- This exec's frame with its status and line break, found in
+--- what the board said: the file has ended. What came before
+--- it, less the line break that went before the frame, and
+--- the status.
+--- @param after string
+--- @return string? text
+--- @return string? status
+local function frameIn(after)
+  local frame = sending.lines.frame
+  local at = after:find(frame, 1, true)
+  while at do
+    local status = after:sub(at + #frame):match("^(%a+)\r\n")
+    if status then
+      return (after:sub(1, at - 1):gsub("\r?\n$", "")), status
+    end
+    at = after:find(frame, at + 1, true)
+  end
+end
+
+--- How a frame says the file ended
+local ENDS = {
+  "ok",
+  "error"
+}
+
+--- Whether what the board said ends in the start of this
+--- exec's end line, the rest of which is on its way
+--- @param after string
+--- @return boolean
+local function endComing(after)
+  for _, status in ipairs(ENDS) do
+    local whole = sending.lines.frame .. status .. "\r\n"
+    for n = #whole - 1, 1, -1 do
+      if after:sub(-n) == whole:sub(1, n) then
+        return true
+      end
+    end
+  end
+  return false
+end
+
+--- The file ran past QUIET_S: ended after all, when its frame
+--- has come; still on its way, while the end of what came may
+--- be its start; else still running, and echo shows the rest
+--- @param after string?
+local function longLast(after)
+  local text, status = frameIn(after or "")
+  if status then
     show(text)
     finish(verdict(status))
-  elseif long then
+  elseif not (after and endComing(after)) then
     quietLast(after)
   end
 end
 
---- Time passing while exec waits on the board
---- @param dt number
+--- The last line runs the file: a prompt the board has been
+--- quiet after means the file has run, as far as the board's
+--- bytes can tell; a program that writes "> " and pauses looks
+--- the same. No prompt QUIET_S after the line went, however
+--- much the file prints, and the file is still running.
+local function lastLine()
+  local after = afterEcho()
+  local said = after and after:match("^(.*)> $")
+  local done = said and SETTLE_S <= sending.quiet
+  if done then
+    local text, status = framed(said)
+    show(text)
+    finish(verdict(status))
+  elseif QUIET_S < sending.quiet then
+    quietLast(after)
+  elseif QUIET_S < sending.since then
+    longLast(after)
+  end
+end
+
 --- A line the board has not taken QUIET_S after it went, or
 --- has said nothing for as long: a board that runs a program
 --- of its own may send all the while, and never echo it
@@ -440,6 +493,8 @@ local function unanswered()
   return QUIET_S < sending.quiet or unechoed
 end
 
+--- Time passing while exec waits on the board
+--- @param dt number
 local function waiting(dt)
   tell(dt)
   sending.quiet = sending.quiet + dt
