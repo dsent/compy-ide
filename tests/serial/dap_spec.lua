@@ -1892,6 +1892,43 @@ describe('Serial flash', function()
       end
     end)
 
+  --- the link goes with the port: after an unplug the next
+  --- link must still know the board may be without its program
+  it('keeps the doubt about the program across a replug',
+    function()
+      local chip = F.chip({ latency = 0.001 })
+      local receive, writes = chip.receive, 0
+      chip.receive = function(c, packet)
+        if packet:byte(1) == 0x8C then writes = writes + 1 end
+        if writes > 60 then c.silent = true end
+        return receive(c, packet)
+      end
+      local s, b = connected(chip)
+      local first = heard(s, chip, F.hex(300))
+      assert.truthy(first:find('may be gone', 1, true))
+      -- unplugged and plugged back in: a new link, a quiet chip
+      chip.receive, chip.silent = receive, false
+      b.link = linkTo(chip)
+      assert.is_nil(b.link.wiped)
+      local said = {}
+      assert.is_true(s:flash(F.hex(400),
+        function(l) said[#said + 1] = l end))
+      local words = s:stop()
+      assert.is_nil(words:find('keeps its program', 1, true))
+      assert.truthy(words:find('may be gone', 1, true))
+    end)
+
+  it('drops the doubt once a flash succeeds', function()
+    local chip = F.chip({ latency = 0.001 })
+    local s, b = connected(chip)
+    s.wiped = true
+    assert.truthy(heard(s, chip, F.hex(40)):find('took the file',
+      1, true))
+    b.link = linkTo(chip)
+    assert.is_true(s:flash(F.hex(400), function() end))
+    assert.truthy(s:stop():find('keeps its program', 1, true))
+  end)
+
   --- a fault of the Compy's own sends no one for a new file
   it('tells its own fault from a damaged file', function()
     local chip = F.chip()

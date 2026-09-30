@@ -59,6 +59,9 @@ function Serial.new(backend, max_line)
   self.dispatcher = Dispatcher.new()
   self.faults = {}
   self.connected = false
+  -- a flash may have erased the board's program, until one
+  -- succeeds: kept here, since the link goes with the port
+  self.wiped = false
   self.echo = Echo.new(io.write, print)
   for _, env in ipairs({ 'console', 'program' }) do
     local t = self.dispatcher:table_for(env)
@@ -311,6 +314,8 @@ function Serial:flash(data, say, on)
   -- the board restarts with the new firmware, and what was
   -- queued for the old one would be typed into its new REPL
   self:drop()
+  -- a link opened since then does not know
+  if self.wiped then link.wiped = true end
   self.job = DapPrepare.new(data, say, Dap.log,
     self.clock or clock, on, link.wiped)
   return true
@@ -388,6 +393,7 @@ function Serial:update(dt)
     end
   elseif job and job:step(dt) ~= 'running' then
     self.job = nil
+    self:settled(job)
     if job.state == 'done' then self:restarted() end
   end
   self.echo:tick(dt)
@@ -410,10 +416,19 @@ local CLOSING = 'The Compy was being closed while it sent the'
 --- at most STOP_S, and the verdict says why. The port stays
 --- open.
 function Serial:abandon()
-  if self.job and self.job:abandon(STOP_S, CLOSING) == true then
+  local job = self.job
+  if job and job:abandon(STOP_S, CLOSING) == true then
     self:restarted()
   end
+  if job then self:settled(job) end
   self.job = nil
+end
+
+--- A flash has ended: whether it may have left the board
+--- without its program is kept past the link
+--- @param job table
+function Serial:settled(job)
+  if job.link then self.wiped = job.link.wiped == true end
 end
 
 local STOPPED_READING = 'The Compy stopped before the file went'
@@ -445,6 +460,7 @@ function Serial:stop()
         cut = cut .. ' ' .. DapFlash.GONE
       end
     end
+    self:settled(self.job)
   end
   self.job = nil
   self.backend:stop()
