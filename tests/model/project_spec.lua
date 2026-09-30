@@ -300,26 +300,40 @@ describe('ProjectService #project', function()
         local p = PS.current
         assert.is_true(p:writefile('main.lua', 'x = 2\n'))
         assert.same('x = 2\n', read(p:get_path('main.lua')))
-        assert.is_nil(lfs.attributes(p:get_path('.main.lua.tmp')))
+        assert.is_nil(lfs.attributes(FS.replace_temp(p:get_path('main.lua'))))
+      end)
+
+    it('refuses a name in the temporary files\' namespace #project',
+      function()
+        PS:opreate('saves')
+        local p = PS.current
+        assert.is_false(p:writefile('.main.lua.compy-tmp', 'x'))
+        assert.is_false(p:writefile('.Notes.COMPY-TMP', 'x'))
       end)
 
     it('is never listed or cloned as a file of its own #project',
       function()
         PS:opreate('saves')
         local p = PS.current
-        local f = assert(io.open(p:get_path('.main.lua.tmp'), 'w'))
-        f:write('half a fi')
-        f:close()
-
-        for _, item in ipairs(p:contents()) do
-          assert.is_not.equal('.main.lua.tmp', item.name)
+        local temp = '.main.lua.compy-tmp'
+        for _, name in ipairs({ temp, '.notes.tmp' }) do
+          local f = assert(io.open(p:get_path(name), 'w'))
+          f:write('half a fi')
+          f:close()
         end
+
+        local listed = {}
+        for _, item in ipairs(p:contents()) do
+          listed[item.name] = true
+        end
+        assert.is_nil(listed[temp])
+        --- a file of the project's own, dotted or not
+        assert.is_true(listed['.notes.tmp'])
         local cok, cerr = PS:clone('saves', 'copy')
         assert.is_true(cok, cerr)
-        assert.is_nil(lfs.attributes(
-          FS.join_path(tmp, 'copy', '.main.lua.tmp')))
+        assert.is_nil(lfs.attributes(FS.join_path(tmp, 'copy', temp)))
         assert.is_not_nil(lfs.attributes(
-          FS.join_path(tmp, 'copy', 'main.lua')))
+          FS.join_path(tmp, 'copy', '.notes.tmp')))
       end)
   end)
 
@@ -337,7 +351,10 @@ describe('ProjectService #project', function()
         local target = PS.current:get_path('main.lua')
         local before = read(target)
         local temp = FS.replace_temp(target)
-        lfs.mkdir(temp)
+        --- the project folder takes no new file
+        local dir = PS.current.path
+        finally(function() os.execute('chmod 755 ' .. dir) end)
+        os.execute('chmod 555 ' .. dir)
         local ok, err = FS.replace(target, 'x = 2\n')
         assert.is_false(ok)
         assert.is_not_nil(err)

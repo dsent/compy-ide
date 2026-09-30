@@ -81,6 +81,10 @@ local function validate_filename(name)
   then
     return false, messages.invalid_filename('Forbidden characters')
   end
+  --- a save's temporary files live there (FS.replace)
+  if FS.is_replace_temp(name) then
+    return false, messages.invalid_filename('Name kept for saving')
+  end
   return true
 end
 
