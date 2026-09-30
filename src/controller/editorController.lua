@@ -1721,6 +1721,13 @@ function EditorController:keypressed(k)
       self._asked_by_gate = nil
       return
     end
+    --- the chord that asked, held: its repeat neither
+    --- answers nor cancels (Ctrl+Shift+S; the gate's
+    --- chords ask again on theirs)
+    if self.pending_then and k == 's'
+        and Key.ctrl() and Key.shift() then
+      return
+    end
     if Key.is_mod(k) then
       return
     end
