@@ -343,6 +343,15 @@ per-run boundary) rather than as a phase of a lifecycle.
 
 ## BACKLOG
 
+### T-REPLACE-NEEDS-POSIX-RENAME — a save renames over the file, which Windows' rename refuses
+
+- **Where:** `src/util/filesystem.lua`, `FS.replace` → `FS.rename` → `os.rename`.
+- **Scenario:** under Windows, saving a file that exists fails: the C runtime's rename refuses an
+  existing target, so every save after the first, every checkpoint overwrite and every restore
+  fails.
+- **Why it stays (2026-09-30):** there is no Windows build; Linux and Android rename over an
+  existing file, and the card does too (checked on a Compy). `FS.replace`'s comment says so.
+
 ### T-GLYPH-ONLY-SPACE-ANSWERS-NOTHING — a keyboard that sends a Space as text alone cannot answer an editor question with it
 
 - **Where:** `src/controller/editorController.lua`, `_dialog_textinput`: while a question is open a

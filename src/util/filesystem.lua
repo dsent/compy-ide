@@ -834,7 +834,9 @@ end
 --- over the file. On a full card the temporary write fails
 --- and the file is untouched. A failure removes the
 --- temporary file; a save finding one a power cut left
---- replaces it.
+--- replaces it. The rename replaces an existing file, as it
+--- does on Linux, Android and the card; Windows' refuses,
+--- and there is no Windows build.
 --- @param path string
 --- @param data string
 --- @param durable boolean? --- the data reaches stable
