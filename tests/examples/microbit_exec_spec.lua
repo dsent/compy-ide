@@ -812,11 +812,15 @@ describe('micro:bit exec #microbit', function()
       --- what the board runs, the way the Compy's own lessons
       --- write it
       local SAMPLES = {
-        'print("blink-ok")\n',
-        'while true do\n  microbit.display.scroll("hi")\n'
+        'require("microbit.serial")\n'
+          .. 'microbit.serial.send("blink-ok\\r\\n")\n',
+        'require("microbit")\nrequire("microbit.display")\n'
+          .. 'while true do\n  microbit.display.scroll("hi")\n'
           .. '  microbit.sleep(500)\nend\n',
-        'robot_move(50, 50, 1)\nturn(3)\nstraight(2)\n',
-        'function on_event(source, value)\n'
+        'require("tpbot")\n'
+          .. 'robot_move(50, 50, 1)\nturn(3)\nstraight(2)\n',
+        'require("microbit")\nrequire("microbit.display")\n'
+          .. 'function on_event(source, value)\n'
           .. '  if source == microbit.DEVICE_ID_BUTTON_A then\n'
           .. '    microbit.display.scroll("A")\n  end\nend\n',
       }
