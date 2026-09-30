@@ -20,8 +20,10 @@ require('model.serial.dap')
 ---
 --- Every way out leaves the chip in a known state: nothing
 --- open (a refusal before open, or a close after one that
---- was refused), or, when it stops answering, a message
---- that says to unplug the board, which resets the chip.
+--- was refused), or, when it stops answering, commands left
+--- unanswered, which the next flash gives up before it
+--- starts (DapLink:resync); unplugging the board resets the
+--- chip when that is not enough.
 ---
 --- say prints a line for the person; log writes a line for
 --- the developer.
@@ -49,9 +51,9 @@ local AGAIN = 'Unplug the micro:bit, plug it back in, then'
     .. ' send the file again.'
 --- A chip that missed one command answers the next flash once
 --- the link is back in step: sending again comes first
-local RETRY = 'Send the file again. If it stops again, unplug the'
-    .. ' micro:bit, plug it back in, then send the file once'
-    .. ' more.'
+local RETRY = 'Send the file again. If the micro:bit still does'
+    .. ' not take it, unplug it, plug it back in, then send the'
+    .. ' file once more.'
 local NO_ANSWER = 'The micro:bit stopped answering. ' .. RETRY
 local NOTHING_SENT = 'It did not answer, and nothing went to it,'
     .. ' so it keeps its program. ' .. RETRY
@@ -159,9 +161,12 @@ local BEFORE_ERASE = { [26] = true, [27] = true, [28] = true,
 --- whole chip within that write, whatever its reply, or none.
 --- Not when the chip refused an earlier chunk, which leaves
 --- its stream in error, nor when it refused that chunk before
---- reading its data through.
+--- reading its data through. A flash on the same link that
+--- ended so leaves the program gone for all anyone knows,
+--- until one succeeds (link.wiped).
 --- @return boolean
 function DapFlash:erased()
+  if self.link.wiped then return true end
   if self.sent < self.eraseChunk then return false end
   local at = self.refusedAt
   if at and at < self.eraseChunk then return false end
@@ -173,7 +178,10 @@ function DapFlash:erased()
 end
 
 function DapFlash:mayBeGone()
-  if self:erased() then self.say(GONE) end
+  if self:erased() then
+    self.link.wiped = true
+    self.say(GONE)
+  end
 end
 
 --- The verdict after a close the chip reported done: the
@@ -184,6 +192,7 @@ end
 function DapFlash:succeed(note)
   if self.state ~= 'running' then return end
   self.state = 'done'
+  self.link.wiped = false
   self.log(string.format('DONE in %.3f s, %d bytes,'
     .. ' open %s, last write %s, close %s',
     self.clock() - self.started, #self.data,
@@ -476,7 +485,8 @@ function DapFlash:watch()
     -- replies carry no number: once one is lost, each reply
     -- after it is taken for the command before its own
     local n = self.link:unanswered()
-    self:fail(self.sent == 0 and NOTHING_SENT or NO_ANSWER,
+    local kept = self.sent == 0 and not self.link.wiped
+    self:fail(kept and NOTHING_SENT or NO_ANSWER,
       string.format('no reply in %d s, %d commands unanswered;'
         .. ' a lost reply makes the chunk numbers since it up'
         .. ' to %d low', DapFlash.REPLY_S, n, n))
@@ -547,6 +557,7 @@ DapFlash.TOOK = 'The micro:bit took the file. Press its reset'
 --- @return boolean true
 function DapFlash:tookOnStop(plain)
   self.state = 'done'
+  self.link.wiped = false
   self.log(string.format('DONE on stop in phase %s after %.3f s,'
     .. ' close %s', self.phase, self.clock() - self.started,
     tostring(self.statuses.close)))
@@ -627,6 +638,7 @@ function DapFlash:abandon(seconds, plain)
     self:mayBeGone()
   end
   self.state = 'failed'
+  if self:erased() then self.link.wiped = true end
   self.log(string.format('ABANDONED in phase %s, %d of %d'
     .. ' chunks answered', self.phase, self.acked, self.chunks))
   -- a close with no stream open trips an assert in the chip,

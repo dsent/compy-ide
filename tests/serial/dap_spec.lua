@@ -397,6 +397,43 @@ describe('DapLink', function()
   end)
 end)
 
+describe('DapLink resync', function()
+  it('does nothing when every command was answered', function()
+    local chip = F.chip()
+    local logged = {}
+    local link = linkTo(chip, logged)
+    local heard = false
+    link.onResync = function() heard = true end
+    link:resync()
+    assert.is_true(link.synced)
+    assert.is_false(heard)
+  end)
+
+  it('gives unanswered commands up, gets back in step, and'
+    .. ' says so to whoever asked', function()
+      local chip = F.chip()
+      local link = linkTo(chip)
+      local heard, answered = false, false
+      link.onResync = function() heard = true end
+      chip.silent = true
+      assert.is_true(link:send(Dap.packet(Dap.UNIQUE_ID),
+        function() answered = true end))
+      link:pump(1)
+      link:resync()
+      assert.is_true(heard)
+      assert.same(0, link:unanswered())
+      assert.is_false(link.synced)
+      chip.silent = false
+      local t = chip.now
+      while not link.synced do
+        link:pump(1)
+        chip.now = chip.now + 0.01
+        assert.is_true(chip.now - t < 10, 'never in step')
+      end
+      assert.is_false(answered)
+    end)
+end)
+
 describe('DapFlash', function()
   it('asks, opens, writes, closes and resets, in order',
     function()
@@ -663,14 +700,84 @@ describe('DapFlash', function()
       assert.truthy(joined(logged):find('chunk numbers', 1,
         true))
       assert.is_true(link:unanswered() > 0)
-      local again = {}
+      local again, noted = {}, {}
+      link.log = function(l) noted[#noted + 1] = l end
       local second = DapFlash.new(data, link,
-        function(l) again[#again + 1] = l end, quiet,
+        function(l) again[#again + 1] = l end,
+        function(l) noted[#noted + 1] = l end,
         function() return chip.now end)
       assert.same('done', run(second, chip))
       assert.truthy(joined(again):find('took the file', 1, true))
+      assert.truthy(joined(noted):find('never answered', 1, true))
+      -- the stream the first flash left in error is closed,
+      -- then opened again
+      assert.truthy(joined(noted):find('open refused as busy', 1,
+        true))
       assert.same('CLOSED', chip.stream)
       assert.same(1, chip.resets)
+    end)
+
+  --- the reply comes after all, once the next flash has
+  --- given its command up: it is passed over
+  it('sends again after a reply that came too late', function()
+    local chip = F.chip({ latency = 0.001 })
+    local receive, writes = chip.receive, 0
+    chip.receive = function(c, packet)
+      receive(c, packet)
+      if packet:byte(1) == 0x8C then
+        writes = writes + 1
+        if writes == 50 then
+          local last = c.queue[#c.queue]
+          last.ready = last.ready + 8
+          c.busy = last.ready
+        end
+      end
+    end
+    local data = F.hex(300)
+    local first, _, _, link = job(data, chip)
+    assert.same('failed', run(first, chip))
+    local said = {}
+    local second = DapFlash.new(data, link,
+      function(l) said[#said + 1] = l end, quiet,
+      function() return chip.now end)
+    assert.same('done', run(second, chip))
+    assert.truthy(joined(said):find('took the file', 1, true))
+  end)
+
+  --- a flash that sent nothing does not know the board kept
+  --- its program when one before it on the link may have
+  --- erased it; a flash that succeeds settles it
+  it('says a board may have lost its program across flashes',
+    function()
+      local chip = F.chip({ latency = 0.001 })
+      local receive, writes = chip.receive, 0
+      chip.receive = function(c, packet)
+        if packet:byte(1) == 0x8C then writes = writes + 1 end
+        if writes > 60 then c.silent = true end
+        return receive(c, packet)
+      end
+      local data = F.hex(300)
+      local first, said, _, link = job(data, chip)
+      assert.same('failed', run(first, chip))
+      assert.truthy(joined(said):find('may be gone', 1, true))
+      local function flash()
+        local told = {}
+        local j = DapFlash.new(data, link,
+          function(l) told[#told + 1] = l end, quiet,
+          function() return chip.now end)
+        return run(j, chip), joined(told)
+      end
+      local state, told = flash()
+      assert.same('failed', state)
+      assert.is_nil(told:find('keeps its program', 1, true))
+      assert.truthy(told:find('may be gone', 1, true))
+      chip.silent, writes = false, -100000
+      assert.same('done', (flash()))
+      chip.silent, writes = true, 0
+      chip.receive = receive
+      state, told = flash()
+      assert.same('failed', state)
+      assert.truthy(told:find('keeps its program', 1, true))
     end)
 
   --- the chip erases nothing before it starts writing: 48

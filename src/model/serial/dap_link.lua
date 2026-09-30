@@ -95,12 +95,15 @@ end
 --- oldest wait would never end. The unanswered commands are
 --- given up, and the link drains and syncs as it does at
 --- start; replies still to come for them are passed over.
+--- onResync, when set, hears that its commands were given up.
 function DapLink:resync()
   if self.fault or #self.pending == 0 then return end
   self.log(string.format('%d commands never answered: getting'
     .. ' back in step with the chip', #self.pending))
   self.pending = {}
   self:start()
+  -- whoever had a command among them asks again
+  if self.onResync then self.onResync() end
 end
 
 --- Send SYNC once the chip has been quiet long enough

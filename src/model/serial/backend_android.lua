@@ -470,6 +470,9 @@ function AndroidBackend:claimDap(port)
   end
   port.link = DapLink.new(Usbfs.new(fd), dap.outAddr,
     dap.inAddr, log, now)
+  -- a flash that finds the probe's questions unanswered gives
+  -- them up: they are asked again
+  port.link.onResync = function() port.probed = false end
   port.link:start()
   log('CMSIS-DAP interface claimed, descriptor ' .. fd)
 end
