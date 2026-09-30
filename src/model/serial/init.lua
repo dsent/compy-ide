@@ -478,6 +478,14 @@ function Serial:settled(job)
   -- same board's
   local key = self.flashing or self:doubtKey()
   if key == self.connection then key = self:doubtKey() end
+  -- the flash may have read the board's id itself, which an
+  -- unplug, taking the port first, leaves nowhere else
+  local learned = type(key) == 'number' and job.id ~= nil
+      and job.id ~= ''
+  if learned then
+    self.doubt[key] = nil
+    key = job.id
+  end
   self.doubt[key] = job.link.wiped == true or nil
 end
 
