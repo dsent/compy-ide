@@ -289,8 +289,9 @@ end
 function DapFlash:sayStart()
   if self.started_said then return end
   self.started_said = true
-  self.say('Sending the file to the micro:bit. Its light'
-    .. ' blinks while it takes it.')
+  -- two lines, each short enough for the console's width
+  self.say('Sending the file to the micro:bit.')
+  self.say('Its light blinks while it takes it.')
   if self.sending then
     local ok, err = pcall(self.sending)
     if not ok then

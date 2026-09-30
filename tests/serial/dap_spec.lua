@@ -1702,13 +1702,15 @@ describe('Serial flash', function()
       -- the start is said once the board is checked and its
       -- stream open
       for _ = 1, 50 do
-        if said[#said]:find('Sending the file', 1, true) then
+        if said[#said]:find('blinks while it takes it', 1, true) then
           break
         end
         s:update(1 / 30)
       end
-      assert.truthy(said[#said]:find('Sending the file', 1,
-        true))
+      -- a line each, short enough not to break in the console
+      assert.same({ 'Sending the file to the micro:bit.',
+        'Its light blinks while it takes it.' },
+        { said[#said - 1], said[#said] })
       assert.same(1, count(chip.got, 0x8A))
     end)
 
