@@ -343,6 +343,16 @@ per-run boundary) rather than as a phase of a lifecycle.
 
 ## BACKLOG
 
+### T-MOUSE-LEAVES-QUESTION — with editor mouse input on, a click leaves a question on another block
+
+- **Where:** `src/controller/editorController.lua`, the mouse navigation that accepts an open block
+  and leaves edit mode without dropping `pending_confirm`.
+- **Scenario, with `cfg.editor.mouse_enabled = true`:** change `x = 1` to `x = 2`, raise
+  `Shift+Esc`'s question, click the line `y = 1`. The block is accepted and the question stays;
+  Enter answers it against `y`, recording a discard pair, and Ctrl+Z then deletes `y` from the file.
+- **Why it stays (2026-09-30):** the shipped build turns editor mouse input off (`src/main.lua`).
+  A fix drops the question on any pointer action that moves the selection or leaves edit mode.
+
 ### T-LATE-CHORD-GLYPH-CANCELS — a chord's glyph arriving after its modifiers are up cancels the question
 
 - **Where:** `src/controller/editorController.lua`, `_dialog_textinput`: a glyph is taken as part
