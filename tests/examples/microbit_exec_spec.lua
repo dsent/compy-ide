@@ -404,6 +404,41 @@ describe('micro:bit exec #microbit', function()
     assert.same({ 'exec: line 1 of 2 of f.lua' }, said)
   end)
 
+  --- a program from upload runs on the board: it may send all
+  --- the while and never echo what exec sends
+  it('stops on a board that sends but never takes the line, and'
+    .. ' says upload() brings the Compy back', function()
+      local tools = load_tools()
+      tools.exec('f.lua')
+      said = {}
+      for _ = 1, 7 do
+        backend:rx('alive\r\n')
+        serial:update(1)
+      end
+      local told = table.concat(said, ' ')
+      assert.truthy(told:find('stopped answering', 1, true))
+      assert.truthy(told:find('upload() puts the Compy\'s'
+        .. ' firmware back', 1, true))
+      assert.is_nil(port.onBytes)
+    end)
+
+  --- a file still printing after the wait goes on in echo
+  it('hands a file that keeps printing over to echo', function()
+    local tools = load_tools()
+    tools.exec('f.lua')
+    for _ = 1, 5 do board() end
+    backend:rx(backend.sent[#backend.sent]:gsub('\r$', '')
+      .. '\r\r\n')
+    serial:update(0)
+    for _ = 1, 7 do
+      backend:rx('1\r\n')
+      serial:update(1)
+    end
+    assert.equal('f.lua is on the board and still running',
+      said[#said])
+    assert.is_nil(port.onBytes)
+  end)
+
   it('stops when the board stops answering', function()
     local tools = load_tools()
     tools.exec('f.lua')
@@ -1105,6 +1140,8 @@ describe('micro:bit exec #microbit', function()
     local told = table.concat(said, ' ')
     assert.truthy(told:find('restarts', 1, true))
     assert.truthy(told:find('reset button', 1, true))
+    assert.truthy(told:find('upload() puts the Compy\'s firmware'
+      .. ' back', 1, true))
   end)
 
   it('restart_microbit turns echo back on for the greeting',

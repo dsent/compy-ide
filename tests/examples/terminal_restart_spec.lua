@@ -46,6 +46,9 @@ describe('terminal Ctrl+R #microbit', function()
     assert.same(1, resets)
     assert.truthy(said[#said]:find('restarting the micro:bit', 1,
       true))
+    -- a restart only starts a program from upload again
+    assert.truthy(said[#said]:find('upload() in the microbit'
+      .. ' project puts the Compy\'s firmware back', 1, true))
   end)
 
   it('waits while a file goes to the board', function()

@@ -97,6 +97,18 @@ local function onItsWay()
   return serial.isFlashing ~= nil and serial.isFlashing()
 end
 
+-- What a restart says: what to do when no greeting comes,
+-- and the way back from a program of the person's own that
+-- upload put on the board, which a restart only starts again
+local RESTARTING = table.concat({
+  "[restarting the micro:bit: if it does not greet you",
+  " within a minute, ",
+  BUTTON,
+  ". If a program of yours is",
+  " on it from upload, upload() in the microbit project puts",
+  " the Compy's firmware back]"
+})
+
 -- The way back from a board that no longer reads what is
 -- typed, stuck in a loop or in listen(): it restarts, as its
 -- reset button makes it, and greets you again.
@@ -110,8 +122,7 @@ local function restartBoard()
         .. " the Compy says how it went]"
   end
   if serial.reset() then
-    return "[restarting the micro:bit: if it does not greet" ..
-        " you within a minute, " .. BUTTON .. "]"
+    return RESTARTING
   end
   return "[the micro:bit did not restart: " .. BUTTON .. "]"
 end

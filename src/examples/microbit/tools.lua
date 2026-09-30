@@ -94,8 +94,12 @@ local QUIET_S = 5
 local SETTLE_S = 0.2
 --- How often exec says how far it has got
 local PROGRESS_S = 3
+--- The way back when the board runs a program of its own from
+--- upload: restart_microbit only starts that program again
+local UPLOADED = "If a program of yours is on it from upload,"
+    .. " upload() puts the Compy's firmware back."
 local STOPPED = "the board stopped answering. Type" ..
-    " restart_microbit(), then try again."
+    " restart_microbit(), then try again. " .. UPLOADED
 
 --- The file exec is sending, while it sends
 local sending = nil
@@ -304,6 +308,7 @@ local function sendNext()
   sending.at = sending.at + 1
   sending.heard = ""
   sending.quiet = 0
+  sending.since = 0
   local line = sending.lines[sending.at]
   if not line then
     finish(sending.name .. " is on the board")
@@ -406,28 +411,41 @@ end
 --- The last line runs the file: a prompt the board has been
 --- quiet after means the file has run, as far as the board's
 --- bytes can tell; a program that writes "> " and pauses looks
---- the same
+--- the same. No prompt QUIET_S after the line went, however
+--- much the file prints, and echo shows the rest.
 local function lastLine()
   local after = afterEcho()
   local said = after and after:match("^(.*)> $")
   local done = said and SETTLE_S <= sending.quiet
+  local quiet = QUIET_S < sending.quiet
+  local long = quiet or QUIET_S < sending.since
   if done then
     local text, status = framed(said)
     show(text)
     finish(verdict(status))
-  elseif QUIET_S < sending.quiet then
+  elseif long then
     quietLast(after)
   end
 end
 
 --- Time passing while exec waits on the board
 --- @param dt number
+--- A line the board has not taken QUIET_S after it went, or
+--- has said nothing for as long: a board that runs a program
+--- of its own may send all the while, and never echo it
+--- @return boolean
+local function unanswered()
+  local unechoed = QUIET_S < sending.since and not afterEcho()
+  return QUIET_S < sending.quiet or unechoed
+end
+
 local function waiting(dt)
   tell(dt)
   sending.quiet = sending.quiet + dt
+  sending.since = sending.since + dt
   if sending.at == #(sending.lines) then
     lastLine()
-  elseif QUIET_S < sending.quiet then
+  elseif unanswered() then
     stopAt(STOPPED)
   end
 end
@@ -541,7 +559,8 @@ local function greetingNote()
   print("The micro:bit restarts, and greets you when it")
   print("is ready. If it does not within a minute, press")
   print("its reset button, on the back next to the USB")
-  print("socket.")
+  print("socket. If a program of yours is on it from")
+  print("upload, upload() puts the Compy's firmware back.")
 end
 
 --- Restart the board, as its reset button does, without
