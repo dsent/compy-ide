@@ -70,16 +70,6 @@ local function flashing()
   return false
 end
 
---- Send a project file to the board, line by line, as if
---- typed
---- @param filename string
-function send(filename)
-  if flashing() then
-    return
-  end
-  assert(serial.send(fileForBoard(filename)))
-end
-
 -- The board takes a line, then answers it with a prompt: "> "
 -- when it is ready for a new statement, ">> " while a chunk is
 -- still open. It drops what arrives faster than it reads, so
@@ -592,6 +582,17 @@ end
 local function readyToSend()
   assert(serial.isConnected(), "no micro:bit connected")
   return not flashing() and not busy()
+end
+
+--- Send a project file to the board, line by line, as if
+--- typed
+--- @param filename string
+function send(filename)
+  local held = flashing() or busy()
+  if held then
+    return
+  end
+  assert(serial.send(fileForBoard(filename)))
 end
 
 --- exec's handlers take the board over while it sends

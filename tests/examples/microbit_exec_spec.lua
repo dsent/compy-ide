@@ -603,6 +603,21 @@ describe('micro:bit exec #microbit', function()
         true))
     end)
 
+  --- its lines would land in the middle of the file exec sends
+  it('holds send back while it sends, in the same words',
+    function()
+      local tools = load_tools()
+      tools.exec('f.lua')
+      local before = sent()
+      said = {}
+      assert.has_no_error(function() tools.send('f.lua') end)
+      assert.equal(before, sent())
+      local told = table.concat(said, ' ')
+      assert.truthy(told:find('exec is still sending f.lua', 1, true))
+      assert.truthy(told:find('restart_microbit() to stop it', 1,
+        true))
+    end)
+
   --- this example on a Compy from before files went down the
   --- cable: its serial table has send, reset and isConnected
   --- only (0d8a66d5), and flash_microbit copies to the drive
