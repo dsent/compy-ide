@@ -76,8 +76,14 @@ local DISCARD_QUESTION =
 --- after it
 function EditorController:_leave_keys(k)
   if k == "s" and Key.shift() and not Key.alt() then
-    local leave = function() self.console:finish_edit() end
-    if not self:ask_to_leave(leave, true) then leave() end
+    --- each change asked about in turn, as the gate's
+    --- exits ask
+    local function leave()
+      if not self:ask_to_leave(leave, true) then
+        self.console:finish_edit()
+      end
+    end
+    leave()
     return true
   end
   return false

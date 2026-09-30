@@ -502,6 +502,22 @@ describe('the editor across files #input', function()
         end)
       end
 
+      it('Ctrl+Shift+S asks about each change in turn', function()
+        open()
+        draft("local lib = require('lib')\nkept = 99")
+        chord('lctrl', 'j')
+        draft('libvalue = 2')
+        chord('lctrl', 'lshift', 's')
+        assert.same('lib.lua', ed:get_active_buffer().name)
+        chord('return')
+
+        assert.same('discard', ed.pending_confirm)
+        assert.same('main.lua', ed:get_active_buffer().name)
+        assert.same('editor', love.state.app_state)
+        chord('return')
+        assert.same('ready', love.state.app_state)
+      end)
+
       it('takes the exit once the draft is answered', function()
         open()
         draft("local lib = require('lib')\nkept = 99")
