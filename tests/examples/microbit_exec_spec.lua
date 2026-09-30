@@ -533,7 +533,9 @@ describe('micro:bit exec #microbit', function()
       board('Compile error: x\r\n', '> ')
       assert.equal(2, sent())
       assert.truthy(said[#said - 1]:find('Compile error', 1, true))
-      assert.truthy(said[#said]:find('before its end', 1, true))
+      assert.truthy(said[#said]:find('before its end, and did not'
+        .. ' run it', 1, true))
+      assert.truthy(said[#said]:find('restart_microbit()', 1, true))
       assert.is_nil(port.onBytes)
     end)
 

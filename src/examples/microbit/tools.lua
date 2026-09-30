@@ -149,9 +149,12 @@ end
 --- file runs, so what the file puts there changes nothing; the
 --- frame goes straight to the port, when the board has one,
 --- past whatever print is. With no pcall left from an earlier
---- file, the file runs unprotected. With no rawget, loadstring
---- or tostring the board's own prompt fails before the file
---- runs, and exec says the board did not say whether it ran.
+--- file, the file runs unprotected. With no rawget the chunk
+--- stops before the file runs, and exec says the board did not
+--- say whether it ran; with no loadstring the board's own
+--- prompt cannot read what exec sends, and exec stops at its
+--- first line; with no tostring the file runs, and a mistake
+--- in it comes with no frame.
 local OPENING = "do local R, G = rawget, _G local file, err ="
     .. " R(G, 'loadstring')("
 
@@ -312,10 +315,15 @@ local function sendNext()
   end
 end
 
+--- What exec says when the board ends its chunk early
+local EARLY = "the board stopped reading the file before its"
+    .. " end, and did not run it. Type restart_microbit(), then"
+    .. " try again."
+
 --- A line's prompt lets the next line go. A prompt for a new
---- statement before the last line means the board ran the file
---- before its end, and the rest would reach it as statements
---- of their own.
+--- statement before the last line means the board ended the
+--- chunk early, before the file could run, and the rest would
+--- reach it as statements of their own.
 --- @param said string
 --- @param open boolean
 local function answered(said, open)
@@ -323,7 +331,7 @@ local function answered(said, open)
   if open then
     sendNext()
   else
-    stopAt("the board ran the file before its end")
+    stopAt(EARLY)
   end
 end
 
