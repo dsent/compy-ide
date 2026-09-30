@@ -13,10 +13,8 @@ package.preload['utf8'] = package.preload['utf8']
 require('model.serial.init')
 require('model.serial.backend_fake')
 
-local WRAP = "do local R, G = rawget, _G local L = R(G,"
-  .. " 'loadstring') or function() return nil, 'the board lost its"
-  .. " loadstring; restart_microbit() brings it back' end local"
-  .. " file, err = L([=["
+local WRAP = "do local R, G = rawget, _G local file, err ="
+  .. " R(G, 'loadstring')([=["
 --- how the last line exec sends begins; the rest runs the file
 --- and says how it ended
 local UNWRAP = ']=], "@f.lua")'
@@ -232,8 +230,9 @@ describe('micro:bit exec #microbit', function()
       for _ = 1, 5 do board() end
       board('1\r\n', '> ')
       serial:update(0.25)
-      assert.same('f.lua was run; the board did not say how it'
-        .. ' ended', said[#said])
+      -- the chunk may have failed before the file ran
+      assert.same('the board did not say whether f.lua ran. Type'
+        .. ' restart_microbit(), then try again.', said[#said])
     end)
 
   --- The chunk exec sends, run as the board runs it: what it
@@ -297,13 +296,11 @@ describe('micro:bit exec #microbit', function()
     return table.concat(on.out)
   end
 
-  --- a program that puts its own print, pcall, tostring or
-  --- loadstring in the board's globals: the next exec still
-  --- says how its file ended
-  for _, case in ipairs({ { 'print = function() end' },
-    { 'print = nil' }, { 'pcall = nil' }, { 'tostring = nil' },
-    { 'loadstring = nil', 'lost its loadstring' } }) do
-    local text = case[1]
+  --- a program that puts its own print or takes pcall away in
+  --- the board's globals: the next exec still says how its file
+  --- ended
+  for _, text in ipairs({ 'print = function() end', 'print = nil',
+    'pcall = nil' }) do
     it('reads the next file\'s end after a program runs ' .. text,
       function()
         local on = newBoard()
@@ -315,14 +312,7 @@ describe('micro:bit exec #microbit', function()
         said = {}
         board(ranOnBoard(tools, 'h.lua', on), '> ')
         serial:update(0.25)
-        if case[2] then
-          assert.truthy(table.concat(said, ' '):find(case[2], 1,
-            true))
-          assert.truthy(said[#said]:find('stopped on the mistake',
-            1, true))
-        else
-          assert.equal('h.lua is on the board', said[#said])
-        end
+        assert.equal('h.lua is on the board', said[#said])
       end)
   end
 

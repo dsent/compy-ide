@@ -148,16 +148,12 @@ end
 --- is taken from the board's globals as they are before the
 --- file runs, so what the file puts there changes nothing; the
 --- frame goes straight to the port, when the board has one,
---- past whatever print is. What an earlier file took away is
---- done without: with no pcall the file runs unprotected, and
---- with no loadstring the chunk says so, in a mistake.
-local OPENING = table.concat({
-  "do local R, G = rawget, _G",
-  " local L = R(G, 'loadstring') or function() return nil,",
-  " 'the board lost its loadstring; restart_microbit()",
-  " brings it back' end",
-  " local file, err = L("
-})
+--- past whatever print is. With no pcall left from an earlier
+--- file, the file runs unprotected. With no rawget, loadstring
+--- or tostring the board's own prompt fails before the file
+--- runs, and exec says the board did not say whether it ran.
+local OPENING = "do local R, G = rawget, _G local file, err ="
+    .. " R(G, 'loadstring')("
 
 --- What the closing line adds after the file's name: the rest
 --- the chunk uses, taken still before the file runs
@@ -171,8 +167,7 @@ local SAY = table.concat({
   "local s = m and m.serial and m.serial.send",
   " local function say(t)",
   " if s then s(t .. '\\r\\n') else W(t) end end",
-  " P = P or function(f) return true, f() end",
-  " T = T or function(v) return v end"
+  " P = P or function(f) return true, f() end"
 })
 
 --- The line after the file: the end of its bracket, its
@@ -410,8 +405,8 @@ local function verdict(status)
     return sending.name .. " was run, and stopped on the" ..
         " mistake above"
   end
-  return sending.name .. " was run; the board did not say how"
-      .. " it ended"
+  return "the board did not say whether " .. sending.name ..
+      " ran. Type restart_microbit(), then try again."
 end
 
 --- The last line runs the file: a prompt the board has been
