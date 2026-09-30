@@ -2010,40 +2010,89 @@ describe('Serial flash', function()
       assert.truthy(words:find('may be gone', 1, true))
     end)
 
+  --- A chip that stops answering once 60 packets of the file
+  --- have gone, past the erase: the flash leaves its board in
+  --- doubt. It answers again once told to, or plugged back in.
+  --- @param chip table
+  --- @param s Serial
+  --- @param b FakeBackend
+  --- @return function plug takes the id the backend knows
+  --- @return function answering
+  local function failingPastErase(chip, s, b)
+    local receive, writes = chip.receive, 0
+    chip.receive = function(c, packet)
+      if packet:byte(1) == 0x8C then writes = writes + 1 end
+      if writes > 60 then c.silent = true end
+      return receive(c, packet)
+    end
+    local function answering()
+      chip.receive, chip.silent = receive, false
+    end
+    local function plug(id)
+      b:detach()
+      answering()
+      b.id = id
+      b:attach()
+      b.link = linkTo(chip)
+      s:update(0)
+    end
+    return plug, answering
+  end
+
+  --- the words the Compy's closing gives while a file is read
+  local function stopWords(s)
+    local said = {}
+    assert.is_true(s:flash(F.hex(400),
+      function(l) said[#said + 1] = l end))
+    s:abandon()
+    return joined(said)
+  end
+
   --- a flash that fails before the board's id is known keeps
-  --- its doubt for every board, until a flash succeeds
-  it('lets a doubt of no known board go once a flash succeeds',
-    function()
+  --- its doubt for that connection; the id, once it comes, takes
+  --- it on, and a success on that board ends it
+  it('lets a doubt of no known id go once the same board, known'
+    .. ' by then, takes a file', function()
       local chip = F.chip({ latency = 0.001 })
-      local receive, writes = chip.receive, 0
-      chip.receive = function(c, packet)
-        if packet:byte(1) == 0x8C then writes = writes + 1 end
-        if writes > 60 then c.silent = true end
-        return receive(c, packet)
-      end
       local s, b = connected(chip)
+      local _, answering = failingPastErase(chip, s, b)
       assert.truthy(heard(s, chip, F.hex(300)):find('may be gone', 1,
         true))
-      assert.is_true(s.doubt['?'])
-      chip.receive, chip.silent = receive, false
+      -- the same connection: the probe answers, and the chip
+      -- answers again
+      answering()
       b.id = 'A'
       b.link = linkTo(chip)
       assert.truthy(heard(s, chip, F.hex(40)):find('took the file',
         1, true))
-      assert.is_nil(s.doubt['?'])
+      assert.same({}, s.doubt)
       b.id = 'B'
       b.link = linkTo(chip)
-      local said = {}
-      assert.is_true(s:flash(F.hex(400),
-        function(l) said[#said + 1] = l end))
-      s:abandon()
-      assert.truthy(joined(said):find('keeps its program', 1, true))
+      assert.truthy(stopWords(s):find('keeps its program', 1, true))
+    end)
+
+  --- two boards of no known id: a success on B says nothing of
+  --- A, which may still be without its program
+  it('keeps the doubt of a board of no known id when another'
+    .. ' takes a file, A, then B, then A', function()
+      local chip = F.chip({ latency = 0.001 })
+      local s, b = connected(chip)
+      local plug = failingPastErase(chip, s, b)
+      assert.truthy(heard(s, chip, F.hex(300)):find('may be gone', 1,
+        true))
+      plug(nil)
+      assert.truthy(heard(s, chip, F.hex(40)):find('took the file',
+        1, true))
+      plug(nil)
+      local words = stopWords(s)
+      assert.is_nil(words:find('keeps its program', 1, true))
+      assert.truthy(words:find('may be gone', 1, true))
     end)
 
   it('drops the doubt once a flash succeeds', function()
     local chip = F.chip({ latency = 0.001 })
     local s, b = connected(chip)
-    s.doubt['?'] = true
+    s.doubt[s.connection] = true
     assert.truthy(heard(s, chip, F.hex(40)):find('took the file',
       1, true))
     b.link = linkTo(chip)

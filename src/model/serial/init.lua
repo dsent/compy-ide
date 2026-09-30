@@ -60,9 +60,12 @@ function Serial.new(backend, max_line)
   self.faults = {}
   self.connected = false
   -- the boards a flash may have left without their program,
-  -- by id, until one succeeds on them: kept here, since the
-  -- link goes with the port
+  -- by id, or by the connection a board of no known id came
+  -- on, until a flash succeeds on that board: kept here,
+  -- since the link goes with the port
   self.doubt = {}
+  -- how many times a board has been plugged in
+  self.connection = 0
   self.echo = Echo.new(io.write, print)
   for _, env in ipairs({ 'console', 'program' }) do
     local t = self.dispatcher:table_for(env)
@@ -88,6 +91,7 @@ function Serial:sink()
   return {
     attach = function(info)
       self.connected = true
+      self.connection = self.connection + 1
       self.reader:reset()
       self.dispatcher:push('connect', info)
     end,
@@ -316,8 +320,8 @@ function Serial:flash(data, say, on)
   -- queued for the old one would be typed into its new REPL
   self:drop()
   -- a link opened since then does not know
-  self.flashing = self:boardKey()
-  if self:inDoubt(self.flashing) then link.wiped = true end
+  self.flashing = self:doubtKey()
+  if self:inDoubt() then link.wiped = true end
   self.job = DapPrepare.new(data, say, Dap.log,
     self.clock or clock, on, link.wiped)
   return true
@@ -426,39 +430,55 @@ function Serial:abandon()
   self.job = nil
 end
 
---- The board a doubt is kept for when its id is not known
-local UNKNOWN = '?'
-
 --- The open board's id, when the backend knows it
 --- @return string?
 function Serial:boardKey()
   return self.backend.boardId and self.backend:boardId() or nil
 end
 
---- Whether a board may be without its program. A board of no
---- known id is in doubt while any is, and every board while
---- one of no known id is.
---- @param id string?
+--- What a doubt about the open board is kept under: its id,
+--- or while that is not known, the connection it came on
+--- @return string|integer
+function Serial:doubtKey()
+  return self:boardKey() or self.connection
+end
+
+--- A doubt kept under the open board's connection goes to its
+--- id, once the id is known
+function Serial:identified()
+  local id = self:boardKey()
+  if id and self.doubt[self.connection] then
+    self.doubt[self.connection] = nil
+    self.doubt[id] = true
+  end
+end
+
+--- Whether the open board may be without its program: a doubt
+--- kept for it, or for a board never known, which may be this
+--- one. A board of no known id may be any board in doubt.
 --- @return boolean
-function Serial:inDoubt(id)
-  if self.doubt[UNKNOWN] then return true end
-  if id then return self.doubt[id] == true end
-  return next(self.doubt) ~= nil
+function Serial:inDoubt()
+  self:identified()
+  local id = self:boardKey()
+  for key in pairs(self.doubt) do
+    local anyone = not id or type(key) == 'number'
+    if anyone or key == id then return true end
+  end
+  return false
 end
 
 --- A flash has ended: whether it may have left its board
 --- without its program is kept past the link, for that board
---- alone; a success also ends a doubt of no known board
+--- alone, and a success ends that board's doubt only
 --- @param job table
 function Serial:settled(job)
   if not job.link then return end
+  self:identified()
   -- the link goes with the port: an id known by now is the
   -- same board's
-  local key = self.flashing or self:boardKey() or UNKNOWN
+  local key = self.flashing or self:doubtKey()
+  if key == self.connection then key = self:doubtKey() end
   self.doubt[key] = job.link.wiped == true or nil
-  -- a doubt kept for a board of no known id may have been this
-  -- one's, and a success puts that right
-  if job.state == 'done' then self.doubt[UNKNOWN] = nil end
 end
 
 local STOPPED_READING = 'The Compy stopped before the file went'
