@@ -203,6 +203,7 @@ describe('a program\'s canvas after it stops #canvas', function()
     end)
     assert.equal('ready', love.state.app_state)
     assert.is_false(shown())
+    assert.is_false(F.cc.run_live)
   end)
 
   it('a project that fails to load leaves no picture under'
@@ -286,6 +287,41 @@ describe('a program\'s canvas after it stops #canvas', function()
       assert.equal('new', who())
     end)
 
+    --- The outgoing handler keeps drawing after its replacement
+    --- ended too: the canvas is nobody's.
+    for name, top in pairs({
+      ['stops'] = function() F.cc:get_project_env().stop() end,
+      ['fails'] = function() error('boom') end,
+    }) do
+      it('clears it when the run it started ' .. name
+        .. ' before it draws again', function()
+          local undo = project(top)
+          F.activate_project({
+            update = function()
+              F.cc:get_project_env().stop()
+              F.cc:run_project()
+              canvas:renderTo(function() draw('late') end)
+            end,
+          })
+          F.love_update(0.1)
+          undo()
+          assert.is_false(shown())
+        end)
+    end
+
+    it('applies to a run the real run path started', function()
+      F.run_project(function()
+        F.cc:get_project_env().love.update = function()
+          F.cc:get_project_env().stop()
+          draw('late')
+        end
+      end)
+      F.love_update(0.1)
+      -- the project env outlives the case
+      F.cc:get_project_env().love.update = nil
+      assert.is_false(shown())
+    end)
+
     it('clears a restart whose top-level code fails', function()
       local undo = project(function()
         draw('new')
@@ -312,12 +348,36 @@ describe('a program\'s canvas after it stops #canvas', function()
 
   -- One console line that stops and then draws: the console
   -- owns no run, so its drawing after the stop stays.
+  --- The line is submitted with Enter, which runs inside the
+  --- program's own call while a run exists, idle or not.
+  local function submit_stop_and_draw()
+    F.cc:get_project_env().mark = function() draw('typed') end
+    F.session.type('stop() mark()')
+    press({ 'return' })
+  end
+
   it('a console line that stops and then draws keeps what it'
     .. ' drew', function()
       paint('old')
-      F.cc:get_project_env().mark = function() draw('typed') end
-      F.session.type('stop() mark()')
-      press({ 'return' })
+      submit_stop_and_draw()
+      assert.equal('typed', who())
+    end)
+
+  it('the same line after a run that finished keeps what it'
+    .. ' drew', function()
+      F.run_project(function() draw('prog') end)
+      assert.equal('prog', who())
+      submit_stop_and_draw()
+      assert.equal('typed', who())
+    end)
+
+  it('the same line over a run with a live handler keeps what'
+    .. ' it drew', function()
+      F.run_project(function()
+        draw('prog')
+        F.cc:get_project_env().love.mousepressed = function() end
+      end)
+      submit_stop_and_draw()
       assert.equal('typed', who())
     end)
 

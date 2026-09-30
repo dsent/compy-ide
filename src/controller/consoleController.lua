@@ -37,6 +37,7 @@ local messages = {
 --- @field paused_mouse table? the paused program's, see suspend
 --- @field run_id integer? the current run's number
 --- @field run_live boolean? the run is not stopped
+--- @field canvas_handed integer? moves on when console code takes the canvas from a stopped run
 --- methods
 --- @field edit function
 --- @field finish_edit function
@@ -2384,17 +2385,23 @@ function ConsoleController:use_canvas(f, console)
     canvas, -- this is actually [1] = canvas
     stencil = true
   })
-  local run_id, live = self.run_id, self.run_live
+  local live, handed = self.run_live, self.canvas_handed
   local r = { pcall(f) }
   gfx.setCanvas()
   -- A program's call that stopped its own run and went on
   -- drawing repainted the canvas after the stop's clear: the
-  -- clear is final for that call. A run started since
-  -- (restart) owns the canvas and is left alone, and console
-  -- code, which owns no run, draws after a stop as it likes.
-  if not console and live and not self.run_live
-      and self.run_id == run_id then
-    self.model.output:clear_canvas()
+  -- clear is final for that call. A run still live (restart)
+  -- owns the canvas and is left alone.
+  -- Console code owns no run: what it draws after a stop stays.
+  -- The keypress that submits it runs inside the program's own
+  -- call, so the console hands the canvas over by moving
+  -- canvas_handed on, and that call leaves it alone.
+  if live and not self.run_live then
+    if console then
+      self.canvas_handed = (self.canvas_handed or 0) + 1
+    elseif self.canvas_handed == handed then
+      self.model.output:clear_canvas()
+    end
   end
   if not r[1] then error(r[2], 0) end
   return unpack(r, 2)
