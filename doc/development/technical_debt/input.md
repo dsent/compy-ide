@@ -343,6 +343,16 @@ per-run boundary) rather than as a phase of a lifecycle.
 
 ## BACKLOG
 
+### T-GLYPH-ONLY-SPACE-ANSWERS-NOTHING — a keyboard that sends a Space as text alone cannot answer an editor question with it
+
+- **Where:** `src/controller/editorController.lua`, `_dialog_textinput`: while a question is open a
+  glyph neither answers nor cancels it; only a fresh key press does (`keypressed`).
+- **Scenario:** on an on-screen keyboard, which sends a Space as text with no key press, Ctrl+Q asks
+  about a changed block and Space does nothing. Enter still answers: it arrives as a key press.
+- **Why it stays (2026-09-30):** a glyph carries no repeat flag, so letting one answer let a held
+  Space give consent to questions the person never saw. The Compy has a hardware keyboard, whose
+  Space sends a key press.
+
 ### T-MOUSE-LEAVES-QUESTION — with editor mouse input on, a click leaves a question on another block
 
 - **Where:** `src/controller/editorController.lua`, the mouse navigation that accepts an open block
