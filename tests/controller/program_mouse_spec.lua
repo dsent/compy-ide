@@ -200,6 +200,16 @@ describe('a program\'s mouse after it stops #input', function()
       assert.equal(2, updates)
     end)
 
+  -- The reset comes after the project's own exit hook, so what
+  -- the hook does to the mouse does not outlast the stop.
+  it('a before_exit hook that captures the mouse does not keep'
+    .. ' it from the console', function()
+      run_capturing()
+      F.cc:get_project_env().compy.before_exit = capture
+      press({ 'lctrl', 's' })
+      assert.same(CONSOLE, mouse())
+    end)
+
   -- evacuate_required runs ahead of the reset in the stop
   it('a stop that raises before the reset still gives the'
     .. ' console its mouse', function()
