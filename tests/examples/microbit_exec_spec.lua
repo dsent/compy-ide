@@ -374,8 +374,10 @@ describe('micro:bit exec #microbit', function()
     function()
       local tools = load_tools()
       tools.exec('f.lua')
-      --- the greeting of a board just reset
-      backend:rx('micro:bit\r\nLua 5.1 REPL\r\n> ')
+      --- the greeting of a board just reset, as the bundled
+      --- firmware gives it: an empty line first
+      backend:rx('\r\nmicro:bit\r\nLua 5.1 REPL\r\nfirmware'
+        .. ' 0a352f7\r\n> ')
       serial:update(0)
       assert.equal(1, sent())
       board()
