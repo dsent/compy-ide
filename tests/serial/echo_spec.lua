@@ -47,22 +47,69 @@ describe("echo", function()
     assert.same({}, wrote)
   end)
 
-  --- a file exec handed over ends while echo shows the board
-  it("says how a file ended in place of exec's status line",
-    function()
-      e:bytes("done\r\n\30exec ok\r\n")
-      e:bytes("oops\r\n\30exec error\r\n")
-      assert.same({ "done", "The program on the micro:bit has"
-        .. " ended.", "oops", "The program on the micro:bit"
-        .. " stopped on the mistake above." }, said)
-      for _, line in ipairs(said) do
-        assert.is_nil(line:find("\30", 1, true))
-      end
+  --- a file exec handed over ends while echo shows the board:
+  --- exec gives echo the frame its end comes in
+  describe("with a frame to expect", function()
+    local F = "\30exec 65f00001 "
+    local ENDED = "The program on the micro:bit has ended."
+    local STOPPED = "The program on the micro:bit stopped on the"
+      .. " mistake above."
+
+    before_each(function() e:expect(F) end)
+
+    it("says the end in words, and drops the break before it",
+      function()
+        e:bytes("done\r\n\r\n" .. F .. "ok\r\n")
+        assert.same({ "done", ENDED }, said)
+      end)
+
+    it("says a mistake the same way", function()
+      e:bytes("oops\r\n\r\n" .. F .. "error\r\n")
+      assert.same({ "oops", STOPPED }, said)
     end)
 
-  it("shows a line that only looks like a status", function()
-    e:bytes("x \30exec ok\r\n")
-    assert.same({ "x \30exec ok" }, said)
+    --- io.write("done "): the tail went out open, and the break
+    --- before the frame ends its line
+    it("ends a line the tail left open", function()
+      e:bytes("done ")
+      e:tick(0.25)
+      assert.same({ "done " }, wrote)
+      e:bytes("\r\n" .. F .. "ok\r\n")
+      assert.same({ "", ENDED }, said)
+    end)
+
+    it("holds a frame that comes in pieces", function()
+      e:bytes("\r\n" .. F:sub(1, 5))
+      e:tick(0.25)
+      assert.same({}, wrote)
+      e:bytes(F:sub(6) .. "ok\r\n")
+      assert.same({ ENDED }, said)
+    end)
+
+    it("shows a held start that turned out not to be the frame",
+      function()
+        e:bytes("\30ex")
+        e:tick(0.25)
+        assert.same({}, wrote)
+        e:bytes("tra\r\n")
+        assert.same({ "\30extra" }, said)
+      end)
+
+    it("shows another exec's frame and a frame inside a line",
+      function()
+        e:bytes("\30exec 1 ok\r\nx " .. F .. "ok\r\n")
+        assert.same({ "\30exec 1 ok", "x " .. F .. "ok" }, said)
+      end)
+
+    it("says the end once", function()
+      e:bytes(F .. "ok\r\n" .. F .. "ok\r\n")
+      assert.same({ ENDED, F .. "ok" }, said)
+    end)
+  end)
+
+  it("shows a frame it was not given as it is", function()
+    e:bytes("\30exec 65f00001 ok\r\n")
+    assert.same({ "\30exec 65f00001 ok" }, said)
   end)
 
   it("assembles a line from single characters", function()

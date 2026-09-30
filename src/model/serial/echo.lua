@@ -18,11 +18,14 @@
 
 local utf8 = require("utf8")
 
---- The line the micro:bit example's exec has the board print
---- once a file has run (STATUS in its tools.lua). A file
---- that ran on past exec's wait ends while echo shows the
---- board, so echo says how it ended in its place.
-local STATUS = "^\30exec (%a+)$"
+--- A file the micro:bit example's exec sent that runs on past
+--- exec's wait ends while echo shows the board. exec gives
+--- echo the frame the board is to say its end in (expect), a
+--- line of its own with a mark new to that exec, and echo says
+--- how the file ended in its place. The line break the board
+--- puts before the frame is dropped when it leaves an empty
+--- line, and a tail that may yet be the frame is held until
+--- the line shows it is not.
 local ENDED = {
   ok = "The program on the micro:bit has ended.",
   error = "The program on the micro:bit stopped on the"
@@ -83,6 +86,15 @@ function Echo:on()
   self.held = ""
   self.settle = 0
   self.showing = true
+  self.frame = nil
+  self.blank = false
+  self.open = false
+end
+
+--- The frame the board is to say a file's end in, once
+--- @param frame string
+function Echo:expect(frame)
+  self.frame = frame
 end
 
 --- What is held back goes, shown or not: the board has
@@ -90,11 +102,50 @@ end
 function Echo:clear()
   self.held = ""
   self.settle = 0
+  self.frame = nil
+  self.blank = false
+  self.open = false
 end
 
 function Echo:off()
   self.held = ""
   self.showing = false
+  self.frame = nil
+  self.blank = false
+  self.open = false
+end
+
+--- How a whole line says the file ended, when it is the frame
+--- @param line string
+--- @return string? words
+function Echo:ended(line)
+  local frame = self.frame
+  if not frame or line:sub(1, #frame) ~= frame then return nil end
+  return ENDED[line:sub(#frame + 1)]
+end
+
+--- One whole line from the board
+--- @param line string
+function Echo:line(line)
+  -- a line the tail left open ends here, the frame's own
+  -- line break or not
+  local open = self.open
+  self.open = false
+  local ended = self:ended(line)
+  if ended then
+    self.frame, self.blank = nil, false
+    self.say(ended)
+    return
+  end
+  if self.blank then
+    self.blank = false
+    self.say("")
+  end
+  if line == "" and self.frame and not open then
+    self.blank = true
+    return
+  end
+  self.say(line)
 end
 
 --- @return boolean
@@ -108,8 +159,7 @@ function Echo:bytes(chunk)
   while true do
     local line, rest = self.held:match("^([^\n]*)\n(.*)$")
     if not line then break end
-    local status = line:match(STATUS)
-    self.say(status and ENDED[status] or line)
+    self:line(line)
     self.held = rest
   end
   self.settle = SETTLE_S
@@ -121,6 +171,13 @@ function Echo:tick(dt)
   if self.held == "" then return end
   self.settle = self.settle - dt
   if self.settle > 0 then return end
+  local frame = self.frame
+  if frame and frame:sub(1, #self.held) == self.held then return end
+  if self.blank then
+    self.blank = false
+    self.say("")
+  end
   self.write(self.held)
   self.held = ""
+  self.open = true
 end

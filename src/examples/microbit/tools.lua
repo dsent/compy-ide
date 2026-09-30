@@ -115,34 +115,64 @@ end
 
 --- How the chunk exec sends ends: it runs the file, says a
 --- mistake in the board's own words, then says how the file
---- ended on a line of its own, which starts with a character
---- no program prints by chance (STATUS). The console's echo
---- knows it too, and says how a file that ran on past exec's
---- wait ended in its place.
-local STATUS = "\30exec "
+--- ended on a line of its own, its frame: a character no
+--- program prints by chance, and a mark new to each exec. A
+--- line break goes before it, so it starts a line even after
+--- output with no end. The console's echo is given the frame
+--- too, and says how a file that ran on past exec's wait
+--- ended in its place.
+local FRAME = "\30exec "
 local RAN = table.concat({
   " local ok = file ~= nil",
   " if ok then ok, err = pcall(file) end",
   " if not ok then print((file and 'Runtime' or 'Compile')",
   " .. ' error: ' .. tostring(err)) end",
-  " print(ok and '\\30exec ok' or '\\30exec error') end"
+  " print('\\n\\30exec %s ' .. (ok and 'ok' or 'error')) end"
 })
+
+--- How many frames exec has made
+local frames = 0
+
+--- A frame of its own for the exec about to start
+--- @return string
+local function newFrame()
+  frames = frames + 1
+  local mark = ("%x%04x"):format(os.time(), frames % 65536)
+  return FRAME .. mark .. " "
+end
+
+--- The first line exec sends begins so: print is taken before
+--- the file can change it, for the frame
+local OPENING = "do local print, file, err = print, loadstring("
+
+--- The last line exec sends: the end of the file's bracket,
+--- its name, then the run and the frame
+--- @param filename string
+--- @param close string
+--- @param frame string
+--- @return string
+local function closingLine(filename, close, frame)
+  local name = string.format("%q", "@" .. filename)
+  local mark = frame:match("^\30exec (%x+) $")
+  return close .. ", " .. name .. ")" .. RAN:format(mark)
+end
 
 --- The lines exec sends: the file in a chunk of its own, so
 --- what the code declares stays in it, named for the file in
---- the board's words for a mistake
+--- the board's words for a mistake; and the frame its end is
+--- said in, as lines.frame
 --- @param filename string
 --- @return string[]
 local function chunkLines(filename)
   local text = fileForBoard(filename)
   local close = closing(text)
   local open = (close:gsub("%]", "["))
-  local lines = { "do local file, err = loadstring(" .. open }
+  local lines = { OPENING .. open }
+  lines.frame = newFrame()
   for line in text:gmatch("([^\r]*)\r") do
     lines[#lines + 1] = line
   end
-  local name = string.format("%q", "@" .. filename)
-  lines[#lines + 1] = close .. ", " .. name .. ")" .. RAN
+  lines[#lines + 1] = closingLine(filename, close, lines.frame)
   return lines
 end
 
@@ -219,10 +249,12 @@ end
 --- Say what happened, and hand the board back. Echo comes back
 --- on: what the board says from here on is shown.
 --- @param outcome string
-local function finish(outcome)
+--- @param frame string? the frame echo is to take in place
+---   of the board's line, for a file still running
+local function finish(outcome, frame)
   putBack()
   sending = nil
-  echo()
+  echo(nil, frame)
   print(outcome)
 end
 
@@ -291,18 +323,39 @@ end
 local function quietLast(after)
   if after then
     show(after)
-    finish(sending.name .. " is on the board and still running")
+    local running = " is on the board and still running"
+    finish(sending.name .. running, sending.lines.frame)
   else
     stopAt(STOPPED)
   end
 end
 
---- What exec says once the board has run the file, from the
---- chunk's own status line alone
+--- What the board said, less this exec's frame at its end and
+--- the line break that went before it; and how the frame says
+--- the file ended. A frame anywhere else, or of another exec,
+--- is the program's own output.
 --- @param said string
+--- @return string text
+--- @return string? status
+local function framed(said)
+  local frame = sending.lines.frame
+  local at = said:find(frame, 1, true)
+  while at do
+    local status = said:sub(at + #frame):match("^(%a+)\r?\n?$")
+    if status then
+      local text = said:sub(1, at - 1)
+      return (text:gsub("\r?\n$", "")), status
+    end
+    at = said:find(frame, at + 1, true)
+  end
+  return said
+end
+
+--- What exec says once the board has run the file, from its
+--- frame alone
+--- @param status string?
 --- @return string
-local function verdict(said)
-  local status = said:match(STATUS .. "(%a+)")
+local function verdict(status)
   if status == "ok" then
     return sending.name .. " is on the board"
   end
@@ -314,13 +367,6 @@ local function verdict(said)
       .. " it ended"
 end
 
---- What the board said, less the chunk's status line
---- @param said string
---- @return string
-local function unmarked(said)
-  return (said:gsub(STATUS .. "%a+\r?\n?", ""))
-end
-
 --- The last line runs the file: a prompt the board has been
 --- quiet after means the file has run, as far as the board's
 --- bytes can tell; a program that writes "> " and pauses looks
@@ -330,8 +376,9 @@ local function lastLine()
   local said = after and after:match("^(.*)> $")
   local done = said and SETTLE_S <= sending.quiet
   if done then
-    show(unmarked(said))
-    finish(verdict(said))
+    local text, status = framed(said)
+    show(text)
+    finish(verdict(status))
   elseif QUIET_S < sending.quiet then
     quietLast(after)
   end

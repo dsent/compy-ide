@@ -13,13 +13,10 @@ package.preload['utf8'] = package.preload['utf8']
 require('model.serial.init')
 require('model.serial.backend_fake')
 
-local WRAP = 'do local file, err = loadstring([=['
+local WRAP = 'do local print, file, err = print, loadstring([=['
 --- how the last line exec sends begins; the rest runs the file
 --- and says how it ended
 local UNWRAP = ']=], "@f.lua")'
---- the status line the chunk prints once the file has run
-local OK = '\30exec ok\r\n'
-local FAILED = '\30exec error\r\n'
 
 --- @return string? luac5.1, when installed
 local function luac()
@@ -49,6 +46,8 @@ local RAN = 'f.lua is on the board'
 
 describe('micro:bit exec #microbit', function()
   local serial, backend, port, said, echoes, files, flashed
+  --- the frame exec last gave echo
+  local handed
   local os_name = 'Android'
 
   --- tools.lua loaded into an environment of its own, with what
@@ -56,7 +55,10 @@ describe('micro:bit exec #microbit', function()
   local function load_tools()
     local env = setmetatable({
       compy = { serial = port, audio = { hyperjump = function() end } },
-      echo = function(on) echoes[#echoes + 1] = on ~= false end,
+      echo = function(on, frame)
+        echoes[#echoes + 1] = on ~= false
+        handed = frame
+      end,
       readfile = function(name) return files[name] end,
       writefile = function(name, text) files[name] = text end,
       print = function(text) said[#said + 1] = text end,
@@ -84,13 +86,23 @@ describe('micro:bit exec #microbit', function()
     serial:update(0)
   end
 
+  --- The line the board says the file's end in, for the exec
+  --- whose last line went last: a line break, then the frame
+  --- with that exec's mark
+  --- @param word string ok or error
+  --- @return string
+  local function framed(word)
+    local mark = backend.sent[#backend.sent]:match('\\30exec (%x+) ')
+    return '\r\n\30exec ' .. mark .. ' ' .. word .. '\r\n'
+  end
+
   --- The file in, the board prompting after each line, and
   --- quiet after the last
   --- @param tools table
   local function run(tools)
     tools.exec('f.lua')
     for _ = 1, 3 do board() end
-    board('1\r\n' .. OK, '> ')
+    board('1\r\n' .. framed('ok'), '> ')
     serial:update(0.25)
   end
 
@@ -147,8 +159,8 @@ describe('micro:bit exec #microbit', function()
     files['g.lua'] = 'print("]=]")\n'
     local tools = load_tools()
     tools.exec('g.lua')
-    assert.same({ 'do local file, err = loadstring([==[\r' },
-      backend.sent)
+    assert.same({ 'do local print, file, err = print,'
+      .. ' loadstring([==[\r' }, backend.sent)
   end)
 
   --- The lines exec sends for a file, all of them, as the
@@ -192,7 +204,8 @@ describe('micro:bit exec #microbit', function()
     local tools = load_tools()
     tools.exec('f.lua')
     for _ = 1, 3 do board() end
-    board('Runtime error: f.lua:2: boom\r\n' .. FAILED, '> ')
+    board('Runtime error: f.lua:2: boom\r\n' .. framed('error'),
+      '> ')
     serial:update(0.25)
     assert.same('Runtime error: f.lua:2: boom', said[#said - 1])
     assert.same('f.lua was run, and stopped on the mistake above',
@@ -204,7 +217,7 @@ describe('micro:bit exec #microbit', function()
     tools.exec('f.lua')
     for _ = 1, 3 do board() end
     board('seen: Runtime error: none\r\nRuntime error: mine'
-      .. '\r\nall done\r\n' .. OK, '> ')
+      .. '\r\nall done\r\n' .. framed('ok'), '> ')
     serial:update(0.25)
     assert.same('f.lua is on the board', said[#said])
   end)
@@ -237,14 +250,17 @@ describe('micro:bit exec #microbit', function()
       lines[i] = line:gsub('\r$', '')
     end
     local out = {}
+    --- the board's write: a line ends in CR LF
+    local function write(text)
+      out[#out + 1] = (text:gsub('\n', '\r\n'))
+    end
     local env = setmetatable({ print = function(...)
       local parts = {}
       for i = 1, select('#', ...) do
         parts[i] = tostring(select(i, ...))
       end
-      out[#out + 1] = (table.concat(parts, '\t') .. '\n')
-        :gsub('\n', '\r\n')
-    end }, { __index = _G })
+      write(table.concat(parts, '\t') .. '\n')
+    end, io = { write = write } }, { __index = _G })
     local chunk = assert(loadstring(table.concat(lines, '\n')))
     setfenv(chunk, env)
     env.loadstring = function(code, name)
@@ -256,26 +272,34 @@ describe('micro:bit exec #microbit', function()
     return table.concat(out)
   end
 
-  --- the verdict comes from the chunk's status, never from
-  --- what the program printed
+  --- the verdict comes from this exec's frame at the end,
+  --- never from what the program printed; a frame of the
+  --- program's own is shown as it is
   for _, case in ipairs({
     { 'print("Runtime error: practice")\n', 'is on the board' },
     { 'error("first\\nsecond")\n', 'stopped on the mistake' },
     { 'print(1)\nerror("Compile error: no")\n',
       'stopped on the mistake' },
     { 'x = = 1\n', 'stopped on the mistake' },
+    { 'io.write("done ")\n', 'is on the board', 'done ' },
+    { 'print("\\30exec ok")\nerror("boom")\n',
+      'stopped on the mistake', '\30exec ok' },
+    { 'print("prefix \\30exec error suffix")\n', 'is on the board',
+      'prefix \30exec error suffix' },
   }) do
-    it('reads how ' .. case[1]:gsub('\n', ' ') .. 'ended from the'
-      .. ' chunk\'s status', function()
+    it('reads how ' .. case[1]:gsub('\n', ' ') .. 'ended from its'
+      .. ' own frame', function()
         files['g.lua'] = case[1]
         local tools = load_tools()
         local printed = ranOnBoard(tools, 'g.lua')
         board(printed, '> ')
         serial:update(0.25)
         assert.truthy(said[#said]:find(case[2], 1, true))
-        for _, line in ipairs(said) do
-          assert.is_nil(line:find('\30', 1, true))
+        local shown = table.concat(said, '\n')
+        if case[3] then
+          assert.truthy(shown:find(case[3], 1, true))
         end
+        assert.is_nil(shown:find('\30exec %x+ ', 1))
       end)
   end
 
@@ -310,7 +334,7 @@ describe('micro:bit exec #microbit', function()
       board('x\r\n> ', '')
       serial:update(0.1)
       assert.is_not_nil(port.onBytes)
-      backend:rx('y\r\n' .. OK .. '> ')
+      backend:rx('y\r\n' .. framed('ok') .. '> ')
       serial:update(0)
       serial:update(0.25)
       assert.same({ 'x', '> y', RAN },
@@ -361,6 +385,8 @@ describe('micro:bit exec #microbit', function()
       { said[#said - 1], said[#said] })
     assert.is_nil(port.onBytes)
     assert.same({ true, false, true }, echoes)
+    -- echo is to say the end in words when it comes
+    assert.equal(framed('ok'):match('^\r\n(.-)ok\r\n$'), handed)
   end)
 
   it('stops before the end when the board runs the file early',
