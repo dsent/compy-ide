@@ -751,12 +751,7 @@ end
 --- @param exit function?
 function EditorController:_answer(act, exit)
   self:_confirm(act)
-  if exit then
-    exit()
-    --- the gate's tokens hold the other half of this Space
-    --- back, whatever holds the route after the exit
-    self._swallow_glyph = nil
-  end
+  if exit then exit() end
   --- an exit that asks again asks with no chord key still
   --- on its way: the next key answers
   self._asked_by_gate = nil
@@ -783,12 +778,7 @@ function EditorController:_confirm(act)
     local name = self:get_active_buffer().name
     if con:restore_checkpoint(name) then
       local text = con:_readfile(name)
-      --- the reload opens the file again, which drops any
-      --- question; the confirming Space's glyph may be
-      --- still to come
-      local swallow = self._swallow_glyph
       self:reload_active(text)
-      self._swallow_glyph = swallow
     end
     return
   end
@@ -833,16 +823,11 @@ function EditorController:_drop_dialog()
   self.pending_confirm = nil
   self.pending_then = nil
   self._asked_by_gate = nil
-  self._swallow_glyph = nil
 end
 
 --- @param t string
 --- @return boolean handled --- the glyph fed a dialog
 function EditorController:_dialog_textinput(t)
-  if self._swallow_glyph then
-    self._swallow_glyph = nil
-    if t == ' ' then return true end
-  end
   --- a question hears key presses alone: a glyph carries
   --- no repeat flag and may come from a key held since
   --- before the question, so it neither answers nor cancels
@@ -1822,14 +1807,12 @@ function EditorController:keypressed(k, _, isrepeat)
       self.pending_confirm = nil
       self.pending_then = nil
       self.input:clear_error()
-      --- a Space's glyph follows its key press here; Enter
-      --- sends none
-      self._swallow_glyph = k == 'space' or nil
-      --- the Space's glyph follows its key press here;
-      --- once the exit has closed the editor, the gate
-      --- drops it
-      if exit and k == 'space'
-          and not Key.ctrl() and not Key.alt() then
+      --- a plain Space's glyph may follow its key press:
+      --- the gate drops it, into the editor or whatever the
+      --- exit leaves the route to, until the next frame (on
+      --- the device it came first, and the wait lapses)
+      if k == 'space' and not Key.ctrl() and not Key.alt()
+          and self.console then
         self.console.swallow_glyph = ' '
       end
       return self:_answer(act, exit)

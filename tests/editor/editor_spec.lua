@@ -1444,15 +1444,15 @@ describe('Editor #editor', function()
           fresh:get_text_content()[1])
       end)
 
-      --- the desktop's order: the key, then its glyph
-      it('Space confirming a restore types nothing', function()
+      --- the desktop's order: the key, then its glyph, which
+      --- the gate drops
+      it('Space confirming a restore holds its glyph back', function()
         cp_time = 1752400000
         mock.keystroke('C-S-k', press)
         controller:keypressed('space')
-        controller:textinput(' ')
         assert.same({ 'restore:main.lua' }, calls)
         assert.same('nav', controller:get_mode())
-        assert.is_true(controller.input:is_empty())
+        assert.same(' ', controller.console.swallow_glyph)
       end)
 
       --- each place a buffer comes to the front drops the

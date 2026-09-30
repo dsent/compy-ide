@@ -203,6 +203,28 @@ describe('editor key contract #input', function()
       end)
     end
 
+    for _, order in ipairs({ 'device', 'desktop' }) do
+      it('a space typed after Space answered Shift+Esc is kept ('
+        .. order .. ')', function()
+          open_dirty_block()
+          F.session.press('lshift')
+          F.session.press('escape')
+          F.session.release('escape')
+          F.session.release('lshift')
+          if order == 'device' then F.session.type(' ') end
+          F.session.press('space')
+          F.session.release('space')
+          if order == 'desktop' then F.session.type(' ') end
+          assert.same('nav', ed:get_mode())
+          F.love_update(1)
+
+          F.session.type(' ')
+          --- in navigation a glyph opens the block, with it
+          assert.is_truthy(
+            string.unlines(ed.input:get_text()):find('^ '))
+        end)
+    end
+
     it('a space typed after Enter answered Shift+Esc is kept', function()
       open_dirty_block()
       F.session.press('lshift')
