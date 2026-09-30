@@ -343,6 +343,17 @@ per-run boundary) rather than as a phase of a lifecycle.
 
 ## BACKLOG
 
+### T-WRITEFILE-COSTS-A-RENAME — a program's writefile takes about 90 ms on a Compy
+
+- **Where:** `src/model/project/project.lua`, `Project:writefile` → `FS.replace`, with `durable`
+  unset: a new temporary file (a directory write), the data, then a rename over the file (a second
+  directory write), each synchronous on the card, which is mounted dirsync.
+- **Measured on a Compy (2026-09-30), 20 writes each followed by the console's line:** 247 ms at
+  `29c16ccc`, about 12 ms per write, writing in place; 1,799 ms at `d9c2ede7` and 1,888 ms at
+  `c52bed30`, about 90-94 ms per write. A program that saves its state every frame drops frames.
+- **Why it stays (2026-09-30):** the rename is what keeps a full card from emptying the file.
+  Whether a program's writefile keeps the atomic path, or writes in place as before, is dsent's call.
+
 ### T-SPACE-GLYPH-WAIT-ENDS-AT-FRAME — a confirming Space's glyph is let through if it arrives a frame after its key
 
 - **Where:** `src/controller/controller.lua`: the update clears `CC.swallow_glyph` each frame.
