@@ -1911,6 +1911,39 @@ describe('Serial flash', function()
       end
     end)
 
+  --- a close refused while a stop waits for it: the flash
+  --- has one verdict, the stop's
+  it('gives one verdict when a stop takes in a failed close',
+    function()
+      for _, phase in ipairs({ 'close', 'unwind' }) do
+        for _, how in ipairs({ 'stop', 'abandon' }) do
+          local chip = F.chip({ closeStatus = 1,
+            slow = { [0x8B] = 0.3 } })
+          if phase == 'unwind' then
+            chip.over[0x8C] = function(_, c)
+              c.n = (c.n or 0) + 1
+              if c.n == 2 then return string.char(0x8C, 21) end
+            end
+          end
+          local s = connected(chip)
+          local said = {}
+          assert.is_true(s:flash(F.hex(40),
+            function(l) said[#said + 1] = l end))
+          for _ = 1, 400 do
+            local j = s.job
+            if j and j.phase == phase and j.asked then break end
+            s:update(1 / 30)
+            chip.now = chip.now + 1 / 30
+          end
+          assert.same(phase, s.job.phase, how)
+          local cut = s[how](s)
+          local told = joined(said) .. ' ' .. (cut or '')
+          local _, n = told:gsub('did not take', '')
+          assert.same(1, n, phase .. ' ' .. how)
+        end
+      end
+    end)
+
   --- the link goes with the port: after an unplug the next
   --- link must still know the board may be without its program
   it('keeps the doubt about the program across a replug',
