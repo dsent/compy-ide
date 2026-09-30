@@ -18,6 +18,28 @@ local hex = require("hex")
 local HEX = "MICROBIT.hex"
 local LUA = "MICROBIT.lua"
 
+--- How wide the tools' own lines are, inside the console's
+--- 64 columns: a longer line would break mid-word
+local LINE = 56
+
+--- Words for the person, broken between words at LINE, never
+--- inside one
+--- @param text string
+local function say(text)
+  local line
+  for word in text:gmatch("%S+") do
+    if not line then
+      line = word
+    elseif #line + 1 + #word <= LINE then
+      line = line .. " " .. word
+    else
+      print(line)
+      line = word
+    end
+  end
+  print(line or "")
+end
+
 --- A command stopped for a reason a person can put right is
 --- raised with its words under this key: they say what to do,
 --- in place of an error with a line number
@@ -37,9 +59,7 @@ local function said(err)
   if not words then
     error(err, 0)
   end
-  for _, line in ipairs(words) do
-    print(line)
-  end
+  say(table.concat(words, " "))
 end
 
 --- A command that says a refusal in words
@@ -405,7 +425,7 @@ local function finish(outcome, frame, before, after)
   putBack()
   sending = nil
   pass(frame, before)
-  print(outcome)
+  say(outcome)
   if after then
     pass(frame, after)
   end
@@ -721,9 +741,9 @@ end
 --- Say, once, that the board has not taken the line yet
 local function warn()
   sending.warned = true
-  print("exec: the board has not taken " .. where() .. " yet,"
-      .. " and exec is still waiting; restart_microbit() stops"
-      .. " it. " .. UPLOADED)
+  say("exec: the board has not taken " .. where() .. " yet," ..
+      " and exec is still waiting; restart_microbit() stops" ..
+      " it. " .. UPLOADED)
 end
 
 --- The board has not taken the line in flight: its prompt may
@@ -906,7 +926,7 @@ local function afterRestart(restarted)
   if restarted then
     greetingNote()
   else
-    print(NO_RESTART)
+    say(NO_RESTART)
   end
 end
 

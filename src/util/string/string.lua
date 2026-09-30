@@ -208,6 +208,29 @@ string.wrap_array = function(t, i)
   return res
 end
 
+--- The words of s as lines of at most i characters: a line
+--- breaks between words, never inside one, and a word longer
+--- than i stands on a line of its own
+--- @param s string
+--- @param i integer
+--- @return string[]
+string.wrap_words = function(s, i)
+  local res = {}
+  local line
+  for word in s:gmatch('%S+') do
+    if not line then
+      line = word
+    elseif string.ulen(line) + 1 + string.ulen(word) <= i then
+      line = line .. ' ' .. word
+    else
+      table.insert(res, line)
+      line = word
+    end
+  end
+  table.insert(res, line or '')
+  return res
+end
+
 -- https://stackoverflow.com/a/51893646
 --- @param str string
 --- @param delimiter string

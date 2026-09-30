@@ -394,4 +394,15 @@ describe("StringUtils #string", function()
       assert.is_false(string.matches_r('abc', '%W'))
     end)
   end)
+
+  describe('wrap_words', function()
+    it('breaks between words, never inside one', function()
+      assert.same({ 'one two', 'three' },
+        string.wrap_words('one two three', 7))
+      assert.same({ 'a', 'longword', 'b' },
+        string.wrap_words('a longword b', 4))
+      assert.same({ '' }, string.wrap_words('', 10))
+      assert.same({ 'é é', 'é' }, string.wrap_words('é é é', 3))
+    end)
+  end)
 end)

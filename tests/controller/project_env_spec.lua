@@ -515,8 +515,54 @@ describe('ConsoleController project env #project', function()
         usb.detect = detect
         assert.is_true(ok, err)
         assert.are.equal(':data:', sent.data)
-        assert.are.equal(print, sent.say)
         assert.is_nil(found)
+        -- what the flash says is printed, broken between words to
+        -- the console's width
+        local width = CC.model.output.terminal.width
+        local said = { }
+        local print_ = _G.print
+        _G.print = function(t) said[#said + 1] = t end
+        sent.say(('word '):rep(width))
+        _G.print = print_
+        for line in said[1]:gmatch('[^\n]+') do
+          assert.is_true(#line <= width, line)
+          for word in line:gmatch('%S+') do
+            assert.are.equal('word', word)
+          end
+        end
+      end)
+
+    --- UE174: a 71-character line broke mid-word in a console 64
+    --- wide. Every line the flash can say, and every refusal it
+    --- returns, printed at 64 columns breaks between words only.
+    it('breaks every flash message between words at 64 columns',
+      function()
+        local messages = { }
+        for _, file in ipairs({ 'dap.lua', 'dap_flash.lua',
+          'dap_prepare.lua', 'init.lua' }) do
+          local f = assert(io.open('src/model/serial/' .. file))
+          local src = f:read('*a')
+          f:close()
+          -- a message: string literals joined with .., starting
+          -- with a capital, with spaces in it
+          local joined = src:gsub("'%s*%.%.%s*'", '')
+          for text in joined:gmatch("'([A-Z][^'\n]* [^'\n]*)'") do
+            if 64 < #text and not text:find('%%') then
+              messages[#messages + 1] = text
+            end
+          end
+        end
+        assert.is_true(20 < #messages, #messages)
+        for _, text in ipairs(messages) do
+          local wrapped = ConsoleController.wrapped(text, 64)
+          for line in wrapped:gmatch('[^\n]+') do
+            assert.is_true(#line <= 64, line)
+          end
+          -- every word whole: the lines joined give the words back
+          local words = text:gsub('%s+', ' '):gsub('^ ', '')
+              :gsub(' $', '')
+          assert.are.equal(words, (wrapped:gsub('\n', ' ')))
+        end
       end)
   end)
 

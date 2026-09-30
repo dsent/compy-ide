@@ -418,9 +418,32 @@ end
 --- @return boolean? success
 --- @return string? err
 function ConsoleController:flash_microbit(content, on)
+  local width = self.model.output.terminal.width
+  local ok, err
   if on_android() then
-    return SerialPort:flash(content, print, on)
+    ok, err = SerialPort:flash(content, function(line)
+      print(ConsoleController.wrapped(line, width))
+    end, on)
+  else
+    ok, err = self:flash_to_drive(content)
   end
+  if err then err = ConsoleController.wrapped(err, width) end
+  return ok, err
+end
+
+--- A line broken between words to the console's width, which
+--- breaks a longer line where it falls, mid-word
+--- @param text string
+--- @param width integer
+--- @return string
+function ConsoleController.wrapped(text, width)
+  return table.concat(string.wrap_words(text, width), '\n')
+end
+
+--- @param content any
+--- @return boolean? success
+--- @return string? err
+function ConsoleController:flash_to_drive(content)
   local P = self.model.projects
   local p = P.current
   if not p then

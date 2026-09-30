@@ -111,6 +111,13 @@ describe('micro:bit exec #microbit', function()
     return #backend.sent
   end
 
+  --- Everything said, a line after another, as one text: a long
+  --- line is said broken between words
+  --- @return string
+  local function allSaid()
+    return table.concat(said, ' ')
+  end
+
   --- A command refused in words: no error panel, no line
   --- number, and the words given among what it said
   --- @param command function
@@ -274,9 +281,10 @@ describe('micro:bit exec #microbit', function()
       serial:update(0.25)
       -- the chunk may have failed before the file ran, or the
       -- "> " is the program's own
-      assert.same('the board has not said how f.lua went. It may'
+      local words = 'the board has not said how f.lua went. It may'
         .. ' still be running; if the board does not answer, type'
-        .. ' restart_microbit(), then try again.', said[#said])
+        .. ' restart_microbit(), then try again.'
+      assert.equal(words, allSaid():sub(-#words))
       assert.equal(framed('ok'):match('^\r\n(.-)ok\r\n$'), handed)
     end)
 
@@ -482,7 +490,7 @@ describe('micro:bit exec #microbit', function()
       told = table.concat(said, ' ')
       local _, n = told:gsub('has not taken', '')
       assert.equal(1, n)
-      assert.truthy(said[#said]:find('did not take it. Type'
+      assert.truthy(allSaid():find('did not take it. Type'
         .. ' restart_microbit(), then try again. If a program of'
         .. ' yours is on it from upload, upload() puts the Compy\'s'
         .. ' firmware back.', 1, true))
@@ -727,7 +735,7 @@ describe('micro:bit exec #microbit', function()
         .. '\r\r\nYour name> ')
       serial:update(0)
       serial:update(0.25)
-      assert.truthy(said[#said]:find('It may still be running', 1,
+      assert.truthy(allSaid():find('It may still be running', 1,
         true))
       backend:rx('Ada\r\n' .. framed('ok') .. '> ')
       serial:update(0)
@@ -762,12 +770,12 @@ describe('micro:bit exec #microbit', function()
       board()
       said = {}
       for _ = 1, 6 do serial:update(1) end
-      assert.truthy(said[#said]:find('has not taken line 1', 1,
+      assert.truthy(allSaid():find('has not taken line 1', 1,
         true))
       assert.is_not_nil(port.onTick)
       for _ = 1, 55 do serial:update(1) end
       assert.equal(2, sent())
-      assert.truthy(said[#said]:find('did not take it', 1, true))
+      assert.truthy(allSaid():find('did not take it', 1, true))
       assert.is_nil(port.onBytes)
       assert.is_nil(port.onTick)
     end)
@@ -780,7 +788,7 @@ describe('micro:bit exec #microbit', function()
       board(nil, '')
       for _ = 1, 6 do serial:update(1) end
       assert.equal(2, sent())
-      assert.truthy(said[#said]:find('stopped answering', 1, true))
+      assert.truthy(allSaid():find('stopped answering', 1, true))
       assert.is_nil(port.onTick)
     end)
 
@@ -789,7 +797,7 @@ describe('micro:bit exec #microbit', function()
     tools.exec('f.lua')
     for _ = 1, 5 do board() end
     for _ = 1, 61 do serial:update(1) end
-    assert.truthy(said[#said]:find('did not take it', 1, true))
+    assert.truthy(allSaid():find('did not take it', 1, true))
   end)
 
   --- t_slow on UE174: a sleep, then a line; the line showed only
@@ -849,10 +857,10 @@ describe('micro:bit exec #microbit', function()
       board()
       board('Compile error: x\r\n', '> ')
       assert.equal(2, sent())
-      assert.truthy(said[#said - 1]:find('Compile error', 1, true))
-      assert.truthy(said[#said]:find('before its end, and did not'
+      assert.truthy(allSaid():find('Compile error', 1, true))
+      assert.truthy(allSaid():find('before its end, and did not'
         .. ' run it', 1, true))
-      assert.truthy(said[#said]:find('restart_microbit()', 1, true))
+      assert.truthy(allSaid():find('restart_microbit()', 1, true))
       assert.is_nil(port.onBytes)
     end)
 
@@ -1289,6 +1297,37 @@ describe('micro:bit exec #microbit', function()
     assert.is_nil(files['x.hex'])
     assert.is_nil(files['mine.hex'])
     assert.is_false(flashed)
+  end)
+
+  --- UE174: a line longer than the console, 64 wide, breaks
+  --- mid-word; the tools break their long ones between words
+  it('says nothing wider than the console', function()
+    local name = 'a_long_program_name_for_the_board.lua'
+    files[name] = 'x = 1\n'
+    local tools = load_tools()
+    said = {}
+    tools.exec(name)
+    for _ = 1, 61 do serial:update(1) end
+    tools.exec(name)
+    for _ = 1, 4 do board() end
+    board('1\r\n', '> ')
+    serial:update(0.25)
+    backend.refuse = 'break -1'
+    tools.restart_microbit()
+    backend:detach()
+    serial:update(0)
+    tools.exec(name)
+    files['MICROBIT.hex'] = nil
+    tools.upload('x.lua')
+    assert.truthy(#said > 10)
+    for _, line in ipairs(said) do
+      assert.is_true(#line <= 64, line)
+    end
+    local all = allSaid()
+    assert.truthy(all:find('did not take it', 1, true))
+    assert.truthy(all:find('has not said how ' .. name, 1, true))
+    assert.truthy(all:find('did not restart', 1, true))
+    assert.truthy(all:find('No micro:bit is plugged in', 1, true))
   end)
 
   it('says in words that a command needs a file name', function()
@@ -1759,7 +1798,7 @@ describe('micro:bit exec #microbit', function()
       tools.restart_microbit()
       assert.equal(1, backend.resets)
       assert.equal(1, backend.drops)
-      assert.truthy(said[1]:find('the board was restarted', 1,
+      assert.truthy(allSaid():find('the board was restarted', 1,
         true))
       assert.is_nil(port.onBytes)
       assert.is_nil(port.onTick)
@@ -1782,7 +1821,7 @@ describe('micro:bit exec #microbit', function()
       said = {}
       backend.refuse = 'break -1, end -1'
       assert.has_no_error(function() tools.restart_microbit() end)
-      assert.truthy(said[1]:find('did not restart', 1, true))
+      assert.truthy(allSaid():find('did not restart', 1, true))
       assert.is_nil(port.onTick)
     end)
 
@@ -1799,7 +1838,7 @@ describe('micro:bit exec #microbit', function()
     board()
     said = {}
     for _ = 1, 6 do serial:update(1) end
-    assert.truthy(said[#said]:find('restart_microbit()', 1, true))
+    assert.truthy(allSaid():find('restart_microbit()', 1, true))
   end)
 
   it('says in words to plug the board in while none is connected',
