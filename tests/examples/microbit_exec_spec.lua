@@ -191,6 +191,15 @@ describe('micro:bit exec #microbit', function()
       said[#said])
   end)
 
+  it('takes a program\'s own words for its answer', function()
+    local tools = load_tools()
+    tools.exec('f.lua')
+    for _ = 1, 3 do board() end
+    board('seen: Runtime error: none\r\n', '> ')
+    serial:update(0.25)
+    assert.same('f.lua is on the board', said[#said])
+  end)
+
   it('runs a second time the same way', function()
     local tools = load_tools()
     run(tools)
@@ -619,7 +628,7 @@ describe('micro:bit exec #microbit', function()
       local hex = require('examples.microbit.hex')
 
       --- The largest file upload takes
-      local CAP = 4000
+      local CAP = 2500
 
       --- The script the shipped firmware carries
       --- @return string
@@ -897,13 +906,23 @@ describe('micro:bit exec #microbit', function()
             true))
         end)
 
-      it('scrolls "error" alone for a mistake with no line',
+      --- the robot's commands say what went wrong with no line
+      it('scrolls the first sentence of a mistake with no line',
         function()
           local tools = load_tools()
-          files['robot.lua'] = 'error("plain", 0)\n'
+          files['robot.lua'] =
+            'error("The robot does not answer. Check it.", 0)\n'
           local out = boot(uploaded(tools))
-          assert.truthy(out:find('plain\r\n<scrolled error>', 1,
-            true))
+          assert.truthy(out:find('<scrolled The robot does not'
+            .. ' answer>', 1, true))
+        end)
+
+      it('scrolls no line of another file as the file\'s',
+        function()
+          local tools = load_tools()
+          files['robot.lua'] = 'error("lib.lua:340: boom", 0)\n'
+          local out = boot(uploaded(tools))
+          assert.is_nil(out:find('error, line 340', 1, true))
         end)
 
       it('sends exactly the hex it wrote', function()
@@ -927,6 +946,17 @@ describe('micro:bit exec #microbit', function()
           assert.is_true(flashed)
           assert.is_nil(err)
           assert.truthy(out:find('end\r\n', 1, true))
+        end)
+
+      --- CRs go before the file is counted
+      it('counts a file with CRLF endings as the board reads it',
+        function()
+          local tools = load_tools()
+          local code = ('x = 1\n'):rep(math.floor(CAP / 6))
+          files['robot.lua'] = code:gsub('\n', '\r\n')
+          assert.is_true(CAP < #files['robot.lua'])
+          uploaded(tools)
+          assert.is_true(flashed)
         end)
 
       it('refuses a file one character longer, in words',

@@ -282,17 +282,15 @@ local function quietLast(after)
   end
 end
 
---- The last line runs the file: a prompt the board has been
---- quiet after means the file has run, as far as the board's
---- bytes can tell; a program that writes "> " and pauses looks
---- the same
 --- What exec says once the board has run the file: whether
---- the board's answer tells of a mistake that stopped it
+--- the board's answer tells of a mistake that stopped it,
+--- which the board says at the start of a line
 --- @param said string
 --- @return string
 local function verdict(said)
-  local unread = said:find("Compile error:", 1, true)
-  local failed = said:find("Runtime error:", 1, true)
+  local lines = "\n" .. said
+  local unread = lines:find("\nCompile error: ", 1, true)
+  local failed = lines:find("\nRuntime error: ", 1, true)
   local stopped = unread or failed
   if not stopped then
     return sending.name .. " is on the board"
@@ -301,6 +299,10 @@ local function verdict(said)
       .. " above"
 end
 
+--- The last line runs the file: a prompt the board has been
+--- quiet after means the file has run, as far as the board's
+--- bytes can tell; a program that writes "> " and pauses looks
+--- the same
 local function lastLine()
   local after = afterEcho()
   local said = after and after:match("^(.*)> $")
@@ -601,19 +603,27 @@ local RUN_PROXY = table.concat({
   "end"
 }, "\n")
 
---- The file's run: its text, its name for mistakes, and the
---- words for a mistake that says nothing
+--- The file's run: its text, and its name for mistakes
 local RUN_FILE = table.concat({
   "setmetatable(proxy, { __index = get, __newindex = set })",
   "local file, err = loadstring(%s, %s)",
   "local ran = file ~= nil",
-  "if ran then ran, err = pcall(setfenv(file, proxy)) end",
+  "if ran then ran, err = pcall(setfenv(file, proxy)) end"
+}, "\n")
+
+--- A mistake, said: the whole of it printed, and on the
+--- lights "error" and its line in the file, or the message's
+--- first sentence when it names no line of the file. Its
+--- words for a mistake that says nothing, and the pattern
+--- for a line of the file.
+local RUN_SAY = table.concat({
   "local function say()",
   "  local text = err == nil and %q or tostring(err)",
   "  print(text)",
-  "  local line = text:match(':(%%d+):')",
-  "  microbit.display.scroll(line and 'error, line ' .. line",
-  "    or 'error')",
+  "  local line = text:match(%q)",
+  "  local short = line and 'error, line ' .. line",
+  "  local first = text:match('^[^.]+') or 'error'",
+  "  microbit.display.scroll(short or first:sub(1, 40))",
   "end",
   "if not ran then pcall(say) end"
 }, "\n")
@@ -633,16 +643,18 @@ local RUN_END = table.concat({
 --- a quarter of it taken by the firmware's own script. It
 --- holds the file as text, as the text read into the parser,
 --- and as parsed code, and the parsed code grows with how
---- much the file does per character: a list of short calls
---- or a long table of numbers costs about twice what a
+--- much the file does per character: a table of distinct
+--- strings or of functions costs about three times what a
 --- program of the same length usually does. A board that
 --- runs out of memory reading its program does not start: it
 --- shows 020 on every start until upload() puts the shipped
---- firmware back. 4000 keeps the densest code tried within
---- the memory a 7000-character program of the usual kind
---- takes, and 7916 characters of that kind started on a
---- board; the densest code at 4000 is yet to be tried on one.
-local MAX_SCRIPT = 4000
+--- firmware back. Measured with the board's Lua and a
+--- CODAL-like allocator on a computer, 2500 keeps the
+--- densest code tried within the memory a 7000-character
+--- program of the usual kind takes, and 7916 characters of
+--- that kind started on a board; the densest code at 2500 is
+--- yet to be tried on one.
+local MAX_SCRIPT = 2500
 
 --- Say that MICROBIT.hex has no place for a Lua file, and
 --- how to send the file alone
@@ -661,13 +673,18 @@ end
 --- @param filename string
 --- @return string
 local function runOf(script, filename)
-  -- a CR first would be taken with the newline after the
-  -- bracket, and every line counted one too few
-  script = script:gsub("\r\n?", "\n")
   local name = string.format("%q", "@" .. filename)
+  local file = RUN_FILE:format(quoted(script), name)
   local silent = filename .. " stopped, and said nothing more."
-  local file = RUN_FILE:format(quoted(script), name, silent)
-  return RUN_PROXY .. "\n" .. file .. "\n" .. RUN_END
+  local line = "^" .. filename:gsub("%p", "%%%0") .. ":(%d+):"
+  local say = RUN_SAY:format(silent, line)
+  local parts = {
+    RUN_PROXY,
+    file,
+    say,
+    RUN_END
+  }
+  return table.concat(parts, "\n")
 end
 
 --- The firmware's own script with a Lua file run in it; nil,
@@ -698,10 +715,11 @@ end
 --- @param filename string
 local function tooLong(filename)
   print(filename .. " is too long for the micro:bit, which")
-  local limit = "takes a program of up to %d characters; a"
+  local limit = "takes a program of up to %d characters;"
   print(limit:format(MAX_SCRIPT))
-  print("letter with an accent or a symbol counts as two or")
-  print("more. Make it shorter, then upload it again.")
+  print("letters with accents and signs beyond a plain")
+  print("keyboard count as two or more. Make it shorter, then")
+  print("upload it again.")
 end
 
 --- A Lua file's text; nil, said, when it holds no program or
@@ -709,7 +727,9 @@ end
 --- @param filename string
 --- @return string?
 local function scriptOf(filename)
-  local script = read(filename)
+  -- a CR first would be taken with the newline after the
+  -- bracket, and every line counted one too few
+  local script = read(filename):gsub("\r\n?", "\n")
   if not script:find("%S") then
     empty(filename)
     return nil
