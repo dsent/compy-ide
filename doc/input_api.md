@@ -848,14 +848,20 @@ that is the editor's own handling, not a reservation: it applies when you are
 editing, not while your project runs. Bare Ctrl+S does nothing there; the
 editor keeps it for itself.
 
-**Known limitation, and it ships this way.** Ctrl+Shift+S and Ctrl+T both leave
-the editor **without writing an open, changed block** — the changes are lost
-without a prompt. Shift+Esc is the supported way out and the only *exit* that
-asks before discarding; use it. (One further path discards a draft without
-asking, without leaving the editor: Ctrl+J while editing moves you to another
-file, and a Shift+Esc after it no longer sees an edit in progress.) Both chords predate this release and are documented
-rather than fixed here — the contract is
-`doc/development/decisions/input.md`, `D-EDITOR-KEYS`, statement 6.
+Ctrl+Shift+S, Ctrl+Q, Ctrl+Shift+R and Ctrl+Alt+R leave the editor too, and so
+does Ctrl+T while you navigate or edit a block; in search or while moving a
+block, Ctrl+T does nothing. Each first asks the question Shift+Esc asks when
+you would lose a change: a block you have changed and left open, one you left
+open in another file with Ctrl+J, or a file whose last save failed, which the
+question names. The question brings you to the file it asks about. Enter or
+Space discards that change and goes on to the next one, and leaves once none is
+left. Anything else keeps the change: you stay on that file, and the files you
+had opened from it with Ctrl+J are closed. Ctrl+Esc exits the IDE from anywhere
+and does not ask. The contract is `doc/development/decisions/input.md`,
+`D-EDITOR-KEYS`, statement 6.
+
+Ctrl+J while you edit a block opens the file it requires and keeps your edit
+with the first file: Shift+Esc back to it shows the edit again, still open.
 
 ### Pointer and click hooks
 

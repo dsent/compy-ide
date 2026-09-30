@@ -665,7 +665,7 @@ teardown invariant, which is the part later decisions depend on.
 
 **Decision (as amended).** The project route occupies **every** input channel — keyboard, text,
 pointer and the derived click events — from activation until the project stops. A non-blocking
-project reaching `'project_open'` keeps them; `Ctrl+Esc` is the way back to the console. On project
+project reaching `'ready'` keeps them. On project
 stop, every handler restores to framework defaults and every project participant — handler tables,
 callbacks, widget configuration — resets.
 
@@ -2480,8 +2480,8 @@ it.
 | `Shift+Esc` | **always consumed** — leave, and discard. *(Remark, 2026-09-09 — de facto, verified in `editorController.lua`: the four states that claim bare Escape below claim it **regardless of modifiers**, so in a confirmation dialog, over an error message, in a block reorder and in search, `Shift+Esc` does what bare Escape does. It is still **consumed**; what it is not is leave-and-discard. That meaning belongs to navigation and editing — the two modes where bare Escape is silent. The two rows therefore dovetail rather than conflict: **Escape's four states are exactly the states this row's second clause does not apply in**. Owner ruling: a harmless overlook in the statement, corrected in place.)* |
 | bare `Escape` | **consumed in exactly four states**: dismissing an error, cancelling a confirmation dialog, cancelling a block reorder, and closing search. In navigation and in editing it does **nothing** |
 | `Ctrl+S` | **not the editor's** — reserved at application level, where the reservation runs **before** the route and does **not consume** (`D-RESERVE-TABLE`). So the key *does* reach the editor controller, which does not claim it — the rework's checkpoint is `Ctrl+K` (`../technical_debt/input.md`, `T-CTRL-S-UNCLAIMED`) — and it falls through to the widget, which has no binding for it. Nothing happens: ***not the editor's* is about claim, not about reach** |
-| `Ctrl+Shift+S` | **not in the editor's own spec** — an inherited binding this branch **re-expresses in `EditorController:_leave_keys`** (statement 3), whose effect is the console's `finish_edit`. It is not in the reservation table at all, so *"application level"* describes where the **effect** lives, not the binding. **Leaves the editor without writing an open changed block** (statement 6) |
-| `Ctrl+T` | **not the editor's** — the application's run/editor quickswitch. In `nav` or `edit` it leaves the editor **and starts the project run**, also without writing an open changed block (statement 6) |
+| `Ctrl+Shift+S` | **not in the editor's own spec** — an inherited binding this branch **re-expresses in `EditorController:_leave_keys`** (statement 3), whose effect is the console's `finish_edit`. It is not in the reservation table at all, so *"application level"* describes where the **effect** lives, not the binding. With a changed block open it first asks `Shift+Esc`'s discard question; confirming discards the change and leaves (statement 6) |
+| `Ctrl+T` | **not the editor's** — the application's run/editor quickswitch. In `nav` or `edit` it leaves the editor **and starts the project run**. With a changed block open it first asks `Shift+Esc`'s discard question; confirming discards the change and takes the exit (statement 6) |
 
 1. **Bare Escape is silent in both main modes**, and this is the row with teeth. It binds **our**
    tree, not only the editor's own code: a key the contract says is silent must be silent **after
@@ -2495,13 +2495,15 @@ it.
 2. **Leaving and discarding are always `Shift+Esc`.** There is no second way out that the contract
    recognises, which is what makes an unrecognised one worth finding rather than preserving.
    **Two were found and are now named — see statement 6**, which amends this one: `Shift+Esc`
-   remains the only *guarded* way out, and it is no longer the only one that exists.
+   remains the only *guarded* way out, and it is no longer the only one that exists. *Amended
+   2026-09-30: the five editor exits ask `Shift+Esc`'s question too (statement 6).*
 3. **`Ctrl+S` and `Ctrl+Shift+S` are above the editor**, so neither is the editor's to define and
    neither is ours to re-express at route level. We do re-express the second one
    (`../technical_debt/input.md`, `T-LEAVE-KEYS-LOSES-BLOCK`), and it reaches a path with no
    acceptance step, so it loses an open changed block. The chord ships **deprecated** by owner
    ruling, **and the loss is now RULED — it ships, documented** (2026-09-07; statement 6, which also
-   names the second exit this statement does not: `Ctrl+T`).
+   names the second exit this statement does not: `Ctrl+T`). *Amended 2026-09-30: the chord asks
+   before it drops a changed block, and loses nothing unasked (statement 6).*
 4. **What this does not decide.** @dsent has stated a **direction of travel** for the keymap —
    collapsing the exits onto `Ctrl+D`, dropping `Ctrl+Q`, and moving plain `Escape` into
    `Shift+Esc`'s role with confirmation before anything destructive. **That is stated intent and is
@@ -2522,6 +2524,21 @@ it.
 
 6. **Two exits are historically unguarded, and the release ships them that way** (owner ruling,
    2026-09-07, at `OP-04`: *"ship both, document the defect"*).
+
+   **AMENDED 2026-09-30: the five editor exits are guarded.** `Ctrl+Shift+S`, `Ctrl+T` (from `nav`
+   and `edit`; in search and reorder it does nothing), and the gate's `Ctrl+Q`, `Ctrl+Shift+R` and
+   `Ctrl+Alt+R` ask `Shift+Esc`'s own question (`EditorController:ask_to_leave`) when leaving would
+   lose a change: a changed open block, a changed draft `Ctrl+J` left in a file below, or a file
+   whose last write failed. The question brings its file to the front, closing the files above it.
+   Enter or Space discards the change as `Shift+Esc` does and goes on to the next change, taking the
+   exit once none is left; anything else keeps the change, on that file. `Ctrl+Esc` exits the IDE
+   from any state and does not ask. No key and no dialog is added: this is the
+   *editor-side `request_leave`* named below. The pinned cases are now *"Ctrl+Shift+S asks before it
+   drops a changed block"* and *"Ctrl+T asks before it drops a changed block"*, with the gate's
+   chords under *"the project exits ask first"*. What follows is the entry as ruled.
+
+   **The `Ctrl+J` gap below is closed (2026-09-30):** the draft stays with its own file and comes
+   back when `Shift+Esc` returns to it (`../technical_debt/input.md`, `T-EXITS-BYPASS-GUARD`).
 
    **NARROWER THAN THE CODE, and the gap is recorded rather than ruled** (found the same day, after
    this statement was written): *"two exits"* is exact **about exits**, and a **third** path loses a
@@ -2557,7 +2574,7 @@ it.
    `request_leave` that runs the existing confirmation and completes the exit on confirm — so the
    policy stays where #45 put it and only its reachability changes. **Full analysis, both guard
    chains and the shape of the work: `../technical_debt/input.md`, `T-EXITS-BYPASS-GUARD`**
-   (`BACKLOG`), with the chord's own history on `T-LEAVE-KEYS-LOSES-BLOCK`.
+   (`RETIRED`, paid 2026-09-30), with the chord's own history on `T-LEAVE-KEYS-LOSES-BLOCK`.
 
    **The one exit that IS guarded is pinned**: `tests/editor/editor_spec.lua`, *"leaving through
    Shift+Esc (2.3)"* — a dirty block asks instead of leaving.

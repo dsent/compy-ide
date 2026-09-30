@@ -100,7 +100,8 @@ known state with its reason recorded, which is what `BACKLOG` is for:
 
 - `T-EDITOR-SEAM-DEFAULT-OPEN`, 2026-09-06 — the release does not close the seam structurally.
 - `T-LEAVE-KEYS-LOSES-BLOCK`, 2026-09-07 — *"ship both, document the defect"*; the loss is named in
-  `../decisions/input.md`, `D-EDITOR-KEYS` statement 6 and in the shipping guide.
+  `../decisions/input.md`, `D-EDITOR-KEYS` statement 6 and in the shipping guide. Paid on
+  2026-09-30 and now in `RETIRED`.
 - `T-CTRL-S-UNCLAIMED`, 2026-09-07 — *"we do not intervene, ship what was shipped by #45"*; bare
   Ctrl+S stays unbound and is theirs to rebind.
 
@@ -342,6 +343,104 @@ per-run boundary) rather than as a phase of a lifecycle.
 
 ## BACKLOG
 
+### T-TEMP-NAME-DIRECTORY-BLOCKS-SAVES — a folder at a save's temporary name stops every save of its file
+
+- **Where:** `src/util/filesystem.lua`, `create_new`: a leftover at the reserved name is removed with
+  `os.remove`, which cannot remove a folder with files in it, so the retry fails too.
+- **Scenario:** someone makes a folder `.main.lua.compy-tmp`, with a file in it, in the project, from
+  a PC with the card in it. Every save of `main.lua` fails, and the editor says "Could not save the
+  file. Check the storage and try again.", which does not lead to the folder.
+- **Why it stays (2026-09-30):** Compy never makes such a folder, and a project refuses the name;
+  only a change to the card from outside does.
+
+### T-SAVE-MAY-RECASE-NAME — a save through a name differing only in case may change the name on the card
+
+- **Where:** `src/util/filesystem.lua`, `FS.replace`: the rename puts the file in place under the
+  name it was saved through.
+- **Scenario:** the project holds `main.lua`, and `edit('Main.lua')` opens it, as the card ignores
+  case. A save renames `.Main.lua.compy-tmp` to `Main.lua`, and the file may now be called
+  `Main.lua`. Before the atomic save, the write went into the existing entry, whose name stayed.
+- **Why it stays (2026-09-30):** inferred from the FAT drivers, not run on a card; nothing on the
+  card breaks, as lookups ignore case. A project copied to a case-sensitive filesystem could miss
+  `main.lua`. A fix renames to the name the listing already holds when the two differ in case alone.
+
+### T-WRITEFILE-COSTS-A-RENAME — a program's writefile takes about 90 ms on a Compy
+
+- **Where:** `src/model/project/project.lua`, `Project:writefile` → `FS.replace`, with `durable`
+  unset: a new temporary file (a directory write), the data, then a rename over the file (a second
+  directory write), each synchronous on the card, which is mounted dirsync.
+- **Measured on a Compy (2026-09-30), 20 writes each followed by the console's line:** 247 ms at
+  `29c16ccc`, about 12 ms per write, writing in place; 1,799 ms at `d9c2ede7` and 1,888 ms at
+  `c52bed30`, about 90-94 ms per write. A program that saves its state every frame drops frames.
+- **Why it stays (2026-09-30):** the rename is what keeps a full card from emptying the file.
+  Whether a program's writefile keeps the atomic path, or writes in place as before, is dsent's call.
+
+### T-SPACE-GLYPH-WAIT-ENDS-AT-FRAME — a confirming Space's glyph is let through if it arrives a frame after its key
+
+- **Where:** `src/controller/controller.lua`: the update clears `CC.swallow_glyph` each frame.
+- **Scenario:** a Space answers an editor question with its key press, then a frame's update runs,
+  and only then does its glyph arrive. Most answers leave the editor open in navigation (Shift+Esc's
+  discard, a checkpoint's overwrite or restore), where a glyph opens a new block holding it: an
+  unasked-for open block, closed with Esc. After an exit the glyph reaches the console, or a program
+  Ctrl+T started. In the other direction, a Space typed within the same frame after an answer is
+  dropped.
+- **Why it stays (2026-09-30):** a key press and its glyph come in the same event batch on the
+  desktop and on the device; a split across an update was not seen.
+
+### T-REPLACE-NEEDS-POSIX-RENAME — a save renames over the file, which Windows' rename refuses
+
+- **Where:** `src/util/filesystem.lua`, `FS.replace` → `FS.rename` → `os.rename`.
+- **Scenario:** under Windows, saving a file that exists fails: the C runtime's rename refuses an
+  existing target, so every save after the first, every checkpoint overwrite and every restore
+  fails.
+- **Why it stays (2026-09-30):** there is no Windows build; Linux and Android rename over an
+  existing file, and the card does too (checked on a Compy). `FS.replace`'s comment says so.
+
+### T-GLYPH-ONLY-SPACE-ANSWERS-NOTHING — a keyboard that sends a Space as text alone cannot answer an editor question with it
+
+- **Where:** `src/controller/editorController.lua`, `_dialog_textinput`: while a question is open a
+  glyph neither answers nor cancels it; only a fresh key press does (`keypressed`).
+- **Scenario:** on an on-screen keyboard, which sends a Space as text with no key press, Ctrl+Q asks
+  about a changed block and Space does nothing. Enter still answers: it arrives as a key press.
+- **Why it stays (2026-09-30):** a glyph carries no repeat flag, so letting one answer let a held
+  Space give consent to questions the person never saw. The Compy has a hardware keyboard, whose
+  Space sends a key press.
+
+### T-MOUSE-LEAVES-QUESTION — with editor mouse input on, a click leaves a question on another block
+
+- **Where:** `src/controller/editorController.lua`, the mouse navigation that accepts an open block
+  and leaves edit mode without dropping `pending_confirm`.
+- **Scenario, with `cfg.editor.mouse_enabled = true`:** change `x = 1` to `x = 2`, raise
+  `Shift+Esc`'s question, click the line `y = 1`. The block is accepted and the question stays;
+  Enter answers it against `y`, recording a discard pair, and Ctrl+Z then deletes `y` from the file.
+- **Why it stays (2026-09-30):** the shipped build turns editor mouse input off (`src/main.lua`).
+  A fix drops the question on any pointer action that moves the selection or leaves edit mode.
+
+### T-PROGRAM-SWITCH-DROPS-DRAFT — a program that switches projects under the editor drops its draft
+
+- **Where:** `src/controller/consoleController.lua`, `open_project` → `_close_project` →
+  `stop_project_run` → `finish_edit`, reached from a program's own code; the editor's exit question
+  (`EditorController:ask_to_leave`) sits on the gate's chords and is not consulted.
+- **Scenario:** a program that stays idle in `ready` keeps a pointer hook that calls
+  `project('b')`. Open the editor, change a block, click: the hook switches projects, the editor
+  closes, and the change is gone unwritten and unasked.
+- **Why it stays (2026-09-30):** older than this branch, and it needs a program that switches
+  projects under the person editing. Asking there means teardown that can wait for an answer: the
+  program's `project()` call would have to be deferred until the question is answered, which is
+  more than a contained change.
+
+### T-CTRL-ESC-DROPS-CHANGE — Ctrl+Esc exits the IDE with a changed block open, unasked
+
+- **Where:** `src/controller/controller.lua`, the `keyreleased` reservation
+  `['ctrl+escape'] = Application.request_application_exit`, which no editor question guards;
+  `love.quit` lets the exit through in `app_state == 'editor'`.
+- **Scenario:** change an open block, hold Ctrl, press and release Escape. The IDE exits; the draft,
+  and any draft `Ctrl+J` left in another file, were never written.
+- **Why it stays (2026-09-30):** `Ctrl+Esc` is the untaught key that leaves the IDE from any state,
+  and the keys are frozen for 0.5.0. `../decisions/input.md`, `D-EDITOR-KEYS` statement 6 and the
+  input guide say it does not ask. A fix would route the reservation through
+  `EditorController:ask_to_leave` and request the exit on confirmation.
+
 ### T-HISTORY-UNREACHABLE — no project-facing way to read, navigate or clear the input history (capability deferred; the limitation is documented)
 
 **MOVED FROM `ACTIVE` TO `BACKLOG` 2026-09-09 (session89).** The entry was `ACTIVE`
@@ -523,312 +622,6 @@ future author adding an editor branch meets the constraint at the site).
 - **Found:** 2026-09-05 by the S75 delivery review, which checked #45's bindings instead of
   accepting the session's reading of #45's comment.
 - **Roadmap:** `MERGE-01-08`, **closed 2026-09-07**. It was blocked on an owner ruling rather than on work, and the ruling is the header of this entry: *do not intervene*.
-
-### T-LEAVE-KEYS-LOSES-BLOCK — the editor's whole-editor exits do not write an open changed block: two losing doors, both older than #45
-
-**RULED AND MOVED TO `BACKLOG`, 2026-09-07** (owner, at `OP-04`): *"ship both, document the
-defect."* The loss ships knowingly. It left `ACTIVE` because an `ACTIVE` slug is a commitment to fix
-before the PR and the owner ruled the opposite — **and because the ruling closed `OP-04`, the row
-that pointed at it**, which would have left it as exactly the visible gap `agents/rules/ledgers.md`
-§5 describes. **The release obligation it carried is discharged**, not dropped: the defect is named
-in `../decisions/input.md`, `D-EDITOR-KEYS` statement 6 and in the shipping guide's reservation
-section, and the guarded exit is pinned by four tests. What remains here is the record. The
-architectural half is `T-EXITS-BYPASS-GUARD` below.
-
-- **Where:** `src/controller/editorController.lua`, `EditorController:_leave_keys` — `k == "s"` with
-  Shift and not Alt calls `self.console:finish_edit()`.
-- **The loss is at `finish_edit`, not at the chord, and there are THREE entrances** (found
-  2026-09-07, session79, by an AST call-hierarchy query the three preceding sessions could not run —
-  `lua-lsp` was dead. `mcp__lua-lsp__references` on `finish_edit`; `grep` for the name finds the
-  same three, so this is confirmable without the LSP now that it is written down):
-  1. **`Ctrl+Shift+S`** — `EditorController:_leave_keys` (`editorController.lua:72-76`). The chord
-     this entry was opened for, and the one `OP-04` discusses.
-  2. **`Ctrl+T`** — `reserved_quickswitch` (`controller.lua:807-822`), the leave-the-editor-and-run
-     door. In `app_state == 'editor'` **and** `is_normal_mode()`, it calls `finish_edit()`, stores
-     the returned state and runs the project. `is_normal(m)` is `m == 'nav' or m == 'edit'`
-     (`editorController.lua:216-218`), so **`edit` — the mode in which a block is open and being
-     changed — is included.** Same unwritten block, then a project run on top of it.
-  3. **`Shift+Escape` in `nav` mode with an empty widget** — `_normal_mode_keys`' `discard()`
-     (`editorController.lua:1347-1355`) → `close_buffer()` → `finish_edit()` when fewer than two
-     buffers are open (`:203-212`). **This one reaches `finish_edit` but does NOT lose a block —
-     corrected 2026-09-07 in this entry's own session, on the owner's question**; the first
-     statement of it here claimed *"emptying a block that had content is the change that is then not
-     written"*, and that is wrong. See the guard analysis below. It is listed because a fix sited at
-     `finish_edit` has to account for it as a caller, not because it is a defect.
-- **Doors 1 and 2 lose data; door 3 does not, and the difference is what each one checks before it
-  leaves.**
-  - **Door 1 has no mode guard at all.** `_leave_keys` is called under `if Key.ctrl()` in
-    `keypressed` (`editorController.lua:1545-1553`), *before* the mode dispatch below it, so
-    `Ctrl+Shift+S` fires in `edit` mode with a dirty loaded block.
-  - **Door 2's guard admits the dangerous mode.** `is_normal_mode()` is `nav or edit`
-    (`:216-218`), and `edit` is where a block is open and modified.
-  - **Door 3's guard excludes it, and the reason needs no route inventory.** `discard()` branches:
-    `is_empty and self.mode == 'nav'` → `close_buffer()`; **everything else → `discard_edit()`**,
-    which is #45's confirming guard. `is_empty` is the **widget's** (`input:is_empty()`, read once
-    at the top of `_normal_mode_keys`), and **an unwritten change exists only as text in the
-    widget** — the block holds what was last written, which is what `discard_edit` compares the
-    draft against. So the branch that reaches `finish_edit` runs **only with an empty widget, and
-    an empty widget has nothing unwritten to lose.** That is true however the mode was reached, and
-    it stays true if another route into `nav` is ever added.
-  - **The route inventory was tried and is abandoned — do not rebuild it.** Three successive
-    wordings here argued this from *which routes reach `nav` from `edit`*, and all three were wrong
-    on a different site: first *"`leave_edit()` is the only `edit → nav` route"* (`leave(dir)`'s
-    clean branch inlines the same three lines), then an enumeration of all six `set_mode('nav')`
-    sites that dismissed `:117`, `open()`, as unreachable from `edit` — **it is reachable**, via
-    `Ctrl+J` → `follow_require` → `console:edit` → `open`, and unlike the routes that enumeration
-    accepted it clears neither the loaded block nor the input. The conclusion was right every time
-    and the argument was not, which is the signal that route-counting is the wrong shape of
-    argument for it. The statement above replaces it and depends on no inventory.
-  - **That mis-read is a real defect on its own path**, and it is recorded where it belongs rather
-    than here: `T-EXITS-BYPASS-GUARD`, *a THIRD bypass*. It loses the **draft** at `leave_edit`,
-    not an open block at `finish_edit`, so it **adds no door to this entry** — it is why the
-    inventory was retired, not a fourth entrance.
-  **The data-loss surface is therefore two doors, not three, and both predate #45.**
-- **What #45 did about this class, measured: it built the guard and did not wire the exits to it**
-  (2026-09-07, owner question — *"#45 did not fix it but did what instead?"*). `git diff af9a5782
-  f4cf338c -- src/controller/consoleController.lua | grep finish_edit` is **empty**, and
-  `save_state()` is byte-identical across the import (`:216` before, `:289` after). What #45 added
-  is the entire acceptance-and-confirmation discipline **inside `EditorController`**, none of which
-  exists at `af9a5782`: `accept_block` (validate → size-check → `record_write` → `save`, with a
-  refusal path that keeps the block open because *"a failed write must not read as accepted"*),
-  `discard_edit` (compares the draft against the original and, when they differ, sets
-  `pending_confirm = 'discard'` and asks *"discard the changes? Confirm [Enter] / Cancel [Esc]"*),
-  `leave_edit` (the clean exit), `_confirm`, `refuse`, `record_write`, `_reject_oversized`.
-  **So the editor already knows how to protect a dirty block, and the two whole-editor exits never
-  ask it** — while `discard_edit`, the key #45 itself owns, does. `finish_edit` is console-level, predates the feature and predates #45, and
-  its name promises a finish it does not perform: it stores the clipboard and drops the buffers.
-- **All three entrances exist at #45's own tip, and both losing doors are open there, before our
-  import** (2026-09-07, owner question —
-  *"were these doors left open at the tip of #45 before it was imported into our branch?"*).
-  Measured at `f4cf338c`, which is `dev + #45`:
-  - **Door 1, `Ctrl+Shift+S`** — `controller.lua:592-601`, application-level under
-    `app_state == 'editor'`, with #45's own comment beside it (*"bare Ctrl+S is reserved for the
-    checkpoint (rework spec 2.6); saving is automatic, leaving is Shift+Esc"*) → `CC:finish_edit()`.
-  - **Door 2, `Ctrl+T`** — `controller.lua:562-583`, unchanged from the base.
-  - **Door 3, `Shift+Escape`** — `editorController.lua:1317-1322` → `close_buffer()` →
-    `finish_edit()` (`:173-182`).
-  - **`finish_edit` itself** — `consoleController.lua:978-991`, identical to ours line for line.
-  **So we imported three open doors and invented none.** What is ours is the *layer*: doors 1 and 2
-  were re-expressed as `RESERVED` entries, and door 1 moved to route level.
-- **Door 3 is #45's own wiring, and #45 guarded it.** At `af9a5782` (dev, pre-#45) `close_buffer`
-  already existed with the same `finish_edit()` call (`editorController.lua:122-130`) but **nothing
-  called it** — `grep -c close_buffer` returns 1, the definition alone. **#45 gave the dead sink a
-  key**, its own spec-2.3 `discard()` path — **and routed every case that could lose something to
-  `discard_edit()` instead**, sending only the empty-and-nav case to the sink. *(An earlier
-  statement in this entry read that #45 opened an unguarded entrance beside its own guard. That was
-  wrong and is withdrawn: the entrance is guarded, and #45's handling of the key it added is
-  correct.)* **The transferable point survives and is narrower:** #45 fixed the class **at the
-  block level**, everywhere it owns the key, and left the two **whole-editor** exits — which it did
-  not author — calling `finish_edit` as before.
-- **The two losing doors, by key and full guard chain at `f4cf338c`** (2026-09-07, owner question —
-  *"which keys they are wired to at the tip of #45?"*). Both are application-level `Ctrl` chords in
-  `controller.lua`; **neither passes through `EditorController`**, which is why neither can reach a
-  guard that lives inside it. There is **no `_leave_keys` at their tip** — that method is ours.
-  - **`Ctrl+Shift+S`** — `project_state_change()`: `Key.ctrl()` → `k == "s"` →
-    `app_state == 'editor'` → `Key.shift()` → `CC:finish_edit()`.
-  - **`Ctrl+T`** — `quickswitch()`: `Key.ctrl() and not Key.alt() and k == 't'` →
-    `app_state == 'editor'` → `CC.editor:is_normal_mode()` → `CC:finish_edit()` →
-    `CC:run_project()`.
-- **#45's own comment sits on door 1 and names a different key as the exit:** *"bare Ctrl+S is
-  reserved for the checkpoint (rework spec 2.6); saving is automatic, **leaving is Shift+Esc**"*.
-  And Shift+Esc is guarded twice: a dirty block goes to `discard_edit()`'s confirmation, and only
-  after `leave_edit()` has cleared it does a second press reach `close_buffer()` → `finish_edit()`.
-  **The editor cannot be left with unwritten changes via the key #45 documents as leaving** — the
-  two doors that lose the block are the ones that comment implicitly excludes, which matches its
-  author's account of the chord as *inherited and absent from the editor spec*.
-- **One parity divergence of ours, recorded here because it was not written down anywhere.** Their
-  door 1 has **no Alt guard**; our `_leave_keys` is `k == "s" and Key.shift() and not Key.alt()`.
-  So **`Ctrl+Alt+Shift+S` leaves the editor at `f4cf338c` and does nothing on this branch.** Ours is
-  the narrower binding — defensible, and still a deviation from *"exact behaviour #45 ships"*
-  introduced by the re-homing rather than ruled. It is not covered by the tests
-  (`input_global_shortcuts_spec.lua` presses `lctrl`/`lshift`/`s` only).
-- **This settles the parity half of the owner's standing ruling** (*"ship exactly what #45 ships;
-  if its destructive behaviour, escalate"*): at #45's tip both losing doors lose the block, so
-  **shipping them is exact parity**, and any acceptance step we add is a deliberate divergence from
-  #45 rather than a correction toward it. The escalation half was `OP-04`'s, and it ruled on
-  2026-09-07: **ship both exits, documented** — so no acceptance step is taken.
-- **Consequence: the fix is a routing question, not a policy question.** Nothing here needs new
-  data-loss policy invented — `discard_edit`'s confirm is the policy, authored by #45 and consistent
-  with @dsent's stated direction. What is missing is that `finish_edit` does not go through it.
-  **The real cost is that the guard is modal and the exits are synchronous:** `pending_confirm` is
-  consumed on the *next* `keypressed` (`editorController.lua:1518-1530`), while
-  `reserved_quickswitch` runs `finish_edit()` and `run_project()` in one call. Confirming before
-  leaving means those callers can no longer assume the editor is gone when the call returns. That
-  was the actual design work, and `OP-04` weighed it on 2026-09-07 and declined to take it: both
-  exits ship as a documented defect. **The architectural half has its own
-  entry** — `T-EXITS-BYPASS-GUARD` (`BACKLOG`), opened 2026-09-07 by owner directive; this entry
-  stays the record of the specific chord and of what our re-homing adopted.
-- **`Ctrl+T`'s editor arm is NOT ours — it is at the PR base**, and this matters because the entry
-  argues the opposite for the chord. `git show 3256aac:src/controller/controller.lua` carries
-  `quickswitch()` at `:530-548` with the same three steps (`finish_edit` → store state →
-  `run_project`) under the same `is_normal_mode()` guard. This branch moved it into the `RESERVED`
-  table — which does not exist at the base (`grep -c RESERVED` → 0) — and preserved the behaviour.
-  So the re-homing-is-adopting argument below applies to **two** bindings, while the
-  we-introduced-the-defect argument applies to **neither**: both doors predate us.
-- **Consequence for the fix, and it is the reason this bullet is here rather than in a session
-  note.** An acceptance step at the **chord** leaves door 2 open, and door 2 is the worse one — it
-  loses the block *and* starts a project run, so the user's next screen is not the editor. An
-  acceptance step at **`finish_edit`** closes all three at one site. That is a smaller change in
-  lines and a larger one in blast radius, since `finish_edit` is a pre-existing path with a
-  pre-existing caller; **the choice was `OP-04`'s to make, and on 2026-09-07 it made neither** —
-  both exits ship. The shape is stated here so that whoever does fix it starts from the site
-  comparison rather than redoing it.
-- **What the path does, verified rather than assumed.** `ConsoleController:finish_edit()` calls
-  `self.editor:save_state()` then `self.editor:close()`; `EditorController:close()` runs
-  `self.input:clear()`, replaces `self.model.buffers` with a fresh `Dequeue()` and empties
-  `self.view.buffers`. **There is no acceptance step for an open, changed block anywhere on that
-  path** — `save_state()` stores the clipboard, not the buffer. So a user editing a block who
-  presses `Ctrl+Shift+S` loses that block's changes silently.
-- **Attested by the author of PR #45**, 2026-09-06, about the same chord on *his* layer: it *"goes
-  past the acceptance gate — an open changed block is not written"*, and he calls the binding
-  inherited, absent from the editor spec, and something he will raise with @dsent separately.
-  **The attestation was given in Russian and is recorded in English**, summarised rather than
-  translated: the wording above is ours, the claims are his. The contract it belongs to is
-  `../decisions/input.md`, `D-EDITOR-KEYS`.
-- **Provenance: ours, and that is the point.** The binding is upstream's
-  (`git show af9a5782:src/controller/controller.lua`, the `k == "s"` block — `Key.shift()` →
-  `CC:finish_edit()`), and it carried the defect there. **This branch re-supplied it at route
-  level** during `MERGE-01-05` — `_leave_keys` is a rename and relocation of our own `_save_keys` —
-  **without checking what the path it calls actually does.** Re-homing a binding is adopting it.
-- **Why it is not simply upstream's to fix.** On their layer the chord is one they are questioning;
-  on ours it is one we deliberately re-expressed at a new layer while resolving a merge conflict,
-  and the argument recorded for that placement was about *which layer owns the reservation*, never
-  about what the call loses. Both can be true: they may retire the chord, and we would still have
-  shipped it.
-- **Reachability:** any editor session with an open, modified block. Not hypothetical — it is the
-  ordinary way a user might try to leave.
-- **Interaction with the direction of travel.** @dsent's stated redesign collapses the exit
-  combinations and requires **confirmation for anything that can lose data**, so this path is
-  contrary to where the product is going as well as to what it does today.
-- **Found:** 2026-09-06, by `OP-03`, following Vadim1987's attestation to our own copy of the
-  chord. **Nothing in our suite covers it** — the re-pin that touched this area asserted which
-  function fires, not what the file ends up containing.
-- **Behavioural parity with #45 is ruled, and it is already met** (owner, 2026-09-06): *"we need to
-  ship it with exact behavior #45 ships it. If its destructive behaviour, escalate."* Both halves
-  resolved the same day. **Parity holds** — the divergence is which layer owns the chord, not what
-  the user gets: theirs is application-level guarded by `app_state == 'editor'`, ours is route-level
-  under `Key.ctrl()` ahead of mode dispatch, and both reach every editor mode and the same
-  `finish_edit()`. Measured, not assumed: `grep -n "reserved_stop_run\|RESERVED" src/controller/
-  controller.lua` shows bare `ctrl+s` mapped to the stop-run reservation, which no-ops outside a
-  run, and `ctrl+shift+s` absent from that table on our side entirely. **So there is no behaviour to
-  change.** And the escalation condition **fires**, because the attested behaviour on the other layer
-  is destructive too.
-- **Roadmap: nothing open — the row that carried this closed.** `OP-04` was the escalation, and the
-  owner ruled it on 2026-09-07: *"ship both, document the defect."* **The ruling's persistent home
-  is `../decisions/input.md`, `D-EDITOR-KEYS` statement 6**, with the shipping guide's reservation
-  section beside it — cited that way on purpose, because a `wip/` row id stops resolving when the
-  feature's working tree is deleted and this entry outlives it. *(The escalation was a discussion
-  with the owner rather than a message upstream, which is why it never belonged to
-  `MERGE-01-07`/`-08`.)*
-
-### T-EXITS-BYPASS-GUARD — the editor's discard guard cannot be reached from the two keys that leave the editor
-
-**Opened 2026-09-07 by owner directive at `OP-04`** — *"record the debt on these two keys, probably
-generalized to need of re-architecturing or reimplementing the guard so that they could use it
-too."* This is the **general** entry; `T-LEAVE-KEYS-LOSES-BLOCK` remains the record of the specific
-chord and of what our re-homing adopted.
-
-- **The two keys, with full guard chains** (ours, at HEAD): **`Ctrl+Shift+S`** →
-  `EditorController:_leave_keys` → `console:finish_edit()`, under `if Key.ctrl()` **ahead of the
-  mode dispatch**, so it fires in `edit`; and **`Ctrl+T`** → `reserved_quickswitch`
-  (`controller.lua`) → `finish_edit()` → `run_project()`, guarded by `is_normal_mode()`, which is
-  `nav or edit`. Both reach `ConsoleController:finish_edit()`, which calls `save_state()` — the
-  **clipboard** — and `close()`, which drops `model.buffers`. No acceptance, no confirmation.
-- **The guard exists, works, and is out of reach.** `EditorController:discard_edit` compares the
-  draft against the original and, when they differ, sets `pending_confirm = 'discard'` and asks
-  *"discard the changes? Confirm [Enter] / Cancel [Esc]"*. `accept_block` writes with a refusal path
-  that keeps the block open when the write fails. **Both are methods on `EditorController`**, and
-  both exits bypass them — **by two different routes, which this bullet used to collapse into one**
-  (corrected 2026-09-09, `EDKEYS-01-01`). `Ctrl+T`'s reservation fires in `controller.lua` **before
-  the key enters the editor at all**. `Ctrl+Shift+S` *does* enter it — `_leave_keys` is a method on
-  `EditorController` (the bullet above says so) — but it runs under `if Key.ctrl()` **ahead of the
-  mode dispatch** and calls the console directly, so `discard()` inside `_normal_mode_keys` is never
-  reached. Same outcome, and only the first is a layering problem.
-
-- **The loss is pinned as of 2026-09-09, and a fix must flip two cases** (owner ruling at
-  `EDKEYS-01`): `tests/input/input_editor_keys_spec.lua`, *"Ctrl+Shift+S leaves (w/o
-  confirmation)"* and *"Ctrl+T leaves and runs (w/o confirmation)"*. They assert that the open
-  changed block reaches no write on the way out — the behaviour the release knowingly ships
-  (`../decisions/input.md`, `D-EDITOR-KEYS` statement 6). **The `(w/o confirmation)` marker is what
-  keeps a green test from reading as the specification**, and it is why the earlier position — leave
-  the two unpinned, because a passing test would fix the loss in place — was withdrawn: unpinned,
-  they sat outside the regression net that guards the route around them.
-- **This is the architectural half, and it is why the entry is general.** The mismatch is not a
-  missing `if`: the guard is **modal and deferred** — `pending_confirm` is consumed on the *next*
-  `keypressed` (`editorController.lua`) — while the exits are **synchronous**;
-  `reserved_quickswitch` calls `finish_edit()` and `run_project()` in one breath. Routing the exits
-  through the guard means **the callers can no longer assume the editor is gone when the call
-  returns**, which is a contract change at three call sites rather than a patch at one.
-- **Direction, recommended and NOT committed** (the same shape `T-EDITOR-SEAM-DEFAULT-OPEN` uses):
-  give the editor a *may I leave?* step that the exits must pass — either `finish_edit` returning a
-  refusal that its callers honour, or an editor-side `request_leave(on_granted)` that runs the
-  existing confirmation and completes the exit on confirm. Either way the **policy stays where #45
-  put it** and only the reachability changes. Deciding between them is design work, not a sweep.
-- **Provenance: neither key is ours, and neither is #45's.** Both are at the PR base; `Ctrl+T`'s
-  editor arm is byte-identical across the import, and #45 changed the `Ctrl+S` block only to
-  **remove bare Ctrl+S**, leaving the `Shift` leave untouched. **What #45 did do is fix this class
-  at the block level** — `discard_edit`, `accept_block`, `leave_edit` — and route its own
-  `Shift+Esc` correctly through it. **The exits it did not author are the gap**, and its author has
-  called the chord inherited and absent from the editor spec.
-- **What ours adds is layer, not defect:** `Ctrl+Shift+S` was re-expressed at route level as
-  `_leave_keys` and `Ctrl+T` became a `RESERVED` entry. Re-homing a binding is adopting it, which
-  is the argument `T-LEAVE-KEYS-LOSES-BLOCK` makes and this entry inherits.
-- **A THIRD bypass, and it does not need an exit at all** (found 2026-09-07 by the S79 delivery
-  review, verified independently by the parent before being recorded here). **`Ctrl+J` is not mode
-  gated.** In `navigate()`'s tail (`editorController.lua:1485-1489`) it runs in **`edit`** as well
-  as `nav`: `follow_require()` → `console:edit(...)` → `EditorController:open(...)` →
-  `set_mode('nav')` — and **`open()` clears neither the loaded block nor the input** (`:114-117`).
-  So the widget arrives in `nav` **still holding the draft**. A following **`Shift+Esc`** then finds
-  `is_empty` false, falls through to `discard_edit()`, meets its **`if self.mode ~= 'edit' then
-  return self:leave_edit()`** early return (`:581-584`) and **destroys the draft with no
-  confirmation.**
-  - **It is a guard bypass rather than a fourth door:** nothing here reaches `finish_edit` and the
-    editor is not left. The loss is the **draft**, and the mechanism is that the guard tests
-    **`mode`** as a proxy for *is there something to lose*, which `Ctrl+J` breaks by moving the mode
-    out from under a live draft.
-  - **Provenance: inherited, and the two halves come from different places.** `follow_require` is at
-    the PR base and at every revision since (`git show 3256aac:src/controller/editorController.lua
-    | grep -c follow_require` → 2, same at `af9a5782` and `f4cf338c`); `discard_edit`'s early return
-    is **#45's own**, part of the guard it built. **The combination is reachable at #45's tip**, so
-    **parity is untouched and the `OP-04` ruling stands unchanged.**
-  - **What it does change is the reach of two sentences written the same day**, and they are now
-    narrower than the code: `../decisions/input.md`, `D-EDITOR-KEYS` statement 6 says **two** exits,
-    and the shipping guide calls `Shift+Esc` *"the only one that asks before discarding"*. Both are
-    true **of the exits**; neither covers this path. Marked at both sites rather than rewritten,
-    because **widening a ruled statement is the owner's call, not a correction**.
-  - **The category question was put to the owner and RULED, 2026-09-07:** *"I do not know if other
-    fragile modes exist or not. but we certainly are not spinning-off to fixing #45 work, we have
-    own purpose."* The question itself stands exactly as asked — a guard keyed on `mode` is only as
-    good as the invariant *mode changes imply the draft was dealt with*, and `open()` breaks that
-    invariant without touching the guard, so **whether other mode moves leave a live draft is open
-    and deliberately unmeasured.** The ruling is **not** that the answer is *no*; it is that
-    **finding it out is not this feature's work.** The guard is #45's, both halves of this path
-    predate this branch, and an inventory of mode moves would be a spin-off into another author's
-    subsystem. The entry is the record and stays `BACKLOG`; the *Direction* bullet above remains a
-    recommendation to whoever owns the editor, not a commitment of ours.
-- **`Ctrl+T` contradicts a RATIFIED decision, and the decision does not name it** (found 2026-09-07,
-  while checking the deprecation ruling). `../decisions/input.md`, `D-EDITOR-KEYS`, statement 2:
-  *"**Leaving and discarding are always `Shift+Esc`.** There is no second way out that the contract
-  recognises, **which is what makes an unrecognised one worth finding rather than preserving**."*
-  Its key table named `Shift+Esc`, bare `Escape`, `Ctrl+S` and `Ctrl+Shift+S`, and **`Ctrl+T`
-  appeared nowhere in the entry** — **fixed the same day**: the owner ruled the amendment and
-  `Ctrl+T` is now in the table with a new statement 6 beside it. What follows is why it mattered — and it is a second way out, from `edit` mode, that loses the block and
-  then starts a project run. So the contract's own test applies to it by the contract's own words.
-  **Amending `D-EDITOR-KEYS` is owner-gated, and the owner ruled it hours later** — the gap this
-  bullet recorded is closed, and the bullet is kept because it is why the amendment happened.
-  Related but not the same as `T-KEYS-UNPINNED`, which is about rows the suite does not pin — this
-  is a row the contract does not have.
-- **Reachability:** any editor session with an open, modified block — the ordinary state of editing.
-- **Coverage:** the guarded exit is now pinned — `tests/editor/editor_spec.lua`, *"leaving through
-  Shift+Esc (2.3)"*, four cases, added 2026-09-07 by owner directive. **The two unguarded exits are
-  deliberately unpinned**: a passing test over them would fix the loss in place.
-- **Why `BACKLOG` rather than `ACTIVE`, and this is the assistant's placement, not a ruling.** An
-  `ACTIVE` slug is a commitment to fix before the PR, and the fix is a contract change across three
-  call sites in a pre-existing path. Shipping both doors **is exact parity with #45**, which the
-  owner's standing ruling asks for; the escalation half was taken at `OP-04` on 2026-09-07 and
-  ruled *ship both, documented*.
-  **If the owner rules the re-architecture into the release, this entry moves to `ACTIVE` and needs
-  a roadmap row** (`agents/rules/ledgers.md` §5).
 
 ### T-EDITOR-SEAM-DEFAULT-OPEN — our widget acts on every editor key the editor does not block, and the block list is theirs
 
@@ -1377,7 +1170,7 @@ chord and of what our re-homing adopted.
 - **Revisit:** if a Web build is released, or when CI grows a second
   interpreter.
 
-### A project that raises leaves global device state dirty; no force-reset exists
+### A project that raises leaves global device state dirty; only the mouse is force-reset
 
 - **State:** the sandbox deep-clones the `love` table but shares leaf C
   functions, so a project's imperative `love.*` calls — `setKeyRepeat`,
@@ -1386,7 +1179,7 @@ chord and of what our re-homing adopted.
   `compy.before_exit`, and by ratified contract that hook fires on **stop**
   paths only; crash is explicitly out of its scope. A project that mutates
   global state in top-level code and then raises therefore never restores it:
-  `run_project`'s failed-run branch drops to `project_open` without ever
+  `run_project`'s failed-run branch drops to `ready` without ever
   calling `stop_project_run`, so nothing fires, and the dirty state bleeds
   into the next run. `examples/keyboard` is the canonical mutator — it calls
   `love.keyboard.setTextInput(true)` and `love.mouse.setRelativeMode(true)`
@@ -1425,6 +1218,16 @@ chord and of what our re-homing adopted.
   `reset_before_exit` only, deliberately, since a partially initialised project
   runs no teardown. Wiring the force-reset means calling the framework half on
   the crash path too, which is a decision this entry does not pre-empt.
+- **The mouse is force-reset (2026-09-30).** `flush_program_state`
+  (`consoleController.lua`), a step of its own beside `framework_before_exit`,
+  puts the mouse back — relative mode off, not grabbed, visible, the system
+  cursor — on every stop path after the project's hook, on the failed-run
+  branch (the reset alone: the hook still does not fire there), when a
+  program's code ends with no widget shown and no pointer handler left,
+  before every run starts, and when the IDE starts (Ctrl+Esc restarts it in
+  the same process without a stop). A pause gives the console that mouse and
+  `continue()` gives the program back its own. Keyboard modes and audio are
+  still as this entry describes.
 
 ### `compy.before_exit` is a closure slot
 
@@ -2381,6 +2184,334 @@ changes.
   anyway.
 
 ## RETIRED
+
+### T-LEAVE-KEYS-LOSES-BLOCK — the editor's whole-editor exits do not write an open changed block (PAID, 2026-09-30)
+
+**PAID 2026-09-30:** the five editor exits — `Ctrl+Shift+S`, `Ctrl+T`, and the gate's `Ctrl+Q`,
+`Ctrl+Shift+R` and `Ctrl+Alt+R` — ask `Shift+Esc`'s discard question before they drop a changed open
+block (`EditorController:ask_to_leave`, `T-EXITS-BYPASS-GUARD`). `Ctrl+Esc` exits the IDE from any
+state and does not ask. The pinned *"(w/o confirmation)"*
+cases flipped to *"asks before it drops a changed block"*. What follows is the entry as it stood.
+
+**RULED AND MOVED TO `BACKLOG`, 2026-09-07** (owner, at `OP-04`): *"ship both, document the
+defect."* The loss ships knowingly. It left `ACTIVE` because an `ACTIVE` slug is a commitment to fix
+before the PR and the owner ruled the opposite — **and because the ruling closed `OP-04`, the row
+that pointed at it**, which would have left it as exactly the visible gap `agents/rules/ledgers.md`
+§5 describes. **The release obligation it carried is discharged**, not dropped: the defect is named
+in `../decisions/input.md`, `D-EDITOR-KEYS` statement 6 and in the shipping guide's reservation
+section, and the guarded exit is pinned by four tests. What remains here is the record. The
+architectural half is `T-EXITS-BYPASS-GUARD` below.
+
+- **Where:** `src/controller/editorController.lua`, `EditorController:_leave_keys` — `k == "s"` with
+  Shift and not Alt calls `self.console:finish_edit()`.
+- **The loss is at `finish_edit`, not at the chord, and there are THREE entrances** (found
+  2026-09-07, session79, by an AST call-hierarchy query the three preceding sessions could not run —
+  `lua-lsp` was dead. `mcp__lua-lsp__references` on `finish_edit`; `grep` for the name finds the
+  same three, so this is confirmable without the LSP now that it is written down):
+  1. **`Ctrl+Shift+S`** — `EditorController:_leave_keys` (`editorController.lua:72-76`). The chord
+     this entry was opened for, and the one `OP-04` discusses.
+  2. **`Ctrl+T`** — `reserved_quickswitch` (`controller.lua:807-822`), the leave-the-editor-and-run
+     door. In `app_state == 'editor'` **and** `is_normal_mode()`, it calls `finish_edit()`, stores
+     the returned state and runs the project. `is_normal(m)` is `m == 'nav' or m == 'edit'`
+     (`editorController.lua:216-218`), so **`edit` — the mode in which a block is open and being
+     changed — is included.** Same unwritten block, then a project run on top of it.
+  3. **`Shift+Escape` in `nav` mode with an empty widget** — `_normal_mode_keys`' `discard()`
+     (`editorController.lua:1347-1355`) → `close_buffer()` → `finish_edit()` when fewer than two
+     buffers are open (`:203-212`). **This one reaches `finish_edit` but does NOT lose a block —
+     corrected 2026-09-07 in this entry's own session, on the owner's question**; the first
+     statement of it here claimed *"emptying a block that had content is the change that is then not
+     written"*, and that is wrong. See the guard analysis below. It is listed because a fix sited at
+     `finish_edit` has to account for it as a caller, not because it is a defect.
+- **Doors 1 and 2 lose data; door 3 does not, and the difference is what each one checks before it
+  leaves.**
+  - **Door 1 has no mode guard at all.** `_leave_keys` is called under `if Key.ctrl()` in
+    `keypressed` (`editorController.lua:1545-1553`), *before* the mode dispatch below it, so
+    `Ctrl+Shift+S` fires in `edit` mode with a dirty loaded block.
+  - **Door 2's guard admits the dangerous mode.** `is_normal_mode()` is `nav or edit`
+    (`:216-218`), and `edit` is where a block is open and modified.
+  - **Door 3's guard excludes it, and the reason needs no route inventory.** `discard()` branches:
+    `is_empty and self.mode == 'nav'` → `close_buffer()`; **everything else → `discard_edit()`**,
+    which is #45's confirming guard. `is_empty` is the **widget's** (`input:is_empty()`, read once
+    at the top of `_normal_mode_keys`), and **an unwritten change exists only as text in the
+    widget** — the block holds what was last written, which is what `discard_edit` compares the
+    draft against. So the branch that reaches `finish_edit` runs **only with an empty widget, and
+    an empty widget has nothing unwritten to lose.** That is true however the mode was reached, and
+    it stays true if another route into `nav` is ever added.
+  - **The route inventory was tried and is abandoned — do not rebuild it.** Three successive
+    wordings here argued this from *which routes reach `nav` from `edit`*, and all three were wrong
+    on a different site: first *"`leave_edit()` is the only `edit → nav` route"* (`leave(dir)`'s
+    clean branch inlines the same three lines), then an enumeration of all six `set_mode('nav')`
+    sites that dismissed `:117`, `open()`, as unreachable from `edit` — **it is reachable**, via
+    `Ctrl+J` → `follow_require` → `console:edit` → `open`, and unlike the routes that enumeration
+    accepted it clears neither the loaded block nor the input. The conclusion was right every time
+    and the argument was not, which is the signal that route-counting is the wrong shape of
+    argument for it. The statement above replaces it and depends on no inventory.
+  - **That mis-read is a real defect on its own path**, and it is recorded where it belongs rather
+    than here: `T-EXITS-BYPASS-GUARD`, *a THIRD bypass*. It loses the **draft** at `leave_edit`,
+    not an open block at `finish_edit`, so it **adds no door to this entry** — it is why the
+    inventory was retired, not a fourth entrance.
+  **The data-loss surface is therefore two doors, not three, and both predate #45.**
+- **Door 2 and three project-boundary doors ask first (2026-09-30).** `Ctrl+Q`, `Ctrl+Shift+R` and
+  `Ctrl+Alt+R` reach `ConsoleController:stop_project_run` before the editor sees their key, and the
+  stop closes an open editor through `finish_edit`, so its buffers cannot outlive their project.
+  With a changed block open, these three and `Ctrl+T` ask `Shift+Esc`'s discard question first
+  (`EditorController:ask_to_leave`, `T-EXITS-BYPASS-GUARD`), so none of them drops the block
+  unasked. A reorder in progress is still dropped, as `Escape` would. Door 1 asks the same way.
+- **What #45 did about this class, measured: it built the guard and did not wire the exits to it**
+  (2026-09-07, owner question — *"#45 did not fix it but did what instead?"*). `git diff af9a5782
+  f4cf338c -- src/controller/consoleController.lua | grep finish_edit` is **empty**, and
+  `save_state()` is byte-identical across the import (`:216` before, `:289` after). What #45 added
+  is the entire acceptance-and-confirmation discipline **inside `EditorController`**, none of which
+  exists at `af9a5782`: `accept_block` (validate → size-check → `record_write` → `save`, with a
+  refusal path that keeps the block open because *"a failed write must not read as accepted"*),
+  `discard_edit` (compares the draft against the original and, when they differ, sets
+  `pending_confirm = 'discard'` and asks *"discard the changes? Confirm [Enter] / Cancel [Esc]"*),
+  `leave_edit` (the clean exit), `_confirm`, `refuse`, `record_write`, `_reject_oversized`.
+  **So the editor already knows how to protect a dirty block, and the two whole-editor exits never
+  ask it** — while `discard_edit`, the key #45 itself owns, does. `finish_edit` is console-level, predates the feature and predates #45, and
+  its name promises a finish it does not perform: it stores the clipboard and drops the buffers.
+- **All three entrances exist at #45's own tip, and both losing doors are open there, before our
+  import** (2026-09-07, owner question —
+  *"were these doors left open at the tip of #45 before it was imported into our branch?"*).
+  Measured at `f4cf338c`, which is `dev + #45`:
+  - **Door 1, `Ctrl+Shift+S`** — `controller.lua:592-601`, application-level under
+    `app_state == 'editor'`, with #45's own comment beside it (*"bare Ctrl+S is reserved for the
+    checkpoint (rework spec 2.6); saving is automatic, leaving is Shift+Esc"*) → `CC:finish_edit()`.
+  - **Door 2, `Ctrl+T`** — `controller.lua:562-583`, unchanged from the base.
+  - **Door 3, `Shift+Escape`** — `editorController.lua:1317-1322` → `close_buffer()` →
+    `finish_edit()` (`:173-182`).
+  - **`finish_edit` itself** — `consoleController.lua:978-991`, identical to ours line for line.
+  **So we imported three open doors and invented none.** What is ours is the *layer*: doors 1 and 2
+  were re-expressed as `RESERVED` entries, and door 1 moved to route level.
+- **Door 3 is #45's own wiring, and #45 guarded it.** At `af9a5782` (dev, pre-#45) `close_buffer`
+  already existed with the same `finish_edit()` call (`editorController.lua:122-130`) but **nothing
+  called it** — `grep -c close_buffer` returns 1, the definition alone. **#45 gave the dead sink a
+  key**, its own spec-2.3 `discard()` path — **and routed every case that could lose something to
+  `discard_edit()` instead**, sending only the empty-and-nav case to the sink. *(An earlier
+  statement in this entry read that #45 opened an unguarded entrance beside its own guard. That was
+  wrong and is withdrawn: the entrance is guarded, and #45's handling of the key it added is
+  correct.)* **The transferable point survives and is narrower:** #45 fixed the class **at the
+  block level**, everywhere it owns the key, and left the two **whole-editor** exits — which it did
+  not author — calling `finish_edit` as before.
+- **The two losing doors, by key and full guard chain at `f4cf338c`** (2026-09-07, owner question —
+  *"which keys they are wired to at the tip of #45?"*). Both are application-level `Ctrl` chords in
+  `controller.lua`; **neither passes through `EditorController`**, which is why neither can reach a
+  guard that lives inside it. There is **no `_leave_keys` at their tip** — that method is ours.
+  - **`Ctrl+Shift+S`** — `project_state_change()`: `Key.ctrl()` → `k == "s"` →
+    `app_state == 'editor'` → `Key.shift()` → `CC:finish_edit()`.
+  - **`Ctrl+T`** — `quickswitch()`: `Key.ctrl() and not Key.alt() and k == 't'` →
+    `app_state == 'editor'` → `CC.editor:is_normal_mode()` → `CC:finish_edit()` →
+    `CC:run_project()`.
+- **#45's own comment sits on door 1 and names a different key as the exit:** *"bare Ctrl+S is
+  reserved for the checkpoint (rework spec 2.6); saving is automatic, **leaving is Shift+Esc**"*.
+  And Shift+Esc is guarded twice: a dirty block goes to `discard_edit()`'s confirmation, and only
+  after `leave_edit()` has cleared it does a second press reach `close_buffer()` → `finish_edit()`.
+  **The editor cannot be left with unwritten changes via the key #45 documents as leaving** — the
+  two doors that lose the block are the ones that comment implicitly excludes, which matches its
+  author's account of the chord as *inherited and absent from the editor spec*.
+- **One parity divergence of ours, recorded here because it was not written down anywhere.** Their
+  door 1 has **no Alt guard**; our `_leave_keys` is `k == "s" and Key.shift() and not Key.alt()`.
+  So **`Ctrl+Alt+Shift+S` leaves the editor at `f4cf338c` and does nothing on this branch.** Ours is
+  the narrower binding — defensible, and still a deviation from *"exact behaviour #45 ships"*
+  introduced by the re-homing rather than ruled. It is not covered by the tests
+  (`input_global_shortcuts_spec.lua` presses `lctrl`/`lshift`/`s` only).
+- **This settles the parity half of the owner's standing ruling** (*"ship exactly what #45 ships;
+  if its destructive behaviour, escalate"*): at #45's tip both losing doors lose the block, so
+  **shipping them is exact parity**, and any acceptance step we add is a deliberate divergence from
+  #45 rather than a correction toward it. The escalation half was `OP-04`'s, and it ruled on
+  2026-09-07: **ship both exits, documented** — so no acceptance step is taken.
+- **Consequence: the fix is a routing question, not a policy question.** Nothing here needs new
+  data-loss policy invented — `discard_edit`'s confirm is the policy, authored by #45 and consistent
+  with @dsent's stated direction. What is missing is that `finish_edit` does not go through it.
+  **The real cost is that the guard is modal and the exits are synchronous:** `pending_confirm` is
+  consumed on the *next* `keypressed` (`editorController.lua:1518-1530`), while
+  `reserved_quickswitch` runs `finish_edit()` and `run_project()` in one call. Confirming before
+  leaving means those callers can no longer assume the editor is gone when the call returns. That
+  was the actual design work, and `OP-04` weighed it on 2026-09-07 and declined to take it: both
+  exits ship as a documented defect. **The architectural half has its own
+  entry** — `T-EXITS-BYPASS-GUARD` (`BACKLOG`), opened 2026-09-07 by owner directive; this entry
+  stays the record of the specific chord and of what our re-homing adopted.
+- **`Ctrl+T`'s editor arm is NOT ours — it is at the PR base**, and this matters because the entry
+  argues the opposite for the chord. `git show 3256aac:src/controller/controller.lua` carries
+  `quickswitch()` at `:530-548` with the same three steps (`finish_edit` → store state →
+  `run_project`) under the same `is_normal_mode()` guard. This branch moved it into the `RESERVED`
+  table — which does not exist at the base (`grep -c RESERVED` → 0) — and preserved the behaviour.
+  So the re-homing-is-adopting argument below applies to **two** bindings, while the
+  we-introduced-the-defect argument applies to **neither**: both doors predate us.
+- **Consequence for the fix, and it is the reason this bullet is here rather than in a session
+  note.** An acceptance step at the **chord** leaves door 2 open, and door 2 is the worse one — it
+  loses the block *and* starts a project run, so the user's next screen is not the editor. An
+  acceptance step at **`finish_edit`** closes all three at one site. That is a smaller change in
+  lines and a larger one in blast radius, since `finish_edit` is a pre-existing path with a
+  pre-existing caller; **the choice was `OP-04`'s to make, and on 2026-09-07 it made neither** —
+  both exits ship. The shape is stated here so that whoever does fix it starts from the site
+  comparison rather than redoing it.
+- **What the path does, verified rather than assumed.** `ConsoleController:finish_edit()` calls
+  `self.editor:save_state()` then `self.editor:close()`; `EditorController:close()` runs
+  `self.input:clear()`, replaces `self.model.buffers` with a fresh `Dequeue()` and empties
+  `self.view.buffers`. **There is no acceptance step for an open, changed block anywhere on that
+  path** — `save_state()` stores the clipboard, not the buffer. So a user editing a block who
+  presses `Ctrl+Shift+S` loses that block's changes silently.
+- **Attested by the author of PR #45**, 2026-09-06, about the same chord on *his* layer: it *"goes
+  past the acceptance gate — an open changed block is not written"*, and he calls the binding
+  inherited, absent from the editor spec, and something he will raise with @dsent separately.
+  **The attestation was given in Russian and is recorded in English**, summarised rather than
+  translated: the wording above is ours, the claims are his. The contract it belongs to is
+  `../decisions/input.md`, `D-EDITOR-KEYS`.
+- **Provenance: ours, and that is the point.** The binding is upstream's
+  (`git show af9a5782:src/controller/controller.lua`, the `k == "s"` block — `Key.shift()` →
+  `CC:finish_edit()`), and it carried the defect there. **This branch re-supplied it at route
+  level** during `MERGE-01-05` — `_leave_keys` is a rename and relocation of our own `_save_keys` —
+  **without checking what the path it calls actually does.** Re-homing a binding is adopting it.
+- **Why it is not simply upstream's to fix.** On their layer the chord is one they are questioning;
+  on ours it is one we deliberately re-expressed at a new layer while resolving a merge conflict,
+  and the argument recorded for that placement was about *which layer owns the reservation*, never
+  about what the call loses. Both can be true: they may retire the chord, and we would still have
+  shipped it.
+- **Reachability:** any editor session with an open, modified block. Not hypothetical — it is the
+  ordinary way a user might try to leave.
+- **Interaction with the direction of travel.** @dsent's stated redesign collapses the exit
+  combinations and requires **confirmation for anything that can lose data**, so this path is
+  contrary to where the product is going as well as to what it does today.
+- **Found:** 2026-09-06, by `OP-03`, following Vadim1987's attestation to our own copy of the
+  chord. **Nothing in our suite covers it** — the re-pin that touched this area asserted which
+  function fires, not what the file ends up containing.
+- **Behavioural parity with #45 is ruled, and it is already met** (owner, 2026-09-06): *"we need to
+  ship it with exact behavior #45 ships it. If its destructive behaviour, escalate."* Both halves
+  resolved the same day. **Parity holds** — the divergence is which layer owns the chord, not what
+  the user gets: theirs is application-level guarded by `app_state == 'editor'`, ours is route-level
+  under `Key.ctrl()` ahead of mode dispatch, and both reach every editor mode and the same
+  `finish_edit()`. Measured, not assumed: `grep -n "reserved_stop_run\|RESERVED" src/controller/
+  controller.lua` shows bare `ctrl+s` mapped to the stop-run reservation, which no-ops outside a
+  run, and `ctrl+shift+s` absent from that table on our side entirely. **So there is no behaviour to
+  change.** And the escalation condition **fires**, because the attested behaviour on the other layer
+  is destructive too.
+- **Roadmap: nothing open — the row that carried this closed.** `OP-04` was the escalation, and the
+  owner ruled it on 2026-09-07: *"ship both, document the defect."* **The ruling's persistent home
+  is `../decisions/input.md`, `D-EDITOR-KEYS` statement 6**, with the shipping guide's reservation
+  section beside it — cited that way on purpose, because a `wip/` row id stops resolving when the
+  feature's working tree is deleted and this entry outlives it. *(The escalation was a discussion
+  with the owner rather than a message upstream, which is why it never belonged to
+  `MERGE-01-07`/`-08`.)*
+
+### T-EXITS-BYPASS-GUARD — the editor's discard guard cannot be reached from the two keys that leave the editor (PAID, 2026-09-30)
+
+**PAID 2026-09-30.** `EditorController:ask_to_leave` is the editor-side step this entry
+recommends: `Ctrl+Shift+S`, and the gate's `Ctrl+T`, `Ctrl+Q`, `Ctrl+Shift+R` and `Ctrl+Alt+R`,
+call it before they leave, and with a changed block open it asks `discard_edit`'s question and
+takes the exit on confirmation. Both *"(w/o confirmation)"* cases below flipped to *"asks before it
+drops a changed block"*. What follows is the entry as it stood.
+
+**Opened 2026-09-07 by owner directive at `OP-04`** — *"record the debt on these two keys, probably
+generalized to need of re-architecturing or reimplementing the guard so that they could use it
+too."* This is the **general** entry; `T-LEAVE-KEYS-LOSES-BLOCK` remains the record of the specific
+chord and of what our re-homing adopted.
+
+- **The two keys, with full guard chains** (ours, at HEAD): **`Ctrl+Shift+S`** →
+  `EditorController:_leave_keys` → `console:finish_edit()`, under `if Key.ctrl()` **ahead of the
+  mode dispatch**, so it fires in `edit`; and **`Ctrl+T`** → `reserved_quickswitch`
+  (`controller.lua`) → `finish_edit()` → `run_project()`, guarded by `is_normal_mode()`, which is
+  `nav or edit`. Both reach `ConsoleController:finish_edit()`, which calls `save_state()` — the
+  **clipboard** — and `close()`, which drops `model.buffers`. No acceptance, no confirmation.
+- **The guard exists, works, and is out of reach.** `EditorController:discard_edit` compares the
+  draft against the original and, when they differ, sets `pending_confirm = 'discard'` and asks
+  *"discard the changes? Confirm [Enter] / Cancel [Esc]"*. `accept_block` writes with a refusal path
+  that keeps the block open when the write fails. **Both are methods on `EditorController`**, and
+  both exits bypass them — **by two different routes, which this bullet used to collapse into one**
+  (corrected 2026-09-09, `EDKEYS-01-01`). `Ctrl+T`'s reservation fires in `controller.lua` **before
+  the key enters the editor at all**. `Ctrl+Shift+S` *does* enter it — `_leave_keys` is a method on
+  `EditorController` (the bullet above says so) — but it runs under `if Key.ctrl()` **ahead of the
+  mode dispatch** and calls the console directly, so `discard()` inside `_normal_mode_keys` is never
+  reached. Same outcome, and only the first is a layering problem.
+
+- **The loss is pinned as of 2026-09-09, and a fix must flip two cases** (owner ruling at
+  `EDKEYS-01`): `tests/input/input_editor_keys_spec.lua`, *"Ctrl+Shift+S leaves (w/o
+  confirmation)"* and *"Ctrl+T leaves and runs (w/o confirmation)"*. They assert that the open
+  changed block reaches no write on the way out — the behaviour the release knowingly ships
+  (`../decisions/input.md`, `D-EDITOR-KEYS` statement 6). **The `(w/o confirmation)` marker is what
+  keeps a green test from reading as the specification**, and it is why the earlier position — leave
+  the two unpinned, because a passing test would fix the loss in place — was withdrawn: unpinned,
+  they sat outside the regression net that guards the route around them.
+- **This is the architectural half, and it is why the entry is general.** The mismatch is not a
+  missing `if`: the guard is **modal and deferred** — `pending_confirm` is consumed on the *next*
+  `keypressed` (`editorController.lua`) — while the exits are **synchronous**;
+  `reserved_quickswitch` calls `finish_edit()` and `run_project()` in one breath. Routing the exits
+  through the guard means **the callers can no longer assume the editor is gone when the call
+  returns**, which is a contract change at three call sites rather than a patch at one.
+- **Direction, recommended and NOT committed** (the same shape `T-EDITOR-SEAM-DEFAULT-OPEN` uses):
+  give the editor a *may I leave?* step that the exits must pass — either `finish_edit` returning a
+  refusal that its callers honour, or an editor-side `request_leave(on_granted)` that runs the
+  existing confirmation and completes the exit on confirm. Either way the **policy stays where #45
+  put it** and only the reachability changes. Deciding between them is design work, not a sweep.
+- **Provenance: neither key is ours, and neither is #45's.** Both are at the PR base; `Ctrl+T`'s
+  editor arm is byte-identical across the import, and #45 changed the `Ctrl+S` block only to
+  **remove bare Ctrl+S**, leaving the `Shift` leave untouched. **What #45 did do is fix this class
+  at the block level** — `discard_edit`, `accept_block`, `leave_edit` — and route its own
+  `Shift+Esc` correctly through it. **The exits it did not author are the gap**, and its author has
+  called the chord inherited and absent from the editor spec.
+- **What ours adds is layer, not defect:** `Ctrl+Shift+S` was re-expressed at route level as
+  `_leave_keys` and `Ctrl+T` became a `RESERVED` entry. Re-homing a binding is adopting it, which
+  is the argument `T-LEAVE-KEYS-LOSES-BLOCK` makes and this entry inherits.
+- **PAID 2026-09-30: `Ctrl+J` leaves the draft with its own file.** `follow_require` parks the
+  draft on the outgoing buffer, `open()` gives the required file an empty input with no message,
+  and `pop_buffer` brings the draft back, in its mode, when `Shift+Esc` returns to the file. No draft
+  meets `Shift+Esc` in `nav` any more. The analysis below is the bypass as found.
+- **A THIRD bypass, and it does not need an exit at all** (found 2026-09-07 by the S79 delivery
+  review, verified independently by the parent before being recorded here). **`Ctrl+J` is not mode
+  gated.** In `navigate()`'s tail (`editorController.lua:1485-1489`) it runs in **`edit`** as well
+  as `nav`: `follow_require()` → `console:edit(...)` → `EditorController:open(...)` →
+  `set_mode('nav')` — and **`open()` clears neither the loaded block nor the input** (`:114-117`).
+  So the widget arrives in `nav` **still holding the draft**. A following **`Shift+Esc`** then finds
+  `is_empty` false, falls through to `discard_edit()`, meets its **`if self.mode ~= 'edit' then
+  return self:leave_edit()`** early return (`:581-584`) and **destroys the draft with no
+  confirmation.**
+  - **It is a guard bypass rather than a fourth door:** nothing here reaches `finish_edit` and the
+    editor is not left. The loss is the **draft**, and the mechanism is that the guard tests
+    **`mode`** as a proxy for *is there something to lose*, which `Ctrl+J` breaks by moving the mode
+    out from under a live draft.
+  - **Provenance: inherited, and the two halves come from different places.** `follow_require` is at
+    the PR base and at every revision since (`git show 3256aac:src/controller/editorController.lua
+    | grep -c follow_require` → 2, same at `af9a5782` and `f4cf338c`); `discard_edit`'s early return
+    is **#45's own**, part of the guard it built. **The combination is reachable at #45's tip**, so
+    **parity is untouched and the `OP-04` ruling stands unchanged.**
+  - **What it does change is the reach of two sentences written the same day**, and they are now
+    narrower than the code: `../decisions/input.md`, `D-EDITOR-KEYS` statement 6 says **two** exits,
+    and the shipping guide calls `Shift+Esc` *"the only one that asks before discarding"*. Both are
+    true **of the exits**; neither covers this path. Marked at both sites rather than rewritten,
+    because **widening a ruled statement is the owner's call, not a correction**.
+  - **The category question was put to the owner and RULED, 2026-09-07:** *"I do not know if other
+    fragile modes exist or not. but we certainly are not spinning-off to fixing #45 work, we have
+    own purpose."* The question itself stands exactly as asked — a guard keyed on `mode` is only as
+    good as the invariant *mode changes imply the draft was dealt with*, and `open()` breaks that
+    invariant without touching the guard, so **whether other mode moves leave a live draft is open
+    and deliberately unmeasured.** The ruling is **not** that the answer is *no*; it is that
+    **finding it out is not this feature's work.** The guard is #45's, both halves of this path
+    predate this branch, and an inventory of mode moves would be a spin-off into another author's
+    subsystem. The entry is the record and stays `BACKLOG`; the *Direction* bullet above remains a
+    recommendation to whoever owns the editor, not a commitment of ours.
+- **`Ctrl+T` contradicts a RATIFIED decision, and the decision does not name it** (found 2026-09-07,
+  while checking the deprecation ruling). `../decisions/input.md`, `D-EDITOR-KEYS`, statement 2:
+  *"**Leaving and discarding are always `Shift+Esc`.** There is no second way out that the contract
+  recognises, **which is what makes an unrecognised one worth finding rather than preserving**."*
+  Its key table named `Shift+Esc`, bare `Escape`, `Ctrl+S` and `Ctrl+Shift+S`, and **`Ctrl+T`
+  appeared nowhere in the entry** — **fixed the same day**: the owner ruled the amendment and
+  `Ctrl+T` is now in the table with a new statement 6 beside it. What follows is why it mattered — and it is a second way out, from `edit` mode, that loses the block and
+  then starts a project run. So the contract's own test applies to it by the contract's own words.
+  **Amending `D-EDITOR-KEYS` is owner-gated, and the owner ruled it hours later** — the gap this
+  bullet recorded is closed, and the bullet is kept because it is why the amendment happened.
+  Related but not the same as `T-KEYS-UNPINNED`, which is about rows the suite does not pin — this
+  is a row the contract does not have.
+- **Reachability:** any editor session with an open, modified block — the ordinary state of editing.
+- **Coverage:** the guarded exit is now pinned — `tests/editor/editor_spec.lua`, *"leaving through
+  Shift+Esc (2.3)"*, four cases, added 2026-09-07 by owner directive. **The two unguarded exits are
+  deliberately unpinned**: a passing test over them would fix the loss in place.
+- **Why `BACKLOG` rather than `ACTIVE`, and this is the assistant's placement, not a ruling.** An
+  `ACTIVE` slug is a commitment to fix before the PR, and the fix is a contract change across three
+  call sites in a pre-existing path. Shipping both doors **is exact parity with #45**, which the
+  owner's standing ruling asks for; the escalation half was taken at `OP-04` on 2026-09-07 and
+  ruled *ship both, documented*.
+  **If the owner rules the re-architecture into the release, this entry moves to `ACTIVE` and needs
+  a roadmap row** (`agents/rules/ledgers.md` §5).
 
 ### T-GUIDE-LIFECYCLE-IDIOM — the guide teaches the flags but not the shape of a program's configuration (PAID, 2026-09-09)
 

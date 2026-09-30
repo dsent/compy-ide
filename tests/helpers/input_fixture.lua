@@ -33,8 +33,16 @@ local quits = {}
 -- Held-button state the widget's drag-select reads through
 -- love.mouse.isDown; see mock_runtime below.
 local mouse_down = false
+-- The modes a program can set on the mouse and the IDE puts
+-- back when it stops: global device state, which outlives the
+-- run in LÖVE too. Read and set through love.mouse only.
+local mouse_modes = { }
 
 local function mock_runtime()
+  mouse_modes = {
+    relative = false, grabbed = false, visible = true,
+    cursor = nil,
+  }
   mock.mock_love({
     state = {
       app_state             = 'ready',
@@ -62,13 +70,28 @@ local function mock_runtime()
     mouse      = {
       getPosition = function() return mx, my end,
       isDown      = function() return mouse_down end,
+      setRelativeMode = function(on) mouse_modes.relative = on end,
+      getRelativeMode = function() return mouse_modes.relative end,
+      setGrabbed = function(on) mouse_modes.grabbed = on end,
+      isGrabbed = function() return mouse_modes.grabbed end,
+      setVisible = function(on) mouse_modes.visible = on end,
+      isVisible = function() return mouse_modes.visible end,
+      isCursorSupported = function() return true end,
+      -- nil is the system cursor, as setCursor() makes it
+      setCursor = function(c) mouse_modes.cursor = c end,
+      getCursor = function() return mouse_modes.cursor end,
     },
     paths      = { project_path = '/tmp' },
     filesystem = { getInfo = function() end },
     -- The console prepares serial support at build time and asks
     -- love.system.getOS() to pick a backend; the mock love has no
     -- `system`, so stub it (a desktop OS -> the null backend).
-    system     = { getOS = function() return 'Linux' end },
+    -- Leaving the editor saves the clipboard with its state.
+    system     = {
+      getOS            = function() return 'Linux' end,
+      getClipboardText = function() return '' end,
+      setClipboardText = function() end,
+    },
   })
 end
 
@@ -86,6 +109,10 @@ local function enrich_gfx()
   gfx.setFont   = function() end
   gfx.setColor  = function() end
   gfx.clear     = function() end
+  gfx.getScissor   = function() end
+  gfx.setScissor   = function() end
+  gfx.getColorMask = function() return true, true, true, true end
+  gfx.setColorMask = function() end
   gfx.push      = function() end
   gfx.pop       = function() end
   -- love.update walks into the snapshot branch as soon as a
@@ -323,6 +350,8 @@ end
 -- events still use love.handlers.
 function F.activate_project(handlers)
   love.state.app_state = 'running'
+  -- and a live run, as run_project makes it
+  CC.run_live = true
   -- A real run builds the widget at this same boundary
   -- (D-WIDGET-AT-BOOT as amended), so the narrow seam does too
   -- — otherwise a case that stops and re-activates would find
@@ -406,6 +435,9 @@ function F.reset()
   -- stop_project_run tears down the fixture's widget rather
   -- than a case-local one.
   love.state.user_input_controller = widget
+  -- An editor a case opened goes with the case: the next one
+  -- starts with no buffer behind its own.
+  CC.editor:close()
   CC:stop_project_run()
   -- The stop DESTROYS the widget, as a real stop does. A case
   -- that never runs a project still needs one to drive, so the
@@ -418,6 +450,7 @@ function F.reset()
   -- down for the next test unless the reset lifts it.
   mock.release_keys()
   love.state.app_state          = 'ready'
+  love.state.prev_state         = nil
   love.state.editor             = nil
   -- Otherwise leaks into the next test's suspend(): a
   -- stale message from an earlier suspend_run() would set

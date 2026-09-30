@@ -492,6 +492,10 @@ function UserInputModel:delete()
 end
 
 function UserInputModel:clear_input()
+  --- the text level lives only inside one edit block
+  --- (#45, spec 1.1): clearing ends the block, and its
+  --- undo with it
+  self.edit_history:reset()
   self.entered = InputText()
   self:text_change()
   self:clear_selection()

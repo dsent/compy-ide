@@ -33,6 +33,7 @@
 -- duplicated here.
 
 local F  = require('tests.helpers.input_fixture')
+local mock = require('tests.mock')
 require('tests.helpers.codesnippets')
 
 describe('editor key contract #input', function()
@@ -129,18 +130,13 @@ describe('editor key contract #input', function()
     end)
   end)
 
-  describe('the two unguarded exits', function()
+  describe('the whole-editor exits', function()
     -- D-EDITOR-KEYS statement 6. Both leave the editor
     -- through ConsoleController:finish_edit, which stores
     -- the clipboard and drops the buffers with no acceptance
-    -- step, so an open changed block is lost silently. The
-    -- guard exists one level down — the rework's discard
-    -- confirmation — and is unreachable from here because it
-    -- is a method on EditorController while both exits sit
-    -- above the editor. Neither is new and neither is ours:
-    -- both are at the PR base. What this branch changed is
-    -- the layer, which is why they are in our contract at
-    -- all.
+    -- step. Both ask the rework's discard question first
+    -- when an open block holds a change
+    -- (EditorController:ask_to_leave).
     local left, ran, orig_finish, orig_run
 
     before_each(function()
@@ -156,27 +152,495 @@ describe('editor key contract #input', function()
       F.cc.run_project = orig_run
     end)
 
-    it('Ctrl+Shift+S leaves (w/o confirmation)', function()
+    -- FLIPPED: this case pinned the silent loss until the
+    -- chord learned to ask, as the gate's exits did.
+    it('Ctrl+Shift+S asks before it drops a changed block', function()
       open_dirty_block()
 
       F.session.press('lctrl')
       F.session.press('lshift')
       F.session.press('s')
+      F.session.release('s')
+      F.session.release('lshift')
+      F.session.release('lctrl')
 
+      assert.is_false(left)
+      assert.same('discard', ed.pending_confirm)
+      assert.same('edit', ed:get_mode())
+
+      F.session.press('return')
       assert.is_true(left)
-      --- the edit reached no write on the way out
+      --- confirmed: the change is discarded, not written
       assert.same({}, saved)
     end)
 
-    it('Ctrl+T leaves and runs (w/o confirmation)', function()
+    it('Ctrl+Shift+S held keeps its question open', function()
+      open_dirty_block()
+      F.session.press('lctrl')
+      F.session.press('lshift')
+      F.session.press('s')
+      for _ = 1, 3 do
+        F.session.repeat_press('s')
+        assert.same('discard', ed.pending_confirm)
+      end
+      F.session.release('s')
+      F.session.release('lshift')
+      F.session.release('lctrl')
+      assert.is_false(left)
+    end)
+
+    for _, mode in ipairs({ 'search', 'reorder' }) do
+      it('Ctrl+T leaves nothing from ' .. mode, function()
+        F.session.press('lctrl')
+        F.session.press(mode == 'search' and 'f' or 'm')
+        F.session.release(mode == 'search' and 'f' or 'm')
+        assert.same(mode, ed:get_mode())
+        F.session.press('t')
+        F.session.release('t')
+        F.session.release('lctrl')
+        assert.is_false(left)
+        assert.is_false(ran)
+      end)
+    end
+
+    for _, order in ipairs({ 'device', 'desktop' }) do
+      it('a space typed after Space answered Shift+Esc is kept ('
+        .. order .. ')', function()
+          open_dirty_block()
+          F.session.press('lshift')
+          F.session.press('escape')
+          F.session.release('escape')
+          F.session.release('lshift')
+          if order == 'device' then F.session.type(' ') end
+          F.session.press('space')
+          F.session.release('space')
+          if order == 'desktop' then F.session.type(' ') end
+          assert.same('nav', ed:get_mode())
+          F.love_update(1)
+
+          F.session.type(' ')
+          --- in navigation a glyph opens the block, with it
+          assert.is_truthy(
+            string.unlines(ed.input:get_text()):find('^ '))
+        end)
+    end
+
+    it('a space typed after Enter answered Shift+Esc is kept', function()
+      open_dirty_block()
+      F.session.press('lshift')
+      F.session.press('escape')
+      F.session.release('escape')
+      F.session.release('lshift')
+      F.session.press('return')
+      F.session.release('return')
+      assert.same('nav', ed:get_mode())
+
+      F.session.type(' ')
+      --- in navigation a glyph opens the block, with it
+      assert.is_truthy(string.unlines(ed.input:get_text()):find('^ '))
+    end)
+
+    it('a held Shift+Esc keeps its question open', function()
+      open_dirty_block()
+      F.session.press('lshift')
+      F.session.press('escape')
+      assert.same('discard', ed.pending_confirm)
+      for _ = 1, 3 do
+        F.session.repeat_press('escape')
+        assert.same('discard', ed.pending_confirm)
+      end
+      F.session.release('escape')
+      F.session.release('lshift')
+    end)
+
+    it('Ctrl+Shift+S asks, and Escape keeps the block', function()
+      open_dirty_block()
+      local draft = ed.input:get_text():items()
+      F.session.press('lctrl')
+      F.session.press('lshift')
+      F.session.press('s')
+      F.session.release('s')
+      F.session.release('lshift')
+      F.session.release('lctrl')
+
+      F.session.press('escape')
+      assert.is_false(left)
+      assert.is_nil(ed.pending_confirm)
+      assert.same('edit', ed:get_mode())
+      assert.same(draft, ed.input:get_text():items())
+    end)
+
+    -- FLIPPED: this case pinned the silent loss until the
+    -- gate's exits learned to ask.
+    it('Ctrl+T asks before it drops a changed block', function()
       open_dirty_block()
 
       F.session.press('lctrl')
       F.session.press('t')
+      F.session.release('t')
+      F.session.release('lctrl')
 
+      assert.is_false(left)
+      assert.is_false(ran)
+      assert.same('discard', ed.pending_confirm)
+      assert.same('edit', ed:get_mode())
+
+      F.session.press('return')
       assert.is_true(left)
       assert.is_true(ran)
+      --- confirmed: the change is discarded, not written
       assert.same({}, saved)
+    end)
+  end)
+
+  describe('the project exits ask first', function()
+    -- Ctrl+T and the project chords reach the console before
+    -- the editor sees their key. With a changed block open,
+    -- each asks Shift+Esc's question; Enter or Space takes
+    -- the exit, anything else keeps the block.
+    local stubbed = { 'quit_project', 'reset', 'restart', 'run_project' }
+    local orig, took = {}, {}
+
+    before_each(function()
+      love.state.prev_state = 'ready'
+      took = {}
+      for _, f in ipairs(stubbed) do
+        orig[f] = F.cc[f]
+        F.cc[f] = function() took[#took + 1] = f end
+      end
+    end)
+
+    after_each(function()
+      for _, f in ipairs(stubbed) do F.cc[f] = orig[f] end
+      F.cc.swallow_glyph = nil
+    end)
+
+    local function chord(keys)
+      for _, k in ipairs(keys) do F.session.press(k) end
+      for i = #keys, 1, -1 do F.session.release(keys[i]) end
+    end
+
+    local chords = {
+      { 'Ctrl+T', { 'lctrl', 't' }, 'run_project' },
+      { 'Ctrl+Q', { 'lctrl', 'q' }, 'quit_project' },
+      { 'Ctrl+Shift+R', { 'lctrl', 'lshift', 'r' }, 'reset' },
+      { 'Ctrl+Alt+R', { 'lctrl', 'lalt', 'r' }, 'restart' },
+    }
+    for _, c in ipairs(chords) do
+      local name, keys, exit = c[1], c[2], c[3]
+
+      it(name .. ' asks, and Escape keeps the block', function()
+        open_dirty_block()
+        local draft = ed.input:get_text():items()
+        chord(keys)
+        assert.same('discard', ed.pending_confirm)
+        assert.same({}, took)
+
+        F.session.press('escape')
+        assert.is_nil(ed.pending_confirm)
+        assert.same('edit', ed:get_mode())
+        assert.same(draft, ed.input:get_text():items())
+        assert.same({}, took)
+      end)
+
+      it(name .. ' asks, and Enter discards and leaves', function()
+        open_dirty_block()
+        chord(keys)
+        F.session.press('return')
+
+        assert.same({ exit }, took)
+        assert.same({}, saved)
+      end)
+    end
+
+    it('the Space that confirms types nowhere after', function()
+      --- a quit closes the editor, so the glyph meets the
+      --- console
+      F.cc.quit_project = function()
+        took[#took + 1] = 'quit_project'
+        orig.quit_project(F.cc)
+      end
+      local closed = F.cc.close_project
+      finally(function() F.cc.close_project = closed end)
+      F.cc.close_project = function() end
+      open_dirty_block()
+      chord({ 'lctrl', 'q' })
+      --- a desktop keyboard: the key, then its glyph
+      F.session.press('space')
+      F.session.type(' ')
+      assert.same({ 'quit_project' }, took)
+      assert.same('ready', love.state.app_state)
+      assert.same('', string.unlines(F.cc.input:get_text()))
+    end)
+
+    for _, between in ipairs({
+      { 'a Shift press', function() F.session.press('lshift') end },
+      { "the Space's repeat",
+        function() F.session.repeat_press('space') end },
+    }) do
+      it('the Space that confirms types nowhere after '
+        .. between[1], function()
+          F.cc.quit_project = function()
+            took[#took + 1] = 'quit_project'
+            orig.quit_project(F.cc)
+          end
+          local closed = F.cc.close_project
+          finally(function() F.cc.close_project = closed end)
+          F.cc.close_project = function() end
+          open_dirty_block()
+          chord({ 'lctrl', 'q' })
+          F.session.press('space')
+          between[2]()
+          F.session.type(' ')
+          assert.same({ 'quit_project' }, took)
+          assert.same('', string.unlines(F.cc.input:get_text()))
+        end)
+    end
+
+    it('on the device the key press answers, not the glyph first',
+      function()
+        open_dirty_block()
+        chord({ 'lctrl', 'q' })
+        --- the device: the glyph, then the key
+        F.session.type(' ')
+        assert.same('discard', ed.pending_confirm)
+        assert.same({}, took)
+        F.session.press('space')
+        assert.same({ 'quit_project' }, took)
+      end)
+
+    it('a glyph alone answers nothing', function()
+      open_dirty_block()
+      chord({ 'lctrl', 'q' })
+      --- an on-screen keyboard: the glyph, and no key press
+      F.session.type(' ')
+      F.love_update(1)
+      assert.same('discard', ed.pending_confirm)
+      assert.same({}, took)
+    end)
+
+    it('Ctrl+Space confirms and holds no glyph back', function()
+      open_dirty_block()
+      chord({ 'lctrl', 'q' })
+      F.session.press('lctrl')
+      F.session.press('space')
+      F.session.release('space')
+      F.session.release('lctrl')
+      assert.same({ 'quit_project' }, took)
+      assert.is_nil(F.cc.swallow_glyph)
+    end)
+
+    it("the chord's own glyph answers nothing", function()
+      open_dirty_block()
+      F.session.press('lctrl')
+      F.session.press('q')
+      --- a chord's glyph arriving while the chord is held
+      F.session.type('q')
+      assert.same('discard', ed.pending_confirm)
+      assert.same({}, took)
+    end)
+
+    it('an unchanged open block leaves without asking', function()
+      F.session.press('return')
+      assert.same('edit', ed:get_mode())
+      chord({ 'lctrl', 'q' })
+      assert.same({ 'quit_project' }, took)
+      assert.is_nil(ed.pending_confirm)
+    end)
+  end)
+
+  describe('leaving through the real finish_edit', function()
+    -- The stubbed exits above keep the buffers, so they never
+    -- saw what the key does after they are gone: the chord's
+    -- own 's' went on to the mode's handler, which asked the
+    -- emptied editor for its buffer and raised
+    -- (editorView.lua, get_current_buffer).
+    before_each(function()
+      love.state.prev_state = 'ready'
+    end)
+
+    local handlers = {
+      '_normal_mode_keys', '_search_mode_keys', '_reorg_mode_keys',
+    }
+
+    after_each(function()
+      F.session.release('s')
+      F.session.release('lshift')
+      F.session.release('lctrl')
+      for _, h in ipairs(handlers) do ed[h] = nil end
+      love.debug = nil
+    end)
+
+    --- the key that selects each mode from navigation; the
+    --- block opened for editing is unchanged, so the chord
+    --- has nothing to ask
+    local enter = {
+      edit    = function()
+        F.session.press('return')
+        F.session.release('return')
+      end,
+      search  = function()
+        F.session.press('lctrl')
+        F.session.press('f')
+        F.session.release('f')
+        F.session.release('lctrl')
+      end,
+      reorder = function()
+        F.session.press('lctrl')
+        F.session.press('m')
+        F.session.release('m')
+        F.session.release('lctrl')
+      end,
+    }
+
+    for _, mode in ipairs({ 'nav', 'edit', 'search', 'reorder' }) do
+      it('leaves from ' .. mode .. ' to the console', function()
+        if enter[mode] then enter[mode]() end
+        assert.same(mode, ed:get_mode())
+        --- once the editor is closed, the chord's own key
+        --- reaches no mode handler
+        local handled = false
+        for _, h in ipairs(handlers) do
+          ed[h] = function(_, k) handled = handled or k == 's' end
+        end
+
+        F.session.press('lctrl')
+        F.session.press('lshift')
+        F.session.press('s')
+
+        assert.is_false(handled)
+        assert.same('ready', love.state.app_state)
+        assert.is_nil(ed:get_active_buffer())
+      end)
+    end
+
+    it('a question does not outlive the editor', function()
+      local cc = F.cc
+      local keep = {
+        run_project = cc.run_project,
+        checkpoint_modtime = cc.checkpoint_modtime,
+        file_modtime = cc.file_modtime,
+        restore_checkpoint = cc.restore_checkpoint,
+      }
+      finally(function()
+        for f, v in pairs(keep) do cc[f] = v end
+      end)
+      local restored = false
+      cc.run_project = function() end
+      cc.checkpoint_modtime = function() return 1752400000 end
+      cc.file_modtime = function() return 1752480000 end
+      cc.restore_checkpoint = function() restored = true end
+      F.session.press('lctrl')
+      F.session.press('lshift')
+      F.session.press('k')
+      F.session.release('k')
+      F.session.release('lshift')
+      F.session.release('lctrl')
+      assert.same('restore', ed.pending_confirm)
+
+      F.session.press('lctrl')
+      F.session.press('t')
+      F.session.release('t')
+      F.session.release('lctrl')
+      assert.same('ready', love.state.app_state)
+
+      ed = open_file()
+      love.state.app_state = 'editor'
+      F.session.press('return')
+
+      --- Enter opened the block: no hidden question took it
+      assert.same('edit', ed:get_mode())
+      assert.is_false(restored)
+    end)
+
+    it('Shift+Esc on the last buffer leaves under DEBUG', function()
+      love.debug = { }
+      F.session.press('lshift')
+      F.session.press('escape')
+      F.session.release('escape')
+      F.session.release('lshift')
+
+      assert.same('ready', love.state.app_state)
+      assert.is_nil(ed:get_active_buffer())
+    end)
+  end)
+
+  describe('the project boundary', function()
+    -- The editor's buffers belong to the project they were
+    -- opened in. The gate's project shortcuts reach the
+    -- console before the editor sees the key, so they must
+    -- close it themselves, or its buffers outlive the project
+    -- and write into the next one.
+    local stubbed = { 'close_project', 'run_project' }
+    local orig = {}
+
+    before_each(function()
+      love.state.prev_state = 'ready'
+      for _, f in ipairs(stubbed) do
+        orig[f] = F.cc[f]
+        F.cc[f] = function() end
+      end
+    end)
+
+    after_each(function()
+      for _, f in ipairs(stubbed) do F.cc[f] = orig[f] end
+      mock.release_keys()
+    end)
+
+    local chords = {
+      ['Ctrl+Q']       = { 'lctrl', 'q' },
+      ['Ctrl+Shift+R'] = { 'lctrl', 'lshift', 'r' },
+      ['Ctrl+Alt+R']   = { 'lctrl', 'lalt', 'r' },
+    }
+    for name, keys in pairs(chords) do
+      it(name .. ' closes the editor', function()
+        for _, k in ipairs(keys) do F.session.press(k) end
+
+        assert.is_not.equal('editor', love.state.app_state)
+        assert.is_nil(ed:get_active_buffer())
+      end)
+    end
+
+    it('Ctrl+Alt+R keeps the way back for Ctrl+T', function()
+      F.session.press('lctrl')
+      F.session.press('lalt')
+      F.session.press('r')
+
+      assert.same('main.lua', love.state.editor.buffer.filename)
+    end)
+
+    it('closing a project forgets the quick switch', function()
+      love.state.editor = ed:get_state()
+      F.cc:_close_project()
+      assert.is_nil(love.state.editor)
+    end)
+
+    it('a buffer saves into its own project', function()
+      local P = F.cc.model.projects
+      local prev = P.current
+      finally(function() P.current = prev end)
+      local written = {}
+      local function project(name)
+        return {
+          name = name,
+          get_path = function(_, f) return '/nonexistent/' .. f end,
+          readfile = function() return true, 'x = 1\n' end,
+          writefile = function(_, f)
+            written[#written + 1] = name .. '/' .. f
+            return true
+          end,
+        }
+      end
+      ed:close()
+      love.state.app_state = 'ready'
+      P.current = project('a')
+      F.cc:edit('main.lua')
+      local buf = ed:get_active_buffer()
+
+      P.current = project('b')
+      buf.save_file({ 'x = 2' })
+
+      assert.same({ 'a/main.lua' }, written)
     end)
   end)
 end)

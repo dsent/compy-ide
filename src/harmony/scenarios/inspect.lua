@@ -40,7 +40,7 @@ local function inspect()
     h.screenshot('modified')
 
     wait(1)
-    h.love_key('C-S-q')
+    h.love_key('C-q')
     wait(.1)
     hm_done()
   end)

@@ -1267,6 +1267,28 @@ describe('Editor #editor', function()
       assert.same('assets/sounds/knock.ogg', played[#played])
     end)
 
+    it('knocks on Enter when the search finds nothing', function()
+      local controller, press = wire(TU.mock_view_cfg())
+      local src = "local function findme() end"
+      local save = TU.get_save_function(src)
+      controller:open('search.lua', src .. '\n', save)
+      love.system = {
+        getClipboardText = function() return '' end,
+        setClipboardText = function() end,
+      }
+
+      mock.keystroke('C-f', press)
+      controller:textinput('zzz')
+      local before = #mock.played_sounds()
+      mock.keystroke('return', press)
+
+      local played = mock.played_sounds()
+      assert.same(before + 1, #played)
+      assert.same('assets/sounds/knock.ogg', played[#played])
+      assert.same('search', controller:get_mode())
+      assert.same({ 'zzz' }, controller.search.input:get_text())
+    end)
+
     it('follows the require on Ctrl+J', function()
       require("tests.helpers.codesnippets")
       local controller, press = wire(TU.mock_view_cfg())
@@ -1314,6 +1336,17 @@ describe('Editor #editor', function()
           end,
           _readfile = function() return 'x = 1' end,
         }
+      end)
+
+      it('a checkpoint that cannot be written says so', function()
+        controller.console.write_checkpoint = function() return false end
+        mock.keystroke('C-k', press)
+        assert.is_true(inter:has_error())
+        cp_time = 1752400000
+        inter:clear_error()
+        mock.keystroke('C-k', press)
+        mock.keystroke('return', press)
+        assert.is_true(inter:has_error())
       end)
 
       it('first checkpoint writes without asking', function()
@@ -1420,6 +1453,37 @@ describe('Editor #editor', function()
         local fresh = controller:get_active_buffer()
         assert.same('x = 1',
           fresh:get_text_content()[1])
+      end)
+
+      --- the desktop's order: the key, then its glyph, which
+      --- the gate drops
+      it('Space confirming a restore holds its glyph back', function()
+        cp_time = 1752400000
+        mock.keystroke('C-S-k', press)
+        controller:keypressed('space')
+        assert.same({ 'restore:main.lua' }, calls)
+        assert.same('nav', controller:get_mode())
+        assert.same(' ', controller.console.swallow_glyph)
+      end)
+
+      --- each place a buffer comes to the front drops the
+      --- question on its own, before anything else could
+      it('opening a file drops the question', function()
+        cp_time = 1752400000
+        mock.keystroke('C-S-k', press)
+        assert.same('restore', controller.pending_confirm)
+        controller:open('other.lua', 'y = 1\n', function() end)
+        assert.is_nil(controller.pending_confirm)
+      end)
+
+      it('returning to a file drops the question', function()
+        controller:open('other.lua', 'y = 1\n', function() end)
+        cp_time = 1752400000
+        mock.keystroke('C-S-k', press)
+        assert.same('restore', controller.pending_confirm)
+        controller:pop_buffer()
+        assert.same('main.lua', controller:get_active_buffer().name)
+        assert.is_nil(controller.pending_confirm)
       end)
 
       it('restore without a checkpoint refuses', function()
@@ -1804,6 +1868,78 @@ describe('Editor #editor', function()
           assert.same('nav', controller:get_mode())
           assert.same(3, session.buffer:get_selection())
           assert.is_true(controller.search.input:is_empty())
+        end)
+
+        it('Enter jumps to a definition on the first line', function()
+          local alpha = mock_func_snippet('alpha')
+          local beta = mock_func_snippet('beta')
+          session:open(src(alpha, '', beta), 3)
+          session:select_block(3)
+
+          mock.keystroke('C-f', press)
+          type_search('alpha')
+          mock.keystroke('return', press)
+
+          assert.same('nav', controller:get_mode())
+          assert.same(1, session.buffer:get_selection())
+          local bv = controller.view:get_current_buffer()
+          assert.same(1, bv.content:get_range().start)
+        end)
+
+        it('a jump brings the definition to the top line', function()
+          local lines = {}
+          for i = 1, 40 do lines[i] = 'x' .. i .. ' = ' .. i end
+          local beta = mock_func_snippet('beta')
+          local after = {}
+          for i = 1, 40 do after[i] = 'y' .. i .. ' = ' .. i end
+          session:open((src(table.concat(lines, '\n'), '', beta,
+            table.concat(after, '\n'))))
+
+          mock.keystroke('C-f', press)
+          type_search('beta')
+          mock.keystroke('return', press)
+
+          local bv = controller.view:get_current_buffer()
+          assert.same(42, bv.content:get_range().start)
+        end)
+
+        it('search starts afresh in the next file', function()
+          local lines = {}
+          for i = 1, 9 do lines[i] = 'x' .. i .. ' = ' .. i end
+          local beta = mock_func_snippet('beta')
+          session:open((src(table.concat(lines, '\n'), beta)))
+          mock.keystroke('C-f', press)
+          type_search('be')
+          --- the editor closes with search open, as the
+          --- gate's shortcuts close it
+          controller:close()
+
+          session:open((src(mock_func_snippet('alpha'))))
+          assert.same('nav', controller:get_mode())
+          mock.keystroke('C-f', press)
+          assert.is_true(controller.search.input:is_empty())
+          mock.keystroke('return', press)
+
+          assert.same('nav', controller:get_mode())
+          assert.same(1, session.buffer:get_selection())
+        end)
+
+        it('each load replaces the results, none included', function()
+          local sm = controller.search.model
+          sm:load({ { name = 'a' }, { name = 'b' } })
+          sm:load({ { name = 'c' } })
+          assert.same(1, #sm.resultset)
+          assert.same('c', sm.resultset[1].r.name)
+          sm:load({})
+          assert.same({}, sm.resultset)
+        end)
+
+        it('a file with no definitions searches none', function()
+          controller:open('notes.txt', 'plain text\n', save)
+          controller.search.model:load({ { name = 'stale' } })
+          mock.keystroke('C-f', press)
+          assert.same('search', controller:get_mode())
+          assert.same({}, controller.search.model.resultset)
         end)
 
         it('Escape leaves search without moving the selection', function()

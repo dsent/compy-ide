@@ -36,21 +36,21 @@ Search = class.create(function(cfg)
   }
 end)
 
+--- Replace what the search holds with `items`, none
+--- included
 --- @param items table[]
 function Search:load(items)
-  if #items > 0 then
-    self.searchset = table.clone(items)
-    for i, v in ipairs(self.searchset) do
-      if v then
-        table.insert(self.resultset, {
-          idx = i,
-          r = self.searchset[i],
-        })
-      end
+  self:clear()
+  self.searchset = table.clone(items)
+  for i, v in ipairs(self.searchset) do
+    if v then
+      table.insert(self.resultset, {
+        idx = i,
+        r = self.searchset[i],
+      })
     end
-    self.selection = 1
-    self.visible:update(#items)
   end
+  self.visible:update(#items)
 end
 
 function Search:clear()

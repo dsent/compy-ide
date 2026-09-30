@@ -73,6 +73,7 @@ describe('ConsoleController project env #project', function()
       set_love_update = noop,
       set_love_draw = noop,
       user_is_blocking = function() return false end,
+      user_is_interactive = function() return false end,
       report = noop,
     }
   end
@@ -93,6 +94,10 @@ describe('ConsoleController project env #project', function()
       getCanvas = function() return nil end,
       setCanvas = function() end,
       clear = function() end,
+      getScissor = function() end,
+      setScissor = function() end,
+      getColorMask = function() return true, true, true, true end,
+      setColorMask = function() end,
       origin = function() end,
       push = function() end,
       pop = function() end,

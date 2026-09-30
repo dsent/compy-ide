@@ -23,7 +23,9 @@ describe('ProjectService #project', function()
       return { type = mode }
     end
     return {
-      read = function(path)
+      --- read(name), or read(container, name) as FS.cp calls it
+      read = function(a, b)
+        local path = b or a
         local f = io.open(path, 'r')
         if not f then return nil end
         local c = f:read('*a')
@@ -31,8 +33,8 @@ describe('ProjectService #project', function()
         return c
       end,
       write = function(path, data)
-        local f = io.open(path, 'w')
-        if not f then return nil end
+        local f, err = io.open(path, 'w')
+        if not f then return nil, err end
         f:write(data)
         f:close()
         return true
@@ -82,6 +84,7 @@ describe('ProjectService #project', function()
       getOS = function() return 'Web' end,
     }
     love.filesystem = mock_love_fs()
+    love.filesystem.remove = function(path) return rm_rf(path) end
     --- LÖVE ships its own utf8; in tests, alias the luarocks one
     package.preload['utf8'] = function()
       return require('lua-utf8')
@@ -94,9 +97,6 @@ describe('ProjectService #project', function()
     --- the flasher looks for the board through this FS too
     package.loaded['util.usb'] = nil
     require('model.project.project')
-    --- ProjectService:remove uses FS.rm, which the web FS branch
-    --- gets from love.filesystem.remove — provide it via rm_rf
-    FS.rm = function(target) return rm_rf(target) end
   end)
 
   before_each(function()
@@ -283,6 +283,105 @@ describe('ProjectService #project', function()
         assert.is_nil(lfs.attributes(tmp .. '/projects/a'))
         assert.are.equal('directory',
           lfs.attributes(tmp .. '/projects/b', 'mode'))
+      end)
+  end)
+
+  describe('a save', function()
+    local function read(path)
+      local f = assert(io.open(path, 'rb'))
+      local c = f:read('*a')
+      f:close()
+      return c
+    end
+
+    it('replaces the file and leaves no temporary one #project',
+      function()
+        PS:opreate('saves')
+        local p = PS.current
+        assert.is_true(p:writefile('main.lua', 'x = 2\n'))
+        assert.same('x = 2\n', read(p:get_path('main.lua')))
+        assert.is_nil(lfs.attributes(FS.replace_temp(p:get_path('main.lua'))))
+      end)
+
+    it('refuses a name in the temporary files\' namespace #project',
+      function()
+        PS:opreate('saves')
+        local p = PS.current
+        assert.is_false(p:writefile('.main.lua.compy-tmp', 'x'))
+        local ok, err = p:writefile('.Notes.COMPY-TMP', 'x')
+        assert.is_false(ok)
+        --- it says what to do
+        assert.is_truthy(tostring(err):find('choose another name', 1, true))
+      end)
+
+    it('is never listed or cloned as a file of its own #project',
+      function()
+        PS:opreate('saves')
+        local p = PS.current
+        local temp = '.main.lua.compy-tmp'
+        local own = { '.notes.tmp', 'notes.compy-tmp', '.compy-tmp' }
+        for _, name in ipairs({ temp, own[1], own[2], own[3] }) do
+          local f = assert(io.open(p:get_path(name), 'w'))
+          f:write('half a fi')
+          f:close()
+        end
+
+        local listed = {}
+        for _, item in ipairs(p:contents()) do
+          listed[item.name] = true
+        end
+        assert.is_nil(listed[temp])
+        --- files of the project's own, dotted or not
+        for _, name in ipairs(own) do
+          assert.is_true(listed[name], name)
+        end
+        local cok, cerr = PS:clone('saves', 'copy')
+        assert.is_true(cok, cerr)
+        assert.is_nil(lfs.attributes(FS.join_path(tmp, 'copy', temp)))
+        for _, name in ipairs(own) do
+          assert.is_not_nil(lfs.attributes(
+            FS.join_path(tmp, 'copy', name)), name)
+        end
+        assert.is_true(p:writefile('notes.compy-tmp', 'x'))
+      end)
+  end)
+
+  describe('a failed save', function()
+    local function read(path)
+      local f = assert(io.open(path, 'rb'))
+      local c = f:read('*a')
+      f:close()
+      return c
+    end
+
+    it('when the write fails, removes its temporary file #project',
+      function()
+        PS:opreate('saves')
+        local target = PS.current:get_path('main.lua')
+        local before = read(target)
+        local temp = FS.replace_temp(target)
+        --- the project folder takes no new file
+        local dir = PS.current.path
+        finally(function() os.execute('chmod 755 ' .. dir) end)
+        os.execute('chmod 555 ' .. dir)
+        local ok, err = FS.replace(target, 'x = 2\n')
+        assert.is_false(ok)
+        assert.is_not_nil(err)
+        assert.same(before, read(target))
+        assert.is_nil(lfs.attributes(temp))
+      end)
+
+    it('when the rename fails, removes its temporary file #project',
+      function()
+        PS:opreate('saves')
+        local target = PS.current:get_path('main.lua')
+        local before = read(target)
+        local rename = FS.rename
+        finally(function() FS.rename = rename end)
+        FS.rename = function() return false, 'refused' end
+        assert.is_false(FS.replace(target, 'x = 2\n'))
+        assert.same(before, read(target))
+        assert.is_nil(lfs.attributes(FS.replace_temp(target)))
       end)
   end)
 

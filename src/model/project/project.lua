@@ -81,6 +81,12 @@ local function validate_filename(name)
   then
     return false, messages.invalid_filename('Forbidden characters')
   end
+  --- a save's temporary files live there (FS.replace)
+  if FS.is_replace_temp(name) then
+    return false, messages.invalid_filename(
+      'names like .main.lua.compy-tmp are kept for saving files,'
+      .. ' choose another name')
+  end
   return true
 end
 
@@ -107,7 +113,14 @@ end)
 
 --- @return table
 function Project:contents()
-  return FS.dir(self.path)
+  --- a save's temporary file is no file of the project's
+  local items = {}
+  for _, item in ipairs(FS.dir(self.path)) do
+    if not FS.is_replace_temp(item.name) then
+      table.insert(items, item)
+    end
+  end
+  return items
 end
 
 --- @param name string
@@ -159,15 +172,18 @@ end
 
 --- @param name string
 --- @param data string
+--- @param durable boolean? --- on stable storage before it
+--- replaces the file (FS.replace)
 --- @return boolean? success
 --- @return string? error
-function Project:writefile(name, data)
+function Project:writefile(name, data, durable)
   local valid, err = validate_filename(name)
   if not valid then
     return false, err
   end
   local fp = FS.join_path(self.path, name)
-  return FS.write(fp, data)
+  --- the old content or the new, never an emptied file
+  return FS.replace(fp, data, durable)
 end
 
 --- @param name string

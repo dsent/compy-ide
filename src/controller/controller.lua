@@ -35,9 +35,10 @@ local user_draw
 -- Together with a shown input widget it marks a non-blocking
 -- project (one that overrides no update/draw, e.g. a
 -- pen-and-paper game) as still "live"
--- (doc/development/technical_debt/input.md, "Input-only /
--- pointer-only projects stay live in `project_open` (RESOLVED,
--- ruling a)"): keep the project route, Ctrl+Esc -> console.
+-- in 'ready' (doc/development/technical_debt/input.md,
+-- "Input-only / pointer-only projects stay live", RESOLVED,
+-- ruling a): keep the project route, and its own quit stops it
+-- back to the console.
 local user_pointer
 
 -- One lifetime, several names for subsets of it. Every channel
@@ -539,7 +540,7 @@ Controller = {
   --- @private
   --- @param CC ConsoleController
   set_love_keypressed = function(CC)
-    local function keypressed(k, _, isr)
+    local function keypressed(k, sc, isr)
       -- TODO(debt): these debug-hotkey if-blocks predate
       -- combos; migrate onto the combo-table mechanism
       -- (doc/development/decisions/input.md, D-COMBO-TABLES).
@@ -574,7 +575,7 @@ Controller = {
       -- D-ROUTE-OWNS): a project's widget is reached inside the
       -- PROJECT route's chain, and the console never holds the
       -- slot while one is up.
-      CC:keypressed(k)
+      CC:keypressed(k, sc, isr)
     end
     Controller._defaults.keypressed = keypressed
     love.keypressed = keypressed
@@ -587,6 +588,10 @@ Controller = {
   --- @param CC ConsoleController
   set_love_update = function(CC)
     local function update(dt)
+      -- A Space's key press and its glyph come within one
+      -- frame; a wait for the glyph still open at the next
+      -- frame waits for one that is not coming
+      CC.swallow_glyph = nil
       if love.PROFILE then
         Prof.update()
       end
@@ -743,9 +748,8 @@ Controller = {
       -- still interactive (input widget shown or pointer
       -- handlers installed —
       -- doc/development/technical_debt/input.md, "Input-only /
-      -- pointer-only projects stay live in `project_open`
-      -- (RESOLVED, ruling a)"). An idle console in ready
-      -- falls through: the app quits.
+      -- pointer-only projects stay live", RESOLVED, ruling a).
+      -- An idle console in ready falls through: the app quits.
       if love.state.app_state == 'running'
           or (love.state.app_state == 'ready'
               and Controller.user_is_interactive()) then
@@ -1012,6 +1016,17 @@ Controller = {
     -- playback (cfg.mode == 'play') only restart/profile stay
     -- live (doc/development/decisions/input.md, D-ROUTE-OWNS) —
     -- each project/console-management one checks it and no-ops.
+    --- A whole-editor exit with a changed block open asks
+    --- the editor's own discard question first, and its
+    --- confirmation takes the exit (EditorController,
+    --- ask_to_leave)
+    --- @param exit function
+    --- @return boolean asked
+    local function asked(exit)
+      return love.state.app_state == 'editor'
+          and CC.editor:ask_to_leave(exit)
+    end
+
     local function reserved_quickswitch()
       if playback then return end
       local st = love.state.app_state
@@ -1023,6 +1038,7 @@ Controller = {
         else CC:edit() end
       elseif st == 'editor'
           and CC.editor:is_normal_mode() then
+        if asked(reserved_quickswitch) then return end
         local ed_state = CC:finish_edit()
         love.state.editor = ed_state
         CC:run_project()
@@ -1036,6 +1052,7 @@ Controller = {
 
     local function reserved_quit()
       if playback then return end
+      if asked(reserved_quit) then return end
       CC:quit_project()
     end
 
@@ -1051,12 +1068,14 @@ Controller = {
 
     local function reserved_reset()
       if playback then return end
+      if asked(reserved_reset) then return end
       CC:reset()
     end
 
     -- Restart stays live in playback too (matches the old
     -- restart() call, made in both branches).
     local function reserved_restart()
+      if asked(reserved_restart) then return end
       CC:restart()
     end
 
@@ -1130,6 +1149,13 @@ Controller = {
     end
 
     handlers.textinput = function(t)
+      -- The glyph of a Space whose key press answered an
+      -- editor question (EditorController:keypressed), once
+      -- the key's work is done; it waits through other keys
+      -- and repeats, and the next glyph ends it
+      local swallow = CC.swallow_glyph
+      CC.swallow_glyph = nil
+      if swallow and swallow == t then return end
       if love.textinput then
         return love.textinput(t)
       end
