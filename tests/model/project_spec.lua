@@ -23,7 +23,9 @@ describe('ProjectService #project', function()
       return { type = mode }
     end
     return {
-      read = function(path)
+      --- read(name), or read(container, name) as FS.cp calls it
+      read = function(a, b)
+        local path = b or a
         local f = io.open(path, 'r')
         if not f then return nil end
         local c = f:read('*a')
@@ -283,6 +285,43 @@ describe('ProjectService #project', function()
         assert.is_nil(lfs.attributes(tmp .. '/projects/a'))
         assert.are.equal('directory',
           lfs.attributes(tmp .. '/projects/b', 'mode'))
+      end)
+  end)
+
+  describe('a save', function()
+    local function read(path)
+      local f = assert(io.open(path, 'rb'))
+      local c = f:read('*a')
+      f:close()
+      return c
+    end
+
+    it('replaces the file and leaves no temporary one #project',
+      function()
+        PS:opreate('saves')
+        local p = PS.current
+        assert.is_true(p:writefile('main.lua', 'x = 2\n'))
+        assert.same('x = 2\n', read(p:get_path('main.lua')))
+        assert.is_nil(lfs.attributes(p:get_path('.main.lua.tmp')))
+      end)
+
+    it('is never listed or cloned as a file of its own #project',
+      function()
+        PS:opreate('saves')
+        local p = PS.current
+        local f = assert(io.open(p:get_path('.main.lua.tmp'), 'w'))
+        f:write('half a fi')
+        f:close()
+
+        for _, item in ipairs(p:contents()) do
+          assert.is_not.equal('.main.lua.tmp', item.name)
+        end
+        local cok, cerr = PS:clone('saves', 'copy')
+        assert.is_true(cok, cerr)
+        assert.is_nil(lfs.attributes(
+          FS.join_path(tmp, 'copy', '.main.lua.tmp')))
+        assert.is_not_nil(lfs.attributes(
+          FS.join_path(tmp, 'copy', 'main.lua')))
       end)
   end)
 

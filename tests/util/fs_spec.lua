@@ -105,4 +105,90 @@ describe("FS utils", function()
       assert.is_not_nil(err)
     end)
   end)
+
+  describe('replaces a file', function()
+    local dir, target, temp
+
+    local function read(path)
+      local f = assert(io.open(path, 'rb'))
+      local c = f:read('*a')
+      f:close()
+      return c
+    end
+
+    before_each(function()
+      dir = '/tmp/compy_fs_replace_' .. tostring(math.floor(os.clock() * 1e6))
+      os.execute('mkdir -p ' .. dir)
+      target = FS.join_path(dir, 'main.lua')
+      temp = FS.join_path(dir, '.main.lua.tmp')
+      assert.is_true(FS.write(target, 'x = 1\n'))
+    end)
+
+    after_each(function()
+      os.execute('rm -rf ' .. dir)
+    end)
+
+    it('with the new content, and no temporary file left', function()
+      assert.is_true(FS.replace(target, 'x = 2\n'))
+      assert.same('x = 2\n', read(target))
+      assert.is_false(FS.exists(temp))
+    end)
+
+    it('byte for byte as it was when the write fails', function()
+      --- the temporary file cannot be written: a directory
+      --- stands in its place
+      os.execute('mkdir ' .. temp)
+      local ok, err = FS.replace(target, 'x = 2\n')
+      assert.is_false(ok)
+      assert.is_not_nil(err)
+      assert.same('x = 1\n', read(target))
+      assert.is_false(FS.exists(temp))
+    end)
+
+    it('as it was when the rename fails, and the temporary gone',
+      function()
+        local rename = FS.rename
+        finally(function() FS.rename = rename end)
+        FS.rename = function() return false, 'refused' end
+        local ok = FS.replace(target, 'x = 2\n')
+        assert.is_false(ok)
+        assert.same('x = 1\n', read(target))
+        assert.is_false(FS.exists(temp))
+      end)
+
+    it('removing a temporary file a power cut left', function()
+      assert.is_true(FS.write(temp, 'half a fi'))
+      assert.is_true(FS.replace(target, 'x = 2\n'))
+      assert.same('x = 2\n', read(target))
+      assert.is_false(FS.exists(temp))
+    end)
+
+    it('durably only when asked', function()
+      local fsync = FS.fsync
+      finally(function() FS.fsync = fsync end)
+      local synced = {}
+      FS.fsync = function(path)
+        synced[#synced + 1] = path
+        return true
+      end
+      assert.is_true(FS.replace(target, 'x = 2\n'))
+      assert.same({}, synced)
+      assert.is_true(FS.replace(target, 'x = 3\n', true))
+      assert.same({ temp }, synced)
+    end)
+
+    it('by a copy that replaces', function()
+      local src = FS.join_path(dir, 'main.lua.~save')
+      assert.is_true(FS.write(src, 'x = 0\n'))
+      local rename = FS.rename
+      finally(function() FS.rename = rename end)
+      FS.rename = function() return false, 'refused' end
+      assert.is_false(FS.cp(src, target, nil, true))
+      assert.same('x = 1\n', read(target))
+      FS.rename = rename
+      assert.is_true(FS.cp(src, target, nil, true))
+      assert.same('x = 0\n', read(target))
+      assert.is_false(FS.exists(temp))
+    end)
+  end)
 end)

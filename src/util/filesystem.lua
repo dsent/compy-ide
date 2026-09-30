@@ -258,10 +258,10 @@ if love and not TESTING then
   end)()
 
   --- Flush one file's data through to stable storage.
-  --- The editor accept path calls this after a save
-  --- (spec 2.6 "written immediately"). Do NOT add it to
-  --- FS.write: bulk deploy/clone and the user-facing
-  --- writefile must stay async. Best-effort — returns
+  --- The editor's saves reach it through FS.replace's
+  --- durable write (spec 2.6 "written immediately"). Do NOT
+  --- add it to FS.write: bulk deploy/clone and the
+  --- user-facing writefile must stay async. Best-effort — returns
   --- false when the platform lacks the syscall or the
   --- path cannot be opened.
   --- @param path string
@@ -285,9 +285,9 @@ if love and not TESTING then
   --- the bytes reach the OS but are NOT flushed to stable
   --- storage, so a power-cut or SIGKILL can lose them
   --- while an (exfat dirsync) directory entry persists.
-  --- Callers needing durability opt in via FS.fsync(path)
-  --- after a successful write — the editor accept path
-  --- does; bulk deploy/clone and writefile do not.
+  --- Callers needing durability opt in via FS.fsync(path),
+  --- as FS.replace's durable write does for the editor's
+  --- saves; bulk deploy/clone and writefile do not.
   --- @param path string
   --- @param data string
   --- @return boolean success
@@ -300,9 +300,11 @@ if love and not TESTING then
   --- @param source string
   --- @param target string
   --- @param vfs boolean? -- use VFS for source
+  --- @param replace boolean? -- write through FS.replace,
+  --- durably
   --- @return boolean success
   --- @return string? error
-  function FS.cp(source, target, vfs)
+  function FS.cp(source, target, vfs, replace)
     local getInfo = (function()
       if vfs then
         return LFS.getInfo
@@ -338,7 +340,12 @@ if love and not TESTING then
       return false, tostring(s_err)
     end
 
-    local out, t_err = FS.write(to, content)
+    local out, t_err
+    if replace then
+      out, t_err = FS.replace(to, content, true)
+    else
+      out, t_err = FS.write(to, content)
+    end
     if not out then
       return false, t_err
     end
@@ -378,13 +385,15 @@ if love and not TESTING then
     FS.mkdir(target)
     local items = FS.dir(source, nil, vfs)
     for _, i in pairs(items) do
-      local s = FS.join_path(source, i.name)
-      local t = FS.join_path(target, i.name)
+      if not FS.is_replace_temp(i.name) then
+        local s = FS.join_path(source, i.name)
+        local t = FS.join_path(target, i.name)
 
-      local ok, err = FS.cp(s, t, vfs)
-      if not ok then
-        cp_ok = false
-        cp_err = err
+        local ok, err = FS.cp(s, t, vfs)
+        if not ok then
+          cp_ok = false
+          cp_err = err
+        end
       end
     end
 
@@ -464,9 +473,12 @@ else
 
   --- @param source string
   --- @param target string
+  --- @param _ boolean? -- the VFS flag of the love branch
+  --- @param replace boolean? -- write through FS.replace,
+  --- durably
   --- @return boolean success
   --- @return string? error
-  function FS.cp(source, target)
+  function FS.cp(source, target, _, replace)
     local src = FS.exists(source)
     if not src then
       return false, FS.messages.cannot_open(source)
@@ -474,7 +486,12 @@ else
 
     local rok, cont_err = FS.read(source)
     if rok and cont_err then
-      local wok, werr = FS.write(target, cont_err)
+      local wok, werr
+      if replace then
+        wok, werr = FS.replace(target, cont_err, true)
+      else
+        wok, werr = FS.write(target, cont_err)
+      end
       return wok, werr
     else
       return false, cont_err
@@ -558,6 +575,13 @@ else
     return os.remove(path)
   end
 
+  --- @param target string
+  --- @return boolean success
+  --- @return string? error
+  function FS.rm(target)
+    return os.remove(target)
+  end
+
   --- @return boolean ran
   function FS.sync()
     return true
@@ -613,5 +637,49 @@ function FS.rename(source, target)
   return ok or false, err
 end
 
+
+--- @param path string
+--- @return string --- the temporary file FS.replace writes
+--- beside `path`: its name, dotted, with .tmp after it
+function FS.replace_temp(path)
+  local dir, name = string.match(path, '^(.*[/\\])([^/\\]+)$')
+  if not dir then return '.' .. path .. '.tmp' end
+  return dir .. '.' .. name .. '.tmp'
+end
+
+--- @param name string
+--- @return boolean --- a temporary file FS.replace writes,
+--- which no listing or copy carries as a file of its own
+function FS.is_replace_temp(name)
+  return string.match(name, '^%..+%.tmp$') ~= nil
+end
+
+--- Write `data` over the file at `path` so that it holds its
+--- old content or the new, never a part: the data goes to a
+--- temporary file beside it (FS.replace_temp) and is renamed
+--- over the file. On a full card the temporary write fails
+--- and the file is untouched. Any failure removes the
+--- temporary file, one a power cut left included; writing it
+--- first replaces such a one as well.
+--- @param path string
+--- @param data string
+--- @param durable boolean? --- the data reaches stable
+--- storage before the rename (FS.fsync); the editor's saves
+--- ask for it, a program's writefile stays async
+--- @return boolean success
+--- @return string? error
+function FS.replace(path, data, durable)
+  local tmp = FS.replace_temp(path)
+  local ok, err = FS.write(tmp, data)
+  if ok then
+    if durable then FS.fsync(tmp) end
+    ok, err = FS.rename(tmp, path)
+  end
+  if not ok then
+    FS.rm(tmp)
+    return false, err
+  end
+  return true
+end
 
 return FS

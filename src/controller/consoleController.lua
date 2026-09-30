@@ -279,7 +279,7 @@ function ConsoleController:write_checkpoint(name)
   if not p then return false end
   local ok = FS.cp(
     p:get_path(name),
-    p:get_path(checkpoint_name(name)))
+    p:get_path(checkpoint_name(name)), false, true)
   return ok and true or false
 end
 
@@ -291,7 +291,7 @@ function ConsoleController:restore_checkpoint(name)
   if not p then return false end
   local cp = p:get_path(checkpoint_name(name))
   if not FS.exists(cp) then return false end
-  local ok = FS.cp(cp, p:get_path(name))
+  local ok = FS.cp(cp, p:get_path(name), false, true)
   return ok and true or false
 end
 
@@ -373,11 +373,13 @@ end
 --- @return boolean success
 --- @return string? err
 --- @param project Project? --- default: the current one
-function ConsoleController:_writefile(name, content, project)
+--- @param durable boolean? --- see Project:writefile
+function ConsoleController:_writefile(name, content, project,
+                                      durable)
   local P = self.model.projects
   local p = project or P.current
   local text = string.unlines(content)
-  return p:writefile(name, text)
+  return p:writefile(name, text, durable)
 end
 
 function ConsoleController:writefile(name, content)
@@ -2018,13 +2020,11 @@ function ConsoleController:edit(name, state)
   end
   --- Editor accept path: a save is durable before the
   --- editor reports acceptance (spec 2.6), so a force-stop
-  --- after an accepted edit cannot lose it. fsync only
+  --- after an accepted edit cannot lose it. Durable only
   --- here — writefile and bulk paths stay async.
   --- the file's own project, whichever is current by then
   local save = function(newcontent)
-    local ok, err = self:_writefile(filename, newcontent, p)
-    if ok then FS.fsync(fpath) end
-    return ok, err
+    return self:_writefile(filename, newcontent, p, true)
   end
 
   self.editor:open(filename, text, save, fpath)
