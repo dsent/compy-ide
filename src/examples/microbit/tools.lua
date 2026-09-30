@@ -275,14 +275,22 @@ local function putBack()
 end
 
 --- Say what happened, and hand the board back. Echo comes back
---- on: what the board says from here on is shown.
+--- on: it shows what the board says from here on, and first
+--- rest, so an end line cut in two at the handover is read
+--- whole. A console whose echo takes no rest has it shown
+--- here.
 --- @param outcome string
 --- @param frame string? the frame echo is to take in place
 ---   of the board's line, for a file still running
-local function finish(outcome, frame)
+--- @param rest string? what the board said that is not shown
+local function finish(outcome, frame, rest)
   putBack()
   sending = nil
-  echo(nil, frame)
+  local taken = echo(nil, frame, rest)
+  local unshown = rest and not taken
+  if unshown then
+    show(rest)
+  end
   print(outcome)
 end
 
@@ -362,9 +370,8 @@ end
 --- @param after string?
 local function quietLast(after)
   if after then
-    show(after)
     local running = " is on the board and still running"
-    finish(sending.name .. running, sending.lines.frame)
+    finish(sending.name .. running, sending.lines.frame, after)
   else
     stopAt(STOPPED)
   end

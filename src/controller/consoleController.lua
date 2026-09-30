@@ -1644,11 +1644,13 @@ local terminal              = cc.model.output.terminal
 
   --- Show what the board sends, or stop showing it. Off
   --- until something asks for it.
-  --- @param on boolean?
   --- @param on boolean? false stops it
   --- @param frame string? a line the board is to say a
   ---   program's end in, which echo says in words instead
-  project_env.echo            = function(on, frame)
+  --- @param rest string? what the board said before, not
+  ---   shown yet, read first as if it came now
+  --- @return boolean? true when echo is on, rest taken
+  project_env.echo            = function(on, frame, rest)
     local port = SerialPort:table_for('console')
     if on == false then
       SerialPort.echo:off()
@@ -1660,6 +1662,8 @@ local terminal              = cc.model.output.terminal
     port.onBytes = function(chunk)
       SerialPort.echo:bytes(chunk)
     end
+    if rest then SerialPort.echo:bytes(rest) end
+    return true
   end
 
   local compy_namespace      = get_compy_namespace(terminal,

@@ -469,6 +469,68 @@ describe('micro:bit exec #microbit', function()
     assert.is_nil(table.concat(said, '\n'):find('\30', 1, true))
   end)
 
+  --- its status cut after the o, and the prompt after the wait
+  it('waits for an end line the wait cut in its status',
+    function()
+      local tools = load_tools()
+      printingUntilLate(tools)
+      local line = framed('ok')
+      backend:rx(line:sub(1, -4))
+      serial:update(0.3)
+      assert.is_not_nil(port.onBytes)
+      backend:rx(line:sub(-3) .. '> ')
+      serial:update(0)
+      serial:update(0.25)
+      assert.equal('f.lua is on the board', said[#said])
+      assert.is_nil(table.concat(said, '\n'):find('\30', 1, true))
+    end)
+
+  --- The console's own echo, over the port's console table, as
+  --- the console gives it: echo takes what exec had not shown
+  --- @param tools table
+  local function consoleEcho(tools)
+    local function say(text) said[#said + 1] = text end
+    serial.echo = Echo.new(say, say)
+    local console = serial:table_for('console')
+    tools.echo = function(on, frame, rest)
+      echoes[#echoes + 1] = on ~= false
+      if on == false then
+        serial.echo:off()
+        console.onBytes = nil
+        return
+      end
+      serial.echo:on()
+      if frame then serial.echo:expect(frame) end
+      console.onBytes = function(chunk) serial.echo:bytes(chunk) end
+      if rest then serial.echo:bytes(rest) end
+      return true
+    end
+  end
+
+  --- the board quiet in the middle of its end line: echo holds
+  --- the start and reads the line whole once the rest comes
+  it('hands an end line cut in two over to echo, which reads it'
+    .. ' whole', function()
+      local tools = load_tools()
+      consoleEcho(tools)
+      tools.exec('f.lua')
+      for _ = 1, 5 do board() end
+      local line = framed('ok')
+      backend:rx(backend.sent[#backend.sent]:gsub('\r$', '')
+        .. '\r\r\n1\r\n' .. line:sub(1, -4))
+      serial:update(0)
+      for _ = 1, 6 do serial:update(1) end
+      assert.is_nil(port.onBytes)
+      backend:rx(line:sub(-3) .. '> ')
+      serial:update(0)
+      serial:update(0.25)
+      local told = table.concat(said, '\n')
+      assert.is_nil(told:find('\30', 1, true))
+      assert.truthy(told:find('1\nf.lua is on the board and still'
+        .. ' running\nThe program on the micro:bit has ended.', 1,
+        true))
+    end)
+
   --- a file still printing after the wait goes on in echo
   it('hands a file that keeps printing over to echo', function()
     local tools = load_tools()
