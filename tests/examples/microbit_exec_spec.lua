@@ -1134,6 +1134,23 @@ describe('micro:bit exec #microbit', function()
     assert.equal(shipped, files['MICROBIT.hex'])
   end)
 
+  --- the name was right: the project lacks the firmware
+  it('says what a project without MICROBIT.hex needs', function()
+    local tools = load_tools()
+    files['x.lua'] = 'print(1)\n'
+    for _, call in ipairs({
+      function() tools.upload() end,
+      function() tools.upload('x.lua') end,
+      function() tools.embed('mine.hex', 'x.lua') end,
+    }) do
+      refusedPlainly(call, 'This project has no MICROBIT.hex, which'
+        .. ' upload and', 'clone("microbit", "myboard")')
+    end
+    assert.is_nil(files['x.hex'])
+    assert.is_nil(files['mine.hex'])
+    assert.is_false(flashed)
+  end)
+
   it('says in words that a command needs a file name', function()
     local tools = load_tools()
     for _, call in ipairs({

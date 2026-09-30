@@ -88,6 +88,27 @@ local function named(name)
   end
 end
 
+--- The firmware the tools build every firmware file from, when
+--- the project lacks it: the name was right
+local NO_FIRMWARE = {
+  "This project has no " .. HEX .. ", which upload and",
+  "embed build every firmware file from. Copy the",
+  "microbit project, which has it, with",
+  "clone(\"microbit\", \"myboard\"), and keep your files there."
+}
+
+--- Stop a command whose file the project does not have
+--- @param filename string
+local function missing(filename)
+  if filename == HEX then
+    refuse(unpack(NO_FIRMWARE))
+  end
+  refuse(
+    "This project has no file called " .. filename .. ".",
+    "Check the name, then try again."
+  )
+end
+
 --- A project file, or a stop saying there is none, in these
 --- words alone: the console is asked to say nothing of it
 --- @param filename string
@@ -96,10 +117,7 @@ local function read(filename)
   named(filename)
   local text = readfile(filename, true)
   if not text then
-    refuse(
-      "This project has no file called " .. filename .. ".",
-      "Check the name, then try again."
-    )
+    missing(filename)
   end
   return text
 end
