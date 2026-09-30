@@ -2020,7 +2020,7 @@ function ConsoleController:edit(name, state)
     return ok, err
   end
 
-  self.editor:open(filename, text, save)
+  self.editor:open(filename, text, save, fpath)
   self.editor:restore_state(state)
 end
 

@@ -86,7 +86,10 @@ end
 --- @param name string
 --- @param content str?
 --- @param save function
-function EditorController:open(name, content, save)
+--- @param key string? --- the file's identity, project and
+--- name: a file open already comes back as its own buffer
+--- @param fresh boolean? --- a new buffer even so
+function EditorController:open(name, content, save, key, fresh)
   local w = self.model.cfg.view.drawableChars
   local is_lua = string.match(name, '.lua$')
   local is_md = string.match(name, '.md$')
@@ -118,7 +121,13 @@ function EditorController:open(name, content, save)
     self.input:set_eval(TextEval)
   end
 
-  local b = BufferModel(name, content, save, ch, hl, pp, tr)
+  --- one buffer per file: a second copy would save a
+  --- stale snapshot over the first one's changes
+  local b = not fresh and key and self:_find_buffer(key)
+  if not b then
+    b = BufferModel(name, content, save, ch, hl, pp, tr)
+    b.key = key
+  end
   self:_drop_dialog()
   --- the file comes in with an input of its own: nothing
   --- typed, no message
@@ -216,12 +225,27 @@ function EditorController:_restore_position(buf)
   return false
 end
 
---- Replace the active buffer with fresh file content
+--- @private
+--- @param key string
+--- @return BufferModel?
+function EditorController:_find_buffer(key)
+  for _, b in ipairs(self.model.buffers) do
+    if b.key == key then return b end
+  end
+end
+
+--- Replace the active buffer with fresh file content,
+--- wherever it stands in the buffer stack
 --- @param text string
 function EditorController:reload_active(text)
   local old = self:get_active_buffer()
   self.model.buffers:pop_front()
-  self:open(old.name, text, old.save_file)
+  self:open(old.name, text, old.save_file, old.key, true)
+  local new = self:get_active_buffer()
+  local bs = self.model.buffers
+  for i, b in ipairs(bs) do
+    if b == old then bs:update(new, i) end
+  end
 end
 
 function EditorController:close_buffer()

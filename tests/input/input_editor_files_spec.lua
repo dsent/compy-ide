@@ -109,6 +109,64 @@ describe('the editor across files #input', function()
     end)
   end)
 
+  describe('a file open twice', function()
+    it('is one buffer, so no copy saves over another', function()
+      files['main.lua'] = "local lib = require('lib')\nx = 1\ny = 1\n"
+      files['lib.lua'] = "local main = require('main')\n"
+      open()
+      chord('lctrl', 'j')
+      chord('lctrl', 'j')
+      assert.same('main.lua', ed:get_active_buffer().name)
+      chord('down')
+      draft('x = 2')
+      chord('return')
+      assert.is_truthy(files['main.lua']:find('x = 2', 1, true))
+
+      chord('lshift', 'escape')
+      chord('lshift', 'escape')
+      assert.same('main.lua', ed:get_active_buffer().name)
+      chord('down')
+      chord('down')
+      draft('y = 2')
+      chord('return')
+
+      assert.is_truthy(files['main.lua']:find('x = 2', 1, true))
+      assert.is_truthy(files['main.lua']:find('y = 2', 1, true))
+    end)
+  end)
+
+  describe('a restore', function()
+    it('reaches the file wherever it is open', function()
+      files['main.lua'] = "local lib = require('lib')\nx = 1\n"
+      files['lib.lua'] = "local main = require('main')\n"
+      local keep = {
+        checkpoint_modtime = cc.checkpoint_modtime,
+        file_modtime = cc.file_modtime,
+        restore_checkpoint = cc.restore_checkpoint,
+      }
+      undo[#undo + 1] = function()
+        for f, v in pairs(keep) do cc[f] = v end
+      end
+      cc.checkpoint_modtime = function() return 1752400000 end
+      cc.file_modtime = function() return 1752480000 end
+      cc.restore_checkpoint = function(_, name)
+        files[name] = "local lib = require('lib')\nx = 7\n"
+        return true
+      end
+      open()
+      chord('lctrl', 'j')
+      chord('lctrl', 'j')
+      chord('lctrl', 'lshift', 'k')
+      chord('return')
+      assert.same('x = 7', ed:get_active_buffer():get_text_content()[2])
+
+      chord('lshift', 'escape')
+      chord('lshift', 'escape')
+      assert.same('main.lua', ed:get_active_buffer().name)
+      assert.same('x = 7', ed:get_active_buffer():get_text_content()[2])
+    end)
+  end)
+
   describe('Ctrl+J', function()
     before_each(function()
       files['main.lua'] = "local lib = require('lib')\n"
