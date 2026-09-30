@@ -662,8 +662,7 @@ end
 --- @return boolean --- a name in the temporary files'
 --- namespace; exFAT ignores case, so this does too
 function FS.is_replace_temp(name)
-  local n = string.lower(name)
-  return string.sub(n, -#TEMP_SUFFIX) == TEMP_SUFFIX
+  return string.match(string.lower(name), '^%..+%.compy%-tmp$') ~= nil
 end
 
 --- Linux's C library, where LuaJIT's ffi reaches it: a save

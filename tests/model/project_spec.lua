@@ -316,7 +316,8 @@ describe('ProjectService #project', function()
         PS:opreate('saves')
         local p = PS.current
         local temp = '.main.lua.compy-tmp'
-        for _, name in ipairs({ temp, '.notes.tmp' }) do
+        local own = { '.notes.tmp', 'notes.compy-tmp', '.compy-tmp' }
+        for _, name in ipairs({ temp, own[1], own[2], own[3] }) do
           local f = assert(io.open(p:get_path(name), 'w'))
           f:write('half a fi')
           f:close()
@@ -327,13 +328,18 @@ describe('ProjectService #project', function()
           listed[item.name] = true
         end
         assert.is_nil(listed[temp])
-        --- a file of the project's own, dotted or not
-        assert.is_true(listed['.notes.tmp'])
+        --- files of the project's own, dotted or not
+        for _, name in ipairs(own) do
+          assert.is_true(listed[name], name)
+        end
         local cok, cerr = PS:clone('saves', 'copy')
         assert.is_true(cok, cerr)
         assert.is_nil(lfs.attributes(FS.join_path(tmp, 'copy', temp)))
-        assert.is_not_nil(lfs.attributes(
-          FS.join_path(tmp, 'copy', '.notes.tmp')))
+        for _, name in ipairs(own) do
+          assert.is_not_nil(lfs.attributes(
+            FS.join_path(tmp, 'copy', name)), name)
+        end
+        assert.is_true(p:writefile('notes.compy-tmp', 'x'))
       end)
   end)
 

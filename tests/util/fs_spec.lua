@@ -145,6 +145,9 @@ describe("FS utils", function()
       assert.is_true(FS.is_replace_temp('.MAIN.LUA.COMPY-TMP'))
       assert.is_false(FS.is_replace_temp('.notes.tmp'))
       assert.is_false(FS.is_replace_temp('main.lua'))
+      --- outside the namespace: no dot before, or no name
+      assert.is_false(FS.is_replace_temp('notes.compy-tmp'))
+      assert.is_false(FS.is_replace_temp('.compy-tmp'))
     end)
 
     it('with the new content, and no temporary file left', function()
