@@ -743,6 +743,47 @@ local function mistake(filename, err)
   print("upload it again.")
 end
 
+--- The invisible mark some computers' editors put first in a
+--- file, a byte order mark
+local BOM = string.char(239, 187, 191)
+
+--- Say that a Lua file begins with the invisible mark some
+--- computers' editors put first (a byte order mark)
+--- @param filename string
+local function marked(filename)
+  print(filename .. " begins with an invisible mark a")
+  print("computer's editor put there, which the micro:bit")
+  print("cannot read. To take it off, type")
+  local off = "writefile(%q, readfile(%q):sub(4))"
+  print(off:format(filename, filename))
+  print("then upload it again.")
+end
+
+--- Say that a Lua file's first line starts with #
+--- @param filename string
+local function hashed(filename)
+  print(filename .. " begins with a line that starts with #,")
+  print("which the micro:bit cannot read. Take that line out")
+  local edit = "with edit(%q), then upload it again."
+  print(edit:format(filename))
+end
+
+--- Whether a Lua file begins with something LuaJIT skips and
+--- the board's Lua 5.1 cannot read, said when it does
+--- @param filename string
+--- @param script string
+--- @return boolean
+local function markedStart(filename, script)
+  local bom = script:sub(1, 3) == BOM
+  local hash = script:sub(1, 1) == "#"
+  if bom then
+    marked(filename)
+  elseif hash then
+    hashed(filename)
+  end
+  return bom or hash
+end
+
 --- A Lua file's text, when the board can read it; nil, said,
 --- when it has a mistake that stops it from being read. The
 --- Compy reads it with LuaJIT, which takes a few things the
@@ -754,6 +795,9 @@ end
 --- @param script string
 --- @return string?
 local function readable(filename, script)
+  if markedStart(filename, script) then
+    return nil
+  end
   local fn, err = loadstring(script, "=" .. filename)
   if fn then
     return script

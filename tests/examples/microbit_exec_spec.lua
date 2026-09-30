@@ -964,6 +964,38 @@ describe('micro:bit exec #microbit', function()
           end)
       end
 
+      --- LuaJIT skips both; the board's Lua 5.1 does not
+      it('refuses a file that begins with a byte order mark, and'
+        .. ' the words take it off', function()
+          local tools = load_tools()
+          files['robot.lua'] = '\239\187\191print(1)\n'
+          said = {}
+          uploaded(tools)
+          assert.is_false(flashed)
+          assert.is_nil(files['robot.hex'])
+          local told = table.concat(said, '\n')
+          assert.truthy(told:find('robot.lua begins with an invisible'
+            .. ' mark', 1, true))
+          local off = assert(told:match('writefile%b()'))
+          setfenv(assert(loadstring(off)), tools)()
+          uploaded(tools)
+          assert.is_true(flashed)
+          assert.equal('print(1)\n', program(files['robot.hex']))
+        end)
+
+      it('refuses a file whose first line starts with #', function()
+        local tools = load_tools()
+        files['robot.lua'] = '#!/usr/bin/lua\nprint(1)\n'
+        said = {}
+        uploaded(tools)
+        assert.is_false(flashed)
+        assert.is_nil(files['robot.hex'])
+        local told = table.concat(said, ' ')
+        assert.truthy(told:find('begins with a line that starts with'
+          .. ' #', 1, true))
+        assert.truthy(told:find('edit("robot.lua")', 1, true))
+      end)
+
       it('takes a file as long as the board allows', function()
         local tools = load_tools()
         local tail = 'print("end")\n'
