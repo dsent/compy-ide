@@ -246,10 +246,10 @@ end
 --- line break goes before it, so it starts a line even after
 --- output with no end. The console's echo is given the frame
 --- too, and says how a file that ran on past exec's wait
---- ended in its place. The cable carries about 60 characters
---- a second, so what exec adds to every file is written as
---- short as Lua reads it: one-letter names, and no space the
---- parser does not need.
+--- ended in its place. What exec adds goes down the cable
+--- with every file, and the board reads and echoes each
+--- character, so it is written as short as Lua reads it:
+--- one-letter names, and no space the parser does not need.
 local FRAME = "\30exec "
 local RAN = table.concat({
   "local z='\\r\\n\\30exec %s '..(o and'ok'or f and'error'",
