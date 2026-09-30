@@ -347,13 +347,19 @@ local function hear(chunk)
   end
 end
 
---- Say how far exec has got, every PROGRESS_S
+--- Say how far exec has got, every PROGRESS_S, once for each
+--- line it gets to: a line said again reads as stuck
 --- @param dt number
 local function tell(dt)
   sending.told = sending.told + dt
-  if PROGRESS_S <= sending.told then
+  local at = where()
+  local due = PROGRESS_S <= sending.told
+  local moved = at ~= sending.toldAt
+  local say = due and moved
+  if say then
     sending.told = 0
-    print("exec: " .. where())
+    sending.toldAt = at
+    print("exec: " .. at)
   end
 end
 

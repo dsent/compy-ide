@@ -404,6 +404,21 @@ describe('micro:bit exec #microbit', function()
     assert.same({ 'exec: line 1 of 2 of f.lua' }, said)
   end)
 
+  --- the same line said again reads as stuck
+  it('says each line it gets to once', function()
+    local tools = load_tools()
+    tools.exec('f.lua')
+    -- the board takes the first line, then goes on sending
+    backend:rx(backend.sent[1]:gsub('\r$', '') .. '\r\r\n')
+    said = {}
+    for _ = 1, 8 do
+      backend:rx('.')
+      serial:update(1)
+    end
+    local _, n = table.concat(said, '\n'):gsub('exec: line', '')
+    assert.equal(1, n)
+  end)
+
   --- a program from upload runs on the board: it may send all
   --- the while and never echo what exec sends
   it('stops on a board that sends but never takes the line, and'
