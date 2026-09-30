@@ -1269,6 +1269,7 @@ write(table.concat(out), '<on_event ', tostring(got), '>')
         assert.truthy(told:find('cannot write robot.hex', 1, true))
         assert.truthy(told:find('robot.hex could not be saved', 1,
           true))
+        assert.truthy(told:find('upload it again', 1, true))
         assert.falsy(told:find('written', 1, true))
       end)
 

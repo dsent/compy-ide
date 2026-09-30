@@ -867,7 +867,9 @@ local function saved(hex_name, data)
     return true
   end
   print(hex_name .. " could not be saved, so nothing was")
-  print("sent to the micro:bit.")
+  print("sent to the micro:bit. The line above says why.")
+  print("When the Compy is full, delete files you no longer")
+  print("need, then upload it again.")
   return false
 end
 
