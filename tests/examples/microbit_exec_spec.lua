@@ -767,16 +767,20 @@ describe('micro:bit exec #microbit', function()
       --- @return table env
       --- @return string? err
       local function boot(data)
-        local out = {}
+        local out, env = {}, nil
         local microbit = anything()
         microbit.serial.send = function(c) out[#out + 1] = c end
         microbit.serial.eventAfterAsync = function()
           out[#out + 1] = '<armed>'
         end
-        microbit.display.scroll = function(text)
-          out[#out + 1] = '<scrolled ' .. text .. '>'
+        microbit.display.scrollAsync = function(text)
+          -- a scroll while on_event is set could let the
+          -- firmware call in mid-call
+          local quiet = rawget(env, 'on_event') == nil
+          out[#out + 1] = '<scrolled ' .. tostring(text) .. '>'
+          out[#out + 1] = quiet and '<quiet>' or '<live>'
         end
-        local env = setmetatable({ microbit = microbit },
+        env = setmetatable({ microbit = microbit },
           { __index = _G })
         env._G = env
         -- a string library of the board's own: a file that
@@ -785,6 +789,12 @@ describe('micro:bit exec #microbit', function()
         for k, v in pairs(string) do env.string[k] = v end
         --- the board's own on_event, as the firmware finds it
         env.peek = function() return rawget(env, 'on_event') end
+        -- the thread's globals are the test run's: level 0 is
+        -- left to the runs on Lua 5.1
+        env.setfenv = function(f, t)
+          if f == 0 then return end
+          return setfenv(f, t)
+        end
         env.loadstring = function(code, name)
           local fn, err = loadstring(code, name)
           if fn then
@@ -839,12 +849,27 @@ local function anything()
 end
 microbit = anything()
 microbit.serial.send = function(c) out[#out + 1] = c end
+local typed, up = TYPED, false
+microbit.serial.getCharAsync = function()
+  if not up then return nil end
+  local c = typed:sub(1, 1)
+  typed = typed:sub(2)
+  if c ~= '' then return c end
+end
 function peek() return rawget(_G, 'on_event') end
 local f = assert(io.open(arg[1], 'rb'))
 local chunk = assert(loadstring(f:read('*a'), 'embedded'))
 f:close()
 pcall(chunk)
+up = true
 local ok, got = pcall(rawget(_G, 'on_event'))
+-- what is typed reaches Lua as the firmware sends it: the
+-- thread's on_event, called with the serial event
+local handler = rawget(getfenv(0), 'on_event')
+if type(handler) == 'function' then
+  pcall(handler, microbit.DEVICE_ID_SERIAL,
+    microbit.CODAL_SERIAL_EVT_HEAD_MATCH)
+end
 write(table.concat(out), '<on_event ', tostring(got), '>')
 ]==]
 
@@ -852,13 +877,14 @@ write(table.concat(out), '<on_event ', tostring(got), '>')
       --- @param lua string
       --- @param data string a hex file
       --- @return string
-      local function bootOn(lua, data)
+      --- @param typed string? typed at the board once it is up
+      local function bootOn(lua, data, typed)
         local script, board = os.tmpname(), os.tmpname()
         local f = assert(io.open(script, 'wb'))
         f:write(hex.script(hex.parse(data)))
         f:close()
         f = assert(io.open(board, 'wb'))
-        f:write(BOARD)
+        f:write(('local TYPED = %q\n'):format(typed or ''), BOARD)
         f:close()
         local run = io.popen(lua .. ' ' .. board .. ' ' .. script)
         local said = run:read('*a')
@@ -1007,6 +1033,27 @@ write(table.concat(out), '<on_event ', tostring(got), '>')
           end)
       end
 
+      --- the board's own Lua, with a command typed once it is
+      --- up: the prompt has to answer it
+      for _, text in ipairs({ 'setmetatable(_G, { __metatable ='
+        .. ' false })', 'getmetatable(_G).__metatable = 1',
+        'setfenv(0, {})', 'error("oops")', '' }) do
+        it('answers print(6*7) after a file that runs ' .. text,
+          function()
+            local lua = lua51()
+            if not lua then
+              pending('lua5.1 is not installed')
+              return
+            end
+            local tools = load_tools()
+            files['robot.lua'] = text .. '\nprint("ran")\n'
+            local said = bootOn(lua, uploaded(tools),
+              'print(6*7)\r')
+            local prompt = assert(said:find('> ', 1, true))
+            assert.truthy(said:find('42\r\n', prompt, true))
+          end)
+      end
+
       --- what the wrapper needs after the file is its own
       for _, text in ipairs({ 'rawset = 1', 'rawget = 1',
         'setmetatable = 1', 'pcall = nil', 'tostring = nil',
@@ -1083,6 +1130,7 @@ write(table.concat(out), '<on_event ', tostring(got), '>')
             end
             local at = assert(out:find(why .. '\r\n', 1, true))
             local line = why:match(':(%d+):')
+            assert.truthy(out:find('<quiet>', 1, true))
             assert.truthy(out:find('<scrolled error, line ' .. line
               .. '>', at, true))
             local prompt = assert(out:find('> ', at, true))

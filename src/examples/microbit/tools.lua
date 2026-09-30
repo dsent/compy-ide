@@ -616,11 +616,12 @@ local ARMING = ".*()\nserial_session%.prompt%(%)"
 --- way round these that is not known here stays open.
 ---
 --- Everything the wrapper uses after the file is taken before
---- it runs, and on_event, the string library and the session
---- the prompt writes to are put back first: whatever the file
---- did to the board's globals, the prompt comes. A mistake
---- stops only the file; it is printed, and the lights scroll
---- "error" and its line.
+--- it runs. The string library, the session the prompt writes
+--- to and the thread's globals are put back first, then a
+--- mistake is said, and on_event comes last: nothing calls in
+--- while the mistake is printed, and the scroll runs on its
+--- own. A mistake stops only the file; it is printed, and the
+--- lights scroll "error" and its line.
 local RUN_TAKE = table.concat({
   "",
   "do",
@@ -633,7 +634,7 @@ local RUN_TAKE = table.concat({
   "local loadstring, load = loadstring, load",
   "local strings, gmatch = string, string.gmatch",
   "local match, sub = string.match, string.sub",
-  "local scroll = microbit.display.scroll"
+  "local scroll = microbit.display.scrollAsync"
 }, "\n")
 
 --- What the file's globals hand out: its own on_event, or
@@ -682,18 +683,24 @@ local RUN_FILE = table.concat({
   "if ran then ran, err = pcall(setfenv(file, proxy)) end"
 }, "\n")
 
---- After the file: its globals are the board's alone from
---- here on, its on_event takes over, and what the prompt
---- needs is back
+--- After the file, before anything can call in: its globals
+--- are the board's alone from here on, the board's globals
+--- are the thread's again, and what the prompt needs is back.
+--- A metatable the file locked stays; only its own functions
+--- see it.
 local RUN_BACK = table.concat({
   "local mine = ran and rawget(proxy, 'on_event')",
   "rawset(proxy, 'on_event', nil)",
-  "setmetatable(proxy, { __index = G, __newindex = G })",
-  "rawset(G, 'on_event', mine or firmware)",
+  "local plain = { __index = G, __newindex = G }",
+  "pcall(setmetatable, proxy, plain)",
+  "pcall(setfenv, 0, G)",
   "rawset(G, 'string', strings)",
   "rawset(strings, 'gmatch', gmatch)",
   "rawset(G, 'active_session', nil)"
 }, "\n")
+
+--- Last: the file's on_event, or the firmware's, takes over
+local RUN_ARM = "rawset(G, 'on_event', mine or firmware)\nend"
 
 --- A mistake, said: the whole of it printed, and on the
 --- lights "error" and its line in the file, or the message's
@@ -709,8 +716,7 @@ local RUN_SAY = table.concat({
   "  local first = match(text, '^[^.]+') or 'error'",
   "  scroll(short or sub(first, 1, 40))",
   "end",
-  "if not ran then pcall(say) end",
-  "end"
+  "if not ran then pcall(say) end"
 }, "\n")
 
 --- The largest Lua file upload puts on the board, in bytes.
@@ -753,7 +759,7 @@ local function runOf(script, filename)
   local silent = filename .. " stopped, and said nothing more."
   local line = "^" .. filename:gsub("%p", "%%%0") .. ":(%d+):"
   local say = RUN_SAY:format(silent, line)
-  local after = RUN_BACK .. "\n" .. say
+  local after = RUN_BACK .. "\n" .. say .. "\n" .. RUN_ARM
   return RUN_START .. "\n" .. file .. "\n" .. after
 end
 
