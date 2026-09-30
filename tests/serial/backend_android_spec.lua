@@ -349,4 +349,26 @@ describe('AndroidBackend drive hold', function()
     b.state = 'permission'
     assert.same('permission', b:absence())
   end)
+
+  --- 16 a frame on UE174 with firmware 0a975a4: exec whole, and
+  --- five times as fast as one byte a frame; 64 lost characters
+  it('writes 16 bytes a poll, the rest on the polls after',
+    function()
+      local b = backend(port())
+      b.state, b.port = 'open', port()
+      local out = {}
+      local bytes, drop = _G.jniBytes, _G.jniDropLocal
+      _G.jniBytes = function(_, text) return text end
+      _G.jniDropLocal = function() end
+      _G.jniCallInt = function(_, _, _, _, arr, n)
+        out[#out + 1] = arr
+        return n
+      end
+      assert.is_true(b:send(('x'):rep(40)))
+      for _ = 1, 3 do b:write() end
+      _G.jniBytes, _G.jniDropLocal = bytes, drop
+      assert.same({ ('x'):rep(16), ('x'):rep(16), ('x'):rep(8) },
+        out)
+      assert.same('', b.tx)
+    end)
 end)

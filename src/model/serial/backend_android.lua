@@ -45,19 +45,20 @@ local DIR_IN = 0x80
 local RX_SIZE = 64
 local READ_MS = 5
 local WRITE_MS = 1000
---- Bytes per poll on the way out. The board's Lua REPL is
---- an interactive terminal and drops the tail of anything
---- written faster than it reads.
+--- Bytes per poll on the way out, a poll a frame. The board
+--- reads a character in about a millisecond, and keeps what
+--- waits in a ring of 254; exec and send wait for each line's
+--- prompt before the next, so a line never meets another.
 ---
---- The firmware has since grown a serial RX ring of 254
---- bytes where it had twenty, and over pyserial on a Mac a
---- whole command now arrives ten times out of ten — so this
---- was taken out. It goes back in: from Compy the writes go
---- through JNI in one bulk transfer, which is not the same
---- path, and there a command still arrives cut short and
---- its tail turns up with the next one. What was measured
---- on a Mac says nothing about this one.
-local TX_PER_POLL = 1
+--- The command that arrived cut short, its tail with the next
+--- one, when this was one byte, was the old firmware's arm
+--- race, closed since. On UE174 (2026-09-30), with firmware
+--- 0a975a4, 16 a frame passed 6 of 6 exec runs, an
+--- 872-character exec in about 3 s where one byte took about
+--- 15, and 187-character lines arrived whole; 64 a frame lost
+--- characters with both firmware variants tried, 3 runs of 7
+--- and 1 of 7.
+local TX_PER_POLL = 16
 local CTRL_MS = 1000
 --- PendingIntent.FLAG_IMMUTABLE, required on Android 12+
 local PI_IMMUTABLE = 0x04000000
