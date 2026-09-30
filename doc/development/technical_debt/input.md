@@ -343,6 +343,16 @@ per-run boundary) rather than as a phase of a lifecycle.
 
 ## BACKLOG
 
+### T-SPACE-GLYPH-WAIT-ENDS-AT-FRAME — a confirming Space's glyph is let through if it arrives a frame after its key
+
+- **Where:** `src/controller/controller.lua`: the update clears `CC.swallow_glyph` each frame.
+- **Scenario:** a Space answers an editor question with its key press, then a frame's update runs,
+  and only then does its glyph arrive: the glyph reaches the console, or a program Ctrl+T started.
+  In the other direction, a Space typed within the same frame after an answer is dropped.
+- **Why it stays (2026-09-30):** a key press and its glyph come in the same event batch on the
+  desktop and on the device; a split across an update was not seen, and costs one space either
+  way.
+
 ### T-REPLACE-NEEDS-POSIX-RENAME — a save renames over the file, which Windows' rename refuses
 
 - **Where:** `src/util/filesystem.lua`, `FS.replace` → `FS.rename` → `os.rename`.
