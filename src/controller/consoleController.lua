@@ -499,6 +499,9 @@ function ConsoleController:run_project(name)
       local n = name or P.current.name or 'project'
       Log.info('Running \'' .. n .. '\'')
       self:flush_program_state()
+      -- A run starts on a blank canvas, whatever the last one
+      -- left there.
+      self.model.output:clear_canvas()
       love.state.app_state = 'running'
       -- Before the project's top-level code, which may show the
       -- widget on its first line. This is the run seam, chosen
@@ -537,6 +540,8 @@ function ConsoleController:run_project(name)
         SerialPort:drop()
         SerialPort:programEnded()
         self:flush_program_state()
+        -- The run is over: what it drew before raising goes.
+        self.model.output:clear_canvas()
         love.state.app_state = 'ready'
         print('Error: ', run_err)
       else
@@ -1925,7 +1930,6 @@ function ConsoleController:_close_project()
     if lf then
       table.delete_by_value(package.loaders, lf)
     end
-    self.model.output:clear_canvas()
     View.clear_snapshot()
     return ok
   end
@@ -2017,6 +2021,11 @@ function ConsoleController:_stop_project_run()
   -- before_exit hook may still drive compy.input, and it must
   -- find a widget there when it does.
   destroy_input_widget()
+  -- What the run drew on the console's canvas goes with it,
+  -- after the project's own hook, which may still draw. A
+  -- paused run (Ctrl+Pause, an error in a handler) has not
+  -- reached here: its canvas stays until it stops.
+  self.model.output:clear_canvas()
   View.clear_snapshot()
   self.main_ctrl.set_love_draw(self, self.view)
   self.main_ctrl.clear_user_handlers(self)

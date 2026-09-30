@@ -8,7 +8,7 @@ User projects can draw in one of two ways, selected by whether `love.draw` is ov
 
 ### Pen-and-paper mode (default)
 
-Project code calls `gfx.*` primitives imperatively — in response to events (clicks, input) or at startup. There is no per-frame redraw loop. The framework composites everything on each frame regardless, but the virtual canvas only changes when the project explicitly draws to it, so unchanged content persists for free.
+Project code calls `gfx.*` primitives imperatively — in response to events (clicks, input) or at startup. There is no per-frame redraw loop. The framework composites everything on each frame regardless, but the virtual canvas only changes when the project explicitly draws to it, so unchanged content persists for free while the program runs. The canvas is cleared when the run stops (see [Canvas lifetime](#canvas-lifetime)).
 
 **Example:** `src/examples/sine` — plots the curve once at startup and defines no `love.draw`; the plot stays on the canvas with nothing redrawing it.
 
@@ -25,6 +25,15 @@ Project sets `love.draw` directly. The framework detects this on the next `updat
 ### Virtual canvas
 
 `CanvasModel` holds a `love.Canvas` (`model.output.canvas`) that serves as the drawing surface for all user project code. It is composited over the terminal by `CanvasView:draw()` during the framework's render pass (`src/view/canvas/canvasView.lua`).
+
+### Canvas lifetime
+
+The canvas belongs to the run that drew on it:
+
+- A run starts on a blank canvas.
+- Every stop clears it: Ctrl+S, Ctrl+T, `stop()`, restart (Ctrl+Alt+R), Ctrl+Q, the program's own quit, and a top-level error. `_stop_project_run` clears it after the project's `before_exit` hook, so what the hook draws goes too.
+- A paused run (Ctrl+Pause, an error in a handler) has not stopped: its canvas stays, and `continue()` draws on it again.
+- A run that finishes its top-level code with nothing live (no handlers, no widget) is idle, not stopped: its picture stays until the project stops or is closed.
 
 ### `use_canvas(f)` — `src/controller/consoleController.lua:1159`
 
@@ -71,5 +80,5 @@ Calls `View.draw(CC, CV)` which renders: background → terminal → virtual can
 | Draw trigger | Event / explicit call | Every frame (`love.draw`) |
 | Draws to | Virtual canvas (via `use_canvas`) | Screen directly (framework wraps it) |
 | Framework UI | Composited on top | Bypassed; input widget appended separately |
-| GC / CPU cost | Low — canvas persists | Per-frame cost, project's responsibility |
+| GC / CPU cost | Low — canvas persists until the run stops | Per-frame cost, project's responsibility |
 | Suitable for | Board games, static visuals | Animations, physics, continuous updates |
