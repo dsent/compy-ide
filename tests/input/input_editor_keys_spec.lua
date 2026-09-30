@@ -324,6 +324,22 @@ describe('editor key contract #input', function()
       assert.same({}, reached)
     end)
 
+    it('a glyph with no key press after it swallows nothing later',
+      function()
+        open_dirty_block()
+        chord({ 'lctrl', 'q' })
+        --- an on-screen keyboard: the glyph alone
+        F.session.type(' ')
+        assert.same({ 'quit_project' }, took)
+        F.session.type('a')
+        local route = love.keypressed
+        local reached = {}
+        finally(function() love.keypressed = route end)
+        love.keypressed = function(k) reached[#reached + 1] = k end
+        F.session.press('space')
+        assert.same({ 'space' }, reached)
+      end)
+
     it("the chord's own glyph answers nothing", function()
       open_dirty_block()
       F.session.press('lctrl')

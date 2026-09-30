@@ -1001,6 +1001,8 @@ Controller = {
     handlers.textinput = function(t)
       local swallow = CC.swallow_glyph
       CC.swallow_glyph = nil
+      --- a key the glyph came without is not coming
+      CC.swallow_key = nil
       if swallow and swallow == t then return end
       if love.textinput then
         return love.textinput(t)
