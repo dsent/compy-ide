@@ -81,6 +81,34 @@ describe('the editor across files #input', function()
     for i = #undo, 1, -1 do undo[i]() end
   end)
 
+  describe('text undo', function()
+    it('ends with the editor', function()
+      open()
+      draft('x = 1')
+      F.session.type(' -- the old draft')
+      chord('lctrl', 'lshift', 's')
+
+      files['new.lua'] = 'fresh = 1\n'
+      open('new.lua')
+      chord('lctrl', 'return')
+      assert.same('edit', ed:get_mode())
+      chord('lctrl', 'z')
+      assert.same('', string.unlines(ed.input:get_text()))
+    end)
+
+    it('ends with its block', function()
+      open()
+      draft('x = 2')
+      F.session.type(' -- typed')
+      chord('return')
+      assert.same('nav', ed:get_mode())
+
+      chord('lctrl', 'return')
+      chord('lctrl', 'z')
+      assert.same('', string.unlines(ed.input:get_text()))
+    end)
+  end)
+
   describe('Ctrl+J', function()
     before_each(function()
       files['main.lua'] = "local lib = require('lib')\n"
