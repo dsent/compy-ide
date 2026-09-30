@@ -117,6 +117,48 @@ describe('the editor across files #input', function()
         end
       end)
 
+      it('a space typed after a second question is kept', function()
+        open()
+        draft('x = 99')
+        chord('return')
+        chord('escape')
+        ed.input:set_text('x = 100')
+        chord('lctrl', 't')
+        assert.same('discard', ed.pending_confirm)
+        --- a desktop keyboard: the key, then its glyph
+        F.session.press('space')
+        F.session.release('space')
+        F.session.type(' ')
+        assert.same('leave', ed.pending_confirm)
+        chord('escape')
+        assert.is_nil(ed.pending_confirm)
+
+        F.session.type(' ')
+        --- in navigation a glyph opens the block, with it
+      assert.is_truthy(string.unlines(ed.input:get_text()):find('^ '))
+      end)
+
+      it('a glyph the device sent first is held back by no token',
+        function()
+          open()
+          draft('x = 99')
+          chord('return')
+          chord('escape')
+          ed.input:set_text('x = 100')
+          chord('lctrl', 't')
+          --- the device: glyph, then key, for each answer
+          F.session.type(' ')
+          F.session.press('space')
+          F.session.release('space')
+          assert.same('leave', ed.pending_confirm)
+          F.session.type(' ')
+          F.session.press('space')
+          F.session.release('space')
+          assert.same({ 'run_project' }, took)
+          F.love_update(1)
+          assert.is_nil(cc.swallow_glyph)
+        end)
+
       it('a question asked in search is shown in the editor', function()
         open()
         draft('x = 99')

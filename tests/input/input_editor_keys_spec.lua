@@ -203,6 +203,21 @@ describe('editor key contract #input', function()
       end)
     end
 
+    it('a space typed after Enter answered Shift+Esc is kept', function()
+      open_dirty_block()
+      F.session.press('lshift')
+      F.session.press('escape')
+      F.session.release('escape')
+      F.session.release('lshift')
+      F.session.press('return')
+      F.session.release('return')
+      assert.same('nav', ed:get_mode())
+
+      F.session.type(' ')
+      --- in navigation a glyph opens the block, with it
+      assert.is_truthy(string.unlines(ed.input:get_text()):find('^ '))
+    end)
+
     it('a held Shift+Esc keeps its question open', function()
       open_dirty_block()
       F.session.press('lshift')

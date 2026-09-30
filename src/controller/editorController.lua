@@ -751,7 +751,12 @@ end
 --- @param exit function?
 function EditorController:_answer(act, exit)
   self:_confirm(act)
-  if exit then exit() end
+  if exit then
+    exit()
+    --- the gate's tokens hold the other half of this Space
+    --- back, whatever holds the route after the exit
+    self._swallow_glyph = nil
+  end
   --- an exit that asks again asks with no chord key still
   --- on its way: the next key answers
   self._asked_by_gate = nil
@@ -1835,7 +1840,9 @@ function EditorController:keypressed(k, _, isrepeat)
       self.pending_confirm = nil
       self.pending_then = nil
       self.input:clear_error()
-      self._swallow_glyph = true
+      --- a Space's glyph follows its key press here; Enter
+      --- sends none
+      self._swallow_glyph = k == 'space' or nil
       --- the Space's glyph follows its key press here;
       --- once the exit has closed the editor, the gate
       --- drops it
