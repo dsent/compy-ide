@@ -179,6 +179,24 @@ describe('the editor across files #input', function()
       chord('lctrl', 'f')
       assert.same('', string.unlines(ed.search.input:get_text()))
     end)
+
+    it("takes nothing of another project's same-named file",
+      function()
+        local six = 'a = 1\nb = 2\nc = 3\nd = 4\ne = 5\nf = 6\n'
+        files['main.lua'] = six
+        open()
+        chord('lctrl', 'down')
+        chord('lctrl', 'down')
+        assert.same(3, ed:get_active_buffer():get_selection())
+        chord('lshift', 'escape')
+
+        local other = { ['main.lua'] = six }
+        cc.model.projects.current = project('b', other)
+        files = other
+        love.state.app_state = 'ready'
+        open()
+        assert.same(1, ed:get_active_buffer():get_selection())
+      end)
   end)
 
   describe('Ctrl+J', function()

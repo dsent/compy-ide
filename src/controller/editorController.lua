@@ -212,11 +212,13 @@ function EditorController:pop_buffer()
   self:update_status()
 end
 
---- store the active buffer's position by file name
+--- store the active buffer's position by the file's
+--- identity, project and name, or by its name when it has
+--- none
 function EditorController:_remember_position()
   local buf = self:get_active_buffer()
   local bv = self.view:get_current_buffer()
-  self.pos_memory[buf.name] = {
+  self.pos_memory[buf.key or buf.name] = {
     sel = buf:get_selection(),
     off = bv:get_offset(),
   }
@@ -225,7 +227,7 @@ end
 --- restore a remembered position if it is still in range
 --- @param buf BufferModel
 function EditorController:_restore_position(buf)
-  local saved = self.pos_memory[buf.name]
+  local saved = self.pos_memory[buf.key or buf.name]
   if saved
       and saved.sel >= 1
       and saved.sel <= buf:get_content_length() then
