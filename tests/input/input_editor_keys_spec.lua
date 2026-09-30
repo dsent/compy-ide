@@ -375,52 +375,27 @@ describe('editor key contract #input', function()
         end)
     end
 
-    it('the Space that confirms presses nothing after', function()
-      open_dirty_block()
-      chord({ 'lctrl', 'q' })
-      --- the device: the glyph, then the key
-      F.session.type(' ')
-      assert.same({ 'quit_project' }, took)
-      local route = love.keypressed
-      local reached = {}
-      finally(function() love.keypressed = route end)
-      love.keypressed = function(k) reached[#reached + 1] = k end
-      F.session.press('space')
-      assert.same({}, reached)
-    end)
-
-    it('a glyph with no key press after it swallows nothing later',
+    it('on the device the key press answers, not the glyph first',
       function()
         open_dirty_block()
         chord({ 'lctrl', 'q' })
-        --- an on-screen keyboard: the glyph alone
+        --- the device: the glyph, then the key
         F.session.type(' ')
-        assert.same({ 'quit_project' }, took)
-        F.session.type('a')
-        local route = love.keypressed
-        local reached = {}
-        finally(function() love.keypressed = route end)
-        love.keypressed = function(k) reached[#reached + 1] = k end
+        assert.same('discard', ed.pending_confirm)
+        assert.same({}, took)
         F.session.press('space')
-        assert.same({ 'space' }, reached)
+        assert.same({ 'quit_project' }, took)
       end)
 
-    it('a glyph-only confirmation holds back no later Space press',
-      function()
-        open_dirty_block()
-        chord({ 'lctrl', 't' })
-        --- an on-screen keyboard: the glyph, and no key press
-        F.session.type(' ')
-        assert.same({ 'run_project' }, took)
-        F.love_update(1)
-        local route = love.keypressed
-        local reached = {}
-        finally(function() love.keypressed = route end)
-        love.keypressed = function(k) reached[#reached + 1] = k end
-        --- the next frame, a physical Space: key first
-        F.session.press('space')
-        assert.same({ 'space' }, reached)
-      end)
+    it('a glyph alone answers nothing', function()
+      open_dirty_block()
+      chord({ 'lctrl', 'q' })
+      --- an on-screen keyboard: the glyph, and no key press
+      F.session.type(' ')
+      F.love_update(1)
+      assert.same('discard', ed.pending_confirm)
+      assert.same({}, took)
+    end)
 
     it('Ctrl+Space confirms and holds no glyph back', function()
       open_dirty_block()
@@ -554,12 +529,6 @@ describe('editor key contract #input', function()
       --- Enter opened the block: no hidden question took it
       assert.same('edit', ed:get_mode())
       assert.is_false(restored)
-    end)
-
-    it('a program starts with no key held back', function()
-      F.cc.swallow_key = 'space'
-      F.run_project()
-      assert.is_nil(F.cc.swallow_key)
     end)
 
     it('Shift+Esc on the last buffer leaves under DEBUG', function()

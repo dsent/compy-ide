@@ -587,11 +587,10 @@ Controller = {
   --- @param CC ConsoleController
   set_love_update = function(CC)
     local function update(dt)
-      -- A Space's two halves come within one frame; a wait
-      -- still open at the next frame waits for a half that is
-      -- not coming (a glyph-only keyboard, or a glyph that
-      -- came first)
-      CC.swallow_key, CC.swallow_glyph = nil, nil
+      -- A Space's key press and its glyph come within one
+      -- frame; a wait for the glyph still open at the next
+      -- frame waits for one that is not coming
+      CC.swallow_glyph = nil
       if love.PROFILE then
         Prof.update()
       end
@@ -980,15 +979,6 @@ Controller = {
       if playback and love.state.app_state == 'shutdown' then
         love.event.quit()
       end
-      -- The other half of a Space that confirmed leaving the
-      -- editor, once the editor is gone
-      -- (EditorController:ask_to_leave). A token waits for
-      -- the event it names, through other keys and repeats;
-      -- the next glyph ends both.
-      if CC.swallow_key and CC.swallow_key == k then
-        CC.swallow_key = nil
-        return
-      end
       local reservation = RESERVED.keypressed[combo_string(k)]
       if reservation then reservation() end
 
@@ -1007,10 +997,12 @@ Controller = {
     end
 
     handlers.textinput = function(t)
+      -- The glyph of a Space whose key press answered an
+      -- editor question (EditorController:keypressed), once
+      -- the key's work is done; it waits through other keys
+      -- and repeats, and the next glyph ends it
       local swallow = CC.swallow_glyph
       CC.swallow_glyph = nil
-      --- a key the glyph came without is not coming
-      CC.swallow_key = nil
       if swallow and swallow == t then return end
       if love.textinput then
         return love.textinput(t)

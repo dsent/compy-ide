@@ -760,9 +760,6 @@ function EditorController:_answer(act, exit)
   --- an exit that asks again asks with no chord key still
   --- on its way: the next key answers
   self._asked_by_gate = nil
-  --- a held key's glyphs, and the rest of this one, answer
-  --- nothing further
-  self._await_key = self.pending_confirm and true or nil
 end
 
 --- Execute a confirmed dialog action (the dispatch in
@@ -836,7 +833,6 @@ function EditorController:_drop_dialog()
   self.pending_confirm = nil
   self.pending_then = nil
   self._asked_by_gate = nil
-  self._await_key = nil
   self._swallow_glyph = nil
 end
 
@@ -847,27 +843,10 @@ function EditorController:_dialog_textinput(t)
     self._swallow_glyph = nil
     if t == ' ' then return true end
   end
-  if not self.pending_confirm then return false end
-  --- a chord's glyph answers nothing (the device leaks
-  --- them, compy-input-quirks, quirk 3)
-  if Key.ctrl() or Key.alt() then return true end
-  --- a glyph carries no repeat flag: after an answer that
-  --- asked again, only a fresh key press answers
-  if self._await_key then return true end
-  local act, exit = self.pending_confirm, self.pending_then
-  self.pending_confirm = nil
-  self.pending_then = nil
-  self.input:clear_error()
-  if t == ' ' then
-    self._swallow_glyph = true
-    self:_answer(act, exit)
-    --- the Space's key press follows its glyph here: the
-    --- gate drops it, whether the exit closed the editor
-    --- or asked again. Armed after the exit, which clears
-    --- what an earlier Space left when a program starts.
-    if exit then self.console.swallow_key = 'space' end
-  end
-  return true
+  --- a question hears key presses alone: a glyph carries
+  --- no repeat flag and may come from a key held since
+  --- before the question, so it neither answers nor cancels
+  return self.pending_confirm ~= nil
 end
 
 --- Load the selected block into the input and open it
@@ -1828,8 +1807,6 @@ function EditorController:keypressed(k, _, isrepeat)
     --- a held key answers nothing: one answer's key would be
     --- the next question's answer, before it could be read
     if isrepeat then return end
-    --- a fresh press: glyphs answer again
-    self._await_key = nil
     --- the chord that asked, held: its repeat neither
     --- answers nor cancels (Ctrl+Shift+S; the gate's
     --- chords ask again on theirs)

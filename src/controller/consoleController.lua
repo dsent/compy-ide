@@ -467,9 +467,6 @@ function ConsoleController:run_project(name)
     if f then
       local n = name or P.current.name or 'project'
       Log.info('Running \'' .. n .. '\'')
-      --- a key press the gate still waits to drop is not
-      --- the program's to lose
-      self.swallow_key = nil
       love.state.app_state = 'running'
       -- Before the project's top-level code, which may show the
       -- widget on its first line. This is the run seam, chosen
