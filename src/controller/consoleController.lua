@@ -1988,6 +1988,9 @@ end
 --- @param state EditorState
 function ConsoleController:edit(name, state)
   if love.state.app_state == 'running' then return end
+  --- a program's exit hook runs while its project closes:
+  --- a file it opened then would outlive the project
+  if self.stopping then return end
 
   local PS = self.model.projects
   local p  = PS.current

@@ -211,6 +211,22 @@ describe('the editor across files #input', function()
     end)
   end)
 
+  describe('a program ending', function()
+    it('opens no file from its exit hook', function()
+      local P = cc.model.projects
+      local close = P.close
+      undo[#undo + 1] = function() P.close = close end
+      P.close = function() P.current = nil; return true end
+      cc:get_project_env().compy.before_exit = function()
+        cc:edit('main.lua')
+      end
+      cc:_close_project()
+
+      assert.same('ready', love.state.app_state)
+      assert.is_nil(cc.editor:get_active_buffer())
+    end)
+  end)
+
   describe('Ctrl+J', function()
     before_each(function()
       files['main.lua'] = "local lib = require('lib')\n"
