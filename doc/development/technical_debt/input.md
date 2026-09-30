@@ -343,6 +343,19 @@ per-run boundary) rather than as a phase of a lifecycle.
 
 ## BACKLOG
 
+### T-PROGRAM-SWITCH-DROPS-DRAFT — a program that switches projects under the editor drops its draft
+
+- **Where:** `src/controller/consoleController.lua`, `open_project` → `_close_project` →
+  `stop_project_run` → `finish_edit`, reached from a program's own code; the editor's exit question
+  (`EditorController:ask_to_leave`) sits on the gate's chords and is not consulted.
+- **Scenario:** a program that stays idle in `ready` keeps a pointer hook that calls
+  `project('b')`. Open the editor, change a block, click: the hook switches projects, the editor
+  closes, and the change is gone unwritten and unasked.
+- **Why it stays (2026-09-30):** older than this branch, and it needs a program that switches
+  projects under the person editing. Asking there means teardown that can wait for an answer: the
+  program's `project()` call would have to be deferred until the question is answered, which is
+  more than a contained change.
+
 ### T-CTRL-ESC-DROPS-CHANGE — Ctrl+Esc exits the IDE with a changed block open, unasked
 
 - **Where:** `src/controller/controller.lua`, the `keyreleased` reservation
