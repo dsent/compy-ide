@@ -81,6 +81,62 @@ describe('the editor across files #input', function()
     for i = #undo, 1, -1 do undo[i]() end
   end)
 
+  describe('a write that fails', function()
+    before_each(function()
+      files['main.lua'] = 'x = 1\ny = 1\n'
+      love.state.prev_state = 'ready'
+      cc.model.projects.current.writefile = function()
+        return false, 'the card is full'
+      end
+    end)
+
+    it('leaves the file asked about on exit', function()
+      open()
+      draft('x = 99')
+      chord('return')
+      assert.is_true(ed.input:has_error())
+      chord('escape')
+
+      chord('lctrl', 'lshift', 's')
+      assert.is_not_nil(ed.pending_confirm)
+      assert.same('main.lua', ed:get_active_buffer().name)
+      chord('escape')
+      assert.same('editor', love.state.app_state)
+    end)
+
+    it('keeps a fresh block open, its draft and the file as they were',
+      function()
+        open()
+        chord('lctrl', 'return')
+        ed.input:set_text('newvalue = 99')
+        chord('return')
+
+        assert.same('edit', ed:get_mode())
+        assert.is_true(ed.input:has_error())
+        assert.same({ 'x = 1', 'y = 1' },
+          ed:get_active_buffer():get_text_content())
+        chord('escape')
+        assert.same('newvalue = 99',
+          string.unlines(ed.input:get_text()))
+
+        chord('lctrl', 'lshift', 's')
+        assert.same('discard', ed.pending_confirm)
+      end)
+
+    it('asks before Shift+Esc lets the file go', function()
+      open()
+      draft('x = 99')
+      chord('return')
+      chord('escape')
+      chord('lshift', 'escape')
+      assert.same('nav', ed:get_mode())
+
+      chord('lshift', 'escape')
+      assert.is_not_nil(ed.pending_confirm)
+      assert.same('main.lua', ed:get_active_buffer().name)
+    end)
+  end)
+
   describe('text undo', function()
     it('ends with the editor', function()
       open()

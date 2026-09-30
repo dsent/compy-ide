@@ -116,6 +116,7 @@ end
 --- @field active_line integer --- source line inside the selection
 --- @field loaded integer?
 --- @field key string? --- the file's identity, project and name
+--- @field unsaved boolean? --- its last write failed
 --- @field parked {text: string[], mode: EditorMode}? --- the
 --- draft Ctrl+J left here, back when the buffer returns
 --- @field readonly boolean

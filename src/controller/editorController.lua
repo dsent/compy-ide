@@ -51,6 +51,11 @@ end
 --- acceptance produced; the leave gate steps past them
 EditorController = class.create(new)
 
+--- Shift+Esc's question, which every way out of a change
+--- asks
+local DISCARD_QUESTION =
+    'discard the changes? Confirm [Enter] / Cancel [Esc]'
+
 --- @private
 --- DEPRECATED (owner ruling, 2026-09-06). Ctrl+Shift+S
 --- leaves the editor and stays bound, but Shift+Esc is the
@@ -510,7 +515,19 @@ end
 function EditorController:save(buf)
   local ok, err = buf:save()
   if not ok then Log.error("can't save: ", err) end
+  --- a buffer whose last write failed holds what the file
+  --- does not; leaving it asks first (ask_to_leave)
+  buf.unsaved = not ok or nil
   return ok, err
+end
+
+--- @private
+--- Say the write failed, in the words the person can act on
+function EditorController:_refuse_unsaved()
+  self:refuse({
+    'Could not save the file.'
+    .. ' Check the storage and try again.'
+  })
 end
 
 ---------------------------
@@ -631,9 +648,7 @@ function EditorController:discard_edit()
   end
 
   self.pending_confirm = 'discard'
-  self.input:set_error({
-    'discard the changes? Confirm [Enter] / Cancel [Esc]'
-  })
+  self.input:set_error({ DISCARD_QUESTION })
 end
 
 --- @private
@@ -657,15 +672,21 @@ end
 --- chord's key itself (Ctrl+Shift+S), so no later key is it
 --- @return boolean asked
 function EditorController:ask_to_leave(exit, own_key)
-  --- a draft Ctrl+J parked further down the stack is asked
-  --- about too: its buffer comes to the front, draft and
-  --- all, so the question names a block on screen
-  while not self:_block_changed() do
-    local i = self:_nearest_parked_edit()
+  --- a draft Ctrl+J parked further down the stack, or a
+  --- file whose write failed, is asked about too: its
+  --- buffer comes to the front, draft and all, so the
+  --- question names what is on screen
+  while not (self:_block_changed()
+        or self:get_active_buffer().unsaved) do
+    local i = self:_nearest_change()
     if not i then return false end
     for _ = 2, i do self:pop_buffer() end
   end
-  self:discard_edit()
+  if self:_block_changed() then
+    self:discard_edit()
+  else
+    self:_ask_unsaved()
+  end
   self.pending_then = exit
   --- a gate chord's own key reaches the editor next; it
   --- must not answer the question it asked
@@ -675,13 +696,26 @@ end
 
 --- @private
 --- @return integer? --- where in the buffer stack the
---- nearest draft Ctrl+J parked while editing waits
-function EditorController:_nearest_parked_edit()
+--- nearest draft Ctrl+J parked while editing, or file
+--- whose write failed, waits
+function EditorController:_nearest_change()
   local bs = self.model.buffers
   for i = 2, bs:length() do
-    local parked = bs:get(i).parked
-    if parked and parked.mode == 'edit' then return i end
+    local b = bs:get(i)
+    local parked = b.parked
+    if b.unsaved or parked and parked.mode == 'edit' then
+      return i
+    end
   end
+end
+
+--- @private
+--- The file on screen holds what its failed write could not
+--- put on the card: Shift+Esc's question, and confirming
+--- lets it go
+function EditorController:_ask_unsaved()
+  self.pending_confirm = 'leave'
+  self.input:set_error({ DISCARD_QUESTION })
 end
 
 --- @private
@@ -700,6 +734,9 @@ end
 --- invoking chord lands on the idempotent cancel)
 --- @param act string --- 'discard'|'overwrite'|'restore'
 function EditorController:_confirm(act)
+  --- a file whose write failed: nothing to record, the
+  --- exit that asked goes on
+  if act == 'leave' then return end
   local con = self.console
   if act == 'overwrite' then
     return con:write_checkpoint(
@@ -1001,10 +1038,7 @@ function EditorController:accept_block()
     if not saved then
       --- a failed write must not read as accepted (2.6);
       --- keep the block open so the edit is not lost
-      self:refuse({
-        'Could not save the file.'
-        .. ' Check the storage and try again.'
-      })
+      self:_refuse_unsaved()
       return false
     end
     self.view:refresh()
@@ -1351,12 +1385,22 @@ function EditorController:_normal_mode_keys(k)
         return false
       end
 
-      local n = self:record_write(buf, function()
-        local sel = buf:get_selection()
-        local _, added = buf:insert_content(newtext, sel)
-        self:save(buf)
-        return added
-      end)
+      local before = table.clone(buf:get_text_content())
+      local sel = buf:get_selection()
+      local _, n = buf:insert_content(newtext, sel)
+      if not self:save(buf) then
+        --- a failed write must not read as accepted (2.6):
+        --- the file keeps what it had, and so does the
+        --- buffer, so a retry inserts the draft once
+        buf:replace_text(before)
+        buf:set_selection(sel)
+        buf.unsaved = nil
+        self.view:refresh()
+        self:_refuse_unsaved()
+        return false
+      end
+      buf:push_history(before,
+        table.clone(buf:get_text_content()), sel, sel)
       self.view:refresh()
       self:_move_sel('down', n)
       self:leave_edit()
@@ -1543,8 +1587,13 @@ function EditorController:_normal_mode_keys(k)
         Key.shift() and
         k == "escape" then
       if is_empty and self.mode == 'nav' then
-        self:close_buffer()
         block_input()
+        if buf.unsaved then
+          self:_ask_unsaved()
+          self.pending_then = function() self:close_buffer() end
+          return
+        end
+        self:close_buffer()
         return
       end
       self:discard_edit()
