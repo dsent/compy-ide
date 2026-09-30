@@ -123,11 +123,10 @@ end
 --- ended in its place.
 local FRAME = "\30exec "
 local RAN = table.concat({
-  " local ok = file ~= nil",
-  " if ok then ok, err = pcall(file) end",
-  " if not ok then print((file and 'Runtime' or 'Compile')",
-  " .. ' error: ' .. tostring(err)) end",
-  " print('\\n\\30exec %s ' .. (ok and 'ok' or 'error')) end"
+  "local ok = file ~= nil if ok then ok, err = P(file) end",
+  " if not ok then say((file and 'Runtime' or 'Compile')",
+  " .. ' error: ' .. T(err)) end",
+  " say('\\r\\n\\30exec %s ' .. (ok and 'ok' or 'error')) end"
 })
 
 --- How many frames exec has made
@@ -141,21 +140,56 @@ local function newFrame()
   return FRAME .. mark .. " "
 end
 
---- The first line exec sends begins so: print is taken before
---- the file can change it, for the frame
-local OPENING = "do local print, file, err = print, loadstring("
+--- The first line exec sends begins so: what the chunk uses
+--- is taken from the board's globals as they are before the
+--- file runs, so what the file puts there changes nothing; the
+--- frame goes straight to the port, when the board has one,
+--- past whatever print is. What an earlier file took away is
+--- done without: with no pcall the file runs unprotected, and
+--- with no loadstring the chunk says so, in a mistake.
+local OPENING = table.concat({
+  "do local R, G = rawget, _G",
+  " local L = R(G, 'loadstring') or function() return nil,",
+  " 'the board lost its loadstring; restart_microbit()",
+  " brings it back' end",
+  " local file, err = L("
+})
 
---- The last line exec sends: the end of the file's bracket,
---- its name, then the run and the frame
+--- What the closing line adds after the file's name: the rest
+--- the chunk uses, taken still before the file runs
+local TAKE = table.concat({
+  " local m, P, T, W = R(G, 'microbit'), R(G, 'pcall'),",
+  " R(G, 'tostring'), R(G, 'print')"
+})
+
+--- The line after it: how the chunk says a line
+local SAY = table.concat({
+  "local s = m and m.serial and m.serial.send",
+  " local function say(t)",
+  " if s then s(t .. '\\r\\n') else W(t) end end",
+  " P = P or function(f) return true, f() end",
+  " T = T or function(v) return v end"
+})
+
+--- The line after the file: the end of its bracket, its
+--- name, and the rest the chunk takes
 --- @param filename string
 --- @param close string
+--- @return string
+local function closingLine(filename, close)
+  local name = string.format("%q", "@" .. filename)
+  return close .. ", " .. name .. ")" .. TAKE
+end
+
+--- The last line exec sends: the run and the frame
 --- @param frame string
 --- @return string
-local function closingLine(filename, close, frame)
-  local name = string.format("%q", "@" .. filename)
-  local mark = frame:match("^\30exec (%x+) $")
-  return close .. ", " .. name .. ")" .. RAN:format(mark)
+local function runLine(frame)
+  return RAN:format(frame:match("^\30exec (%x+) $"))
 end
+
+--- How many lines exec sends besides the file's
+local WRAPPING = 4
 
 --- The lines exec sends: the file in a chunk of its own, so
 --- what the code declares stays in it, named for the file in
@@ -172,7 +206,9 @@ local function chunkLines(filename)
   for line in text:gmatch("([^\r]*)\r") do
     lines[#lines + 1] = line
   end
-  lines[#lines + 1] = closingLine(filename, close, lines.frame)
+  lines[#lines + 1] = closingLine(filename, close)
+  lines[#lines + 1] = SAY
+  lines[#lines + 1] = runLine(lines.frame)
   return lines
 end
 
@@ -227,7 +263,7 @@ end
 --- Where exec is in the file, counted in the file's lines
 --- @return string
 local function where()
-  local total = #(sending.lines) - 2
+  local total = #(sending.lines) - WRAPPING
   local line = math.min(math.max(sending.at - 1, 1), total)
   return "line " .. line .. " of " .. total .. " of " .. sending
       .name

@@ -13,7 +13,10 @@ package.preload['utf8'] = package.preload['utf8']
 require('model.serial.init')
 require('model.serial.backend_fake')
 
-local WRAP = 'do local print, file, err = print, loadstring([=['
+local WRAP = "do local R, G = rawget, _G local L = R(G,"
+  .. " 'loadstring') or function() return nil, 'the board lost its"
+  .. " loadstring; restart_microbit() brings it back' end local"
+  .. " file, err = L([=["
 --- how the last line exec sends begins; the rest runs the file
 --- and says how it ended
 local UNWRAP = ']=], "@f.lua")'
@@ -101,7 +104,7 @@ describe('micro:bit exec #microbit', function()
   --- @param tools table
   local function run(tools)
     tools.exec('f.lua')
-    for _ = 1, 3 do board() end
+    for _ = 1, 5 do board() end
     board('1\r\n' .. framed('ok'), '> ')
     serial:update(0.25)
   end
@@ -143,7 +146,7 @@ describe('micro:bit exec #microbit', function()
       run(tools)
       assert.same({ WRAP .. '\r', 'a = 1\r', 'print(a)\r' },
         { backend.sent[1], backend.sent[2], backend.sent[3] })
-      assert.equal(4, #backend.sent)
+      assert.equal(6, #backend.sent)
       assert.equal(UNWRAP, backend.sent[4]:sub(1, #UNWRAP))
       assert.same({ '1', RAN }, said)
       assert.equal(mine, port.onBytes)
@@ -159,8 +162,8 @@ describe('micro:bit exec #microbit', function()
     files['g.lua'] = 'print("]=]")\n'
     local tools = load_tools()
     tools.exec('g.lua')
-    assert.same({ 'do local print, file, err = print,'
-      .. ' loadstring([==[\r' }, backend.sent)
+    assert.same({ WRAP:gsub('%[=%[$', '[==[') .. '\r' },
+      backend.sent)
   end)
 
   --- The lines exec sends for a file, all of them, as the
@@ -174,7 +177,7 @@ describe('micro:bit exec #microbit', function()
     for _ in files[filename]:gmatch('[^\n]*\n') do
       count = count + 1
     end
-    for _ = 1, count + 1 do board() end
+    for _ = 1, count + 3 do board() end
     local lines = {}
     for i, line in ipairs(backend.sent) do
       lines[i] = line:gsub('\r$', '')
@@ -203,7 +206,7 @@ describe('micro:bit exec #microbit', function()
   it('says a file that stopped on a mistake was run', function()
     local tools = load_tools()
     tools.exec('f.lua')
-    for _ = 1, 3 do board() end
+    for _ = 1, 5 do board() end
     board('Runtime error: f.lua:2: boom\r\n' .. framed('error'),
       '> ')
     serial:update(0.25)
@@ -215,7 +218,7 @@ describe('micro:bit exec #microbit', function()
   it('takes a program\'s own words for its answer', function()
     local tools = load_tools()
     tools.exec('f.lua')
-    for _ = 1, 3 do board() end
+    for _ = 1, 5 do board() end
     board('seen: Runtime error: none\r\nRuntime error: mine'
       .. '\r\nall done\r\n' .. framed('ok'), '> ')
     serial:update(0.25)
@@ -226,7 +229,7 @@ describe('micro:bit exec #microbit', function()
     .. ' status', function()
       local tools = load_tools()
       tools.exec('f.lua')
-      for _ = 1, 3 do board() end
+      for _ = 1, 5 do board() end
       board('1\r\n', '> ')
       serial:update(0.25)
       assert.same('f.lua was run; the board did not say how it'
@@ -238,19 +241,12 @@ describe('micro:bit exec #microbit', function()
   --- @param tools table
   --- @param filename string
   --- @return string printed
-  local function ranOnBoard(tools, filename)
-    tools.exec(filename)
-    local count = 0
-    for _ in files[filename]:gmatch('[^\n]*\n') do
-      count = count + 1
-    end
-    for _ = 1, count + 1 do board() end
-    local lines = {}
-    for i, line in ipairs(backend.sent) do
-      lines[i] = line:gsub('\r$', '')
-    end
+  --- A board's globals, as the chunk exec sends finds them
+  --- through _G, and what the board has said, a line ending in
+  --- CR LF
+  --- @return table board { env, out }
+  local function newBoard()
     local out = {}
-    --- the board's write: a line ends in CR LF
     local function write(text)
       out[#out + 1] = (text:gsub('\n', '\r\n'))
     end
@@ -260,16 +256,74 @@ describe('micro:bit exec #microbit', function()
         parts[i] = tostring(select(i, ...))
       end
       write(table.concat(parts, '\t') .. '\n')
-    end, io = { write = write } }, { __index = _G })
-    local chunk = assert(loadstring(table.concat(lines, '\n')))
-    setfenv(chunk, env)
+    end, io = { write = write }, pcall = pcall, tostring = tostring,
+      microbit = { serial = { send = function(text)
+        out[#out + 1] = text
+      end } } }, { __index = _G })
+    env._G = env
     env.loadstring = function(code, name)
       local fn, err = loadstring(code, name)
       if fn then setfenv(fn, env) end
       return fn, err
     end
+    return { env = env, out = out }
+  end
+
+  --- The chunk exec sends for a file, run as the board runs it:
+  --- what it prints, with the board's print ending lines in
+  --- CR LF. A board given goes on from what earlier files left
+  --- in its globals.
+  --- @param tools table
+  --- @param filename string
+  --- @param on table? a board from newBoard
+  --- @return string printed
+  local function ranOnBoard(tools, filename, on)
+    local before = #backend.sent
+    tools.exec(filename)
+    local count = 0
+    for _ in files[filename]:gmatch('[^\n]*\n') do
+      count = count + 1
+    end
+    for _ = 1, count + 3 do board() end
+    local lines = {}
+    for i = before + 1, #backend.sent do
+      lines[#lines + 1] = backend.sent[i]:gsub('\r$', '')
+    end
+    on = on or newBoard()
+    for i = #on.out, 1, -1 do on.out[i] = nil end
+    local chunk = assert(loadstring(table.concat(lines, '\n')))
+    setfenv(chunk, on.env)
     chunk()
-    return table.concat(out)
+    return table.concat(on.out)
+  end
+
+  --- a program that puts its own print, pcall, tostring or
+  --- loadstring in the board's globals: the next exec still
+  --- says how its file ended
+  for _, case in ipairs({ { 'print = function() end' },
+    { 'print = nil' }, { 'pcall = nil' }, { 'tostring = nil' },
+    { 'loadstring = nil', 'lost its loadstring' } }) do
+    local text = case[1]
+    it('reads the next file\'s end after a program runs ' .. text,
+      function()
+        local on = newBoard()
+        files['g.lua'] = text .. '\n'
+        local tools = load_tools()
+        board(ranOnBoard(tools, 'g.lua', on), '> ')
+        serial:update(0.25)
+        files['h.lua'] = 'x = 1\n'
+        said = {}
+        board(ranOnBoard(tools, 'h.lua', on), '> ')
+        serial:update(0.25)
+        if case[2] then
+          assert.truthy(table.concat(said, ' '):find(case[2], 1,
+            true))
+          assert.truthy(said[#said]:find('stopped on the mistake',
+            1, true))
+        else
+          assert.equal('h.lua is on the board', said[#said])
+        end
+      end)
   end
 
   --- the verdict comes from this exec's frame at the end,
@@ -307,7 +361,7 @@ describe('micro:bit exec #microbit', function()
     local tools = load_tools()
     run(tools)
     run(tools)
-    assert.equal(8, sent())
+    assert.equal(12, sent())
     assert.is_nil(port.onBytes)
     assert.equal(RAN, said[#said])
   end)
@@ -328,7 +382,7 @@ describe('micro:bit exec #microbit', function()
     function()
       local tools = load_tools()
       tools.exec('f.lua')
-      for _ = 1, 3 do board() end
+      for _ = 1, 5 do board() end
       --- a line the program prints starts with "> ", and the
       --- chunk ends just after it
       board('x\r\n> ', '')
@@ -365,7 +419,7 @@ describe('micro:bit exec #microbit', function()
   it('stops when the last line never reaches the board', function()
     local tools = load_tools()
     tools.exec('f.lua')
-    for _ = 1, 3 do board() end
+    for _ = 1, 5 do board() end
     for _ = 1, 6 do serial:update(1) end
     assert.truthy(said[#said]:find('stopped answering', 1, true))
   end)
@@ -374,7 +428,7 @@ describe('micro:bit exec #microbit', function()
   it('hands a file that keeps running over to echo', function()
     local tools = load_tools()
     tools.exec('f.lua')
-    for _ = 1, 3 do board() end
+    for _ = 1, 5 do board() end
     backend:rx(backend.sent[#backend.sent]:gsub('\r$', '')
       .. '\r\r\n1\r\n')
     serial:update(0)
