@@ -130,8 +130,9 @@ function EditorController:open(name, content, save, key, fresh)
   end
   self:_drop_dialog()
   --- the file comes in with an input of its own: nothing
-  --- typed, no message
+  --- typed, no message, no search of another file's
   self.input:clear()
+  self.search:clear()
   self.model.buffers:push_front(b)
   self.view:open(b)
   self:set_mode('nav')

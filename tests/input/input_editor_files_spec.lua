@@ -167,6 +167,20 @@ describe('the editor across files #input', function()
     end)
   end)
 
+  describe('opening another file', function()
+    it('starts its search afresh', function()
+      files['main.lua'] = 'function alpha() end\n'
+      files['b.lua'] = 'function beta() end\n'
+      open()
+      chord('lctrl', 'f')
+      F.session.type('alpha')
+      open('b.lua')
+
+      chord('lctrl', 'f')
+      assert.same('', string.unlines(ed.search.input:get_text()))
+    end)
+  end)
+
   describe('Ctrl+J', function()
     before_each(function()
       files['main.lua'] = "local lib = require('lib')\n"
