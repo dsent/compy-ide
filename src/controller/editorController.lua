@@ -757,11 +757,10 @@ function EditorController:_answer(act, exit)
   self._asked_by_gate = nil
 end
 
---- Execute a confirmed dialog action (the dispatch in
---- keypressed/textinput confirms on Enter or Space and
---- cancels on everything else, so key repeat of the
---- invoking chord lands on the idempotent cancel)
---- @param act string --- 'discard'|'overwrite'|'restore'
+--- Execute a confirmed dialog action (keypressed confirms on
+--- a fresh Enter or Space and cancels on any other fresh
+--- key; a repeat or a glyph answers nothing)
+--- @param act string --- 'discard'|'overwrite'|'restore'|'leave'
 function EditorController:_confirm(act)
   --- a file whose write failed: nothing to record; the
   --- person lets it go, so no exit asks about it again
