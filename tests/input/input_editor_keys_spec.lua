@@ -312,7 +312,7 @@ describe('editor key contract #input', function()
 
     after_each(function()
       for _, f in ipairs(stubbed) do F.cc[f] = orig[f] end
-      F.cc.swallow_key, F.cc.swallow_glyph = nil, nil
+      F.cc.swallow_glyph = nil
     end)
 
     local function chord(keys)
@@ -434,7 +434,7 @@ describe('editor key contract #input', function()
       open_dirty_block()
       F.session.press('lctrl')
       F.session.press('q')
-      --- the device leaks a chord's glyph after its key
+      --- a chord's glyph arriving while the chord is held
       F.session.type('q')
       assert.same('discard', ed.pending_confirm)
       assert.same({}, took)

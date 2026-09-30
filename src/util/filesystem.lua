@@ -763,6 +763,7 @@ end
 --- @param fd integer
 --- @return boolean synced
 function FS.sync_fd(fd)
+  if not posix then return false end
   return posix.C.compy_fsync(fd) == 0
 end
 
@@ -856,7 +857,7 @@ end
 --- old content or the new, never a part: the data goes to a
 --- temporary file beside it (FS.replace_temp) and is renamed
 --- over the file. On a full card the temporary write fails
---- and the file is untouched. A failure removes the
+--- and the file is untouched. A failure tries to remove the
 --- temporary file; a save finding one a power cut left
 --- replaces it. The rename replaces an existing file, as it
 --- does on Linux, Android and the card; Windows' refuses,
