@@ -59,9 +59,10 @@ function Serial.new(backend, max_line)
   self.dispatcher = Dispatcher.new()
   self.faults = {}
   self.connected = false
-  -- a flash may have erased the board's program, until one
-  -- succeeds: kept here, since the link goes with the port
-  self.wiped = false
+  -- the boards a flash may have left without their program,
+  -- by id, until one succeeds on them: kept here, since the
+  -- link goes with the port
+  self.doubt = {}
   self.echo = Echo.new(io.write, print)
   for _, env in ipairs({ 'console', 'program' }) do
     local t = self.dispatcher:table_for(env)
@@ -315,7 +316,8 @@ function Serial:flash(data, say, on)
   -- queued for the old one would be typed into its new REPL
   self:drop()
   -- a link opened since then does not know
-  if self.wiped then link.wiped = true end
+  self.flashing = self:boardKey()
+  if self:inDoubt(self.flashing) then link.wiped = true end
   self.job = DapPrepare.new(data, say, Dap.log,
     self.clock or clock, on, link.wiped)
   return true
@@ -424,11 +426,34 @@ function Serial:abandon()
   self.job = nil
 end
 
---- A flash has ended: whether it may have left the board
---- without its program is kept past the link
+--- The board a doubt is kept for when its id is not known
+local UNKNOWN = '?'
+
+--- The open board's id, when the backend knows it
+--- @return string?
+function Serial:boardKey()
+  return self.backend.boardId and self.backend:boardId() or nil
+end
+
+--- Whether a board may be without its program. A board of no
+--- known id is in doubt while any is, and every board while
+--- one of no known id is.
+--- @param id string?
+--- @return boolean
+function Serial:inDoubt(id)
+  if self.doubt[UNKNOWN] then return true end
+  if id then return self.doubt[id] == true end
+  return next(self.doubt) ~= nil
+end
+
+--- A flash has ended: whether it may have left its board
+--- without its program is kept past the link, for that board
+--- alone
 --- @param job table
 function Serial:settled(job)
-  if job.link then self.wiped = job.link.wiped == true end
+  if not job.link then return end
+  local key = self.flashing or UNKNOWN
+  self.doubt[key] = job.link.wiped == true or nil
 end
 
 local STOPPED_READING = 'The Compy stopped before the file went'

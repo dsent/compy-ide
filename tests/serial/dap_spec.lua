@@ -1970,10 +1970,50 @@ describe('Serial flash', function()
       assert.truthy(words:find('may be gone', 1, true))
     end)
 
+  --- the doubt is the board's own: another board neither
+  --- takes it on nor clears it
+  it('keeps each board\'s doubt to itself, A, then B, then A',
+    function()
+      local chip = F.chip({ latency = 0.001 })
+      local receive, writes = chip.receive, 0
+      chip.receive = function(c, packet)
+        if packet:byte(1) == 0x8C then writes = writes + 1 end
+        if writes > 60 then c.silent = true end
+        return receive(c, packet)
+      end
+      local s, b = connected(chip)
+      b.id = 'A'
+      assert.truthy(heard(s, chip, F.hex(300)):find('may be gone', 1,
+        true))
+      --- the board plugged in now, on a link of its own
+      local function plug(id)
+        chip.receive, chip.silent = receive, false
+        b.id = id
+        b.link = linkTo(chip)
+      end
+      --- the words the Compy's closing gives while a file is read
+      local function stopWords()
+        local said = {}
+        assert.is_true(s:flash(F.hex(400),
+          function(l) said[#said + 1] = l end))
+        s:abandon()
+        return joined(said)
+      end
+      plug('B')
+      local words = stopWords()
+      assert.truthy(words:find('keeps its program', 1, true))
+      assert.truthy(heard(s, chip, F.hex(40)):find('took the file',
+        1, true))
+      plug('A')
+      words = stopWords()
+      assert.is_nil(words:find('keeps its program', 1, true))
+      assert.truthy(words:find('may be gone', 1, true))
+    end)
+
   it('drops the doubt once a flash succeeds', function()
     local chip = F.chip({ latency = 0.001 })
     local s, b = connected(chip)
-    s.wiped = true
+    s.doubt['?'] = true
     assert.truthy(heard(s, chip, F.hex(40)):find('took the file',
       1, true))
     b.link = linkTo(chip)
