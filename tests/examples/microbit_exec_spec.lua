@@ -700,6 +700,12 @@ describe('micro:bit exec #microbit', function()
         local env = setmetatable({ microbit = microbit },
           { __index = _G })
         env._G = env
+        -- a string library of the board's own: a file that
+        -- changes it changes nothing outside this board
+        env.string = {}
+        for k, v in pairs(string) do env.string[k] = v end
+        --- the board's own on_event, as the firmware finds it
+        env.peek = function() return rawget(env, 'on_event') end
         env.loadstring = function(code, name)
           local fn, err = loadstring(code, name)
           if fn then
@@ -734,6 +740,55 @@ describe('micro:bit exec #microbit', function()
         return false
       end
 
+      --- @return string? lua5.1, when installed
+      local function lua51()
+        local probe = io.popen('command -v lua5.1')
+        local path = probe:read('*l')
+        probe:close()
+        return path
+      end
+
+      --- A board for lua5.1: a stub of the firmware's API in the
+      --- real globals, the built script run as the firmware
+      --- runs it, then what on_event gives
+      local BOARD = [==[
+local out, write = {}, io.write
+local function anything()
+  return setmetatable({}, { __index = function(t, k)
+    local v = anything() rawset(t, k, v) return v end,
+    __call = function() end })
+end
+microbit = anything()
+microbit.serial.send = function(c) out[#out + 1] = c end
+function peek() return rawget(_G, 'on_event') end
+local f = assert(io.open(arg[1], 'rb'))
+local chunk = assert(loadstring(f:read('*a'), 'embedded'))
+f:close()
+pcall(chunk)
+local ok, got = pcall(rawget(_G, 'on_event'))
+write(table.concat(out), '<on_event ', tostring(got), '>')
+]==]
+
+      --- What the board said, booted on lua5.1
+      --- @param lua string
+      --- @param data string a hex file
+      --- @return string
+      local function bootOn(lua, data)
+        local script, board = os.tmpname(), os.tmpname()
+        local f = assert(io.open(script, 'wb'))
+        f:write(hex.script(hex.parse(data)))
+        f:close()
+        f = assert(io.open(board, 'wb'))
+        f:write(BOARD)
+        f:close()
+        local run = io.popen(lua .. ' ' .. board .. ' ' .. script)
+        local said = run:read('*a')
+        run:close()
+        os.remove(script)
+        os.remove(board)
+        return said
+      end
+
       before_each(firmware)
 
       it('holds the firmware\'s script whole, the file just'
@@ -748,7 +803,7 @@ describe('micro:bit exec #microbit', function()
         .. ' into Lua', function()
           local tools = load_tools()
           files['robot.lua'] =
-            'print("blink-ok", rawget(_G, "on_event") == nil)\n'
+            'print("blink-ok", peek() == nil)\n'
           local out, env, err = boot(uploaded(tools))
           assert.is_nil(err)
           assert.is_function(env.on_event)
@@ -767,7 +822,7 @@ describe('micro:bit exec #microbit', function()
           local tools = load_tools()
           files['robot.lua'] =
             'function on_event() return "mine" end\n'
-            .. 'print(rawget(_G, "on_event") == nil, on_event())\n'
+            .. 'print(peek() == nil, on_event())\n'
           local out, env, err = boot(uploaded(tools))
           assert.is_nil(err)
           assert.truthy(out:find('true\tmine\r\n', 1, true))
@@ -826,6 +881,68 @@ describe('micro:bit exec #microbit', function()
             uploaded(tools)
             assert.equal('', luacSays(compiler,
               hex.script(hex.parse(files['robot.hex']))))
+          end)
+      end
+
+      --- each way to the board's globals, set while the file
+      --- still runs: the firmware would call in at once
+      for _, text in ipairs({
+        '_G.on_event = f',
+        'rawset(_G, "on_event", f)',
+        'getfenv(0).on_event = f',
+        'getfenv(print).on_event = f',
+        'loadstring("on_event = ...")(f)',
+        'local s = "on_event = ..."\n'
+          .. 'load(function() local t = s s = nil return t end)(f)',
+      }) do
+        local file = 'local function f() return "mine" end\n' .. text
+          .. '\nprint(peek() == nil)\n'
+
+        --- LuaJIT's thread globals here are the test's, not the
+        --- board's: getfenv(0) is left to the run on Lua 5.1
+        if not text:find('getfenv(0)', 1, true) then
+          it('holds an on_event set by ' .. text, function()
+            local tools = load_tools()
+            files['robot.lua'] = file
+            local out, env, err = boot(uploaded(tools))
+            assert.is_nil(err)
+            assert.truthy(out:find('true\r\n', 1, true))
+            assert.equal('mine', env.on_event())
+          end)
+        end
+
+        --- the board's Lua itself, whose thread globals are the
+        --- board's, as getfenv(0) finds them
+        it('holds an on_event set by ' .. text .. ', on Lua 5.1',
+          function()
+            local lua = lua51()
+            if not lua then
+              pending('lua5.1 is not installed')
+              return
+            end
+            local tools = load_tools()
+            files['robot.lua'] = file
+            local said = bootOn(lua, uploaded(tools))
+            assert.truthy(said:find('true\r\n', 1, true))
+            assert.truthy(said:find('<on_event mine>', 1, true))
+          end)
+      end
+
+      --- what the wrapper needs after the file is its own
+      for _, text in ipairs({ 'rawset = 1', 'rawget = 1',
+        'setmetatable = 1', 'pcall = nil', 'tostring = nil',
+        'print = nil', 'type = nil', 'microbit.display = nil',
+        'string.gmatch = nil', 'string = nil',
+        'active_session = { transport = {} }' }) do
+        it('brings the prompt after a file that sets ' .. text,
+          function()
+            local tools = load_tools()
+            files['robot.lua'] = text .. '\nerror("oops")\n'
+            local out, env, err = boot(uploaded(tools))
+            assert.is_nil(err)
+            local prompt = assert(out:find('> ', 1, true))
+            assert.truthy(out:find('<armed>', prompt, true))
+            assert.is_function(env.on_event)
           end)
       end
 
