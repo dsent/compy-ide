@@ -104,6 +104,40 @@ describe('the editor across files #input', function()
       assert.same('editor', love.state.app_state)
     end)
 
+    describe('and an exit confirmed', function()
+      local stubbed = { 'quit_project', 'reset', 'restart', 'run_project' }
+      local took
+
+      before_each(function()
+        took = {}
+        for _, f in ipairs(stubbed) do
+          local orig = cc[f]
+          cc[f] = function() took[#took + 1] = f end
+          undo[#undo + 1] = function() cc[f] = orig end
+        end
+      end)
+
+      for _, c in ipairs({
+        { 'Ctrl+T', { 'lctrl', 't' }, 'run_project' },
+        { 'Ctrl+Q', { 'lctrl', 'q' }, 'quit_project' },
+        { 'Ctrl+Shift+R', { 'lctrl', 'lshift', 'r' }, 'reset' },
+        { 'Ctrl+Alt+R', { 'lctrl', 'lalt', 'r' }, 'restart' },
+      }) do
+        it(c[1] .. ' takes its exit', function()
+          open()
+          draft('x = 99')
+          chord('return')
+          chord('escape')
+          chord('lshift', 'escape')
+          chord(unpack(c[2]))
+          assert.is_not_nil(ed.pending_confirm)
+          chord('return')
+          assert.same({ c[3] }, took)
+          assert.is_nil(ed.pending_confirm)
+        end)
+      end
+    end)
+
     it('keeps a fresh block open, its draft and the file as they were',
       function()
         open()

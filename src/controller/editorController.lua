@@ -734,9 +734,12 @@ end
 --- invoking chord lands on the idempotent cancel)
 --- @param act string --- 'discard'|'overwrite'|'restore'
 function EditorController:_confirm(act)
-  --- a file whose write failed: nothing to record, the
-  --- exit that asked goes on
-  if act == 'leave' then return end
+  --- a file whose write failed: nothing to record; the
+  --- person lets it go, so no exit asks about it again
+  if act == 'leave' then
+    self:get_active_buffer().unsaved = nil
+    return
+  end
   local con = self.console
   if act == 'overwrite' then
     return con:write_checkpoint(
