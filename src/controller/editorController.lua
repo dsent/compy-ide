@@ -555,21 +555,52 @@ end
 --- puts the discarded text into the file, another
 --- takes it back out.
 function EditorController:discard_edit()
-  if self.mode ~= 'edit' then
+  if not self:_block_changed() then
     return self:leave_edit()
   end
-  local buf = self:get_active_buffer()
-  local draft = self.input:get_text():items()
-  local orig = buf:get_selected_text()
-  local clean = string.unlines(draft)
-      == string.unlines(orig)
-
-  if clean then return self:leave_edit() end
 
   self.pending_confirm = 'discard'
   self.input:set_error({
     'discard the changes? Confirm [Enter] / Cancel [Esc]'
   })
+end
+
+--- @private
+--- @return boolean --- an open block holds text it did not
+--- have when it was opened
+function EditorController:_block_changed()
+  if self.mode ~= 'edit' then return false end
+  local draft = self.input:get_text():items()
+  local orig = self:get_active_buffer():get_selected_text()
+  return string.unlines(draft) ~= string.unlines(orig)
+end
+
+--- The whole-editor exits of the gate (Ctrl+T, and the
+--- project's Ctrl+Q, Ctrl+Shift+R, Ctrl+Alt+R) ask
+--- Shift+Esc's question before they drop a changed open
+--- block. Confirming discards the change as Shift+Esc does
+--- and then carries the exit on; cancelling keeps the block
+--- open and the exit untaken.
+--- @param exit function --- the exit, taken on confirmation
+--- @return boolean asked
+function EditorController:ask_to_leave(exit)
+  if not self:_block_changed() then return false end
+  self:discard_edit()
+  self.pending_then = exit
+  --- the chord's own key reaches the editor next, after
+  --- the gate; it must not answer the question it asked
+  self._asked_by_gate = true
+  return true
+end
+
+--- @private
+--- Answer the open question: confirm it, then take the
+--- exit that asked it, if one did
+--- @param act string
+--- @param exit function?
+function EditorController:_answer(act, exit)
+  self:_confirm(act)
+  if exit then exit() end
 end
 
 --- Execute a confirmed dialog action (the dispatch in
@@ -635,6 +666,8 @@ end
 function EditorController:_drop_dialog()
   if self.pending_confirm then self.input:clear_error() end
   self.pending_confirm = nil
+  self.pending_then = nil
+  self._asked_by_gate = nil
   self._swallow_glyph = nil
 end
 
@@ -646,12 +679,19 @@ function EditorController:_dialog_textinput(t)
     if t == ' ' then return true end
   end
   if not self.pending_confirm then return false end
-  local act = self.pending_confirm
+  --- a chord's glyph answers nothing (the device leaks
+  --- them, compy-input-quirks, quirk 3)
+  if Key.ctrl() or Key.alt() then return true end
+  local act, exit = self.pending_confirm, self.pending_then
   self.pending_confirm = nil
+  self.pending_then = nil
   self.input:clear_error()
   if t == ' ' then
     self._swallow_glyph = true
-    self:_confirm(act)
+    --- the Space's key press follows its glyph here; once
+    --- the exit has closed the editor, the gate drops it
+    if exit then self.console.swallow_key = 'space' end
+    self:_answer(act, exit)
   end
   return true
 end
@@ -1588,17 +1628,29 @@ function EditorController:keypressed(k)
     --- Enter or Space confirms, a modifier on its own
     --- waits for the key it goes with, everything else
     --- cancels
+    if self._asked_by_gate then
+      self._asked_by_gate = nil
+      return
+    end
     if Key.is_mod(k) then
       return
     end
     if Key.is_enter(k) or k == 'space' then
-      local act = self.pending_confirm
+      local act, exit = self.pending_confirm, self.pending_then
       self.pending_confirm = nil
+      self.pending_then = nil
       self.input:clear_error()
       self._swallow_glyph = true
-      return self:_confirm(act)
+      --- the Space's glyph follows its key press here;
+      --- once the exit has closed the editor, the gate
+      --- drops it
+      if exit and k == 'space' then
+        self.console.swallow_glyph = ' '
+      end
+      return self:_answer(act, exit)
     end
     self.pending_confirm = nil
+    self.pending_then = nil
     self.input:clear_error()
     return
   end

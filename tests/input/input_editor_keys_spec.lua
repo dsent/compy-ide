@@ -130,18 +130,14 @@ describe('editor key contract #input', function()
     end)
   end)
 
-  describe('the two unguarded exits', function()
+  describe('the whole-editor exits', function()
     -- D-EDITOR-KEYS statement 6. Both leave the editor
     -- through ConsoleController:finish_edit, which stores
     -- the clipboard and drops the buffers with no acceptance
-    -- step, so an open changed block is lost silently. The
-    -- guard exists one level down — the rework's discard
-    -- confirmation — and is unreachable from here because it
-    -- is a method on EditorController while both exits sit
-    -- above the editor. Neither is new and neither is ours:
-    -- both are at the PR base. What this branch changed is
-    -- the layer, which is why they are in our contract at
-    -- all.
+    -- step. Ctrl+T now asks the rework's discard question
+    -- first when an open block holds a change
+    -- (EditorController:ask_to_leave); Ctrl+Shift+S still
+    -- loses the block silently.
     local left, ran, orig_finish, orig_run
 
     before_each(function()
@@ -169,15 +165,139 @@ describe('editor key contract #input', function()
       assert.same({}, saved)
     end)
 
-    it('Ctrl+T leaves and runs (w/o confirmation)', function()
+    -- FLIPPED: this case pinned the silent loss until the
+    -- gate's exits learned to ask.
+    it('Ctrl+T asks before it drops a changed block', function()
       open_dirty_block()
 
       F.session.press('lctrl')
       F.session.press('t')
+      F.session.release('t')
+      F.session.release('lctrl')
 
+      assert.is_false(left)
+      assert.is_false(ran)
+      assert.same('discard', ed.pending_confirm)
+      assert.same('edit', ed:get_mode())
+
+      F.session.press('return')
       assert.is_true(left)
       assert.is_true(ran)
+      --- confirmed: the change is discarded, not written
       assert.same({}, saved)
+    end)
+  end)
+
+  describe('the project exits ask first', function()
+    -- Ctrl+T and the project chords reach the console before
+    -- the editor sees their key. With a changed block open,
+    -- each asks Shift+Esc's question; Enter or Space takes
+    -- the exit, anything else keeps the block.
+    local stubbed = { 'quit_project', 'reset', 'restart', 'run_project' }
+    local orig, took = {}, {}
+
+    before_each(function()
+      love.state.prev_state = 'ready'
+      took = {}
+      for _, f in ipairs(stubbed) do
+        orig[f] = F.cc[f]
+        F.cc[f] = function() took[#took + 1] = f end
+      end
+    end)
+
+    after_each(function()
+      for _, f in ipairs(stubbed) do F.cc[f] = orig[f] end
+      F.cc.swallow_key, F.cc.swallow_glyph = nil, nil
+    end)
+
+    local function chord(keys)
+      for _, k in ipairs(keys) do F.session.press(k) end
+      for i = #keys, 1, -1 do F.session.release(keys[i]) end
+    end
+
+    local chords = {
+      { 'Ctrl+T', { 'lctrl', 't' }, 'run_project' },
+      { 'Ctrl+Q', { 'lctrl', 'q' }, 'quit_project' },
+      { 'Ctrl+Shift+R', { 'lctrl', 'lshift', 'r' }, 'reset' },
+      { 'Ctrl+Alt+R', { 'lctrl', 'lalt', 'r' }, 'restart' },
+    }
+    for _, c in ipairs(chords) do
+      local name, keys, exit = c[1], c[2], c[3]
+
+      it(name .. ' asks, and Escape keeps the block', function()
+        open_dirty_block()
+        local draft = ed.input:get_text():items()
+        chord(keys)
+        assert.same('discard', ed.pending_confirm)
+        assert.same({}, took)
+
+        F.session.press('escape')
+        assert.is_nil(ed.pending_confirm)
+        assert.same('edit', ed:get_mode())
+        assert.same(draft, ed.input:get_text():items())
+        assert.same({}, took)
+      end)
+
+      it(name .. ' asks, and Enter discards and leaves', function()
+        open_dirty_block()
+        chord(keys)
+        F.session.press('return')
+
+        assert.same({ exit }, took)
+        assert.same({}, saved)
+      end)
+    end
+
+    it('the Space that confirms types nowhere after', function()
+      --- a quit closes the editor, so the glyph meets the
+      --- console
+      F.cc.quit_project = function()
+        took[#took + 1] = 'quit_project'
+        orig.quit_project(F.cc)
+      end
+      local closed = F.cc.close_project
+      finally(function() F.cc.close_project = closed end)
+      F.cc.close_project = function() end
+      open_dirty_block()
+      chord({ 'lctrl', 'q' })
+      --- a desktop keyboard: the key, then its glyph
+      F.session.press('space')
+      F.session.type(' ')
+      assert.same({ 'quit_project' }, took)
+      assert.same('ready', love.state.app_state)
+      assert.same('', string.unlines(F.cc.input:get_text()))
+    end)
+
+    it('the Space that confirms presses nothing after', function()
+      open_dirty_block()
+      chord({ 'lctrl', 'q' })
+      --- the device: the glyph, then the key
+      F.session.type(' ')
+      assert.same({ 'quit_project' }, took)
+      local route = love.keypressed
+      local reached = {}
+      finally(function() love.keypressed = route end)
+      love.keypressed = function(k) reached[#reached + 1] = k end
+      F.session.press('space')
+      assert.same({}, reached)
+    end)
+
+    it("the chord's own glyph answers nothing", function()
+      open_dirty_block()
+      F.session.press('lctrl')
+      F.session.press('q')
+      --- the device leaks a chord's glyph after its key
+      F.session.type('q')
+      assert.same('discard', ed.pending_confirm)
+      assert.same({}, took)
+    end)
+
+    it('an unchanged open block leaves without asking', function()
+      F.session.press('return')
+      assert.same('edit', ed:get_mode())
+      chord({ 'lctrl', 'q' })
+      assert.same({ 'quit_project' }, took)
+      assert.is_nil(ed.pending_confirm)
     end)
   end)
 
@@ -245,15 +365,28 @@ describe('editor key contract #input', function()
     end
 
     it('a question does not outlive the editor', function()
-      local orig_run = F.cc.run_project
-      finally(function() F.cc.run_project = orig_run end)
-      F.cc.run_project = function() end
-      open_dirty_block()
+      local cc = F.cc
+      local keep = {
+        run_project = cc.run_project,
+        checkpoint_modtime = cc.checkpoint_modtime,
+        file_modtime = cc.file_modtime,
+        restore_checkpoint = cc.restore_checkpoint,
+      }
+      finally(function()
+        for f, v in pairs(keep) do cc[f] = v end
+      end)
+      local restored = false
+      cc.run_project = function() end
+      cc.checkpoint_modtime = function() return 1752400000 end
+      cc.file_modtime = function() return 1752480000 end
+      cc.restore_checkpoint = function() restored = true end
+      F.session.press('lctrl')
       F.session.press('lshift')
-      F.session.press('escape')
-      F.session.release('escape')
+      F.session.press('k')
+      F.session.release('k')
       F.session.release('lshift')
-      assert.same('discard', ed.pending_confirm)
+      F.session.release('lctrl')
+      assert.same('restore', ed.pending_confirm)
 
       F.session.press('lctrl')
       F.session.press('t')
@@ -267,7 +400,7 @@ describe('editor key contract #input', function()
 
       --- Enter opened the block: no hidden question took it
       assert.same('edit', ed:get_mode())
-      assert.same(0, #ed:get_active_buffer().history)
+      assert.is_false(restored)
     end)
 
     it('Shift+Esc on the last buffer leaves under DEBUG', function()

@@ -860,6 +860,17 @@ Controller = {
     -- playback (cfg.mode == 'play') only restart/profile stay
     -- live (doc/development/decisions/input.md, D-ROUTE-OWNS) —
     -- each project/console-management one checks it and no-ops.
+    --- A whole-editor exit with a changed block open asks
+    --- the editor's own discard question first, and its
+    --- confirmation takes the exit (EditorController,
+    --- ask_to_leave)
+    --- @param exit function
+    --- @return boolean asked
+    local function asked(exit)
+      return love.state.app_state == 'editor'
+          and CC.editor:ask_to_leave(exit)
+    end
+
     local function reserved_quickswitch()
       if playback then return end
       local st = love.state.app_state
@@ -871,6 +882,7 @@ Controller = {
         else CC:edit() end
       elseif st == 'editor'
           and CC.editor:is_normal_mode() then
+        if asked(reserved_quickswitch) then return end
         local ed_state = CC:finish_edit()
         love.state.editor = ed_state
         CC:run_project()
@@ -884,6 +896,7 @@ Controller = {
 
     local function reserved_quit()
       if playback then return end
+      if asked(reserved_quit) then return end
       CC:quit_project()
     end
 
@@ -899,12 +912,14 @@ Controller = {
 
     local function reserved_reset()
       if playback then return end
+      if asked(reserved_reset) then return end
       CC:reset()
     end
 
     -- Restart stays live in playback too (matches the old
     -- restart() call, made in both branches).
     local function reserved_restart()
+      if asked(reserved_restart) then return end
       CC:restart()
     end
 
@@ -960,6 +975,12 @@ Controller = {
       if playback and love.state.app_state == 'shutdown' then
         love.event.quit()
       end
+      -- The other half of a Space that confirmed leaving the
+      -- editor, once the editor is gone
+      -- (EditorController:ask_to_leave): each is one-shot.
+      local swallow = CC.swallow_key
+      CC.swallow_key, CC.swallow_glyph = nil, nil
+      if swallow and swallow == k then return end
       local reservation = RESERVED.keypressed[combo_string(k)]
       if reservation then reservation() end
 
@@ -978,6 +999,9 @@ Controller = {
     end
 
     handlers.textinput = function(t)
+      local swallow = CC.swallow_glyph
+      CC.swallow_glyph = nil
+      if swallow and swallow == t then return end
       if love.textinput then
         return love.textinput(t)
       end

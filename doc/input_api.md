@@ -848,14 +848,17 @@ that is the editor's own handling, not a reservation: it applies when you are
 editing, not while your project runs. Bare Ctrl+S does nothing there; the
 editor keeps it for itself.
 
-**Known limitation, and it ships this way.** Ctrl+Shift+S and Ctrl+T both leave
-the editor **without writing an open, changed block** — the changes are lost
-without a prompt. Shift+Esc is the supported way out and the only *exit* that
-asks before discarding; use it. (One further path discards a draft without
-asking, without leaving the editor: Ctrl+J while editing moves you to another
-file, and a Shift+Esc after it no longer sees an edit in progress.) Both chords predate this release and are documented
-rather than fixed here — the contract is
-`doc/development/decisions/input.md`, `D-EDITOR-KEYS`, statement 6.
+Ctrl+T, Ctrl+Q, Ctrl+Shift+R and Ctrl+Alt+R leave the editor too. When a block
+you have changed is open, each first asks the question Shift+Esc asks: Enter or
+Space discards the change and goes on, anything else keeps the block open.
+
+**Known limitation, and it ships this way.** Ctrl+Shift+S leaves the editor
+**without writing an open, changed block** — the changes are lost without a
+prompt. Shift+Esc is the supported way out; use it. (One further path discards a
+draft without asking, without leaving the editor: Ctrl+J while editing moves you
+to another file, and a Shift+Esc after it no longer sees an edit in progress.)
+The chord predates this release and is documented rather than fixed here — the
+contract is `doc/development/decisions/input.md`, `D-EDITOR-KEYS`, statement 6.
 
 ### Pointer and click hooks
 
