@@ -113,6 +113,19 @@ local function closing(script)
   return "]" .. level .. "]"
 end
 
+--- How the chunk exec sends ends: it runs the file, says a
+--- mistake in the board's own words, then says how the file
+--- ended on a line of its own, which starts with a character
+--- no program prints by chance (STATUS)
+local STATUS = "\30exec "
+local RAN = table.concat({
+  " local ok = file ~= nil",
+  " if ok then ok, err = pcall(file) end",
+  " if not ok then print((file and 'Runtime' or 'Compile')",
+  " .. ' error: ' .. tostring(err)) end",
+  " print(ok and '\\30exec ok' or '\\30exec error') end"
+})
+
 --- The lines exec sends: the file in a chunk of its own, so
 --- what the code declares stays in it, named for the file in
 --- the board's words for a mistake
@@ -122,12 +135,12 @@ local function chunkLines(filename)
   local text = fileForBoard(filename)
   local close = closing(text)
   local open = (close:gsub("%]", "["))
-  local lines = { "assert(loadstring(" .. open }
+  local lines = { "do local file, err = loadstring(" .. open }
   for line in text:gmatch("([^\r]*)\r") do
     lines[#lines + 1] = line
   end
   local name = string.format("%q", "@" .. filename)
-  lines[#lines + 1] = close .. ", " .. name .. "))()"
+  lines[#lines + 1] = close .. ", " .. name .. ")" .. RAN
   return lines
 end
 
@@ -282,22 +295,28 @@ local function quietLast(after)
   end
 end
 
---- What exec says once the board has run the file: whether
---- the board's answer tells of a mistake that stopped it,
---- which the board says on the last line before its prompt,
---- after all the program printed
+--- What exec says once the board has run the file, from the
+--- chunk's own status line alone
 --- @param said string
 --- @return string
 local function verdict(said)
-  local last = said:match("([^\r\n]*)[\r\n]*$")
-  local unread = last:find("^Compile error: ")
-  local failed = last:find("^Runtime error: ")
-  local stopped = unread or failed
-  if not stopped then
+  local status = said:match(STATUS .. "(%a+)")
+  if status == "ok" then
     return sending.name .. " is on the board"
   end
-  return sending.name .. " was run, and stopped on the mistake"
-      .. " above"
+  if status == "error" then
+    return sending.name .. " was run, and stopped on the" ..
+        " mistake above"
+  end
+  return sending.name .. " was run; the board did not say how"
+      .. " it ended"
+end
+
+--- What the board said, less the chunk's status line
+--- @param said string
+--- @return string
+local function unmarked(said)
+  return (said:gsub(STATUS .. "%a+\r?\n?", ""))
 end
 
 --- The last line runs the file: a prompt the board has been
@@ -309,7 +328,7 @@ local function lastLine()
   local said = after and after:match("^(.*)> $")
   local done = said and SETTLE_S <= sending.quiet
   if done then
-    show(said)
+    show(unmarked(said))
     finish(verdict(said))
   elseif QUIET_S < sending.quiet then
     quietLast(after)
@@ -408,9 +427,10 @@ local function takeOver()
   compy.before_exit = stopped
 end
 
---- Run a project file on the board as one chunk, wrapped in
---- assert(loadstring [=[ ... ]=])(), sent a line at a time. The
---- board's echo of the file is not shown; what it answers is.
+--- Run a project file on the board as one chunk, loaded from
+--- a long string and run in a protected call, sent a line at
+--- a time. The board's echo of the file is not shown; what it
+--- answers is.
 --- @param filename string
 function exec(filename)
   if not readyToSend() then
