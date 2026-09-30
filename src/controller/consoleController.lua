@@ -2024,7 +2024,10 @@ function ConsoleController:_stop_project_run()
   -- What the run drew on the console's canvas goes with it,
   -- after the project's own hook, which may still draw. A
   -- paused run (Ctrl+Pause, an error in a handler) has not
-  -- reached here: its canvas stays until it stops.
+  -- reached here: its canvas stays until it stops. Nor has one
+  -- that finished its top-level code with nothing live (the
+  -- sine example): it is idle, not stopped, and its picture
+  -- stays.
   self.model.output:clear_canvas()
   View.clear_snapshot()
   self.main_ctrl.set_love_draw(self, self.view)

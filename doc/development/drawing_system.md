@@ -33,7 +33,7 @@ The canvas belongs to the run that drew on it:
 - A run starts on a blank canvas.
 - Every stop clears it: Ctrl+S, Ctrl+T, `stop()`, restart (Ctrl+Alt+R), Ctrl+Q, the program's own quit, and a top-level error. `_stop_project_run` clears it after the project's `before_exit` hook, so what the hook draws goes too.
 - A paused run (Ctrl+Pause, an error in a handler) has not stopped: its canvas stays, and `continue()` draws on it again.
-- A run that finishes its top-level code with nothing live (no handlers, no widget) is idle, not stopped: its picture stays until the project stops or is closed.
+- A run that finishes its top-level code with nothing live (no handlers, no widget) is idle, not stopped, as the sine example is: its picture stays until the project stops or is closed.
 
 ### `use_canvas(f)` — `src/controller/consoleController.lua:1159`
 

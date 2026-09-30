@@ -89,9 +89,21 @@ describe('a program\'s canvas after it stops #canvas', function()
     assert.is_false(canvas.picture)
   end)
 
+  -- Ctrl+Q closes the open project, then opens the default
+  -- one; the fixture has none open, so one is set here, with
+  -- the close and the open stood in for.
   it('Ctrl+Q clears it', function()
+    local undo = project(function() end)
+    local P = F.cc.model.projects
+    local close = P.close
+    local open_project = F.cc.open_project
+    P.close = function() P.current = nil return true end
+    F.cc.open_project = function() return true end
     run_drawing()
     press({ 'lctrl', 'q' })
+    P.close = close
+    F.cc.open_project = open_project
+    undo()
     assert.is_false(canvas.picture)
   end)
 
