@@ -1270,6 +1270,12 @@ describe('micro:bit exec #microbit', function()
       refusedPlainly(call, 'Name the file in quotes, such as'
         .. ' "blink.lua".')
     end
+    --- a file to write, named wrong (Codex round 11, M3)
+    refusedPlainly(function() tools.embed(4) end,
+      'Name the file to write, such as embed("mine.hex").')
+    refusedPlainly(function() tools.extract('MICROBIT.hex', 4) end,
+      'Name the file to write, such as extract("MICROBIT.hex",'
+      .. ' "mine.lua").')
     assert.equal(0, sent())
     assert.is_false(flashed)
   end)
