@@ -138,6 +138,50 @@ describe('the editor across files #input', function()
       end
     end)
 
+    describe('twice, or undone', function()
+      local took
+
+      before_each(function()
+        took = {}
+        local orig = cc.quit_project
+        cc.quit_project = function() took[#took + 1] = 'quit_project' end
+        undo[#undo + 1] = function() cc.quit_project = orig end
+      end)
+
+      it('a failed fresh block keeps the earlier failure asked about',
+        function()
+          open()
+          draft('x = 99')
+          chord('return')
+          chord('escape')
+          chord('lshift', 'escape')
+          chord('lctrl', 'return')
+          ed.input:set_text('newvalue = 99')
+          chord('return')
+          chord('escape')
+          chord('lshift', 'escape')
+          assert.same('discard', ed.pending_confirm)
+          chord('return')
+          assert.same('nav', ed:get_mode())
+
+          chord('lctrl', 'q')
+          assert.same('leave', ed.pending_confirm)
+          assert.same({}, took)
+        end)
+
+      it('a failed format of a saved file asks about nothing', function()
+        files['main.lua'] = 'x=1\n'
+        open()
+        chord('lctrl', 'lshift', 'f')
+        assert.is_true(ed.input:has_error())
+        chord('escape')
+
+        chord('lctrl', 'q')
+        assert.is_nil(ed.pending_confirm)
+        assert.same({ 'quit_project' }, took)
+      end)
+    end)
+
     it('keeps a fresh block open, its draft and the file as they were',
       function()
         open()
