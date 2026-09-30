@@ -55,6 +55,15 @@ local RETRY = 'Send the file again. If the micro:bit still does'
     .. ' not take it, unplug it, plug it back in, then send the'
     .. ' file once more.'
 local NO_ANSWER = 'The micro:bit stopped answering. ' .. RETRY
+--- The chip said it had the end of the file on a chunk before
+--- the last, with all of them sent and as many replies
+--- missing: one reply was lost, and each after it taken for
+--- the chunk before its own. The whole file most likely went
+--- on, but a command the chip dropped looks the same from its
+--- replies, and nothing reads the board's memory back.
+local UNSURE = 'The Compy cannot tell whether the micro:bit took'
+    .. ' the file: one of the micro:bit\'s answers was lost. '
+    .. RETRY
 local NOTHING_SENT = 'It did not answer, and nothing went to it,'
     .. ' so it keeps its program. ' .. RETRY
 local UNPLUGGED = 'The micro:bit was unplugged before it had'
@@ -137,7 +146,9 @@ function DapFlash:fail(plain, why)
     self.phase, self.clock() - self.started,
     math.min(self.acked * Dap.CHUNK, #self.data),
     #self.data, self.accepted, self.chunks, why))
-  self.say('The micro:bit did not take the file. ' .. plain)
+  local lead = self.unsure and ''
+      or 'The micro:bit did not take the file. '
+  self.say(lead .. plain)
   self:mayBeGone()
 end
 
@@ -365,7 +376,20 @@ function DapFlash:wrote(i, status)
   self.log(string.format('write %d of %d refused: %s', i,
     self.chunks, self:name(status)))
   self.refusedAt, self.refusedStatus = i, status
+  self.unsure = self:lostReply(i, status)
   self:refuse(Dap.plain(status), 'write ' .. self:name(status))
+end
+
+--- Whether the chip's end of the file came booked to chunk i
+--- because replies were lost: every chunk sent, and as many
+--- replies missing as the chunks after i
+--- @param i integer
+--- @param status integer
+--- @return boolean
+function DapFlash:lostReply(i, status)
+  local all = self.sent == self.chunks
+  local missing = self.link:unanswered() == self.chunks - i
+  return status == Dap.DONE and all and missing
 end
 
 function DapFlash:writePhase()
@@ -489,7 +513,8 @@ function DapFlash:watch()
     -- after it is taken for the command before its own
     local n = self.link:unanswered()
     local kept = self.sent == 0 and not self.link.wiped
-    self:fail(kept and NOTHING_SENT or NO_ANSWER,
+    local plain = kept and NOTHING_SENT or NO_ANSWER
+    self:fail(self.unsure and UNSURE or plain,
       string.format('no reply in %d s, %d commands unanswered;'
         .. ' a lost reply makes the chunk numbers since it up'
         .. ' to %d low', DapFlash.REPLY_S, n, n))

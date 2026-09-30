@@ -717,6 +717,49 @@ describe('DapFlash', function()
       assert.same(1, chip.resets)
     end)
 
+  --- UE174 at 27bf5846: one reply lost mid-flash, each after
+  --- it taken for the chunk before its own, and the chip's end
+  --- of the file booked to the chunk before the last. It most
+  --- likely has the whole file, but a command the chip dropped
+  --- looks the same from its replies: the flash fails, says the
+  --- Compy cannot tell, and sending again puts it right.
+  it('says it cannot tell when a reply was lost, and sends again'
+    .. ' on the same link', function()
+      local chip = F.chip({ latency = 0.001 })
+      local take, writes = chip.take, 0
+      chip.take = function(c)
+        local r = take(c)
+        if r and r:byte(1) == 0x8C then
+          writes = writes + 1
+          if writes == 100 then return nil end
+        end
+        return r
+      end
+      local data = F.hex(300)
+      local first, said, logged, link = job(data, chip)
+      assert.same('failed', run(first, chip))
+      local told = joined(said)
+      assert.truthy(joined(logged):find('refused: SUCCESS_DONE (19)',
+        1, true))
+      assert.truthy(told:find('The Compy cannot tell whether the'
+        .. ' micro:bit took the file: one of the micro:bit\'s answers'
+        .. ' was lost. Send the file again.', 1, true), told)
+      assert.is_nil(told:find('did not take', 1, true))
+      assert.is_nil(told:find('stopped answering', 1, true))
+      assert.truthy(told:find('may be gone', 1, true))
+      assert.same('END', chip.stream)
+      -- sending again: the stream left open is closed, and the
+      -- file goes on whole
+      chip.take = take
+      local again = {}
+      local second = DapFlash.new(data, link,
+        function(l) again[#again + 1] = l end, function() end,
+        function() return chip.now end)
+      assert.same('done', run(second, chip))
+      assert.truthy(joined(again):find('took the file', 1, true))
+      assert.same(data, chip.written:sub(-#data))
+    end)
+
   --- the open's answer comes in while a stop waits for it:
   --- nothing is said to start, only how it ended
   it('says no start for an open a stop took in', function()
