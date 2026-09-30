@@ -557,7 +557,10 @@ function AndroidBackend:send(data)
   return true
 end
 
---- One slice of the outgoing queue
+--- One slice of the outgoing queue. A transfer that takes only
+--- part of it leaves the rest for the next poll, in order; one
+--- that fails drops the queue, which would reach the board out
+--- of step with what went before.
 --- @return string? fault
 function AndroidBackend:write()
   if self.tx == '' then return end
@@ -568,11 +571,11 @@ function AndroidBackend:write()
   local n = jniCallInt(env, port.conn, port.bulkM,
     port.epOut, arr, #out, WRITE_MS)
   jniDropLocal(env, arr)
-  if n ~= #out then
+  if n < 0 then
     self.tx = ''
     return 'bulk write sent ' .. n .. ' of ' .. #out
   end
-  self.tx = self.tx:sub(#out + 1)
+  self.tx = self.tx:sub(n + 1)
 end
 
 --- Is the open device still on the bus? Takes no global

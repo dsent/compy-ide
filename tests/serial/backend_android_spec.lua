@@ -371,4 +371,35 @@ describe('AndroidBackend drive hold', function()
         out)
       assert.same('', b.tx)
     end)
+
+  --- a transfer that takes part of a slice: the rest goes next,
+  --- in order; a failed one drops the queue, and says so
+  it('writes on from where a short transfer stopped, and drops'
+    .. ' the queue only when one fails', function()
+      local b = backend(port())
+      b.state, b.port = 'open', port()
+      local wrote, took = '', { 10, 16, 14 }
+      local bytes, drop = _G.jniBytes, _G.jniDropLocal
+      _G.jniBytes = function(_, text) return text end
+      _G.jniDropLocal = function() end
+      _G.jniCallInt = function(_, _, _, _, arr)
+        local n = table.remove(took, 1)
+        wrote = wrote .. arr:sub(1, n)
+        return n
+      end
+      local text = ('0123456789'):rep(4)
+      assert.is_true(b:send(text))
+      assert.is_nil(b:write())
+      assert.same(text:sub(11), b.tx)
+      assert.is_nil(b:write())
+      assert.is_nil(b:write())
+      assert.same(text, wrote)
+      assert.same('', b.tx)
+      assert.is_true(b:send(text))
+      _G.jniCallInt = function() return -1 end
+      local fault = b:write()
+      _G.jniBytes, _G.jniDropLocal = bytes, drop
+      assert.same('bulk write sent -1 of 16', fault)
+      assert.same('', b.tx)
+    end)
 end)
