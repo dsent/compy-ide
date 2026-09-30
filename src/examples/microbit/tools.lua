@@ -179,21 +179,23 @@ local function closing(script)
   return "]" .. level .. "]"
 end
 
---- How the chunk exec sends ends: it runs the file, says a
---- mistake in the board's own words, then says how the file
+--- How the chunk exec sends ends, once the file has run: it
+--- says a mistake in the board's own words, then how the file
 --- ended on a line of its own, its frame: a character no
 --- program prints by chance, and a mark new to each exec. A
 --- line break goes before it, so it starts a line even after
 --- output with no end. The console's echo is given the frame
 --- too, and says how a file that ran on past exec's wait
---- ended in its place.
+--- ended in its place. The cable carries about 60 characters
+--- a second, so what exec adds to every file is written as
+--- short as Lua reads it: one-letter names, and no space the
+--- parser does not need.
 local FRAME = "\30exec "
 local RAN = table.concat({
-  "local ok = file ~= nil if ok then ok, err = P(file) end",
-  " if not ok then say((file and 'Runtime' or 'Compile')",
-  " .. ' error: ' .. T(err)) end",
-  " say('\\r\\n\\30exec %s ' .. (ok and 'ok'",
-  " or file and 'error' or 'compile')) end"
+  "local z='\\r\\n\\30exec %s '..(o and'ok'or f and'error'",
+  "or'compile')if not o then z=(f and'Runtime'or'Compile')",
+  "..' error: '..T(e)..z end if s then s(z..'\\r\\n')else W(z)",
+  "end end"
 })
 
 --- How many frames exec has made
@@ -218,22 +220,23 @@ end
 --- prompt cannot read what exec sends, and exec stops at its
 --- first line; with no tostring the file runs, and a mistake
 --- in it comes with no frame.
-local OPENING = "do local R, G = rawget, _G local file, err ="
-    .. " R(G, 'loadstring')("
+local OPENING =
+    "do local R,G=rawget,_G local f,e=R(G,'loadstring')("
 
 --- What the closing line adds after the file's name: the rest
 --- the chunk uses, taken still before the file runs
 local TAKE = table.concat({
-  " local m, P, T, W = R(G, 'microbit'), R(G, 'pcall'),",
-  " R(G, 'tostring'), R(G, 'print')"
+  "local m,P,T,W=R(G,'microbit'),R(G,'pcall'),",
+  "R(G,'tostring'),R(G,'print')"
 })
 
---- The line after it: how the chunk says a line
+--- The line after it: where the chunk says how the file
+--- ended, the port or else print; and the file's run, with
+--- a pcall that runs it unprotected when there is none
 local SAY = table.concat({
-  "local s = m and m.serial and m.serial.send",
-  " local function say(t)",
-  " if s then s(t .. '\\r\\n') else W(t) end end",
-  " P = P or function(f) return true, f() end"
+  "local s=m and m.serial s=s and s.send",
+  " P=P or function(g)return true,g()end",
+  " local o if f then o,e=P(f)end"
 })
 
 --- The line after the file: the end of its bracket, its
@@ -243,10 +246,10 @@ local SAY = table.concat({
 --- @return string
 local function closingLine(filename, close)
   local name = string.format("%q", "@" .. filename)
-  return close .. ", " .. name .. ")" .. TAKE
+  return close .. "," .. name .. ")" .. TAKE
 end
 
---- The last line exec sends: the run and the frame
+--- The last line exec sends: the mistake and the frame
 --- @param frame string
 --- @return string
 local function runLine(frame)

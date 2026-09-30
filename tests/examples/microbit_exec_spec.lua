@@ -13,11 +13,10 @@ package.preload['utf8'] = package.preload['utf8']
 require('model.serial.init')
 require('model.serial.backend_fake')
 
-local WRAP = "do local R, G = rawget, _G local file, err ="
-  .. " R(G, 'loadstring')([=["
+local WRAP = "do local R,G=rawget,_G local f,e=R(G,'loadstring')([=["
 --- how the last line exec sends begins; the rest runs the file
 --- and says how it ended
-local UNWRAP = ']=], "@f.lua")'
+local UNWRAP = ']=],"@f.lua")'
 
 --- @return string? luac5.1, when installed
 local function luac()
@@ -212,6 +211,21 @@ describe('micro:bit exec #microbit', function()
           'g.lua')))
       end)
   end
+
+  --- The cable carries about 60 characters a second, and the
+  --- board's port holds 254: what exec adds to every file stays
+  --- short, and each of its lines well within the port
+  it('adds under 440 characters to a file, none of its lines 200',
+    function()
+      files['g.lua'] = 'x = 1\n'
+      local tools = load_tools()
+      local chunk = sentChunk(tools, 'g.lua')
+      local added = #chunk - #'x = 1'
+      assert.is_true(added < 440, added)
+      for line in chunk:gmatch('[^\n]+') do
+        assert.is_true(#line < 200, line)
+      end
+    end)
 
   --- the board's words for a mistake name the file, and exec
   --- does not call a file that stopped on one "on the board"
@@ -503,7 +517,7 @@ describe('micro:bit exec #microbit', function()
         backend:rx(echo:sub(at, at + 4))
         serial:update(1)
       end
-      assert.is_true(#echo > 5 * 12)
+      assert.is_true(#echo > 5 * 6)
       backend:rx('>> ')
       serial:update(0)
       assert.equal(2, sent())
