@@ -228,9 +228,9 @@ local function clock()
   return os.clock()
 end
 
-local NOT_CONNECTED = 'No micro:bit is plugged in. Plug the'
-    .. ' micro:bit into the Compy with its USB cable, then try'
-    .. ' again.'
+local NOT_CONNECTED = 'No micro:bit is plugged in that the Compy'
+    .. ' can see. Plug it in with a data cable, or unplug it and'
+    .. ' plug it in again, then try again.'
 local PERMISSION = 'The Compy asked whether it may use the'
     .. ' micro:bit. If the question is on the screen, answer it;'
     .. ' if it is gone, unplug the micro:bit and plug it back in'

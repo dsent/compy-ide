@@ -112,6 +112,20 @@ describe('micro:bit exec #microbit', function()
     return #backend.sent
   end
 
+  --- A command refused in words: no error panel, no line
+  --- number, and the words given among what it said
+  --- @param command function
+  --- @param ... string words it is to say
+  local function refusedPlainly(command, ...)
+    said = {}
+    assert.has_no_error(command)
+    local told = table.concat(said, ' ')
+    assert.is_nil(told:find('%.lua:%d+:'), told)
+    for _, words in ipairs({ ... }) do
+      assert.truthy(told:find(words, 1, true), told)
+    end
+  end
+
   before_each(function()
     backend = FakeBackend.new()
     serial = Serial.new(backend)
@@ -897,16 +911,46 @@ describe('micro:bit exec #microbit', function()
         }, said)
       end)
 
-    it('upload stops when no drive is found', function()
+    it('upload says in words to plug the board in when no drive'
+      .. ' is found', function()
+        local tools = load_tools()
+        tools.detect_microbit = function() return nil end
+        files['MICROBIT.hex'] = ':00000001FF\n'
+        refusedPlainly(function() tools.upload('MICROBIT.hex') end,
+          'No micro:bit is plugged in', 'with a data cable',
+          'unplug it and plug it', 'then run upload again.')
+        assert.is_false(flashed)
+      end)
+
+    it('upload says in words why the drive did not take the file',
+      function()
+        local tools = load_tools()
+        tools.flash_microbit = function()
+          return nil, 'The micro:bit drive is full.'
+        end
+        files['MICROBIT.hex'] = ':00000001FF\n'
+        refusedPlainly(function() tools.upload() end,
+          'The micro:bit drive is full.')
+      end)
+
+    it('upload says a damaged hex file is damaged', function()
       local tools = load_tools()
-      tools.detect_microbit = function() return nil end
-      files['MICROBIT.hex'] = ':00000001FF\n'
-      local ok, err = pcall(tools.upload)
-      assert.is_false(ok)
-      assert.truthy(tostring(err):find('no micro:bit plugged in',
-        1, true))
+      files['bad.hex'] = ':0000000'
+      refusedPlainly(function() tools.upload('bad.hex') end,
+        'bad.hex is damaged', 'Copy it onto the Compy again.')
       assert.is_false(flashed)
     end)
+
+    --- a mistake of the tools' own still shows as one
+    it('upload lets an error that is no refusal through',
+      function()
+        local tools = load_tools()
+        tools.flash_microbit = function() error('boom') end
+        files['MICROBIT.hex'] = ':00000001FF\n'
+        local ok, err = pcall(tools.upload)
+        assert.is_false(ok)
+        assert.truthy(tostring(err):find('boom', 1, true))
+      end)
 
     --- without a board no hex file is written for a script
     it('writes no hex for a lua file without a board', function()
@@ -916,10 +960,8 @@ describe('micro:bit exec #microbit', function()
       files['MICROBIT.hex'] = f:read('*a')
       f:close()
       files['robot.lua'] = 'print(1)\n'
-      local ok, err = pcall(tools.upload, 'robot.lua')
-      assert.is_false(ok)
-      assert.truthy(tostring(err):find('no micro:bit plugged in',
-        1, true))
+      refusedPlainly(function() tools.upload('robot.lua') end,
+        'No micro:bit is plugged in')
       assert.is_nil(files['robot.hex'])
       assert.is_false(flashed)
     end)
@@ -1020,7 +1062,9 @@ describe('micro:bit exec #microbit', function()
     files['x.lua'] = 'print(1)\n'
     for _, name in ipairs({ 'MICROBIT.hex', 'microbit.hex',
       'MicroBit.HEX' }) do
-      assert.has_error(function() tools.embed(name, 'x.lua') end)
+      refusedPlainly(function() tools.embed(name, 'x.lua') end,
+        'MICROBIT.hex is the robots\' firmware and is never',
+        'embed("mine.hex")')
     end
     assert.are.equal(shipped, files['MICROBIT.hex'])
     assert.is_nil(files['microbit.hex'])
@@ -1416,7 +1460,7 @@ describe('micro:bit exec #microbit', function()
     tools.echo(false)
     echoes = {}
     backend.refuse = 'break -1, end -1'
-    assert.has_error(function() tools.restart_microbit() end)
+    assert.has_no_error(function() tools.restart_microbit() end)
     assert.same({ true }, echoes)
   end)
 
@@ -1427,7 +1471,7 @@ describe('micro:bit exec #microbit', function()
       board()
       said = {}
       backend.refuse = 'break -1, end -1'
-      assert.has_error(function() tools.restart_microbit() end)
+      assert.has_no_error(function() tools.restart_microbit() end)
       assert.truthy(said[1]:find('did not restart', 1, true))
       assert.is_nil(port.onTick)
     end)
@@ -1435,9 +1479,8 @@ describe('micro:bit exec #microbit', function()
   it('restart_microbit says to press the button when refused', function()
     local tools = load_tools()
     backend.refuse = 'break -1'
-    local ok, err = pcall(tools.restart_microbit)
-    assert.is_false(ok)
-    assert.truthy(tostring(err):find('reset button', 1, true))
+    refusedPlainly(function() tools.restart_microbit() end,
+      'The micro:bit did not restart. Press its reset button')
   end)
 
   it('a board that stops answering points to restart_microbit', function()
@@ -1449,13 +1492,80 @@ describe('micro:bit exec #microbit', function()
     assert.truthy(said[#said]:find('restart_microbit()', 1, true))
   end)
 
-  it('refuses while no board is connected', function()
+  it('says in words to plug the board in while none is connected',
+    function()
+      local tools = load_tools()
+      backend:detach()
+      serial:update(0)
+      for command, call in pairs({
+        ['exec'] = function() tools.exec('f.lua') end,
+        ['send'] = function() tools.send('f.lua') end,
+        ['restart_microbit()'] = tools.restart_microbit,
+      }) do
+        refusedPlainly(call, 'No micro:bit is plugged in',
+          'with a data cable', 'then run ' .. command .. ' again.')
+      end
+      assert.equal(0, sent())
+      assert.equal(0, backend.resets)
+    end)
+
+  it('says in words that a file is not in the project', function()
     local tools = load_tools()
-    backend:detach()
-    serial:update(0)
-    assert.has_error(function() tools.exec('f.lua') end)
-    assert.has_error(function() tools.restart_microbit() end)
+    firmware()
+    for _, call in ipairs({
+      function() tools.exec('none.lua') end,
+      function() tools.send('none.lua') end,
+      function() tools.upload('none.lua') end,
+      function() tools.hexmap('none.lua') end,
+      function() tools.extract('none.lua') end,
+      function() tools.embed('mine.hex', 'none.lua') end,
+    }) do
+      refusedPlainly(call,
+        'This project has no file called none.lua.',
+        'Check the name, then try again.')
+    end
     assert.equal(0, sent())
-    assert.equal(0, backend.resets)
+    assert.is_false(flashed)
+  end)
+
+  it('says in words that a hex file is damaged', function()
+    local tools = load_tools()
+    files['bad.hex'] = ':0000000'
+    for _, call in ipairs({
+      function() tools.hexmap('bad.hex') end,
+      function() tools.extract('bad.hex') end,
+    }) do
+      refusedPlainly(call, 'bad.hex is damaged')
+    end
+    files['MICROBIT.hex'] = ':1000'
+    files['x.lua'] = 'print(1)\n'
+    refusedPlainly(function() tools.embed('mine.hex', 'x.lua') end,
+      'MICROBIT.hex is damaged')
+    refusedPlainly(function() tools.upload('x.lua') end,
+      'MICROBIT.hex is damaged')
+    assert.is_nil(files['mine.hex'])
+    assert.is_false(flashed)
+  end)
+
+  it('says in words that a hex file has no place for Lua',
+    function()
+      local tools = load_tools()
+      files['plain.hex'] = ':00000001FF\n'
+      refusedPlainly(function() tools.extract('plain.hex') end,
+        'plain.hex has no place for a Lua program')
+      assert.is_nil(files['MICROBIT.lua'])
+    end)
+
+  it('embed says in words what it needs', function()
+    local tools = load_tools()
+    firmware()
+    refusedPlainly(function() tools.embed() end,
+      'Name the firmware file to write, such as',
+      'embed("mine.hex")')
+    files['big.lua'] = ('x'):rep(300000)
+    refusedPlainly(function() tools.embed('mine.hex', 'big.lua') end,
+      'MICROBIT.hex has room for', 'this is 300000',
+      'Make it shorter')
+    assert.is_nil(files['mine.hex'])
   end)
 end)

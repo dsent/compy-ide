@@ -17,6 +17,63 @@ local hex = require("hex")
 
 local HEX = "MICROBIT.hex"
 local LUA = "MICROBIT.lua"
+
+--- A command stopped for a reason a person can put right is
+--- raised with its words under this key: they say what to do,
+--- in place of an error with a line number
+local REFUSAL = { }
+
+--- Stop the command, saying why, a line at a time
+--- @param ... string
+local function refuse(...)
+  error({ [REFUSAL] = { ... } }, 0)
+end
+
+--- Say a refusal in its words; any other error goes on as it
+--- came
+--- @param err any
+local function said(err)
+  local words = type(err) == "table" and err[REFUSAL]
+  if not words then
+    error(err, 0)
+  end
+  for _, line in ipairs(words) do
+    print(line)
+  end
+end
+
+--- A command that says a refusal in words
+--- @param command function
+--- @return function
+local function plainly(command)
+  return function(...)
+    local ok, err = pcall(command, ...)
+    if not ok then
+      said(err)
+    end
+  end
+end
+
+--- Stop a command that needs the board, which the Compy
+--- cannot see
+--- @param command string what to run again
+local function noBoard(command)
+  refuse(
+    "No micro:bit is plugged in that the Compy can see.",
+    "Plug it in with a data cable, or unplug it and plug it",
+    "in again, then run " .. command .. " again."
+  )
+end
+
+--- Stop a command that needs the board, when the Compy cannot
+--- see one
+--- @param command string what to run again
+local function seen(command)
+  if not serial.isConnected() then
+    noBoard(command)
+  end
+end
+
 -- How much of the script hexmap shows, as hextract's
 -- structure does: enough to tell which script it is, and
 -- that the metadata points at one at all
@@ -26,7 +83,14 @@ local PEEK = 256
 --- @param filename string
 --- @return string
 local function read(filename)
-  return assert(readfile(filename), "no " .. filename)
+  local text = readfile(filename)
+  if not text then
+    refuse(
+      "This project has no file called " .. filename .. ".",
+      "Check the name, then try again."
+    )
+  end
+  return text
 end
 
 -- send, exec --------------------------------------------------
@@ -655,7 +719,7 @@ end
 --- firmware or exec is still sending a file
 --- @return boolean
 local function readyToSend()
-  assert(serial.isConnected(), "no micro:bit connected")
+  seen("exec")
   return not flashing() and not busy()
 end
 
@@ -667,7 +731,10 @@ function send(filename)
   if held then
     return
   end
-  assert(serial.send(fileForBoard(filename)))
+  seen("send")
+  if not serial.send(fileForBoard(filename)) then
+    noBoard("send")
+  end
 end
 
 --- exec's handlers take the board over while it sends
@@ -699,7 +766,7 @@ end
 -- restart ----------------------------------------------------
 
 --- What to do when the board did not take the restart
-local NO_RESTART = "the micro:bit did not restart. Press its"
+local NO_RESTART = "The micro:bit did not restart. Press its"
     .. " reset button, on the back next to the USB socket."
 
 --- What to do when no greeting comes after a restart
@@ -711,6 +778,17 @@ local function greetingNote()
   print("upload, upload() puts the Compy's firmware back.")
 end
 
+--- What to do once the board was asked to restart: wait for
+--- its greeting, or press its button when it did not restart
+--- @param restarted boolean?
+local function afterRestart(restarted)
+  if restarted then
+    greetingNote()
+  else
+    print(NO_RESTART)
+  end
+end
+
 --- Restart the board, as its reset button does, without
 --- touching it: the way back from a board that no longer
 --- reads what it is sent, stuck in a loop or in listen(). An
@@ -719,7 +797,7 @@ end
 --- restart waits. The message says what to do when no
 --- greeting comes.
 function restart_microbit()
-  assert(serial.isConnected(), "no micro:bit connected")
+  seen("restart_microbit()")
   if flashing() then
     return
   end
@@ -729,17 +807,67 @@ function restart_microbit()
          or "the board did not restart")
   end
   echo()
-  assert(restarted, NO_RESTART)
-  greetingNote()
+  afterRestart(restarted)
 end
 
 -- firmware ---------------------------------------------------
+
+--- The blocks of a hex file's text, or a stop saying it is
+--- damaged
+--- @param filename string
+--- @param text string
+--- @return table[]
+local function parsed(filename, text)
+  local ok, blocks = pcall(hex.parse, text)
+  if not ok then
+    refuse(
+      filename .. " is damaged: part of it is missing or",
+      "changed, so it is not a firmware file the micro:bit",
+      "can take. Copy it onto the Compy again."
+    )
+  end
+  return blocks
+end
 
 --- The blocks of a hex file in the project
 --- @param filename string
 --- @return table[]
 local function blocksOf(filename)
-  return hex.parse(read(filename))
+  return parsed(filename, read(filename))
+end
+
+--- Where a hex file keeps its Lua script, or a stop saying it
+--- keeps none
+--- @param blocks table[]
+--- @param filename string
+--- @return integer addr
+--- @return table meta
+local function scriptPlace(blocks, filename)
+  local addr, meta = hex.meta(blocks)
+  if not addr then
+    refuse(
+      filename .. " has no place for a Lua program: it is",
+      "not firmware the micro:bit tools work with."
+    )
+  end
+  return addr, meta
+end
+
+--- Put a script into a hex file's blocks, or stop, saying so,
+--- when it has no place for one or the script is longer
+--- @param blocks table[]
+--- @param filename string the hex file's name
+--- @param script string
+local function embedInto(blocks, filename, script)
+  local room = hex.room(scriptPlace(blocks, filename))
+  if room < #script then
+    local most = "%s has room for %d bytes of Lua; this is %d."
+    refuse(
+      most:format(filename, room, #script),
+      "Make it shorter, then try again."
+    )
+  end
+  hex.embed(blocks, script)
 end
 
 --- The start of a script, up to PEEK bytes, in whole lines
@@ -795,7 +923,10 @@ end
 --- @param lua_name string?
 function extract(hex_name, lua_name)
   local name = lua_name or LUA
-  writefile(name, hex.script(blocksOf(hex_name or HEX)))
+  local from = hex_name or HEX
+  local blocks = blocksOf(from)
+  scriptPlace(blocks, from)
+  writefile(name, hex.script(blocks))
 end
 
 --- Whether a name is the robots' firmware's, in any case: the
@@ -806,17 +937,33 @@ local function isFirmware(name)
   return name:upper() == HEX:upper()
 end
 
+--- Stop embed when it has no file to write, or would write
+--- over the robots' firmware
+--- @param hex_name string?
+local function writable(hex_name)
+  if not hex_name then
+    refuse(
+      "Name the firmware file to write, such as",
+      "embed(\"mine.hex\")."
+    )
+  end
+  if isFirmware(hex_name) then
+    refuse(
+      HEX .. " is the robots' firmware and is never written",
+      "to. Name another file, such as embed(\"mine.hex\")."
+    )
+  end
+end
+
 --- Put a Lua script into a hex file. MICROBIT.hex is always
 --- the firmware read from, and never the one written to: it
 --- is the one copy that has to stay as it came.
 --- @param hex_name string
 --- @param lua_name string?
 function embed(hex_name, lua_name)
-  assert(hex_name, "name the hex file to write")
-  local firmware = isFirmware(hex_name)
-  assert(not firmware, HEX .. " cannot be overwritten")
+  writable(hex_name)
   local blocks = blocksOf(HEX)
-  hex.embed(blocks, read(lua_name or LUA))
+  embedInto(blocks, HEX, read(lua_name or LUA))
   writefile(hex_name, hex.write(blocks))
 end
 
@@ -973,7 +1120,7 @@ local function build(filename)
     return nil
   end
   local blocks = blocksOf(HEX)
-  hex.embed(blocks, script)
+  embedInto(blocks, HEX, script)
   return hex.write(blocks)
 end
 
@@ -1101,10 +1248,12 @@ end
 --- @param name string
 --- @param data string
 local function uploadToDrive(name, data)
-  local version = hex.version(hex.parse(data))
+  local version = hex.version(parsed(name, data))
   compy.audio.hyperjump()
   local ok, err = flash_microbit(data)
-  assert(ok, err)
+  if not ok then
+    refuse(err or "The Compy could not copy " .. name .. ".")
+  end
   print(name .. " is sent. The micro:bit's light blinks")
   print("while it writes it, then it restarts with it.")
   holds(name, version)
@@ -1133,8 +1282,9 @@ end
 --- @return string? name
 --- @return string? data
 local function fileToSend(filename, cable)
-  if not cable then
-    assert(detect_microbit(), "no micro:bit plugged in")
+  local unseen = not cable and not detect_microbit()
+  if unseen then
+    noBoard("upload")
   end
   return hexFor(filename)
 end
@@ -1195,6 +1345,15 @@ function help()
   print("Write the files with edit(filename), type to the")
   print("board in the \"terminal\" project.")
 end
+
+-- A command a person types says a refusal in words
+send = plainly(send)
+exec = plainly(exec)
+restart_microbit = plainly(restart_microbit)
+hexmap = plainly(hexmap)
+extract = plainly(extract)
+embed = plainly(embed)
+upload = plainly(upload)
 
 echo()
 help()

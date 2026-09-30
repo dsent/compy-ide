@@ -1424,8 +1424,8 @@ describe('Serial flash', function()
     local s = Serial.new(FakeBackend.new())
     local ok, err = s:flash(F.hex(1), quiet)
     assert.is_nil(ok)
-    assert.truthy(err:find('Plug the micro:bit into the Compy',
-      1, true))
+    assert.truthy(err:find('Plug it in with a data cable, or'
+      .. ' unplug it and plug it in again, then try again.', 1, true))
   end)
 
   it('says how to leave maintenance mode', function()
