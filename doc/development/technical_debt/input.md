@@ -343,6 +343,16 @@ per-run boundary) rather than as a phase of a lifecycle.
 
 ## BACKLOG
 
+### T-TEMP-NAME-DIRECTORY-BLOCKS-SAVES — a folder at a save's temporary name stops every save of its file
+
+- **Where:** `src/util/filesystem.lua`, `create_new`: a leftover at the reserved name is removed with
+  `os.remove`, which cannot remove a folder with files in it, so the retry fails too.
+- **Scenario:** someone makes a folder `.main.lua.compy-tmp`, with a file in it, in the project, from
+  a PC with the card in it. Every save of `main.lua` fails, and the editor says "Could not save the
+  file. Check the storage and try again.", which does not lead to the folder.
+- **Why it stays (2026-09-30):** Compy never makes such a folder, and a project refuses the name;
+  only a change to the card from outside does.
+
 ### T-SAVE-MAY-RECASE-NAME — a save through a name differing only in case may change the name on the card
 
 - **Where:** `src/util/filesystem.lua`, `FS.replace`: the rename puts the file in place under the
