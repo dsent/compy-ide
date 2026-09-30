@@ -774,10 +774,10 @@ end
 local function overwrites(filename, hex_name)
   if isFirmware(hex_name) then
     print(filename .. " would overwrite " .. HEX .. ", the")
-    print("robots' firmware. Give your script another name:")
-    local copy = "writefile(\"robot.lua\", readfile(%q))"
-    print(copy:format(filename))
-    print("then upload(\"robot.lua\").")
+    print("robots' firmware. Put it in a firmware file of")
+    print("another name, then send that:")
+    print(("embed(\"mine.hex\", %q)"):format(filename))
+    print("upload(\"mine.hex\")")
     return true
   end
   return false

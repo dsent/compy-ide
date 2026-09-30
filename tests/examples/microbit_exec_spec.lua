@@ -721,11 +721,11 @@ describe('micro:bit exec #microbit', function()
         local told = table.concat(said, ' ')
         assert.truthy(told:find(script .. ' would overwrite'
           .. ' MICROBIT.hex', 1, true))
-        assert.truthy(told:find('Give your script another name', 1,
-          true))
-        assert.truthy(told:find('writefile("robot.lua", readfile("'
-          .. script .. '"))', 1, true))
-        assert.truthy(told:find('upload("robot.lua")', 1, true))
+        assert.truthy(told:find('a firmware file of another name',
+          1, true))
+        assert.truthy(told:find('embed("mine.hex", "' .. script
+          .. '")', 1, true))
+        assert.truthy(told:find('upload("mine.hex")', 1, true))
       end)
   end
 
@@ -735,6 +735,36 @@ describe('micro:bit exec #microbit', function()
     files['MICROBIT.hex'] = f:read('*a')
     f:close()
   end
+
+  --- the Compy's own script, taken out with extract, is longer
+  --- than a Lua upload takes: the advice upload gives for
+  --- MICROBIT.lua puts it on the board all the same
+  it('puts the Compy\'s own script back on the way upload says',
+    function()
+      local tools = load_tools()
+      local hex = require('examples.microbit.hex')
+      firmware()
+      tools.extract()
+      local script = files['MICROBIT.lua']
+      assert.is_true(6000 < #script)
+      said = {}
+      tools.upload('MICROBIT.lua')
+      assert.is_false(flashed)
+      local told = table.concat(said, '\n')
+      local embed = told:match('embed%b()')
+      local upload = told:match('upload%("mine.hex"%)')
+      assert.truthy(embed and upload)
+      local sent
+      tools.flash_microbit = function(data)
+        sent = data
+        flashed = true
+        return true
+      end
+      setfenv(assert(loadstring(embed)), tools)()
+      setfenv(assert(loadstring(upload)), tools)()
+      assert.is_true(flashed)
+      assert.equal(script, hex.script(hex.parse(sent)))
+    end)
 
   --- the card does not tell microbit.hex from MICROBIT.hex
   it('embed will not write microbit.hex in any case', function()
