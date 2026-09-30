@@ -18,6 +18,17 @@
 
 local utf8 = require("utf8")
 
+--- The line the micro:bit example's exec has the board print
+--- once a file has run (STATUS in its tools.lua). A file
+--- that ran on past exec's wait ends while echo shows the
+--- board, so echo says how it ended in its place.
+local STATUS = "^\30exec (%a+)$"
+local ENDED = {
+  ok = "The program on the micro:bit has ended.",
+  error = "The program on the micro:bit stopped on the"
+      .. " mistake above.",
+}
+
 --- How long the board must be quiet before an unterminated
 --- tail is shown anyway
 local SETTLE_S = 0.2
@@ -97,7 +108,8 @@ function Echo:bytes(chunk)
   while true do
     local line, rest = self.held:match("^([^\n]*)\n(.*)$")
     if not line then break end
-    self.say(line)
+    local status = line:match(STATUS)
+    self.say(status and ENDED[status] or line)
     self.held = rest
   end
   self.settle = SETTLE_S

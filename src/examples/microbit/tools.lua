@@ -116,7 +116,9 @@ end
 --- How the chunk exec sends ends: it runs the file, says a
 --- mistake in the board's own words, then says how the file
 --- ended on a line of its own, which starts with a character
---- no program prints by chance (STATUS)
+--- no program prints by chance (STATUS). The console's echo
+--- knows it too, and says how a file that ran on past exec's
+--- wait ended in its place.
 local STATUS = "\30exec "
 local RAN = table.concat({
   " local ok = file ~= nil",

@@ -47,6 +47,24 @@ describe("echo", function()
     assert.same({}, wrote)
   end)
 
+  --- a file exec handed over ends while echo shows the board
+  it("says how a file ended in place of exec's status line",
+    function()
+      e:bytes("done\r\n\30exec ok\r\n")
+      e:bytes("oops\r\n\30exec error\r\n")
+      assert.same({ "done", "The program on the micro:bit has"
+        .. " ended.", "oops", "The program on the micro:bit"
+        .. " stopped on the mistake above." }, said)
+      for _, line in ipairs(said) do
+        assert.is_nil(line:find("\30", 1, true))
+      end
+    end)
+
+  it("shows a line that only looks like a status", function()
+    e:bytes("x \30exec ok\r\n")
+    assert.same({ "x \30exec ok" }, said)
+  end)
+
   it("assembles a line from single characters", function()
     for c in ("hi\r"):gmatch(".") do e:bytes(c) end
     assert.same({ "hi" }, said)
