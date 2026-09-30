@@ -30,8 +30,16 @@ local mx, my = 0, 0
 -- Held-button state the widget's drag-select reads through
 -- love.mouse.isDown; see mock_runtime below.
 local mouse_down = false
+-- The modes a program can set on the mouse and the IDE puts
+-- back when it stops: global device state, which outlives the
+-- run in LÖVE too. Read and set through love.mouse only.
+local mouse_modes = { }
 
 local function mock_runtime()
+  mouse_modes = {
+    relative = false, grabbed = false, visible = true,
+    cursor = nil,
+  }
   mock.mock_love({
     state = {
       app_state             = 'ready',
@@ -54,6 +62,16 @@ local function mock_runtime()
     mouse      = {
       getPosition = function() return mx, my end,
       isDown      = function() return mouse_down end,
+      setRelativeMode = function(on) mouse_modes.relative = on end,
+      getRelativeMode = function() return mouse_modes.relative end,
+      setGrabbed = function(on) mouse_modes.grabbed = on end,
+      isGrabbed = function() return mouse_modes.grabbed end,
+      setVisible = function(on) mouse_modes.visible = on end,
+      isVisible = function() return mouse_modes.visible end,
+      isCursorSupported = function() return true end,
+      -- nil is the system cursor, as setCursor() makes it
+      setCursor = function(c) mouse_modes.cursor = c end,
+      getCursor = function() return mouse_modes.cursor end,
     },
     paths      = { project_path = '/tmp' },
     filesystem = { getInfo = function() end },

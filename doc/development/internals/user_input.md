@@ -357,9 +357,9 @@ The gateway (`love.handlers.*`) routes on the **active route** and nothing else:
 pointer and the derived clicks are installed together at run start
 (`occupy_input`) and released together at the project's stop, when
 `stop_project_run` reinstalls the console's own handlers through
-`set_default_handlers`. The `'running'` → `'project_open'` transition releases
+`set_default_handlers`. The `'running'` → `'ready'` transition releases
 nothing: a non-blocking project that returns (no `update`/`draw` hooked) drops
-to `'project_open'` and keeps every channel, so its widget's submit/cancel and
+to `'ready'` and keeps every channel, so its widget's submit/cancel and
 any pointer hook keep working.
 
 `Controller.release_keyboard_route` exists for one case only — defensive cleanup
@@ -371,10 +371,11 @@ of the normal lifecycle.
 `Controller.user_is_interactive()` — `love.state.user_input ~= nil or
 user_pointer`, the latter set when a project installs any pointer/click handler
 and reset in `set_default_handlers` — gates exactly one thing: `love.quit`
-treats `'project_open'` **plus** interactivity the same as `'running'`, so
-Ctrl+Esc stops the project back to the console instead of quitting the app. An
-idle console reached through `'project_open'`, with neither a widget nor a
-pointer hook, falls through and the app quits.
+treats `'ready'` **plus** interactivity the same as `'running'`, so the
+project's own quit (`love.event.quit`) stops it back to the console instead of
+quitting the app. An idle console in `'ready'`, with neither a widget nor a
+pointer hook, falls through and the app quits. `Ctrl+Esc` quits the app in
+every state.
 
 `ProjectInputController` carries no per-event "am I still running?" guard: once
 `stop_project_run` re-points `love.keypressed` and friends at the console, the
@@ -771,7 +772,7 @@ eliminated, which is what the NFR asks for (`decisions/input.md`, D-WIDGET-AT-BO
 The run boundary, not the open boundary: `restart()` and the `Ctrl+T` quickswitch call
 `stop_project_run` + `run_project` directly and never re-open, so a widget built at open would
 survive into a restart. Destruction is bound to the **stop**, never to the
-`running → project_open` transition — a non-blocking project (sapper) lives in `project_open` and
+`running → ready` transition — a non-blocking project (sapper) lives in `ready` and
 still owns its widget there.
 
 Activation: `compy.input.show(config)` calls

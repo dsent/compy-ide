@@ -1377,7 +1377,7 @@ chord and of what our re-homing adopted.
 - **Revisit:** if a Web build is released, or when CI grows a second
   interpreter.
 
-### A project that raises leaves global device state dirty; no force-reset exists
+### A project that raises leaves global device state dirty; only the mouse is force-reset
 
 - **State:** the sandbox deep-clones the `love` table but shares leaf C
   functions, so a project's imperative `love.*` calls — `setKeyRepeat`,
@@ -1386,7 +1386,7 @@ chord and of what our re-homing adopted.
   `compy.before_exit`, and by ratified contract that hook fires on **stop**
   paths only; crash is explicitly out of its scope. A project that mutates
   global state in top-level code and then raises therefore never restores it:
-  `run_project`'s failed-run branch drops to `project_open` without ever
+  `run_project`'s failed-run branch drops to `ready` without ever
   calling `stop_project_run`, so nothing fires, and the dirty state bleeds
   into the next run. `examples/keyboard` is the canonical mutator — it calls
   `love.keyboard.setTextInput(true)` and `love.mouse.setRelativeMode(true)`
@@ -1425,6 +1425,16 @@ chord and of what our re-homing adopted.
   `reset_before_exit` only, deliberately, since a partially initialised project
   runs no teardown. Wiring the force-reset means calling the framework half on
   the crash path too, which is a decision this entry does not pre-empt.
+- **The mouse is force-reset (2026-09-30).** `flush_program_state`
+  (`consoleController.lua`), a step of its own beside `framework_before_exit`,
+  puts the mouse back — relative mode off, not grabbed, visible, the system
+  cursor — on every stop path after the project's hook, on the failed-run
+  branch (the reset alone: the hook still does not fire there), when a
+  program's code ends with no widget shown and no pointer handler left,
+  before every run starts, and when the IDE starts (Ctrl+Esc restarts it in
+  the same process without a stop). A pause gives the console that mouse and
+  `continue()` gives the program back its own. Keyboard modes and audio are
+  still as this entry describes.
 
 ### `compy.before_exit` is a closure slot
 

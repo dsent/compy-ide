@@ -48,7 +48,7 @@ lives in a global subsystem nobody snapshots.
 |---|---|---|
 | **T1 — handlers** (LÖVE calls these "callbacks"; here the word is the widget's — see `../decisions/input.md`, *"Vocabulary — hook, callback, handler"*) | `love.draw`, `love.update`, `love.keypressed`, `love.textinput`, `love.mouse*`… defined by the project | **Yes — framework-managed.** Set on the project's cloned `love`; harvested by `save_user_handlers(runner_env['love'])` (`consoleController.lua:824`) and wired into the real dispatch; reset to defaults on stop (`set_default_handlers` / `restore_user_handlers`, `controller.lua:826`). No leak. |
 | **T2 — `compy.*`** | `compy.terminal`, `compy.audio`, `compy.graphics`, `compy.input` **(supported since 1.0.0-rc20260712)**… injected into the env (`get_compy_namespace`, `consoleController.lua:360`) | **Yes — framework wrappers.** The project calls a controlled surface; the framework owns the underlying object. No leak. |
-| **T3 — raw `love.*` imperative calls** | `love.keyboard.setKeyRepeat`/`setTextInput`, `love.mouse.setRelativeMode`/`setVisible`, raw `love.audio.newSource`/`play`, cursor… called (not defined) by the project | **No.** These invoke the shared C functions → mutate **real global SDL/LÖVE subsystem state**. Nothing snapshots or restores them across run boundaries. **They leak into the IDE/console after the project exits.** |
+| **T3 — raw `love.*` imperative calls** | `love.keyboard.setKeyRepeat`/`setTextInput`, `love.mouse.setRelativeMode`/`setVisible`, raw `love.audio.newSource`/`play`, cursor… called (not defined) by the project | **The mouse only.** These invoke the shared C functions → mutate **real global SDL/LÖVE subsystem state**. The framework puts the mouse back (relative mode, grab, visibility, cursor) whenever a run ends and before one starts (`flush_program_state`). Keyboard modes and audio are not restored across run boundaries. **They leak into the IDE/console after the project exits.** |
 
 ### Font at project startup
 
@@ -63,8 +63,8 @@ selected a custom font. A project can select its own font during execution.
   permanently hijack the console, because the framework swaps handlers in/out. Any input feature that
   reroutes callbacks (e.g. the `ProjectInputController` added in 1.0.0-rc20260712) lives in this T1
   machinery.
-- **T3 is the real leak surface.** A project that sets relative-mouse mode, hides the cursor, disables
-  key-repeat, or leaves a sound playing leaves that state changed after exit.
+- **T3 is the real leak surface.** A project that disables key-repeat or leaves a sound playing
+  leaves that state changed after exit.
   Example: `src/examples/keyboard/input.lua` *wants* to disable key-repeat for clean input but
   deliberately doesn't, **because it cannot restore it on exit** — and hand-rolls edge-tracking instead.
 - **The robust fix for T3 is framework snapshot/restore across run boundaries** — extend the T1
@@ -100,11 +100,11 @@ returns (D-STOP-IS-FW) — so an absent hook is skipped, a raising one is logged
 continues, and a project cannot refuse to stop, defer the stop, or break it by failing. The consequence a project author has to
 plan around is the one this cannot fix: **a project that raises before reaching a clean state never
 gets to run its teardown at all**, because the raise, not the stop, is what ends the run. That gap is
-the failure mode the "proposed robust fix" above is a counter-measure for — identified and
-registered, not implemented. The register entry is
+the failure mode the "proposed robust fix" above is a counter-measure for — implemented for the
+mouse, registered for the rest. The register entry is
 `doc/development/technical_debt/input.md`, "A project that raises leaves global device state dirty;
-no force-reset exists", which names the same crash path from the other side:
-`run_project`'s failed-run branch drops to `project_open` without ever calling `stop_project_run`,
+only the mouse is force-reset", which names the same crash path from the other side:
+`run_project`'s failed-run branch drops to `ready` without ever calling `stop_project_run`,
 so the hook is uninstalled but never fired. See `doc/development/decisions/input.md`, D-STOP-IS-FW,
 for the hook's contract (framework-owned teardown, called from inside it, return value unread) and
 D-ROUTE-LIFETIME for the teardown invariant itself.
@@ -122,8 +122,8 @@ Each says what you get by following it, so the list can be scanned rather than s
 - **The `before_exit` contract** — teardown is the framework's, the hook is called from inside it,
   and its return value is unread: [`../decisions/input.md`](../decisions/input.md), D-STOP-IS-FW.
 - **Why the input route outlives the run** — every channel is held from activation until the
-  project *stops*, so a non-blocking project sitting in `project_open` keeps them all:
+  project *stops*, so a non-blocking project sitting in `ready` keeps them all:
   [`../decisions/input.md`](../decisions/input.md), D-ROUTE-LIFETIME.
-- **The T3 leak, registered rather than fixed**:
+- **The T3 leak, fixed for the mouse and registered for the rest**:
   [`../technical_debt/input.md`](../technical_debt/input.md), *"A project that raises leaves
-  global device state dirty; no force-reset exists"*.
+  global device state dirty; only the mouse is force-reset"*.

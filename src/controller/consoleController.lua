@@ -34,6 +34,7 @@ local messages = {
 --- @field editor EditorController
 --- @field view ConsoleView?
 --- @field cfg Config
+--- @field paused_mouse table? the paused program's, see suspend
 --- methods
 --- @field edit function
 --- @field finish_edit function
@@ -157,10 +158,10 @@ end
 --- there is no return value here for a caller to read either.
 ---
 --- Single invocation point by construction, so a second stop
---- path cannot grow its own arrangement. It is also where
---- forced restore of global device state belongs once that is
---- built: the framework has teardown of its own to do, and
---- this is the seam for it. See
+--- path cannot grow its own arrangement. The framework's forced
+--- restore of global device state is flush_program_state, which
+--- the stop path calls after this, and the paths that never
+--- reach it call on their own. See
 --- doc/development/technical_debt/input.md, "A project that
 --- raises leaves global device state dirty".
 ---
@@ -234,6 +235,36 @@ end
 local function destroy_input_widget()
   hide_input_widget()
   love.state.user_input_controller = nil
+end
+
+--- The mouse as the console needs it: absolute, free, shown,
+--- with the system cursor. A program may capture it (relative
+--- mode is pointer capture on Android, where the pointer then
+--- hides and moves a cursor nobody sees) and leave it so.
+local CONSOLE_MOUSE = {
+  relative = false, grabbed = false, visible = true,
+}
+
+--- @return table? mouse what the program has set, for set_mouse
+local function get_mouse()
+  local m = love.mouse
+  if not m then return end
+  return {
+    relative = m.getRelativeMode(),
+    grabbed = m.isGrabbed(),
+    visible = m.isVisible(),
+    cursor = m.isCursorSupported() and m.getCursor() or nil,
+  }
+end
+
+--- @param mouse table? from get_mouse, or CONSOLE_MOUSE
+local function set_mouse(mouse)
+  local m = love.mouse
+  if not (m and mouse) then return end
+  m.setRelativeMode(mouse.relative)
+  m.setGrabbed(mouse.grabbed)
+  m.setVisible(mouse.visible)
+  if m.isCursorSupported() then m.setCursor(mouse.cursor) end
 end
 
 --- @param cc ConsoleController
@@ -464,6 +495,7 @@ function ConsoleController:run_project(name)
     if f then
       local n = name or P.current.name or 'project'
       Log.info('Running \'' .. n .. '\'')
+      self:flush_program_state()
       love.state.app_state = 'running'
       -- Before the project's top-level code, which may show the
       -- widget on its first line. This is the run seam, chosen
@@ -501,6 +533,7 @@ function ConsoleController:run_project(name)
         -- queued for the board and has not sent goes too.
         SerialPort:drop()
         SerialPort:programEnded()
+        self:flush_program_state()
         love.state.app_state = 'ready'
         print('Error: ', run_err)
       else
@@ -520,6 +553,13 @@ function ConsoleController:run_project(name)
           -- the one speaking and the console listens again.
           SerialPort:programIdle()
           love.state.app_state = 'ready'
+          -- Without a widget or a pointer handler nothing of the
+          -- program answers the pointer, and the console is on
+          -- screen: it needs its mouse now, even if keys or the
+          -- board still reach the program.
+          if not self.main_ctrl.user_is_interactive() then
+            self:flush_program_state()
+          end
         end
       end
     else
@@ -1598,6 +1638,11 @@ function ConsoleController.prepare_project_env(cc)
       -- resume
       love.state.app_state = 'running'
       cc.main_ctrl.restore_user_handlers(cc)
+      -- After the handlers: a cursor the program has released
+      -- raises here, and the program runs on regardless.
+      local mouse = cc.paused_mouse
+      cc.paused_mouse = nil
+      set_mouse(mouse)
     else
       print('No project halted')
     end
@@ -1780,6 +1825,10 @@ function ConsoleController:suspend()
 
   self.model.output:invalidate_terminal()
 
+  -- The console takes over while the program waits: it gets
+  -- its mouse, and continue() gives the program back its own.
+  self.paused_mouse = get_mouse()
+  set_mouse(CONSOLE_MOUSE)
   self.main_ctrl.save_user_handlers(runner_env['love'])
   self.main_ctrl.set_default_handlers(self, self.view)
 end
@@ -1914,7 +1963,25 @@ function ConsoleController:stop_project_run()
   self.stopping = true
   local ok, err = pcall(self._stop_project_run, self)
   self.stopping = false
-  if not ok then error(err, 0) end
+  if not ok then
+    -- A step ahead of the reset raised: the console still
+    -- gets its mouse.
+    self:flush_program_state()
+    error(err, 0)
+  end
+end
+
+--- Put back what a program changed and the console needs,
+--- whatever the program did and however it ended: the mouse,
+--- to CONSOLE_MOUSE. The IDE's own teardown, never the
+--- program's: a program that crashed, or never cleans up,
+--- leaves the same console as one that does. Every path that
+--- ends a run calls it, and run_project again before a run
+--- starts, for a path that ended one without it, and main.lua
+--- once when the IDE starts.
+function ConsoleController:flush_program_state()
+  self.paused_mouse = nil
+  set_mouse(CONSOLE_MOUSE)
 end
 
 function ConsoleController:_stop_project_run()
@@ -1925,6 +1992,9 @@ function ConsoleController:_stop_project_run()
   self:evacuate_required()
   local compy = self:get_project_env().compy
   framework_before_exit(compy)
+  -- After the project's own hook, which may still use the
+  -- mouse as it left it.
+  self:flush_program_state()
   self.main_ctrl.set_default_handlers(self, self.view)
   self.main_ctrl.set_love_update(self)
   -- After framework_before_exit above: the project's own
