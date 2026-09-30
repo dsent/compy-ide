@@ -587,6 +587,10 @@ Controller = {
   --- @param CC ConsoleController
   set_love_update = function(CC)
     local function update(dt)
+      -- A Space's key press follows its glyph within the
+      -- frame; a wait still open at the next frame waits for
+      -- a press that is not coming (a glyph-only keyboard)
+      CC.swallow_key = nil
       if love.PROFILE then
         Prof.update()
       end

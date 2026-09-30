@@ -377,6 +377,23 @@ describe('editor key contract #input', function()
         assert.same({ 'space' }, reached)
       end)
 
+    it('a glyph-only confirmation holds back no later Space press',
+      function()
+        open_dirty_block()
+        chord({ 'lctrl', 't' })
+        --- an on-screen keyboard: the glyph, and no key press
+        F.session.type(' ')
+        assert.same({ 'run_project' }, took)
+        F.love_update(1)
+        local route = love.keypressed
+        local reached = {}
+        finally(function() love.keypressed = route end)
+        love.keypressed = function(k) reached[#reached + 1] = k end
+        --- the next frame, a physical Space: key first
+        F.session.press('space')
+        assert.same({ 'space' }, reached)
+      end)
+
     it('Ctrl+Space confirms and holds no glyph back', function()
       open_dirty_block()
       chord({ 'lctrl', 'q' })
