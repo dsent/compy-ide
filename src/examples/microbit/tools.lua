@@ -631,118 +631,21 @@ local function hexNameOf(filename)
   return base .. (upper and ".HEX" or ".hex")
 end
 
---- A script as a long string: a line break before its end
---- only when the script's last character would join it
---- @param script string
---- @return string
-local function quoted(script)
-  local close = closing(script)
-  local open = (close:gsub("%]", "["))
-  local joins = script:find("[%]=]$") ~= nil
-  local tail = joins and "\n" or ""
-  return open .. "\n" .. script .. tail .. close
-end
-
---- Where the firmware's script arms the port and shows its
---- prompt, found last: the last thing it does, after which
---- the REPL and the event handlers run
-local ARMING = ".*()\nserial_session%.prompt%(%)"
-
---- The Lua file, run where the firmware's script is about to
---- show its prompt and arm the port, with the board's globals:
---- print, the robot commands, and on_event, which the file may
---- set. The firmware runs one Lua call at a time, so no event
---- comes into Lua while the file's code runs. A mistake stops
---- only the file: it is printed, the lights scroll "error" and
---- its line, and the prompt comes after it all the same. What
---- the wrapper uses after the file it takes before, so a file
---- that sets those globals changes nothing here.
-local RUN_FILE = table.concat({
-  "",
-  "do",
-  "local pcall, tostring, print = pcall, tostring, print",
-  "local match, sub = string.match, string.sub",
-  "local scroll = microbit.display.scrollAsync",
-  "local file, err = loadstring(%s, %s)",
-  "local ran = file ~= nil",
-  "if ran then ran, err = pcall(file) end"
-}, "\n")
-
---- A mistake, said: the whole of it printed, and on the
---- lights "error" and its line in the file, or, when it names
---- no line of the file, its first sentence, up to 40
---- characters. Its words for a mistake that says nothing, and
---- the pattern for a line of the file.
-local RUN_SAY = table.concat({
-  "local function say()",
-  "  local text = err == nil and %q or tostring(err)",
-  "  print(text)",
-  "  local line = match(text, %q)",
-  "  local short = line and 'error, line ' .. line",
-  "  local first = match(text, '^[^.]+') or 'error'",
-  "  scroll(short or sub(first, 1, 40))",
-  "end",
-  "if not ran then pcall(say) end",
-  "end"
-}, "\n")
-
 --- The largest Lua file upload puts on the board, in bytes.
---- The board reads the file with about 100 KB of memory,
---- a quarter of it taken by the firmware's own script. It
---- holds the file as text, as the text read into the parser,
---- and as parsed code, and the parsed code grows with how
---- much the file does per character: a table of distinct
---- strings or of functions costs about three times what a
---- program of the same length usually does. A board that
---- runs out of memory reading its program does not start: it
---- shows 020 on every start until upload() puts the shipped
---- firmware back. Measured with the board's Lua and a
---- CODAL-like allocator on a computer, 2500 keeps the
---- densest code tried within the memory a 7000-character
---- program of the usual kind takes, and 7916 characters of
---- that kind started on a board; the densest code at 2500 is
---- yet to be tried on one.
-local MAX_SCRIPT = 2500
-
---- Say that MICROBIT.hex has no place for a Lua file, and
---- how to send the file alone
---- @param filename string
-local function noPlace(filename)
-  local hex_name = hexNameOf(filename)
-  print(HEX .. " here is not the firmware the Compy came")
-  print("with, and has no place for your program. To send it")
-  print("alone, without the board's prompt, type")
-  print(("embed(%q, %q)"):format(hex_name, filename))
-  print(("then upload(%q)."):format(hex_name))
-end
-
---- The code that runs a Lua file inside the firmware's script
---- @param script string
---- @param filename string
---- @return string
-local function runOf(script, filename)
-  local name = string.format("%q", "@" .. filename)
-  local file = RUN_FILE:format(quoted(script), name)
-  local silent = filename .. " stopped, and said nothing more."
-  local line = "^" .. filename:gsub("%p", "%%%0") .. ":(%d+):"
-  return file .. "\n" .. RUN_SAY:format(silent, line)
-end
-
---- The firmware's own script with a Lua file run in it; nil,
---- said, when the firmware's script has no place for one
---- @param runtime string
---- @param script string
---- @param filename string
---- @return string?
-local function withRuntime(runtime, script, filename)
-  local at = runtime:match(ARMING)
-  if not at then
-    noPlace(filename)
-    return nil
-  end
-  local run = runOf(script, filename)
-  return runtime:sub(1, at - 1) .. run .. runtime:sub(at)
-end
+--- The file becomes the board's whole program. The board
+--- reads it in place, from its flash, with about 90 KB of
+--- memory free, and the parsed code grows with how much the
+--- file does per character: a long table of distinct strings
+--- costs about three times what a program of the same length
+--- usually does. A board that runs out of memory reading its
+--- program does not start: it shows 020 on every start until
+--- upload() puts the Compy's firmware back. Measured with the
+--- board's Lua and a CODAL-like allocator on a computer, 6000
+--- keeps the densest code tried within the memory that a
+--- 7916-character program of the usual kind took, beside the
+--- Compy's own script, on a board where it started; the
+--- densest code at 6000 is yet to be tried on one.
+local MAX_SCRIPT = 6000
 
 --- Say that a Lua file is empty
 --- @param filename string
@@ -763,14 +666,45 @@ local function tooLong(filename)
   print("upload it again.")
 end
 
---- A Lua file's text; nil, said, when it holds no program or
---- is too long for the board
+--- Say what the mistake in a Lua file is, and where
+--- @param filename string
+--- @param err string LuaJIT's words, "name:line: what"
+local function mistake(filename, err)
+  local line, what = err:match(":(%d+): (.*)$")
+  local where = line and " on line " .. line or ""
+  print(filename .. " has a mistake" .. where .. ":")
+  print(what or err)
+  print("The micro:bit would stop on it every time it starts.")
+  print(("Put it right with edit(%q), then"):format(filename))
+  print("upload it again.")
+end
+
+--- A Lua file's text, when the board can read it; nil, said,
+--- when it has a mistake that stops it from being read. The
+--- Compy reads it with LuaJIT, which takes a few things the
+--- board's Lua 5.1 does not: goto and labels, \x and \z in
+--- strings, and a [[ inside a [[ ]] string. A file with one
+--- of those passes here, and the board says "Compile error"
+--- at every start.
+--- @param filename string
+--- @param script string
+--- @return string?
+local function readable(filename, script)
+  local fn, err = loadstring(script, "=" .. filename)
+  if fn then
+    return script
+  end
+  mistake(filename, err)
+  return nil
+end
+
+--- A Lua file's text, its line endings the board's own; nil,
+--- said, when it holds no program, is too long for the board,
+--- or has a mistake that stops it from being read
 --- @param filename string
 --- @return string?
 local function scriptOf(filename)
-  -- a CR first would be taken with the newline after the
-  -- bracket, and every line counted one too few
-  local script = read(filename):gsub("\r\n?", "\n")
+  local script = (read(filename):gsub("\r\n?", "\n"))
   if not script:find("%S") then
     empty(filename)
     return nil
@@ -779,12 +713,11 @@ local function scriptOf(filename)
     tooLong(filename)
     return nil
   end
-  return script
+  return readable(filename, script)
 end
 
---- MICROBIT.hex with a Lua file run in its own script, so
---- the board keeps its REPL and robot commands; nil, said,
---- when the file is empty or too long
+--- MICROBIT.hex with a Lua file as its program in place of
+--- the Compy's own; nil, said, when the file cannot be one
 --- @param filename string
 --- @return string?
 local function build(filename)
@@ -793,12 +726,7 @@ local function build(filename)
     return nil
   end
   local blocks = blocksOf(HEX)
-  local runtime = hex.script(blocks)
-  local whole = withRuntime(runtime, script, filename)
-  if not whole then
-    return nil
-  end
-  hex.embed(blocks, whole)
+  hex.embed(blocks, script)
   return hex.write(blocks)
 end
 
@@ -839,8 +767,8 @@ local function saved(hex_name, data)
 end
 
 --- The hex file upload sends, and what it holds: the file
---- itself, or for a Lua file, a hex file of its name that
---- runs the script too; nil, said, when that would overwrite
+--- itself, or for a Lua file, a hex file of its name with the
+--- file as its program; nil, said, when that would overwrite
 --- the robots' firmware, cannot be built or is not saved
 --- @param filename string
 --- @return string? name
@@ -950,8 +878,8 @@ local function fileToSend(filename, cable)
 end
 
 --- Put a hex file on the board, or a Lua file: that goes
---- into a hex file of its name first, after the firmware's
---- own script, which it keeps
+--- into a hex file of its name first, as the board's whole
+--- program in place of the Compy's own
 --- @param filename string?
 function upload(filename)
   if not mayUpload() then
