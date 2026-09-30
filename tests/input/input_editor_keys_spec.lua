@@ -309,6 +309,30 @@ describe('editor key contract #input', function()
       assert.same('', string.unlines(F.cc.input:get_text()))
     end)
 
+    for _, between in ipairs({
+      { 'a Shift press', function() F.session.press('lshift') end },
+      { "the Space's repeat",
+        function() F.session.repeat_press('space') end },
+    }) do
+      it('the Space that confirms types nowhere after '
+        .. between[1], function()
+          F.cc.quit_project = function()
+            took[#took + 1] = 'quit_project'
+            orig.quit_project(F.cc)
+          end
+          local closed = F.cc.close_project
+          finally(function() F.cc.close_project = closed end)
+          F.cc.close_project = function() end
+          open_dirty_block()
+          chord({ 'lctrl', 'q' })
+          F.session.press('space')
+          between[2]()
+          F.session.type(' ')
+          assert.same({ 'quit_project' }, took)
+          assert.same('', string.unlines(F.cc.input:get_text()))
+        end)
+    end
+
     it('the Space that confirms presses nothing after', function()
       open_dirty_block()
       chord({ 'lctrl', 'q' })

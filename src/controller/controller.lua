@@ -977,10 +977,13 @@ Controller = {
       end
       -- The other half of a Space that confirmed leaving the
       -- editor, once the editor is gone
-      -- (EditorController:ask_to_leave): each is one-shot.
-      local swallow = CC.swallow_key
-      CC.swallow_key, CC.swallow_glyph = nil, nil
-      if swallow and swallow == k then return end
+      -- (EditorController:ask_to_leave). A token waits for
+      -- the event it names, through other keys and repeats;
+      -- the next glyph ends both.
+      if CC.swallow_key and CC.swallow_key == k then
+        CC.swallow_key = nil
+        return
+      end
       local reservation = RESERVED.keypressed[combo_string(k)]
       if reservation then reservation() end
 
