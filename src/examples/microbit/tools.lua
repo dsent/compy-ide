@@ -853,17 +853,18 @@ local function scriptPlace(blocks, filename)
   return addr, meta
 end
 
---- Put a script into a hex file's blocks, or stop, saying so,
---- when it has no place for one or the script is longer
+--- Put a Lua file's script into MICROBIT.hex's blocks, or
+--- stop, saying so, when the firmware has no place for one or
+--- the script does not fit in it
 --- @param blocks table[]
---- @param filename string the hex file's name
+--- @param lua_name string
 --- @param script string
-local function embedInto(blocks, filename, script)
-  local room = hex.room(scriptPlace(blocks, filename))
+local function embedInto(blocks, lua_name, script)
+  local room = hex.room(scriptPlace(blocks, HEX))
   if room < #script then
-    local most = "%s has room for %d bytes of Lua; this is %d."
+    local most = "%s is %d bytes, and %s has room for %d."
     refuse(
-      most:format(filename, room, #script),
+      most:format(lua_name, #script, HEX, room),
       "Make it shorter, then try again."
     )
   end
@@ -963,7 +964,8 @@ end
 function embed(hex_name, lua_name)
   writable(hex_name)
   local blocks = blocksOf(HEX)
-  embedInto(blocks, HEX, read(lua_name or LUA))
+  local name = lua_name or LUA
+  embedInto(blocks, name, read(name))
   writefile(hex_name, hex.write(blocks))
 end
 
@@ -981,39 +983,12 @@ local function hexNameOf(filename)
   return base .. (upper and ".HEX" or ".hex")
 end
 
---- The largest Lua file upload puts on the board, in bytes.
---- The file becomes the board's whole program. The board
---- reads it in place, from its flash, with about 90 KB of
---- memory free, and the parsed code grows with how much the
---- file does per character: a long table of distinct strings
---- costs about three times what a program of the same length
---- usually does. A board that runs out of memory reading its
---- program does not start: it shows 020 on every start until
---- upload() puts the Compy's firmware back. Measured with the
---- board's Lua and a CODAL-like allocator on a computer, 6000
---- keeps the densest code tried within the memory that a
---- 7916-character program of the usual kind took, beside the
---- Compy's own script, on a board where it started; the
---- densest code at 6000 is yet to be tried on one.
-local MAX_SCRIPT = 6000
-
 --- Say that a Lua file is empty
 --- @param filename string
 local function empty(filename)
   local edit = "edit(%q), then upload it again."
   print(filename .. " is empty. Write your program with")
   print(edit:format(filename))
-end
-
---- Say that a Lua file is too long for the board
---- @param filename string
-local function tooLong(filename)
-  print(filename .. " is too long for the micro:bit, which")
-  local limit = "takes a program of up to %d characters;"
-  print(limit:format(MAX_SCRIPT))
-  print("letters with accents and signs beyond a plain")
-  print("keyboard count as two or more. Make it shorter, then")
-  print("upload it again.")
 end
 
 --- Say what the mistake in a Lua file is, and where
@@ -1093,18 +1068,14 @@ local function readable(filename, script)
 end
 
 --- A Lua file's text, its line endings the board's own; nil,
---- said, when it holds no program, is too long for the board,
---- or has a mistake that stops it from being read
+--- said, when it holds no program, or has a mistake that stops
+--- it from being read
 --- @param filename string
 --- @return string?
 local function scriptOf(filename)
   local script = (read(filename):gsub("\r\n?", "\n"))
   if not script:find("%S") then
     empty(filename)
-    return nil
-  end
-  if MAX_SCRIPT < #script then
-    tooLong(filename)
     return nil
   end
   return readable(filename, script)
@@ -1120,28 +1091,18 @@ local function build(filename)
     return nil
   end
   local blocks = blocksOf(HEX)
-  embedInto(blocks, HEX, script)
+  embedInto(blocks, filename, script)
   return hex.write(blocks)
 end
 
 --- The way to put a Lua file named for the firmware on the
---- board: as a Lua file of another name, with upload's checks;
---- one longer than upload takes, such as the Compy's own script
---- extract writes, in a firmware file of another name
+--- board: as a Lua file of another name, with upload's checks
 --- @param filename string
 local function renameWay(filename)
-  local text = read(filename):gsub("\r\n?", "\n")
-  if MAX_SCRIPT < #text then
-    print("robots' firmware. Put it in a firmware file of")
-    print("another name, then send that:")
-    print(("embed(\"mine.hex\", %q)"):format(filename))
-    print("upload(\"mine.hex\")")
-  else
-    print("robots' firmware. Give your script another name:")
-    local copy = "writefile(\"robot.lua\", readfile(%q))"
-    print(copy:format(filename))
-    print("upload(\"robot.lua\")")
-  end
+  print("robots' firmware. Give your script another name:")
+  local copy = "writefile(\"robot.lua\", readfile(%q))"
+  print(copy:format(filename))
+  print("upload(\"robot.lua\")")
 end
 
 --- Whether a Lua file's hex would overwrite the robots'
@@ -1234,7 +1195,7 @@ end
 local function uploadOverCable(name, data)
   local ok, err = flash_microbit(data, uploadHooks(name))
   if not ok then
-    print(err)
+    refuse(err or "The Compy could not send " .. name .. ".")
   end
 end
 
@@ -1289,6 +1250,26 @@ local function fileToSend(filename, cable)
   return hexFor(filename)
 end
 
+--- What running out of memory looks like, for a Lua file the
+--- board takes as its whole program. The board reads it in
+--- place, from its flash, with about 90 KB of memory free,
+--- and the parsed code grows with how much the file does per
+--- character: a long table of different strings costs about
+--- three times what a program of the same length usually
+--- does. A program that runs out, as it is read or as it runs,
+--- stops the board with a sad face and 020, at every start,
+--- until upload() puts the Compy's firmware back. The only
+--- limit on the file is the firmware's room for a script.
+--- @param filename string the file upload sent
+local function memoryNote(filename)
+  if not hexNameOf(filename) then
+    return
+  end
+  print("Once it runs, a sad face and 020 on the micro:bit")
+  print("mean your program ran out of the board's memory;")
+  print("upload() puts the Compy's firmware back.")
+end
+
 --- Put a hex file on the board, or a Lua file: that goes
 --- into a hex file of its name first, as the board's whole
 --- program in place of the Compy's own
@@ -1304,6 +1285,7 @@ function upload(filename)
   end
   local send = cable and uploadOverCable or uploadToDrive
   send(name, data)
+  memoryNote(filename or HEX)
 end
 
 -- help --------------------------------------------------------

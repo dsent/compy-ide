@@ -1026,9 +1026,9 @@ describe('micro:bit exec #microbit', function()
     f:close()
   end
 
-  --- the Compy's own script, taken out with extract, is longer
-  --- than a Lua upload takes: the advice upload gives for
-  --- MICROBIT.lua puts it on the board all the same
+  --- the Compy's own script, taken out with extract, is a Lua
+  --- file like any other: the advice upload gives for
+  --- MICROBIT.lua puts it on the board as it is
   it('puts the Compy\'s own script back on the way upload says',
     function()
       local tools = load_tools()
@@ -1036,21 +1036,20 @@ describe('micro:bit exec #microbit', function()
       firmware()
       tools.extract()
       local script = files['MICROBIT.lua']
-      assert.is_true(6000 < #script)
       said = {}
       tools.upload('MICROBIT.lua')
       assert.is_false(flashed)
       local told = table.concat(said, '\n')
-      local embed = told:match('embed%b()')
-      local upload = told:match('upload%("mine.hex"%)')
-      assert.truthy(embed and upload)
+      local copy = told:match('writefile%b()')
+      local upload = told:match('upload%("robot.lua"%)')
+      assert.truthy(copy and upload)
       local sent
       tools.flash_microbit = function(data)
         sent = data
         flashed = true
         return true
       end
-      setfenv(assert(loadstring(embed)), tools)()
+      setfenv(assert(loadstring(copy)), tools)()
       setfenv(assert(loadstring(upload)), tools)()
       assert.is_true(flashed)
       assert.equal(script, hex.script(hex.parse(sent)))
@@ -1105,8 +1104,15 @@ describe('micro:bit exec #microbit', function()
   describe('a lua file upload', function()
       local hex = require('examples.microbit.hex')
 
-      --- The largest file upload takes
-      local CAP = 6000
+      --- The room the bundled firmware has for a script: the
+      --- largest file upload takes
+      --- @return integer
+      local function room()
+        local f = assert(io.open('src/examples/microbit/MICROBIT.hex'))
+        local blocks = hex.parse(f:read('*a'))
+        f:close()
+        return hex.room(hex.meta(blocks))
+      end
 
       --- The program a hex file carries
       --- @param data string a hex file
@@ -1237,42 +1243,72 @@ describe('micro:bit exec #microbit', function()
         assert.truthy(told:find('edit("robot.lua")', 1, true))
       end)
 
-      it('takes a file as long as the board allows', function()
-        local tools = load_tools()
-        local tail = 'print("end")\n'
-        local code = ('x = 1\n'):rep(math.floor((CAP - #tail)
-          / 6)) .. tail
-        code = (' '):rep(CAP - #code) .. code
-        assert.equal(CAP, #code)
-        files['robot.lua'] = code
-        uploaded(tools)
-        assert.is_true(flashed)
-        assert.equal(code, program(files['robot.hex']))
-      end)
-
-      --- CRs go before the file is counted
-      it('counts a file with CRLF endings as the board reads it',
+      --- no margin under the firmware's room: memory is the
+      --- program's to spend, and a sad face with 020 says it ran out
+      it('takes a file as long as the firmware has room for',
         function()
           local tools = load_tools()
-          local code = ('x = 1\n'):rep(math.floor(CAP / 6))
+          local most = room()
+          local tail = 'print("end")\n'
+          local code = ('-- a comment line\n'):rep(math.floor(
+            (most - #tail) / 18)) .. tail
+          code = (' '):rep(most - #code) .. code
+          assert.equal(most, #code)
+          files['robot.lua'] = code
+          uploaded(tools)
+          assert.is_true(flashed)
+          assert.equal(code, program(files['robot.hex']))
+        end)
+
+      --- CRs go before the file is measured
+      it('measures a file with CRLF endings as the board reads it',
+        function()
+          local tools = load_tools()
+          local code = ('x = 1\n'):rep(math.floor(room() / 6))
           files['robot.lua'] = code:gsub('\n', '\r\n')
-          assert.is_true(CAP < #files['robot.lua'])
+          assert.is_true(room() < #files['robot.lua'])
           uploaded(tools)
           assert.is_true(flashed)
         end)
 
-      it('refuses a file one character longer, in words',
+      it('refuses a file one byte longer than the room, in words',
         function()
           local tools = load_tools()
-          files['robot.lua'] = ('-'):rep(CAP + 1)
+          local most = room()
+          files['robot.lua'] = ('-'):rep(most + 1)
           said = {}
           assert.has_no_error(function() uploaded(tools) end)
           assert.is_false(flashed)
           assert.is_nil(files['robot.hex'])
           local told = table.concat(said, ' ')
-          assert.truthy(told:find('robot.lua is too long', 1, true))
-          assert.truthy(told:find(CAP .. ' characters', 1, true))
+          assert.is_nil(told:find('%.lua:%d+:'), told)
+          assert.truthy(told:find(('robot.lua is %d bytes, and'
+            .. ' MICROBIT.hex has room for %d.'):format(most + 1, most),
+            1, true))
           assert.truthy(told:find('Make it shorter', 1, true))
+        end)
+
+      it('says after a Lua file what a board out of memory shows',
+        function()
+          local tools = load_tools()
+          files['robot.lua'] = 'print("robot")\n'
+          said = {}
+          uploaded(tools)
+          local told = table.concat(said, ' ')
+          assert.truthy(told:find('a sad face and 020 on the'
+            .. ' micro:bit mean your program ran out of the board\'s'
+            .. ' memory; upload() puts the Compy\'s firmware back.', 1,
+            true))
+        end)
+
+      it('says nothing of memory for a firmware file, or a refused'
+        .. ' Lua file', function()
+          local tools = load_tools()
+          said = {}
+          tools.upload()
+          files['robot.lua'] = ''
+          uploaded(tools)
+          assert.is_nil(table.concat(said, ' '):find('020', 1, true))
         end)
 
       it('says once that it wrote the hex', function()
@@ -1284,7 +1320,9 @@ describe('micro:bit exec #microbit', function()
         files['robot.lua'] = 'print("robot")\n'
         said = {}
         uploaded(tools)
-        assert.same({ 'robot.hex written' }, said)
+        local _, n = table.concat(said, '\n'):gsub('written', '')
+        assert.equal(1, n)
+        assert.equal('robot.hex written', said[1])
       end)
 
       --- the console's writefile: it says how the write went,
@@ -1359,6 +1397,7 @@ describe('micro:bit exec #microbit', function()
           said = {}
           tools.upload('robot.lua')
           assert.is_true(flashed)
+          said = {}
           on.read(IntelHex.parse(files['robot.hex']))
           assert.same({}, said)
         end)
@@ -1566,7 +1605,7 @@ describe('micro:bit exec #microbit', function()
       'embed("mine.hex")')
     files['big.lua'] = ('x'):rep(300000)
     refusedPlainly(function() tools.embed('mine.hex', 'big.lua') end,
-      'MICROBIT.hex has room for', 'this is 300000',
+      'big.lua is 300000 bytes, and MICROBIT.hex has room for',
       'Make it shorter')
     assert.is_nil(files['mine.hex'])
   end)
