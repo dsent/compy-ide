@@ -186,6 +186,32 @@ describe("FS utils", function()
         assert.is_false(FS.exists(temp))
       end)
 
+    it('as it was when a durable write does not reach the disk',
+      function()
+        local sync_fd = FS.sync_fd
+        finally(function() FS.sync_fd = sync_fd end)
+        FS.sync_fd = function() return false end
+        local ok, err = FS.replace(target, 'x = 2\n', true)
+        assert.is_false(ok)
+        assert.is_not_nil(err)
+        assert.same('x = 1\n', read(target))
+        assert.is_false(FS.exists(temp))
+      end)
+
+    it('and syncs its folder after a durable rename', function()
+      local sync_dir = FS.sync_dir
+      finally(function() FS.sync_dir = sync_dir end)
+      local synced = {}
+      FS.sync_dir = function(d)
+        synced[#synced + 1] = d
+        return sync_dir(d)
+      end
+      assert.is_true(FS.replace(target, 'x = 2\n'))
+      assert.same({}, synced)
+      assert.is_true(FS.replace(target, 'x = 3\n', true))
+      assert.same({ dir .. '/' }, synced)
+    end)
+
     it('removing a temporary file a power cut left', function()
       assert.is_true(FS.write(temp, 'half a fi'))
       assert.is_true(FS.replace(target, 'x = 2\n'))

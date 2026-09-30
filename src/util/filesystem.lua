@@ -729,6 +729,21 @@ function FS.sync_fd(fd)
   return posix.C.compy_fsync(fd) == 0
 end
 
+--- Flush a folder's entries, a rename among them, to stable
+--- storage. Best effort: the card is mounted dirsync, where a
+--- rename is on the card when it returns, and a folder that
+--- cannot be synced this way is left as it is.
+--- @param dir string
+--- @return boolean synced
+function FS.sync_dir(dir)
+  if not posix then return false end
+  local fd = posix.C.compy_open(dir, 0, 0)
+  if fd < 0 then return false end
+  local synced = posix.C.compy_fsync(fd) == 0
+  posix.C.compy_close(fd)
+  return synced
+end
+
 --- @param fd integer
 --- @param data string
 --- @return boolean ok
@@ -754,7 +769,11 @@ local function write_temp_posix(path, data, durable)
   if not fd then return false, err end
   local ok
   ok, err = write_all(fd, data)
-  if ok and durable then FS.sync_fd(fd) end
+  --- a durable save whose data does not reach the disk is
+  --- no save: the file keeps what it had
+  if ok and durable and not FS.sync_fd(fd) then
+    ok, err = false, errstr()
+  end
   if posix.C.compy_close(fd) ~= 0 and ok then
     ok, err = false, errstr()
   end
@@ -785,8 +804,9 @@ end
 --- @param path string
 --- @param data string
 --- @param durable boolean? --- the data reaches stable
---- storage before the rename (FS.fsync); the editor's saves
---- ask for it, a program's writefile stays async
+--- storage before the rename, and the rename after it; the
+--- editor's saves ask for it, a program's writefile stays
+--- async
 --- @return boolean success
 --- @return string? error
 function FS.replace(path, data, durable)
@@ -799,6 +819,11 @@ function FS.replace(path, data, durable)
   if not ok then
     FS.rm(tmp)
     return false, err
+  end
+  if durable then
+    --- the rename itself reaches the disk with the folder's
+    --- entries; on the card, dirsync has put it there already
+    FS.sync_dir(string.match(path, '^(.*[/\\])') or '.')
   end
   return true
 end
