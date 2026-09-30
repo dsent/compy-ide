@@ -78,7 +78,12 @@ local function mock_runtime()
     -- The console prepares serial support at build time and asks
     -- love.system.getOS() to pick a backend; the mock love has no
     -- `system`, so stub it (a desktop OS -> the null backend).
-    system     = { getOS = function() return 'Linux' end },
+    -- Leaving the editor saves the clipboard with its state.
+    system     = {
+      getOS            = function() return 'Linux' end,
+      getClipboardText = function() return '' end,
+      setClipboardText = function() end,
+    },
   })
 end
 
@@ -387,6 +392,9 @@ function F.reset()
   -- stop_project_run tears down the fixture's widget rather
   -- than a case-local one.
   love.state.user_input_controller = widget
+  -- An editor a case opened goes with the case: the next one
+  -- starts with no buffer behind its own.
+  CC.editor:close()
   CC:stop_project_run()
   -- The stop DESTROYS the widget, as a real stop does. A case
   -- that never runs a project still needs one to drive, so the
@@ -399,6 +407,7 @@ function F.reset()
   -- down for the next test unless the reset lifts it.
   mock.release_keys()
   love.state.app_state          = 'ready'
+  love.state.prev_state         = nil
   love.state.editor             = nil
   -- Otherwise leaks into the next test's suspend(): a
   -- stale message from an earlier suspend_run() would set

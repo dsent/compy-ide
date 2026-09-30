@@ -107,12 +107,17 @@ if love and not TESTING then
 
 
   if love.system and love.system.getOS() == "Web" then
+    --- a save cannot reach the C library here (FS.replace)
+    FS.web = true
     _fs = {
       read = function(...)
         return LFS.read(...)
       end,
       write = function(...)
         return LFS.write(...)
+      end,
+      remove = function(...)
+        return LFS.remove(...)
       end,
       lines = function(...)
         return LFS.lines(...)
@@ -258,10 +263,10 @@ if love and not TESTING then
   end)()
 
   --- Flush one file's data through to stable storage.
-  --- The editor accept path calls this after a save
-  --- (spec 2.6 "written immediately"). Do NOT add it to
-  --- FS.write: bulk deploy/clone and the user-facing
-  --- writefile must stay async. Best-effort — returns
+  --- The editor's saves reach it through FS.replace's
+  --- durable write (spec 2.6 "written immediately"). Do NOT
+  --- add it to FS.write: bulk deploy/clone and the
+  --- user-facing writefile must stay async. Best-effort — returns
   --- false when the platform lacks the syscall or the
   --- path cannot be opened.
   --- @param path string
@@ -285,9 +290,9 @@ if love and not TESTING then
   --- the bytes reach the OS but are NOT flushed to stable
   --- storage, so a power-cut or SIGKILL can lose them
   --- while an (exfat dirsync) directory entry persists.
-  --- Callers needing durability opt in via FS.fsync(path)
-  --- after a successful write — the editor accept path
-  --- does; bulk deploy/clone and writefile do not.
+  --- Callers needing durability opt in via FS.fsync(path),
+  --- as FS.replace's durable write does for the editor's
+  --- saves; bulk deploy/clone and writefile do not.
   --- @param path string
   --- @param data string
   --- @return boolean success
@@ -300,9 +305,11 @@ if love and not TESTING then
   --- @param source string
   --- @param target string
   --- @param vfs boolean? -- use VFS for source
+  --- @param replace boolean? -- write through FS.replace,
+  --- durably
   --- @return boolean success
   --- @return string? error
-  function FS.cp(source, target, vfs)
+  function FS.cp(source, target, vfs, replace)
     local getInfo = (function()
       if vfs then
         return LFS.getInfo
@@ -338,7 +345,12 @@ if love and not TESTING then
       return false, tostring(s_err)
     end
 
-    local out, t_err = FS.write(to, content)
+    local out, t_err
+    if replace then
+      out, t_err = FS.replace(to, content, true)
+    else
+      out, t_err = FS.write(to, content)
+    end
     if not out then
       return false, t_err
     end
@@ -378,13 +390,15 @@ if love and not TESTING then
     FS.mkdir(target)
     local items = FS.dir(source, nil, vfs)
     for _, i in pairs(items) do
-      local s = FS.join_path(source, i.name)
-      local t = FS.join_path(target, i.name)
+      if not FS.is_replace_temp(i.name) then
+        local s = FS.join_path(source, i.name)
+        local t = FS.join_path(target, i.name)
 
-      local ok, err = FS.cp(s, t, vfs)
-      if not ok then
-        cp_ok = false
-        cp_err = err
+        local ok, err = FS.cp(s, t, vfs)
+        if not ok then
+          cp_ok = false
+          cp_err = err
+        end
       end
     end
 
@@ -431,14 +445,14 @@ else
   --- @return string? error
   function FS.write(path, data)
     local f, oerr = io.open(path, 'w')
-    if f then
-      io.output(f)
-      local _, err = io.write(data)
-      io.close(f)
-      io.output(io.stdout)
-      return true, err
-    end
-    return false, oerr
+    if not f then return false, oerr end
+    --- the data may wait in a buffer until close, so a write
+    --- has succeeded only when both have
+    local wok, werr = f:write(data)
+    local cok, cerr = f:close()
+    if not wok then return false, werr end
+    if not cok then return false, cerr end
+    return true
   end
 
   --- @param path string
@@ -464,9 +478,12 @@ else
 
   --- @param source string
   --- @param target string
+  --- @param _ boolean? -- the VFS flag of the love branch
+  --- @param replace boolean? -- write through FS.replace,
+  --- durably
   --- @return boolean success
   --- @return string? error
-  function FS.cp(source, target)
+  function FS.cp(source, target, _, replace)
     local src = FS.exists(source)
     if not src then
       return false, FS.messages.cannot_open(source)
@@ -474,7 +491,12 @@ else
 
     local rok, cont_err = FS.read(source)
     if rok and cont_err then
-      local wok, werr = FS.write(target, cont_err)
+      local wok, werr
+      if replace then
+        wok, werr = FS.replace(target, cont_err, true)
+      else
+        wok, werr = FS.write(target, cont_err)
+      end
       return wok, werr
     else
       return false, cont_err
@@ -558,6 +580,13 @@ else
     return os.remove(path)
   end
 
+  --- @param target string
+  --- @return boolean success
+  --- @return string? error
+  function FS.rm(target)
+    return os.remove(target)
+  end
+
   --- @return boolean ran
   function FS.sync()
     return true
@@ -613,5 +642,251 @@ function FS.rename(source, target)
   return ok or false, err
 end
 
+
+--- A save's temporary file is `.<name>.compy-tmp` beside the
+--- file. The namespace is reserved: a project refuses a file
+--- of that name (Project validation), a listing or a copy
+--- leaves such files out, and a save removes one it finds.
+local TEMP_SUFFIX = '.compy-tmp'
+
+--- A file name's longest, in bytes, on Linux and the card
+local NAME_MAX = 255
+
+--- A short, stable stand-in for a name: 32 bits of it, in
+--- hex, by plain arithmetic, which every build has
+--- @param name string
+--- @return string
+local function digest(name)
+  local h = 2166136261
+  for i = 1, #name do
+    h = (h * 31 + string.byte(name, i)) % 4294967296
+  end
+  return string.format('%08x', h)
+end
+
+--- @param path string
+--- @return string --- the temporary file FS.replace writes
+--- beside `path`. A name so long the suffix would take it
+--- past the length limit gets a digest of it in its place,
+--- still in the namespace.
+function FS.replace_temp(path)
+  local dir, name = string.match(path, '^(.*[/\\])([^/\\]+)$')
+  if not dir then dir, name = '', path end
+  local temp = '.' .. name .. TEMP_SUFFIX
+  if #temp > NAME_MAX then
+    temp = '.' .. digest(name) .. TEMP_SUFFIX
+  end
+  return dir .. temp
+end
+
+--- @param name string
+--- @return boolean --- a name in the temporary files'
+--- namespace; exFAT ignores case, so this does too
+function FS.is_replace_temp(name)
+  return string.match(string.lower(name), '^%..+%.compy%-tmp$') ~= nil
+end
+
+--- Linux's C library, where LuaJIT's ffi reaches it: a save
+--- creates its temporary file exclusively, which never
+--- writes through a file or link already at that name.
+--- Declared one at a time, since a reload of this module
+--- declares them again.
+local posix = (function()
+  if FS.web then return nil end
+  if type(jit) ~= 'table' or jit.os ~= 'Linux' then return nil end
+  local ok, ffi = pcall(require, 'ffi')
+  if not ok then return nil end
+  for _, decl in ipairs({
+    'int compy_open(const char *path, int flags, int mode) __asm__("open");',
+    'long compy_write(int fd, const void *buf, unsigned long n) __asm__("write");',
+    'int compy_close(int fd) __asm__("close");',
+    'int compy_fsync(int fd) __asm__("fsync");',
+    'char *compy_strerror(int errnum) __asm__("strerror");',
+  }) do
+    pcall(ffi.cdef, decl)
+  end
+  local C = ffi.C
+  local found = pcall(function()
+    return C.compy_open, C.compy_write, C.compy_close,
+        C.compy_fsync, C.compy_strerror
+  end)
+  if not found then return nil end
+  --- a file's mode, where the C library has statx, whose
+  --- layout is the same on every architecture
+  for _, decl in ipairs({
+    [[typedef struct {
+        uint32_t mask; uint32_t blksize; uint64_t attributes;
+        uint32_t nlink; uint32_t uid; uint32_t gid;
+        uint16_t mode; uint16_t spare; uint64_t rest[28];
+      } compy_statx_t;]],
+    'int compy_statx(int dirfd, const char *path, int flags,'
+    .. ' unsigned int mask, compy_statx_t *buf) __asm__("statx");',
+    'int compy_fchmod(int fd, unsigned int mode) __asm__("fchmod");',
+  }) do
+    pcall(ffi.cdef, decl)
+  end
+  local modes = pcall(function()
+    return C.compy_statx, C.compy_fchmod
+  end)
+  return { ffi = ffi, C = C, modes = modes }
+end)()
+
+--- Linux, all architectures Compy runs on
+local O_WRONLY, O_CREAT, O_EXCL = 1, 64, 128
+local EEXIST = 17
+
+--- @return string
+local function errstr()
+  return posix.ffi.string(posix.C.compy_strerror(posix.ffi.errno()))
+end
+
+--- A new file at `path`, created by this call alone. One
+--- there already is a save's leftover, since the name is
+--- reserved: it goes, a link by itself and never what it
+--- points at, and the file is created again.
+--- @param path string
+--- @return integer? fd
+--- @return string? err
+local function create_new(path)
+  local C = posix.C
+  local flags = O_WRONLY + O_CREAT + O_EXCL
+  local fd = C.compy_open(path, flags, 438)
+  if fd < 0 and posix.ffi.errno() == EEXIST then
+    os.remove(path)
+    fd = C.compy_open(path, flags, 438)
+  end
+  if fd < 0 then return nil, errstr() end
+  return fd
+end
+
+--- Flush an open file's data to stable storage
+--- @param fd integer
+--- @return boolean synced
+function FS.sync_fd(fd)
+  if not posix then return false end
+  return posix.C.compy_fsync(fd) == 0
+end
+
+--- Flush a folder's entries, a rename among them, to stable
+--- storage. Best effort: the card is mounted dirsync, where a
+--- rename is on the card when it returns, and a folder that
+--- cannot be synced this way is left as it is.
+--- @param dir string
+--- @return boolean synced
+function FS.sync_dir(dir)
+  if not posix then return false end
+  local fd = posix.C.compy_open(dir, 0, 0)
+  if fd < 0 then return false end
+  local synced = posix.C.compy_fsync(fd) == 0
+  posix.C.compy_close(fd)
+  return synced
+end
+
+--- @param fd integer
+--- @param data string
+--- @return boolean ok
+--- @return string? err
+local function write_all(fd, data)
+  local buf = posix.ffi.cast('const char *', data)
+  local done, n = 0, #data
+  while done < n do
+    local w = tonumber(posix.C.compy_write(fd, buf + done, n - done))
+    if w < 0 then return false, errstr() end
+    done = done + w
+  end
+  return true
+end
+
+--- Give the new file the permissions of the one it replaces.
+--- Best effort: the card has no such bits, and a C library
+--- without statx leaves the new file's own. On the Linux
+--- path only (write_temp_plain keeps none).
+--- @param fd integer
+--- @param target string
+local function keep_mode(fd, target)
+  if not posix.modes then return end
+  local AT_FDCWD, STATX_MODE = -100, 2
+  local st = posix.ffi.new('compy_statx_t')
+  if posix.C.compy_statx(AT_FDCWD, target, 0, STATX_MODE, st) ~= 0 then
+    return
+  end
+  posix.C.compy_fchmod(fd, bit.band(st.mode, 4095))
+end
+
+--- @param path string
+--- @param data string
+--- @param durable boolean?
+--- @param target string --- the file it is to replace
+--- @return boolean ok
+--- @return string? err
+local function write_temp_posix(path, data, durable, target)
+  local fd, err = create_new(path)
+  if not fd then return false, err end
+  keep_mode(fd, target)
+  local ok
+  ok, err = write_all(fd, data)
+  --- a durable save whose data does not reach the disk is
+  --- no save: the file keeps what it had
+  if ok and durable and not FS.sync_fd(fd) then
+    ok, err = false, errstr()
+  end
+  if posix.C.compy_close(fd) ~= 0 and ok then
+    ok, err = false, errstr()
+  end
+  return ok, err
+end
+
+--- Without the C library (the web build, a desktop other
+--- than Linux, a plain Lua): a leftover at the reserved name
+--- goes first. Less than the Linux path: the new file keeps
+--- no mode, its sync is best effort and unchecked (the web
+--- build has none), and no folder is synced.
+--- @param path string
+--- @param data string
+--- @param durable boolean?
+--- @return boolean ok
+--- @return string? err
+local function write_temp_plain(path, data, durable)
+  if FS.exists(path) then FS.rm(path) end
+  local ok, err = FS.write(path, data)
+  if ok and durable then FS.fsync(path) end
+  return ok, err
+end
+
+--- Write `data` over the file at `path` so that it holds its
+--- old content or the new, never a part: the data goes to a
+--- temporary file beside it (FS.replace_temp) and is renamed
+--- over the file. On a full card the temporary write fails
+--- and the file is untouched. A failure tries to remove the
+--- temporary file; a save finding one a power cut left
+--- replaces it. The rename replaces an existing file, as it
+--- does on Linux, Android and the card; Windows' refuses,
+--- and there is no Windows build.
+--- @param path string
+--- @param data string
+--- @param durable boolean? --- the data reaches stable
+--- storage before the rename, and the rename after it; the
+--- editor's saves ask for it, a program's writefile stays
+--- async
+--- @return boolean success
+--- @return string? error
+function FS.replace(path, data, durable)
+  local tmp = FS.replace_temp(path)
+  local write_temp = posix and write_temp_posix or write_temp_plain
+  local ok, err = write_temp(tmp, data, durable, path)
+  if ok then
+    ok, err = FS.rename(tmp, path)
+  end
+  if not ok then
+    FS.rm(tmp)
+    return false, err
+  end
+  if durable then
+    --- the rename itself reaches the disk with the folder's
+    --- entries; on the card, dirsync has put it there already
+    FS.sync_dir(string.match(path, '^(.*[/\\])') or '.')
+  end
+  return true
+end
 
 return FS

@@ -310,7 +310,7 @@ function ConsoleController:write_checkpoint(name)
   if not p then return false end
   local ok = FS.cp(
     p:get_path(name),
-    p:get_path(checkpoint_name(name)))
+    p:get_path(checkpoint_name(name)), false, true)
   return ok and true or false
 end
 
@@ -322,7 +322,7 @@ function ConsoleController:restore_checkpoint(name)
   if not p then return false end
   local cp = p:get_path(checkpoint_name(name))
   if not FS.exists(cp) then return false end
-  local ok = FS.cp(cp, p:get_path(name))
+  local ok = FS.cp(cp, p:get_path(name), false, true)
   return ok and true or false
 end
 
@@ -403,11 +403,14 @@ end
 --- @param content str --- lines, or the file's text
 --- @return boolean success
 --- @return string? err
-function ConsoleController:_writefile(name, content)
+--- @param project Project? --- default: the current one
+--- @param durable boolean? --- see Project:writefile
+function ConsoleController:_writefile(name, content, project,
+                                      durable)
   local P = self.model.projects
-  local p = P.current
+  local p = project or P.current
   local text = string.unlines(content)
-  return p:writefile(name, text)
+  return p:writefile(name, text, durable)
 end
 
 function ConsoleController:writefile(name, content)
@@ -1905,6 +1908,10 @@ function ConsoleController:_close_project()
   if P.current then
     self:stop_project_run()
   end
+  --- Ctrl+T's way back into the editor names a file of
+  --- this project; after the stop, which keeps it for a
+  --- restart, and after the exit hook the stop runs
+  love.state.editor = nil
   destroy_input_widget()
   local open = P.current
   if open then
@@ -1958,8 +1965,17 @@ end
 
 --- Once at a time: a before_exit hook that closes or switches
 --- the project reaches here again, and returns at once.
+--- The editor closes first: the gate's project shortcuts
+--- (Ctrl+Q, Ctrl+Shift+R, Ctrl+Alt+R) reach here before the
+--- editor sees their key, and its buffers belong to the
+--- project they were opened in. Ctrl+T keeps its way back,
+--- which closing the project then forgets.
 function ConsoleController:stop_project_run()
   if self.stopping then return end
+  if love.state.app_state == 'editor'
+      and self.editor:get_active_buffer() then
+    love.state.editor = self:finish_edit()
+  end
   self.stopping = true
   local ok, err = pcall(self._stop_project_run, self)
   self.stopping = false
@@ -2045,6 +2061,9 @@ end
 --- @param state EditorState
 function ConsoleController:edit(name, state)
   if love.state.app_state == 'running' then return end
+  --- a program's exit hook runs while its project closes:
+  --- a file it opened then would outlive the project
+  if self.stopping then return end
 
   local PS = self.model.projects
   local p  = PS.current
@@ -2068,15 +2087,17 @@ function ConsoleController:edit(name, state)
   end
   --- Editor accept path: a save is durable before the
   --- editor reports acceptance (spec 2.6), so a force-stop
-  --- after an accepted edit cannot lose it. fsync only
-  --- here — writefile and bulk paths stay async.
+  --- after an accepted edit cannot lose it: the data is
+  --- synced before the rename that puts it in place, and the
+  --- rename is on the card when it returns, the card being
+  --- mounted dirsync (FS.replace). Durable only here —
+  --- writefile and bulk paths stay async.
+  --- the file's own project, whichever is current by then
   local save = function(newcontent)
-    local ok, err = self:_writefile(filename, newcontent)
-    if ok then FS.fsync(fpath) end
-    return ok, err
+    return self:_writefile(filename, newcontent, p, true)
   end
 
-  self.editor:open(filename, text, save)
+  self.editor:open(filename, text, save, fpath)
   self.editor:restore_state(state)
 end
 
@@ -2123,7 +2144,9 @@ function ConsoleController:textinput(t)
 end
 
 --- @param k string
-function ConsoleController:keypressed(k)
+--- @param sc string? --- LÖVE's scancode, unused
+--- @param isrepeat boolean? --- the key is held
+function ConsoleController:keypressed(k, sc, isrepeat)
   local input = self.input
 
   local function terminal_test()
@@ -2142,7 +2165,7 @@ function ConsoleController:keypressed(k)
   end
 
   if love.state.app_state == 'editor' then
-    self.editor:keypressed(k)
+    self.editor:keypressed(k, sc, isrepeat)
   else
     if love.state.testing == 'running' then
       return

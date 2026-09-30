@@ -140,9 +140,10 @@ function SearchController:keypressed(k)
     --- no linebreaks in search
     if Key.shift() or Key.ctrl() then return end
     local sel = self.model.selection
-    local r = self.model.resultset[sel].r
+    local hit = self.model.resultset[sel]
     self.input:update_view()
-    return r
+    --- nothing found: no jump, and search stays open
+    return hit and hit.r
   end
   self.input:update_view()
 end
