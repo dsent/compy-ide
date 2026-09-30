@@ -226,44 +226,44 @@ describe('the editor across files #input', function()
           assert.same({}, took)
         end)
 
-      -- FLIPPED: this case asserted that a failed format of a
-      -- saved file asks about nothing. A full card empties the
-      -- file before the write fails, so the file on the card
-      -- may no longer be what the screen shows.
-      describe('on a full card, which empties the file first', function()
+      -- FLIPPED back: a save now writes the file whole or
+      -- not at all (FS.replace), so a failed write leaves the
+      -- file on the card as it was.
+      describe('that leaves the file as it was', function()
         before_each(function()
-          cc.model.projects.current.writefile = function(_, f)
-            files[f] = ''
+          cc.model.projects.current.writefile = function()
             return false, 'the card is full'
           end
         end)
 
-        it('a failed format asks about the file', function()
-          files['main.lua'] = 'x=1\n'
-          open()
-          chord('lctrl', 'lshift', 'f')
-          assert.is_true(ed.input:has_error())
-          chord('escape')
+        it('a failed format of a saved file asks about nothing',
+          function()
+            files['main.lua'] = 'x=1\n'
+            open()
+            chord('lctrl', 'lshift', 'f')
+            assert.is_true(ed.input:has_error())
+            chord('escape')
 
-          chord('lctrl', 'q')
-          assert.same('leave', ed.pending_confirm)
-          assert.same({}, took)
-        end)
+            chord('lctrl', 'q')
+            assert.is_nil(ed.pending_confirm)
+            assert.same({ 'quit_project' }, took)
+          end)
 
-        it('a failed fresh block asks about the file', function()
-          open()
-          chord('lctrl', 'return')
-          ed.input:set_text('newvalue = 99')
-          chord('return')
-          chord('escape')
-          chord('lshift', 'escape')
-          chord('return')
-          assert.same('nav', ed:get_mode())
+        it('a failed fresh block in a saved file asks about nothing',
+          function()
+            open()
+            chord('lctrl', 'return')
+            ed.input:set_text('newvalue = 99')
+            chord('return')
+            chord('escape')
+            chord('lshift', 'escape')
+            chord('return')
+            assert.same('nav', ed:get_mode())
 
-          chord('lctrl', 'q')
-          assert.same('leave', ed.pending_confirm)
-          assert.same({}, took)
-        end)
+            chord('lctrl', 'q')
+            assert.is_nil(ed.pending_confirm)
+            assert.same({ 'quit_project' }, took)
+          end)
       end)
     end)
 

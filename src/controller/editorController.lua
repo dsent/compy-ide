@@ -1144,13 +1144,15 @@ function EditorController:format_file()
   end
 
   local sel_before = buf:get_selection()
+  local was_unsaved = buf.unsaved
   buf:replace_text(after)
   if not self:save(buf) then
     --- the screen keeps showing the file, so trying again
-    --- formats it again. The buffer stays unsaved: a failed
-    --- write may have emptied the file on the card
+    --- formats it again. A failed save leaves the file as it
+    --- was (FS.replace), so the buffer is as unsaved as before
     buf:replace_text(before)
     buf:analyze()
+    buf.unsaved = was_unsaved
     self.view:refresh()
     return self:refuse({
       'Could not save the file.'
@@ -1435,15 +1437,18 @@ function EditorController:_normal_mode_keys(k)
 
       local before = table.clone(buf:get_text_content())
       local sel = buf:get_selection()
+      local was_unsaved = buf.unsaved
       local _, n = buf:insert_content(newtext, sel)
       if not self:save(buf) then
         --- a failed write must not read as accepted (2.6):
         --- the buffer goes back to what the file held, so a
-        --- retry inserts the draft once. It stays unsaved: a
-        --- failed write may have emptied the file on the card
+        --- retry inserts the draft once. A failed save leaves
+        --- the file as it was (FS.replace), so the buffer is
+        --- as unsaved as before
         buf:replace_text(before)
         buf:analyze()
         buf:set_selection(sel)
+        buf.unsaved = was_unsaved
         self.view:refresh()
         self:_refuse_unsaved()
         return false
