@@ -199,6 +199,21 @@ describe('the editor across files #input', function()
         string.unlines(ed.input:get_text()))
     end)
 
+    it('brings the draft back when the file opens again', function()
+      files['lib.lua'] = "local main = require('main')\n"
+      open()
+      draft("local lib = require('lib')\nkept = 99")
+      chord('lctrl', 'j')
+      chord('lctrl', 'j')
+
+      assert.same('main.lua', ed:get_active_buffer().name)
+      assert.same('edit', ed:get_mode())
+      assert.same("local lib = require('lib')\nkept = 99",
+        string.unlines(ed.input:get_text()))
+      assert.is_nil(ed:get_active_buffer().parked)
+      assert.same(1, ed:get_active_buffer():get_selection())
+    end)
+
     it('leaves an error message behind', function()
       open()
       ed:refuse({ 'a message about main.lua' })

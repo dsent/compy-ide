@@ -138,9 +138,24 @@ function EditorController:open(name, content, save, key, fresh)
   if not self:_restore_position(b) then
     self.view:get_current_buffer():follow_selection()
   end
+  self:_unpark(b)
   self:update_status()
   self:set_state()
   self.input:update_view()
+end
+
+--- @private
+--- The draft Ctrl+J left on a buffer comes back with it
+--- @param b BufferModel
+function EditorController:_unpark(b)
+  local parked = b.parked
+  b.parked = nil
+  if parked then
+    --- an edit returns to the block it was made in
+    if parked.mode == 'edit' then b:select_loaded() end
+    self.input:set_text(parked.text)
+    self:set_mode(parked.mode)
+  end
 end
 
 --- @private
@@ -192,12 +207,7 @@ function EditorController:pop_buffer()
   --- open() alone parks the view at the end
   bv:follow_line()
   self.input:clear()
-  local parked = b.parked
-  b.parked = nil
-  if parked then
-    self.input:set_text(parked.text)
-    self:set_mode(parked.mode)
-  end
+  self:_unpark(b)
   self:update_status()
 end
 
