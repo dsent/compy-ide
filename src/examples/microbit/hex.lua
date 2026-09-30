@@ -201,19 +201,25 @@ local function le_word(n)
   )
 end
 
---- The metadata at an address, if that is what is there.
---- The magic can turn up in ordinary data as well, so a
---- candidate counts only when its fields agree with each
---- other and point somewhere real.
+--- Whether metadata's fields are all there and agree with
+--- each other: the magic can turn up in ordinary data as well,
+--- and a block cut short leaves words out. The script lies
+--- within its space, and starts somewhere real.
+--- @param blocks table[]
+--- @param m table
+--- @return boolean
+local function fieldsAgree(blocks, m)
+  local whole = m.start and m.stop and m.size and m.space
+  return whole and m.start < m.stop
+       and m.size == m.stop - m.start
+       and m.size <= m.space
+       and hex.at(blocks, m.start) ~= nil
+end
+
+--- The metadata at an address, if that is what is there
 --- @param blocks table[]
 --- @param addr integer
 --- @return table? meta
-local function fieldsAgree(blocks, m)
-  return m.start and m.stop and m.size
-       and m.start < m.stop
-       and m.size == m.stop - m.start
-       and hex.at(blocks, m.start)
-end
 
 local function meta_at(blocks, addr)
   local m = {

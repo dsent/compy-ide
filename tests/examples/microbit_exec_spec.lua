@@ -1829,6 +1829,25 @@ describe('micro:bit exec #microbit', function()
       assert.is_nil(files['MICROBIT.lua'])
     end)
 
+  --- metadata cut short before its space word (Codex round 11,
+  --- M4, its truncated-metadata.hex)
+  it('says in words that firmware with metadata cut short has no'
+    .. ' place for Lua', function()
+      local tools = load_tools()
+      files['MICROBIT.hex'] = ':020000040000FA\n'
+        .. ':100000003141554C64000000650000000100000013\n'
+        .. ':01006400207B\n:00000001FF\n'
+      files['x.lua'] = 'print(1)\n'
+      refusedPlainly(function() tools.hexmap() end,
+        'no Lua script inside')
+      refusedPlainly(function() tools.embed('mine.hex', 'x.lua') end,
+        'MICROBIT.hex has no place for a Lua program')
+      refusedPlainly(function() tools.upload('x.lua') end,
+        'MICROBIT.hex has no place for a Lua program')
+      assert.is_nil(files['mine.hex'])
+      assert.is_false(flashed)
+    end)
+
   it('embed says in words what it needs', function()
     local tools = load_tools()
     firmware()

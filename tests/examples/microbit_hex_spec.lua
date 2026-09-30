@@ -72,6 +72,24 @@ describe('micro:bit hex files #microbit', function()
       .. word(stop) .. word(stop - start) .. word(space) }
   end
 
+  --- a block cut short after the size: no space word, and so
+  --- no metadata (Codex round 11, M4)
+  it('takes no metadata that lacks a field', function()
+    local m = metaBlock(0, 0x64, 0x65, 0x100)
+    m.data = m.data:sub(1, 16)
+    local blocks = { m, { addr = 0x64, data = ' ' } }
+    assert.is_nil(hex.meta(blocks))
+    blocks[1] = metaBlock(0, 0x64, 0x65, 0x100)
+    assert.equal(0, (hex.meta(blocks)))
+  end)
+
+  it('takes no metadata whose script is larger than its space',
+    function()
+      local blocks = { metaBlock(0, 0x64, 0x74, 8),
+        { addr = 0x64, data = (' '):rep(16) } }
+      assert.is_nil(hex.meta(blocks))
+    end)
+
   --- the shipped firmware puts its metadata just before the
   --- script: the script may take all the space
   it('fills the shipped firmware\'s space to its end, and no'
