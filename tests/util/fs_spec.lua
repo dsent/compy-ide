@@ -139,6 +139,15 @@ describe("FS utils", function()
       os.execute('rm -rf ' .. dir)
     end)
 
+    --- the sync and the mode come from the C library, through
+    --- LuaJIT's ffi; a plain Lua has neither
+    local function needs_ffi()
+      if not jit then
+        pending('needs LuaJIT, whose ffi reaches the C library')
+        return true
+      end
+    end
+
     it('through a temporary file in a namespace of its own', function()
       assert.same(FS.join_path(dir, '.main.lua.compy-tmp'), temp)
       assert.is_true(FS.is_replace_temp('.main.lua.compy-tmp'))
@@ -191,6 +200,7 @@ describe("FS utils", function()
 
     it('as it was when a durable write does not reach the disk',
       function()
+        if needs_ffi() then return end
         local sync_fd = FS.sync_fd
         finally(function() FS.sync_fd = sync_fd end)
         FS.sync_fd = function() return false end
@@ -216,6 +226,7 @@ describe("FS utils", function()
     end)
 
     it('keeping its permissions', function()
+      if needs_ffi() then return end
       local lfs = require('lfs')
       os.execute('chmod 600 ' .. target)
       assert.is_true(FS.replace(target, 'x = 2\n'))
@@ -248,6 +259,7 @@ describe("FS utils", function()
     end)
 
     it('durably only when asked', function()
+      if needs_ffi() then return end
       local sync_fd = FS.sync_fd
       finally(function() FS.sync_fd = sync_fd end)
       local synced = 0

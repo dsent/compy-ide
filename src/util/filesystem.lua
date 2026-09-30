@@ -798,7 +798,8 @@ end
 
 --- Give the new file the permissions of the one it replaces.
 --- Best effort: the card has no such bits, and a C library
---- without statx leaves the new file's own.
+--- without statx leaves the new file's own. On the Linux
+--- path only (write_temp_plain keeps none).
 --- @param fd integer
 --- @param target string
 local function keep_mode(fd, target)
@@ -834,8 +835,11 @@ local function write_temp_posix(path, data, durable, target)
   return ok, err
 end
 
---- Without the C library (the web build): a leftover at the
---- reserved name goes first
+--- Without the C library (the web build, a desktop other
+--- than Linux, a plain Lua): a leftover at the reserved name
+--- goes first. Less than the Linux path: the new file keeps
+--- no mode, its sync is best effort and unchecked (the web
+--- build has none), and no folder is synced.
 --- @param path string
 --- @param data string
 --- @param durable boolean?
