@@ -1,0 +1,161 @@
+-- The console's error message: how it is drawn, and what the
+-- keys do while it shows (doc/development/internals/
+-- user_input.md, "Error state"). A line that fails stays in
+-- the input to be corrected; the message covers it until a key
+-- closes it.
+--
+-- Every case drives the full route (F.session), the way a
+-- keystroke arrives from LÖVE: key press, then its glyph, then
+-- the release.
+
+local F = require('tests.helpers.input_fixture')
+
+describe('console error message #input', function()
+  setup(function() F.setup() end)
+  teardown(function() F.teardown() end)
+  before_each(function() F.reset() end)
+
+  local failing = 'require("nosuch")'
+
+  --- One keystroke of a character, as a keyboard sends it.
+  --- @param ch string
+  local function key(ch)
+    F.session.press(ch)
+    F.session.type(ch)
+    F.session.release(ch)
+  end
+
+  --- @param s string
+  local function type_line(s)
+    for ch in s:gmatch('.') do key(ch) end
+  end
+
+  --- @param k string
+  local function stroke(k)
+    F.session.press(k)
+    F.session.release(k)
+  end
+
+  --- Submit a line that fails and leave its message up.
+  local function fail()
+    type_line(failing)
+    stroke('return')
+    assert.is_true(F.console:has_error())
+  end
+
+  local function text()
+    return table.concat(F.console:get_text(), '\n')
+  end
+
+  -- A failed require lists every path it tried, one per line
+  -- after a tab. The message used to be wrapped with those
+  -- line breaks inside it, and each wrapped piece was printed
+  -- with its own breaks too, so pieces ran over the rows below
+  -- them.
+  describe('drawing', function()
+    --- Draw the message with a recording gfx.
+    --- @return { s: string, y: number }[]
+    local function draw_error()
+      local rows = { }
+      local prev = _G.gfx
+      _G.gfx = setmetatable({
+        getHeight = function() return 600 end,
+        print = function(s, _, y)
+          rows[#rows + 1] = { s = s, y = y }
+        end,
+      }, { __index = function() return function() end end })
+      local ok, err = pcall(function()
+        F.cc.view.input:render_error(
+          F.console:get_wrapped_error())
+      end)
+      _G.gfx = prev
+      assert(ok, err)
+      return rows
+    end
+
+    it('puts every line of the message on a row of its own',
+      function()
+        fail()
+        local rows = draw_error()
+        local ys = { }
+        for _, r in ipairs(rows) do
+          assert.is_nil(r.s:find('[\n\t]'),
+            'row carries a break: ' .. r.s)
+          assert.is_true(
+            string.ulen(r.s) <= F.cfg.view.drawableChars,
+            'row wider than the screen: ' .. r.s)
+          assert.is_nil(ys[r.y], 'two rows at y=' .. r.y)
+          ys[r.y] = true
+        end
+        assert.equal('Errors:', rows[1].s)
+        assert.truthy(rows[2].s:find("module 'nosuch' not found"))
+      end)
+
+    it('fits the rows the input area has', function()
+      fail()
+      local rows = draw_error()
+      assert.is_true(#rows <= F.cfg.view.input_max,
+        #rows .. ' rows drawn')
+    end)
+  end)
+
+  describe('keys', function()
+    it('a glyph typed over the message closes it and lands',
+      function()
+        fail()
+        key('x')
+        assert.is_false(F.console:has_error())
+        assert.equal(failing .. 'x', text())
+      end)
+
+    -- The device may deliver a glyph before its key press.
+    it('a glyph that comes before its key lands once',
+      function()
+        fail()
+        F.session.type('x')
+        F.session.press('x')
+        F.session.release('x')
+        assert.is_false(F.console:has_error())
+        assert.equal(failing .. 'x', text())
+      end)
+
+    it('Escape closes the message and keeps the line',
+      function()
+        fail()
+        stroke('escape')
+        assert.is_false(F.console:has_error())
+        assert.equal(failing, text())
+      end)
+
+    -- The line under the message is the one that just failed:
+    -- Enter shows it again to correct, rather than running it
+    -- into the same error.
+    it('Enter closes the message without running the line',
+      function()
+        fail()
+        stroke('return')
+        assert.is_false(F.console:has_error())
+        assert.equal(failing, text())
+      end)
+
+    it('Backspace closes the message and deletes', function()
+      fail()
+      stroke('backspace')
+      assert.is_false(F.console:has_error())
+      assert.equal(failing:sub(1, -2), text())
+    end)
+
+    -- The report's walk: erase the failed line, type a good
+    -- one, press Enter, and it runs.
+    it('a line retyped after an error runs on Enter',
+      function()
+        fail()
+        for _ = 1, #failing do stroke('backspace') end
+        type_line('print(333)')
+        assert.equal('print(333)', text())
+        stroke('return')
+        assert.is_false(F.console:has_error())
+        assert.equal('', text())
+      end)
+  end)
+end)

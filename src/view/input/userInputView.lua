@@ -230,6 +230,14 @@ function UserInputView:render_error(err_text)
   local fh = self.cfg.fh
   local vpH = gfx.getHeight()
 
+  --- the canvas has input_max rows under the statusline; a
+  --- longer message shows its head and ends in '...'
+  local max = self.cfg.input_max
+  if #err_text > max then
+    err_text = table.slice(err_text, 1, max)
+    err_text[max] = '...'
+  end
+
   local inLines = #err_text
   self.start_h = vpH - (inLines + 1) * fh
   local drawableWidth = self.cfg.drawableWidth
