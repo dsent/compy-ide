@@ -2017,8 +2017,11 @@ function ConsoleController:edit(name, state)
   end
   --- Editor accept path: a save is durable before the
   --- editor reports acceptance (spec 2.6), so a force-stop
-  --- after an accepted edit cannot lose it. Durable only
-  --- here — writefile and bulk paths stay async.
+  --- after an accepted edit cannot lose it: the data is
+  --- synced before the rename that puts it in place, and the
+  --- rename is on the card when it returns, the card being
+  --- mounted dirsync (FS.replace). Durable only here —
+  --- writefile and bulk paths stay async.
   --- the file's own project, whichever is current by then
   local save = function(newcontent)
     return self:_writefile(filename, newcontent, p, true)
