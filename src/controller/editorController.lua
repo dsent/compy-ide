@@ -120,6 +120,9 @@ function EditorController:open(name, content, save)
 
   local b = BufferModel(name, content, save, ch, hl, pp, tr)
   self:_drop_dialog()
+  --- the file comes in with an input of its own: nothing
+  --- typed, no message
+  self.input:clear()
   self.model.buffers:push_front(b)
   self.view:open(b)
   self:set_mode('nav')
@@ -150,7 +153,16 @@ function EditorController:follow_require()
 
   if reqsel then
     local name = reqsel.name
+    --- the draft stays with its own file, and Shift+Esc
+    --- back to it brings the draft back
+    if self.mode == 'edit' or not self.input:is_empty() then
+      buf.parked = {
+        text = self.input:get_text():items(),
+        mode = self.mode,
+      }
+    end
     self.console:edit(name .. '.lua')
+    if self:get_active_buffer() == buf then buf.parked = nil end
   else
     self:refuse()
   end
@@ -170,6 +182,13 @@ function EditorController:pop_buffer()
   --- follow it, exactly as opening a file does —
   --- open() alone parks the view at the end
   bv:follow_line()
+  self.input:clear()
+  local parked = b.parked
+  b.parked = nil
+  if parked then
+    self.input:set_text(parked.text)
+    self:set_mode(parked.mode)
+  end
   self:update_status()
 end
 

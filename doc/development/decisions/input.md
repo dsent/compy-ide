@@ -2531,6 +2531,9 @@ it.
    pinned case is now *"Ctrl+T asks before it drops a changed block"*, with the four chords under
    *"the project exits ask first"*. What follows is the entry as ruled.
 
+   **The `Ctrl+J` gap below is closed (2026-09-30):** the draft stays with its own file and comes
+   back when `Shift+Esc` returns to it (`../technical_debt/input.md`, `T-EXITS-BYPASS-GUARD`).
+
    **NARROWER THAN THE CODE, and the gap is recorded rather than ruled** (found the same day, after
    this statement was written): *"two exits"* is exact **about exits**, and a **third** path loses a
    draft without leaving the editor at all — `Ctrl+J` is not mode gated, so it can move the mode to

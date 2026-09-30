@@ -786,6 +786,10 @@ chord and of what our re-homing adopted.
 - **What ours adds is layer, not defect:** `Ctrl+Shift+S` was re-expressed at route level as
   `_leave_keys` and `Ctrl+T` became a `RESERVED` entry. Re-homing a binding is adopting it, which
   is the argument `T-LEAVE-KEYS-LOSES-BLOCK` makes and this entry inherits.
+- **PAID 2026-09-30: `Ctrl+J` leaves the draft with its own file.** `follow_require` parks the
+  draft on the outgoing buffer, `open()` gives the required file an empty input with no message,
+  and `pop_buffer` brings the draft back, in its mode, when `Shift+Esc` returns to the file. No draft
+  meets `Shift+Esc` in `nav` any more. The analysis below is the bypass as found.
 - **A THIRD bypass, and it does not need an exit at all** (found 2026-09-07 by the S79 delivery
   review, verified independently by the parent before being recorded here). **`Ctrl+J` is not mode
   gated.** In `navigate()`'s tail (`editorController.lua:1485-1489`) it runs in **`edit`** as well

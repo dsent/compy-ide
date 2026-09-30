@@ -115,6 +115,8 @@ end
 --- @field selection integer
 --- @field active_line integer --- source line inside the selection
 --- @field loaded integer?
+--- @field parked {text: string[], mode: EditorMode}? --- the
+--- draft Ctrl+J left here, back when the buffer returns
 --- @field readonly boolean
 --- @field semantic BufferSemanticInfo?
 --- @field revmap table?

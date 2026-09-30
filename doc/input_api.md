@@ -854,11 +854,12 @@ Space discards the change and goes on, anything else keeps the block open.
 
 **Known limitation, and it ships this way.** Ctrl+Shift+S leaves the editor
 **without writing an open, changed block** — the changes are lost without a
-prompt. Shift+Esc is the supported way out; use it. (One further path discards a
-draft without asking, without leaving the editor: Ctrl+J while editing moves you
-to another file, and a Shift+Esc after it no longer sees an edit in progress.)
-The chord predates this release and is documented rather than fixed here — the
-contract is `doc/development/decisions/input.md`, `D-EDITOR-KEYS`, statement 6.
+prompt. Shift+Esc is the supported way out; use it. The chord predates this
+release and is documented rather than fixed here — the contract is
+`doc/development/decisions/input.md`, `D-EDITOR-KEYS`, statement 6.
+
+Ctrl+J while you edit a block opens the file it requires and keeps your edit
+with the first file: Shift+Esc back to it shows the edit again, still open.
 
 ### Pointer and click hooks
 
