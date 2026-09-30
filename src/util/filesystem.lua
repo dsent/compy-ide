@@ -691,7 +691,24 @@ local posix = (function()
         C.compy_fsync, C.compy_strerror
   end)
   if not found then return nil end
-  return { ffi = ffi, C = C }
+  --- a file's mode, where the C library has statx, whose
+  --- layout is the same on every architecture
+  for _, decl in ipairs({
+    [[typedef struct {
+        uint32_t mask; uint32_t blksize; uint64_t attributes;
+        uint32_t nlink; uint32_t uid; uint32_t gid;
+        uint16_t mode; uint16_t spare; uint64_t rest[28];
+      } compy_statx_t;]],
+    'int compy_statx(int dirfd, const char *path, int flags,'
+    .. ' unsigned int mask, compy_statx_t *buf) __asm__("statx");',
+    'int compy_fchmod(int fd, unsigned int mode) __asm__("fchmod");',
+  }) do
+    pcall(ffi.cdef, decl)
+  end
+  local modes = pcall(function()
+    return C.compy_statx, C.compy_fchmod
+  end)
+  return { ffi = ffi, C = C, modes = modes }
 end)()
 
 --- Linux, all architectures Compy runs on
@@ -759,14 +776,31 @@ local function write_all(fd, data)
   return true
 end
 
+--- Give the new file the permissions of the one it replaces.
+--- Best effort: the card has no such bits, and a C library
+--- without statx leaves the new file's own.
+--- @param fd integer
+--- @param target string
+local function keep_mode(fd, target)
+  if not posix.modes then return end
+  local AT_FDCWD, STATX_MODE = -100, 2
+  local st = posix.ffi.new('compy_statx_t')
+  if posix.C.compy_statx(AT_FDCWD, target, 0, STATX_MODE, st) ~= 0 then
+    return
+  end
+  posix.C.compy_fchmod(fd, bit.band(st.mode, 4095))
+end
+
 --- @param path string
 --- @param data string
 --- @param durable boolean?
+--- @param target string --- the file it is to replace
 --- @return boolean ok
 --- @return string? err
-local function write_temp_posix(path, data, durable)
+local function write_temp_posix(path, data, durable, target)
   local fd, err = create_new(path)
   if not fd then return false, err end
+  keep_mode(fd, target)
   local ok
   ok, err = write_all(fd, data)
   --- a durable save whose data does not reach the disk is
@@ -812,7 +846,7 @@ end
 function FS.replace(path, data, durable)
   local tmp = FS.replace_temp(path)
   local write_temp = posix and write_temp_posix or write_temp_plain
-  local ok, err = write_temp(tmp, data, durable)
+  local ok, err = write_temp(tmp, data, durable, path)
   if ok then
     ok, err = FS.rename(tmp, path)
   end
