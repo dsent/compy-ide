@@ -550,13 +550,24 @@ describe('micro:bit exec #microbit', function()
     assert.equal(2, sent())
   end)
 
-  it('holds upload back while it sends', function()
-    local tools = load_tools()
-    tools.exec('f.lua')
-    files['MICROBIT.hex'] = ':00000001FF\n'
-    assert.has_error(function() tools.upload() end)
-    assert.is_false(flashed)
-  end)
+  --- a refusal in words, as upload's others are: no error
+  --- panel with a line number
+  it('holds upload and a second exec back while it sends',
+    function()
+      local tools = load_tools()
+      tools.exec('f.lua')
+      files['MICROBIT.hex'] = ':00000001FF\n'
+      said = {}
+      assert.has_no_error(function() tools.upload() end)
+      assert.has_no_error(function() tools.exec('f.lua') end)
+      assert.is_false(flashed)
+      assert.equal(1, sent())
+      local told = table.concat(said, ' ')
+      local _, n = told:gsub('exec is still sending f.lua', '')
+      assert.equal(2, n)
+      assert.truthy(told:find('restart_microbit() to stop it', 1,
+        true))
+    end)
 
   --- this example on a Compy from before files went down the
   --- cable: its serial table has send, reset and isConnected

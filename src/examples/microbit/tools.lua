@@ -515,17 +515,25 @@ local function isSending()
   return sending ~= nil and serial.onTick == waiting
 end
 
+--- Whether exec is still sending a file, said when it is
+--- @return boolean
+local function busy()
+  if not isSending() then
+    return false
+  end
+  print("exec is still sending " .. sending.name .. ". Wait")
+  print("until it says how it went, or type")
+  print("restart_microbit() to stop it.")
+  return true
+end
+
 --- Whether the board can take a file now; a stop, in words,
---- when it is not there or exec is still sending one, and
---- false, said, while it takes new firmware
+--- when it is not there, and false, said, while it takes new
+--- firmware or exec is still sending a file
 --- @return boolean
 local function readyToSend()
   assert(serial.isConnected(), "no micro:bit connected")
-  if flashing() then
-    return false
-  end
-  assert(not isSending(), "exec is still sending a file")
-  return true
+  return not flashing() and not busy()
 end
 
 --- exec's handlers take the board over while it sends
@@ -915,13 +923,11 @@ local function overCable()
   return love.system.getOS() == "Android" and cableFlash()
 end
 
---- Whether upload may begin: exec is not sending, stopped
---- with words when it is, and no file is on its way already,
---- false, said, when one is
+--- Whether upload may begin: exec is not sending, and no file
+--- is on its way already; false, said, when either is
 --- @return boolean
 local function mayUpload()
-  assert(not isSending(), "exec is still sending a file")
-  return not flashing()
+  return not busy() and not flashing()
 end
 
 --- The hex file to send and what it holds, nil when there is
