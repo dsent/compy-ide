@@ -134,10 +134,9 @@ describe('editor key contract #input', function()
     -- D-EDITOR-KEYS statement 6. Both leave the editor
     -- through ConsoleController:finish_edit, which stores
     -- the clipboard and drops the buffers with no acceptance
-    -- step. Ctrl+T now asks the rework's discard question
-    -- first when an open block holds a change
-    -- (EditorController:ask_to_leave); Ctrl+Shift+S still
-    -- loses the block silently.
+    -- step. Both ask the rework's discard question first
+    -- when an open block holds a change
+    -- (EditorController:ask_to_leave).
     local left, ran, orig_finish, orig_run
 
     before_each(function()

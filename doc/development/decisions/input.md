@@ -2495,13 +2495,15 @@ it.
 2. **Leaving and discarding are always `Shift+Esc`.** There is no second way out that the contract
    recognises, which is what makes an unrecognised one worth finding rather than preserving.
    **Two were found and are now named — see statement 6**, which amends this one: `Shift+Esc`
-   remains the only *guarded* way out, and it is no longer the only one that exists.
+   remains the only *guarded* way out, and it is no longer the only one that exists. *Amended
+   2026-09-30: the five editor exits ask `Shift+Esc`'s question too (statement 6).*
 3. **`Ctrl+S` and `Ctrl+Shift+S` are above the editor**, so neither is the editor's to define and
    neither is ours to re-express at route level. We do re-express the second one
    (`../technical_debt/input.md`, `T-LEAVE-KEYS-LOSES-BLOCK`), and it reaches a path with no
    acceptance step, so it loses an open changed block. The chord ships **deprecated** by owner
    ruling, **and the loss is now RULED — it ships, documented** (2026-09-07; statement 6, which also
-   names the second exit this statement does not: `Ctrl+T`).
+   names the second exit this statement does not: `Ctrl+T`). *Amended 2026-09-30: the chord asks
+   before it drops a changed block, and loses nothing unasked (statement 6).*
 4. **What this does not decide.** @dsent has stated a **direction of travel** for the keymap —
    collapsing the exits onto `Ctrl+D`, dropping `Ctrl+Q`, and moving plain `Escape` into
    `Shift+Esc`'s role with confirmation before anything destructive. **That is stated intent and is
