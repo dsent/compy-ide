@@ -680,6 +680,9 @@ function EditorController:ask_to_leave(exit, own_key)
         or self:get_active_buffer().unsaved) do
     local i = self:_nearest_change()
     if not i then return false end
+    --- search and a block move end first, as Escape ends
+    --- them, so the draft comes back open for editing
+    self:_back_to_nav()
     for _ = 2, i do self:pop_buffer() end
   end
   if self:_block_changed() then
@@ -707,6 +710,16 @@ function EditorController:_nearest_change()
       return i
     end
   end
+end
+
+--- @private
+function EditorController:_back_to_nav()
+  if self.mode == 'search' then
+    self.search:clear()
+  elseif self.mode == 'reorder' then
+    self:_reorg(false)
+  end
+  self:set_mode('nav')
 end
 
 --- @private

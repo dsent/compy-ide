@@ -442,6 +442,22 @@ describe('the editor across files #input', function()
         end)
       end
 
+      for _, m in ipairs({ { 'search', 'f' }, { 'reorder', 'm' } }) do
+        it('Ctrl+Q from ' .. m[1] .. ' asks about the draft', function()
+          open()
+          draft("local lib = require('lib')\nkept = 99")
+          chord('lctrl', 'j')
+          chord('lctrl', m[2])
+          assert.same(m[1], ed:get_mode())
+
+          chord('lctrl', 'q')
+          assert.same('discard', ed.pending_confirm)
+          assert.same({}, took)
+          assert.same('main.lua', ed:get_active_buffer().name)
+          assert.same('edit', ed:get_mode())
+        end)
+      end
+
       it('takes the exit once the draft is answered', function()
         open()
         draft("local lib = require('lib')\nkept = 99")
