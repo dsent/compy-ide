@@ -89,6 +89,7 @@ function Echo:on()
   self.frame = nil
   self.blank = false
   self.open = false
+  self.cr = false
 end
 
 --- The frame the board is to say a file's end in, once
@@ -105,6 +106,7 @@ function Echo:clear()
   self.frame = nil
   self.blank = false
   self.open = false
+  self.cr = false
 end
 
 function Echo:off()
@@ -113,6 +115,22 @@ function Echo:off()
   self.frame = nil
   self.blank = false
   self.open = false
+  self.cr = false
+end
+
+--- Whether what is held may yet be the line the file's end is
+--- said in: the frame, then ok or error, however little of it
+--- has come
+--- @param held string
+--- @return boolean
+function Echo:mayBeEnd(held)
+  local frame = self.frame
+  if not frame then return false end
+  for status in pairs(ENDED) do
+    local whole = frame .. status
+    if whole:sub(1, #held) == held then return true end
+  end
+  return false
 end
 
 --- How a whole line says the file ended, when it is the frame
@@ -155,6 +173,12 @@ end
 
 --- @param chunk string
 function Echo:bytes(chunk)
+  -- a CR LF cut between two chunks ends one line: the CR
+  -- ended it already
+  if self.cr and chunk:sub(1, 1) == "\n" then
+    chunk = chunk:sub(2)
+  end
+  self.cr = chunk:sub(-1) == "\r"
   self.held = self.held .. as_text(as_lines(chunk))
   while true do
     local line, rest = self.held:match("^([^\n]*)\n(.*)$")
@@ -171,8 +195,7 @@ function Echo:tick(dt)
   if self.held == "" then return end
   self.settle = self.settle - dt
   if self.settle > 0 then return end
-  local frame = self.frame
-  if frame and frame:sub(1, #self.held) == self.held then return end
+  if self:mayBeEnd(self.held) then return end
   if self.blank then
     self.blank = false
     self.say("")

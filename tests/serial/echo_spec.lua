@@ -78,13 +78,30 @@ describe("echo", function()
       assert.same({ "", ENDED }, said)
     end)
 
-    it("holds a frame that comes in pieces", function()
-      e:bytes("\r\n" .. F:sub(1, 5))
-      e:tick(0.25)
-      assert.same({}, wrote)
-      e:bytes(F:sub(6) .. "ok\r\n")
-      assert.same({ ENDED }, said)
-    end)
+    --- every place the line can be cut, the status word too, with
+    --- a pause the tail would otherwise be written in
+    for _, case in ipairs({ { "ok", ENDED }, { "error", STOPPED } }) do
+      local line = F .. case[1] .. "\r\n"
+      for cut = 1, #line - 1 do
+        it("holds the end line cut after " .. cut .. " bytes ("
+          .. case[1] .. ")", function()
+            e:bytes(line:sub(1, cut))
+            e:tick(0.25)
+            assert.same({}, wrote)
+            e:bytes(line:sub(cut + 1))
+            assert.same({ case[2] }, said)
+          end)
+      end
+    end
+
+    it("holds a whole end line until its line break comes",
+      function()
+        e:bytes(F .. "ok")
+        e:tick(1)
+        assert.same({}, wrote)
+        e:bytes("\r\n")
+        assert.same({ ENDED }, said)
+      end)
 
     it("shows a held start that turned out not to be the frame",
       function()
@@ -111,6 +128,13 @@ describe("echo", function()
     e:bytes("\30exec 65f00001 ok\r\n")
     assert.same({ "\30exec 65f00001 ok" }, said)
   end)
+
+  it("takes a CR LF cut between two chunks for one line end",
+    function()
+      e:bytes("one\r")
+      e:bytes("\ntwo\r\n")
+      assert.same({ "one", "two" }, said)
+    end)
 
   it("assembles a line from single characters", function()
     for c in ("hi\r"):gmatch(".") do e:bytes(c) end
