@@ -347,11 +347,13 @@ per-run boundary) rather than as a phase of a lifecycle.
 
 - **Where:** `src/controller/controller.lua`: the update clears `CC.swallow_glyph` each frame.
 - **Scenario:** a Space answers an editor question with its key press, then a frame's update runs,
-  and only then does its glyph arrive: the glyph reaches the console, or a program Ctrl+T started.
-  In the other direction, a Space typed within the same frame after an answer is dropped.
+  and only then does its glyph arrive. Most answers leave the editor open in navigation (Shift+Esc's
+  discard, a checkpoint's overwrite or restore), where a glyph opens a new block holding it: an
+  unasked-for open block, closed with Esc. After an exit the glyph reaches the console, or a program
+  Ctrl+T started. In the other direction, a Space typed within the same frame after an answer is
+  dropped.
 - **Why it stays (2026-09-30):** a key press and its glyph come in the same event batch on the
-  desktop and on the device; a split across an update was not seen, and costs one space either
-  way.
+  desktop and on the device; a split across an update was not seen.
 
 ### T-REPLACE-NEEDS-POSIX-RENAME — a save renames over the file, which Windows' rename refuses
 
