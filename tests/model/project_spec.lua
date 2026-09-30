@@ -308,7 +308,10 @@ describe('ProjectService #project', function()
         PS:opreate('saves')
         local p = PS.current
         assert.is_false(p:writefile('.main.lua.compy-tmp', 'x'))
-        assert.is_false(p:writefile('.Notes.COMPY-TMP', 'x'))
+        local ok, err = p:writefile('.Notes.COMPY-TMP', 'x')
+        assert.is_false(ok)
+        --- it says what to do
+        assert.is_truthy(tostring(err):find('choose another name', 1, true))
       end)
 
     it('is never listed or cloned as a file of its own #project',

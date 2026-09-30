@@ -83,7 +83,9 @@ local function validate_filename(name)
   end
   --- a save's temporary files live there (FS.replace)
   if FS.is_replace_temp(name) then
-    return false, messages.invalid_filename('Name kept for saving')
+    return false, messages.invalid_filename(
+      'names like .main.lua.compy-tmp are kept for saving files,'
+      .. ' choose another name')
   end
   return true
 end
