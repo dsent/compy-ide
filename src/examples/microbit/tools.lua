@@ -424,6 +424,7 @@ local function fresh()
   sending.waited = 0
   sending.echoed = 0
   sending.warned = false
+  sending.shown = 0
 end
 
 --- The next line on its way, or the end of the file
@@ -489,15 +490,6 @@ local function tell(dt)
   end
 end
 
---- No prompt QUIET_S after the board took the last line: the
---- file is still running, as a program that loops is, and
---- echo shows the rest as it comes
---- @param after string
-local function quietLast(after)
-  local running = " is on the board and still running"
-  finish(sending.name .. running, sending.lines.frame, after)
-end
-
 --- How a frame says the file ended, and what exec says of it
 --- after the file's name: it ran; it ran, and stopped on a
 --- mistake; the board could not compile it, so it never ran
@@ -543,28 +535,66 @@ local function verdict(status)
       .. " answer, type restart_microbit(), then try again."
 end
 
---- This exec's frame with its status and line break, found in
---- what the board said: the file has ended. What came before
---- it, less the line break that went before the frame; the
---- status; and what came after, less the prompt, such as
---- what an on_event of the file's prints.
+--- Where this exec's end line begins in what the board said,
+--- and how it says the file ended: the frame, one of the
+--- statuses it sends, and a line break. A line that begins as
+--- the frame and goes on otherwise is the program's own.
+--- @param said string
+--- @return integer? at
+--- @return string? status
+local function endLine(said)
+  local frame = sending.lines.frame
+  local at = said:find(frame, 1, true)
+  while at do
+    local word = said:sub(at + #frame):match("^(%a+)\r\n")
+    local status = VERDICTS[word or ""] and word
+    if status then
+      return at, status
+    end
+    at = said:find(frame, at + 1, true)
+  end
+end
+
+--- This exec's end line, found in what the board said: the
+--- file has ended. What came before it, less the line break
+--- that went before the frame; the status; and what came
+--- after, less the prompt, such as what an on_event of the
+--- file's prints.
 --- @param after string
 --- @return string? text
 --- @return string? status
 --- @return string? rest
 local function frameIn(after)
-  local frame = sending.lines.frame
-  local at = after:find(frame, 1, true)
-  while at do
-    local word = after:sub(at + #frame):match("^(%a+)\r\n")
-    local status = VERDICTS[word or ""] and word
-    if status then
-      local rest = after:sub(at + #frame + #status + 2)
-      return (after:sub(1, at - 1):gsub("\r?\n$", "")), status,
-        (rest:gsub("^> ", ""))
-    end
-    at = after:find(frame, at + 1, true)
+  local at, status = endLine(after)
+  if not at then
+    return
   end
+  local rest = after:sub(
+    at + #(sending.lines.frame) + #status + 2
+  )
+  return (after:sub(1, at - 1):gsub("\r?\n$", "")), status,
+    (rest:gsub("^> ", ""))
+end
+
+--- What the file prints shows as it comes, a whole line at a
+--- time, up to its end line, which the verdict takes with
+--- what follows: sending.shown counts what of it is shown
+--- @param after string
+local function showRunning(after)
+  local whole = after:match("^.*\n") or ""
+  local at = endLine(whole)
+  local cut = at and at - 1 or #whole
+  if sending.shown < cut then
+    show(whole:sub(sending.shown + 1, cut))
+    sending.shown = cut
+  end
+end
+
+--- What of the text before the end line is not shown yet
+--- @param text string
+--- @return string
+local function unshown(text)
+  return text:sub(sending.shown + 1)
 end
 
 --- Whether what the board said ends in the start of this
@@ -583,6 +613,19 @@ local function endComing(after)
   return false
 end
 
+--- No prompt QUIET_S after the board took the last line: the
+--- file is still running, as a program that loops is, and
+--- echo shows the rest as it comes
+--- @param after string
+local function quietLast(after)
+  local running = " is on the board and still running"
+  finish(
+    sending.name .. running,
+    sending.lines.frame,
+    unshown(after)
+  )
+end
+
 --- The file ran past QUIET_S: ended after all, when its frame
 --- has come; still on its way, while the end of what came may
 --- be its start; else still running, and echo shows the rest
@@ -590,7 +633,7 @@ end
 local function longLast(after)
   local text, status, rest = frameIn(after)
   if status then
-    show(text)
+    show(unshown(text))
     finish(verdict(status), nil, nil, rest)
   elseif not endComing(after) then
     quietLast(after)
@@ -604,7 +647,7 @@ end
 --- @param said string
 local function prompted(said)
   local text, status = framed(said)
-  show(text)
+  show(unshown(text))
   local unended = status == nil and sending.lines.frame or nil
   finish(verdict(status), unended)
 end
@@ -617,6 +660,7 @@ end
 --- prints, and the file is still running.
 --- @param after string
 local function lastLine(after)
+  showRunning(after)
   local said = after:match("^(.*)> $")
   local done = said and SETTLE_S <= sending.quiet
   if done then

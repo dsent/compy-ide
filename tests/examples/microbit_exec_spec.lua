@@ -648,9 +648,11 @@ describe('micro:bit exec #microbit', function()
       serial:update(0.25)
       local told = table.concat(said, '\n')
       assert.is_nil(told:find('\30', 1, true))
-      assert.truthy(told:find('1\nf.lua is on the board and still'
+      local one = told:find('1\n', 1, true)
+      local running = told:find('f.lua is on the board and still'
         .. ' running\nThe program on the micro:bit has ended.', 1,
-        true))
+        true)
+      assert.truthy(one and running and one < running, told)
     end)
 
   --- an on_event of the file's prints on after its end, within
@@ -790,6 +792,32 @@ describe('micro:bit exec #microbit', function()
     assert.truthy(said[#said]:find('did not take it', 1, true))
   end)
 
+  --- t_slow on UE174: a sleep, then a line; the line showed only
+  --- with the verdict, 2.4 s late
+  it('shows what the file prints as it comes, once, and its end',
+    function()
+      local tools = load_tools()
+      tools.exec('f.lua')
+      for _ = 1, 5 do board() end
+      backend:rx(backend.sent[#backend.sent]:gsub('\r$', '')
+        .. '\r\r\n')
+      serial:update(0)
+      serial:update(2.5)
+      backend:rx('tick 1\r\n')
+      serial:update(0.1)
+      assert.equal('tick 1', said[#said])
+      assert.is_not_nil(port.onTick)
+      backend:rx('tick 2\r\n' .. framed('ok') .. '> ')
+      serial:update(0)
+      serial:update(0.25)
+      local told = table.concat(said, '\n')
+      assert.truthy(told:find('tick 1\ntick 2\nf.lua is on the board',
+        1, true), told)
+      local _, n = told:gsub('tick 1', '')
+      assert.equal(1, n)
+      assert.is_nil(told:find('\30', 1, true))
+    end)
+
   --- a program that loops never brings the prompt back
   it('hands a file that keeps running over to echo', function()
     local tools = load_tools()
@@ -798,11 +826,16 @@ describe('micro:bit exec #microbit', function()
     backend:rx(backend.sent[#backend.sent]:gsub('\r$', '')
       .. '\r\r\n1\r\n')
     serial:update(0)
+    -- what the file prints shows as it comes
+    assert.equal('1', said[#said])
     for _ = 1, 4 do serial:update(1) end
     assert.is_not_nil(port.onBytes)
     serial:update(2)
-    assert.same({ '1', 'f.lua is on the board and still running' },
-      { said[#said - 1], said[#said] })
+    assert.equal('f.lua is on the board and still running',
+      said[#said])
+    local _, ones = table.concat(said, '\n'):gsub('%f[^\n%z]1%f[\n%z]',
+      '')
+    assert.equal(1, ones)
     assert.is_nil(port.onBytes)
     assert.same({ true, false, true }, echoes)
     -- echo is to say the end in words when it comes
