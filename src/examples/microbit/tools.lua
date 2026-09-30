@@ -79,11 +79,21 @@ end
 -- that the metadata points at one at all
 local PEEK = 256
 
+--- Stop a command given no file name, or something else in
+--- its place, in words
+--- @param name any
+local function named(name)
+  if type(name) ~= "string" then
+    refuse("Name the file in quotes, such as \"blink.lua\".")
+  end
+end
+
 --- A project file, or a stop saying there is none, in these
 --- words alone: the console is asked to say nothing of it
 --- @param filename string
 --- @return string
 local function read(filename)
+  named(filename)
   local text = readfile(filename, true)
   if not text then
     refuse(
@@ -924,17 +934,6 @@ function hexmap(filename)
   print(head(hex.script(blocks)))
 end
 
---- Take the Lua script out of a hex file and keep it
---- @param hex_name string?
---- @param lua_name string?
-function extract(hex_name, lua_name)
-  local name = lua_name or LUA
-  local from = hex_name or HEX
-  local blocks = blocksOf(from)
-  scriptPlace(blocks, from)
-  writefile(name, hex.script(blocks))
-end
-
 --- Whether a name is the robots' firmware's, in any case: the
 --- card does not tell microbit.hex from MICROBIT.hex
 --- @param name string
@@ -943,35 +942,32 @@ local function isFirmware(name)
   return name:upper() == HEX:upper()
 end
 
---- Stop embed when it has no file to write, or would write
---- over the robots' firmware
---- @param hex_name string?
-local function writable(hex_name)
-  if not hex_name then
-    refuse(
-      "Name the firmware file to write, such as",
-      "embed(\"mine.hex\")."
-    )
+--- Stop a command when it has no file to write, or would
+--- write over the robots' firmware
+--- @param name any the file it writes
+--- @param example string the command, written with another name
+local function writable(name, example)
+  if type(name) ~= "string" then
+    refuse("Name the file to write, such as " .. example .. ".")
   end
-  if isFirmware(hex_name) then
+  if isFirmware(name) then
     refuse(
       HEX .. " is the robots' firmware and is never written",
-      "to. Name another file, such as embed(\"mine.hex\")."
+      "to. Name another file, such as " .. example .. "."
     )
   end
 end
 
---- Put a Lua script into a hex file. MICROBIT.hex is always
---- the firmware read from, and never the one written to: it
---- is the one copy that has to stay as it came.
---- @param hex_name string
+--- Take the Lua script out of a hex file and keep it
+--- @param hex_name string?
 --- @param lua_name string?
-function embed(hex_name, lua_name)
-  writable(hex_name)
-  local blocks = blocksOf(HEX)
+function extract(hex_name, lua_name)
   local name = lua_name or LUA
-  embedInto(blocks, name, read(name))
-  writefile(hex_name, hex.write(blocks))
+  writable(name, "extract(\"MICROBIT.hex\", \"mine.lua\")")
+  local from = hex_name or HEX
+  local blocks = blocksOf(from)
+  scriptPlace(blocks, from)
+  writefile(name, hex.script(blocks))
 end
 
 --- The hex file's name for a Lua file, its ending in the
@@ -980,6 +976,7 @@ end
 --- @param filename string
 --- @return string?
 local function hexNameOf(filename)
+  named(filename)
   local base, ending = filename:match("^(.*)%.([Ll][Uu][Aa])$")
   if not base then
     return nil
@@ -1100,14 +1097,45 @@ local function build(filename)
   return hex.write(blocks)
 end
 
+--- Put a Lua script into a hex file, with upload's checks.
+--- MICROBIT.hex is always the firmware read from, and never
+--- the one written to: it is the one copy that has to stay as
+--- it came.
+--- @param hex_name string
+--- @param lua_name string?
+function embed(hex_name, lua_name)
+  writable(hex_name, "embed(\"mine.hex\")")
+  local data = build(lua_name or LUA)
+  if data then
+    writefile(hex_name, data)
+  end
+end
+
+--- A Lua file name the project does not use yet, nor its
+--- firmware file's: mine.lua, or mine2.lua, and so on
+--- @return string
+local function freeName()
+  local name, n = "mine.lua", 1
+  local function taken()
+    return readfile(name, true)
+         or readfile(hexNameOf(name), true)
+  end
+  while taken() do
+    n = n + 1
+    name = "mine" .. n .. ".lua"
+  end
+  return name
+end
+
 --- The way to put a Lua file named for the firmware on the
---- board: as a Lua file of another name, with upload's checks
+--- board: as a Lua file of another name, one that takes the
+--- place of none, with upload's checks
 --- @param filename string
 local function renameWay(filename)
+  local free = freeName()
   print("robots' firmware. Give your script another name:")
-  local copy = "writefile(\"robot.lua\", readfile(%q))"
-  print(copy:format(filename))
-  print("upload(\"robot.lua\")")
+  print(("writefile(%q, readfile(%q))"):format(free, filename))
+  print(("upload(%q)"):format(free))
 end
 
 --- Whether a Lua file's hex would overwrite the robots'
@@ -1117,6 +1145,8 @@ end
 --- @return boolean
 local function overwrites(filename, hex_name)
   if isFirmware(hex_name) then
+    -- a file that is not there is said first, and alone
+    read(filename)
     print(filename .. " would overwrite " .. HEX .. ", the")
     renameWay(filename)
     return true

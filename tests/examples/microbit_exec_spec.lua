@@ -1040,9 +1040,9 @@ describe('micro:bit exec #microbit', function()
         -- with upload's checks
         assert.truthy(told:find('Give your script another name', 1,
           true))
-        assert.truthy(told:find('writefile("robot.lua", readfile("'
+        assert.truthy(told:find('writefile("mine.lua", readfile("'
           .. script .. '"))', 1, true))
-        assert.truthy(told:find('upload("robot.lua")', 1, true))
+        assert.truthy(told:find('upload("mine.lua")', 1, true))
         assert.is_nil(told:find('embed("mine.hex"', 1, true))
       end)
   end
@@ -1069,7 +1069,7 @@ describe('micro:bit exec #microbit', function()
       assert.is_false(flashed)
       local told = table.concat(said, '\n')
       local copy = told:match('writefile%b()')
-      local upload = told:match('upload%("robot.lua"%)')
+      local upload = told:match('upload%("mine.lua"%)')
       assert.truthy(copy and upload)
       local sent
       tools.flash_microbit = function(data)
@@ -1082,6 +1082,73 @@ describe('micro:bit exec #microbit', function()
       assert.is_true(flashed)
       assert.equal(script, hex.script(hex.parse(sent)))
     end)
+
+  --- the advice for MICROBIT.lua takes the place of no file
+  it('names a Lua file the project does not use yet for'
+    .. ' MICROBIT.lua', function()
+      local tools = load_tools()
+      files['MICROBIT.lua'] = 'print(1)\n'
+      files['mine.lua'] = 'my own\n'
+      files['mine2.hex'] = ':00000001FF\n'
+      said = {}
+      tools.upload('MICROBIT.lua')
+      local told = table.concat(said, ' ')
+      assert.truthy(told:find('writefile("mine3.lua", readfile('
+        .. '"MICROBIT.lua"))', 1, true))
+      assert.truthy(told:find('upload("mine3.lua")', 1, true))
+      assert.equal('my own\n', files['mine.lua'])
+    end)
+
+  it('says only that there is no MICROBIT.lua when there is none',
+    function()
+      local tools = load_tools()
+      refusedPlainly(function() tools.upload('microbit.lua') end,
+        'This project has no file called microbit.lua.')
+      assert.is_nil(table.concat(said, ' '):find('would overwrite', 1,
+        true))
+    end)
+
+  --- embed is the other way onto the board: it checks the file
+  --- as upload does
+  it('embed refuses a file upload would refuse', function()
+    local tools = load_tools()
+    firmware()
+    for name, text in pairs({ ['bad.lua'] = 'x = = 1\n',
+      ['blank.lua'] = '\n', ['hash.lua'] = '#!/bin/lua\nx = 1\n' }) do
+      files[name] = text
+      said = {}
+      assert.has_no_error(function() tools.embed('mine.hex', name) end)
+      assert.is_nil(files['mine.hex'], name)
+      assert.truthy(table.concat(said, ' '):find(name, 1, true))
+    end
+  end)
+
+  it('extract will not write over the firmware', function()
+    local tools = load_tools()
+    firmware()
+    local shipped = files['MICROBIT.hex']
+    refusedPlainly(function()
+      tools.extract('MICROBIT.hex', 'microbit.HEX')
+    end, 'MICROBIT.hex is the robots\' firmware and is never written',
+      'extract("MICROBIT.hex", "mine.lua")')
+    assert.equal(shipped, files['MICROBIT.hex'])
+  end)
+
+  it('says in words that a command needs a file name', function()
+    local tools = load_tools()
+    for _, call in ipairs({
+      function() tools.exec() end,
+      function() tools.send() end,
+      function() tools.upload(42) end,
+      function() tools.hexmap(42) end,
+      function() tools.embed('mine.hex', 42) end,
+    }) do
+      refusedPlainly(call, 'Name the file in quotes, such as'
+        .. ' "blink.lua".')
+    end
+    assert.equal(0, sent())
+    assert.is_false(flashed)
+  end)
 
   --- the card does not tell microbit.hex from MICROBIT.hex
   it('embed will not write microbit.hex in any case', function()
@@ -1636,9 +1703,8 @@ describe('micro:bit exec #microbit', function()
     local tools = load_tools()
     firmware()
     refusedPlainly(function() tools.embed() end,
-      'Name the firmware file to write, such as',
-      'embed("mine.hex")')
-    files['big.lua'] = ('x'):rep(300000)
+      'Name the file to write, such as embed("mine.hex").')
+    files['big.lua'] = ('-'):rep(300000)
     refusedPlainly(function() tools.embed('mine.hex', 'big.lua') end,
       'big.lua is 300000 bytes, and MICROBIT.hex has room for',
       'Make it shorter')
