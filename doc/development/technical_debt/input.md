@@ -343,6 +343,15 @@ per-run boundary) rather than as a phase of a lifecycle.
 
 ## BACKLOG
 
+### T-LATE-CHORD-GLYPH-CANCELS — a chord's glyph arriving after its modifiers are up cancels the question
+
+- **Where:** `src/controller/editorController.lua`, `_dialog_textinput`: a glyph is taken as part
+  of a chord only while Ctrl or Alt is held.
+- **Scenario:** change a block, press and release Ctrl+Q, then its glyph `q` arrives. The question
+  is cancelled; Enter then accepts and saves the draft, and the exit is not taken.
+- **Why it stays (2026-09-30):** a Compy delivers a key's glyph before its press, so the order does
+  not arise there, and nothing is lost when it does: the draft is kept and Enter saves it.
+
 ### T-PROGRAM-SWITCH-DROPS-DRAFT — a program that switches projects under the editor drops its draft
 
 - **Where:** `src/controller/consoleController.lua`, `open_project` → `_close_project` →
