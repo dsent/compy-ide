@@ -343,6 +343,18 @@ per-run boundary) rather than as a phase of a lifecycle.
 
 ## BACKLOG
 
+### T-CTRL-ESC-DROPS-CHANGE — Ctrl+Esc exits the IDE with a changed block open, unasked
+
+- **Where:** `src/controller/controller.lua`, the `keyreleased` reservation
+  `['ctrl+escape'] = Application.request_application_exit`, which no editor question guards;
+  `love.quit` lets the exit through in `app_state == 'editor'`.
+- **Scenario:** change an open block, hold Ctrl, press and release Escape. The IDE exits; the draft,
+  and any draft `Ctrl+J` left in another file, were never written.
+- **Why it stays (2026-09-30):** `Ctrl+Esc` is the untaught key that leaves the IDE from any state,
+  and the keys are frozen for 0.5.0. `../decisions/input.md`, `D-EDITOR-KEYS` statement 6 and the
+  input guide say it does not ask. A fix would route the reservation through
+  `EditorController:ask_to_leave` and request the exit on confirmation.
+
 ### T-HISTORY-UNREACHABLE — no project-facing way to read, navigate or clear the input history (capability deferred; the limitation is documented)
 
 **MOVED FROM `ACTIVE` TO `BACKLOG` 2026-09-09 (session89).** The entry was `ACTIVE`
