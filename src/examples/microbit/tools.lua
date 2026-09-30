@@ -191,7 +191,8 @@ local RAN = table.concat({
   "local ok = file ~= nil if ok then ok, err = P(file) end",
   " if not ok then say((file and 'Runtime' or 'Compile')",
   " .. ' error: ' .. T(err)) end",
-  " say('\\r\\n\\30exec %s ' .. (ok and 'ok' or 'error')) end"
+  " say('\\r\\n\\30exec %s ' .. (ok and 'ok'",
+  " or file and 'error' or 'compile')) end"
 })
 
 --- How many frames exec has made
@@ -473,17 +474,23 @@ local function framed(said)
   return said
 end
 
+--- How a frame says the file ended, and what exec says of it
+--- after the file's name: it ran; it ran, and stopped on a
+--- mistake; the board could not compile it, so it never ran
+local VERDICTS = {
+  ok = " is on the board",
+  error = " was run, and stopped on the mistake above",
+  compile = " could not run, because of the mistake above"
+}
+
 --- What exec says once the board has run the file, from its
 --- frame alone
 --- @param status string?
 --- @return string
 local function verdict(status)
-  if status == "ok" then
-    return sending.name .. " is on the board"
-  end
-  if status == "error" then
-    return sending.name .. " was run, and stopped on the" ..
-        " mistake above"
+  local words = VERDICTS[status]
+  if words then
+    return sending.name .. words
   end
   return "the board did not say whether " .. sending.name ..
       " ran. Type restart_microbit(), then try again."
@@ -508,18 +515,12 @@ local function frameIn(after)
   end
 end
 
---- How a frame says the file ended
-local ENDS = {
-  "ok",
-  "error"
-}
-
 --- Whether what the board said ends in the start of this
 --- exec's end line, the rest of which is on its way
 --- @param after string
 --- @return boolean
 local function endComing(after)
-  for _, status in ipairs(ENDS) do
+  for status in pairs(VERDICTS) do
     local whole = sending.lines.frame .. status .. "\r\n"
     for n = #whole - 1, 1, -1 do
       if after:sub(-n) == whole:sub(1, n) then

@@ -30,6 +30,8 @@ local ENDED = {
   ok = "The program on the micro:bit has ended.",
   error = "The program on the micro:bit stopped on the"
       .. " mistake above.",
+  compile = "The program on the micro:bit could not run,"
+      .. " because of the mistake above.",
 }
 
 --- How long the board must be quiet before an unterminated

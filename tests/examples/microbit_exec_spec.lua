@@ -227,6 +227,20 @@ describe('micro:bit exec #microbit', function()
       said[#said])
   end)
 
+  --- a file the board could not compile never ran
+  it('says a file with a mistake in how it is written could not'
+    .. ' run', function()
+      local tools = load_tools()
+      tools.exec('f.lua')
+      for _ = 1, 5 do board() end
+      board('Compile error: f.lua:1: unexpected symbol\r\n'
+        .. framed('compile'), '> ')
+      serial:update(0.25)
+      assert.same('f.lua could not run, because of the mistake'
+        .. ' above', said[#said])
+      assert.is_nil(table.concat(said, ' '):find('was run', 1, true))
+    end)
+
   it('takes a program\'s own words for its answer', function()
     local tools = load_tools()
     tools.exec('f.lua')
@@ -338,7 +352,7 @@ describe('micro:bit exec #microbit', function()
     { 'error("first\\nsecond")\n', 'stopped on the mistake' },
     { 'print(1)\nerror("Compile error: no")\n',
       'stopped on the mistake' },
-    { 'x = = 1\n', 'stopped on the mistake' },
+    { 'x = = 1\n', 'could not run, because of the mistake above' },
     { 'io.write("done ")\n', 'is on the board', 'done ' },
     { 'print("\\30exec ok")\nerror("boom")\n',
       'stopped on the mistake', '\30exec ok' },
