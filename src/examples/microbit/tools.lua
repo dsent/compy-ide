@@ -214,12 +214,12 @@ end
 --- file runs, so what the file puts there changes nothing; the
 --- frame goes straight to the port, when the board has one,
 --- past whatever print is. With no pcall left from an earlier
---- file, the file runs unprotected. With no rawget the chunk
---- stops before the file runs, and exec says the board did not
---- say whether it ran; with no loadstring the board's own
---- prompt cannot read what exec sends, and exec stops at its
---- first line; with no tostring the file runs, and a mistake
---- in it comes with no frame.
+--- file, the file runs unprotected. With no rawget or
+--- loadstring the chunk stops before the file runs, and exec
+--- says the board did not say whether it ran: the board's
+--- prompt keeps a loadstring of its own, and reads every line;
+--- with no tostring the file runs, and a mistake in it comes
+--- with no frame.
 local OPENING =
     "do local R,G=rawget,_G local f,e=R(G,'loadstring')("
 
