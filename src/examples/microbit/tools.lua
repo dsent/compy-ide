@@ -185,8 +185,9 @@ end
 
 -- The board takes a line, then answers it with a prompt: "> "
 -- when it is ready for a new statement, ">> " while a chunk is
--- still open. It drops what arrives faster than it reads, so
--- exec sends a line and waits for the prompt before the next.
+-- still open. What arrives while it runs a line waits in 254
+-- characters, and the rest is lost, so exec and send both send
+-- a line and wait for the prompt before the next.
 
 --- How long the board may say nothing before exec stops
 --- waiting on it
@@ -210,9 +211,20 @@ local STOPPED = "the board stopped answering. Type" ..
     " restart_microbit(), then try again. " .. UPLOADED
 local NOT_TAKEN = "the board did not take it. Type" ..
     " restart_microbit(), then try again. " .. UPLOADED
+local STILL_RUNNING = "that line was still running after a" ..
+    " minute, and the rest was not sent. Type" ..
+    " restart_microbit(), then try again."
 
---- The file exec is sending, while it sends
+--- The file exec or send is sending, while it sends: send's
+--- is plain, its lines as they are, their echo and what the
+--- board answers shown as they come
 local sending = nil
+
+--- The command sending the file, for its words
+--- @return string
+local function verb()
+  return sending.plain and "send" or "exec"
+end
 
 --- The end of a long bracket around a script, long enough
 --- that nothing in the script ends it first. It is never
@@ -376,11 +388,14 @@ local function show(said)
   end
 end
 
---- Where exec is in the file, counted in the file's lines
+--- Where exec or send is in the file, counted in the file's
+--- lines: exec's first line opens its chunk
 --- @return string
 local function where()
-  local total = #(sending.lines) - WRAPPING
-  local line = math.min(math.max(sending.at - 1, 1), total)
+  local wrapping = sending.plain and 0 or WRAPPING
+  local total = #(sending.lines) - wrapping
+  local at = sending.at - math.min(wrapping, 1)
+  local line = math.min(math.max(at, 1), total)
   return "line " .. line .. " of " .. total .. " of " .. sending
       .name
 end
@@ -417,15 +432,22 @@ end
 --- on: it shows what the board says from here on, and first
 --- before, what came before the outcome; after, what came
 --- after the file's end, goes after the outcome.
---- @param outcome string
+--- send leaves echo on throughout, and says nothing at a
+--- file's end.
+--- @param outcome string?
 --- @param frame string?
 --- @param before string?
 --- @param after string?
 local function finish(outcome, frame, before, after)
+  local plain = sending.plain
   putBack()
   sending = nil
-  pass(frame, before)
-  say(outcome)
+  if not plain then
+    pass(frame, before)
+  end
+  if outcome then
+    say(outcome)
+  end
   if after then
     pass(frame, after)
   end
@@ -433,7 +455,7 @@ end
 
 --- @param why string
 local function stopAt(why)
-  finish("exec stopped at " .. where() .. ": " .. why)
+  finish(verb() .. " stopped at " .. where() .. ": " .. why)
 end
 
 --- A line just sent: nothing heard of it, no time waited
@@ -445,6 +467,7 @@ local function fresh()
   sending.echoed = 0
   sending.warned = false
   sending.shown = 0
+  sending.long = false
 end
 
 --- The next line on its way, or the end of the file
@@ -453,7 +476,9 @@ local function sendNext()
   fresh()
   local line = sending.lines[sending.at]
   if not line then
-    finish(sending.name .. " is on the board")
+    local ran = not sending.plain
+         and sending.name .. " is on the board"
+    finish(ran or nil)
   elseif not serial.send(line .. "\r") then
     stopAt("the board is not connected")
   end
@@ -468,9 +493,15 @@ local EARLY = "the board stopped reading the file before its"
 --- statement before the last line means the board ended the
 --- chunk early, before the file could run, and the rest would
 --- reach it as statements of their own.
+--- send's lines are each their own statement: echo has shown
+--- what the board said, and any prompt lets the next go.
 --- @param said string
 --- @param open boolean
 local function answered(said, open)
+  if sending.plain then
+    sendNext()
+    return
+  end
   show(said)
   if open then
     sendNext()
@@ -482,10 +513,20 @@ end
 --- The board's bytes while exec sends. The last line's prompt
 --- is left to waiting, which lets the board settle first.
 --- @param chunk string
+--- send's last line is done once the board has taken it: no
+--- line waits on its prompt
+local function heardLast()
+  local done = sending.plain and afterEcho()
+  if done then
+    finish()
+  end
+end
+
 local function hear(chunk)
   sending.heard = sending.heard .. chunk
   sending.quiet = 0
   if sending.at == #(sending.lines) then
+    heardLast()
     return
   end
   local said, open = reply(afterEcho() or "")
@@ -498,7 +539,7 @@ end
 --- line it gets to: a line said again reads as stuck
 --- @param dt number
 local function tell(dt)
-  sending.told = sending.told + dt
+  sending.told = (sending.told or 0) + dt
   local at = where()
   local due = PROGRESS_S <= sending.told
   local moved = at ~= sending.toldAt
@@ -506,7 +547,7 @@ local function tell(dt)
   if say then
     sending.told = 0
     sending.toldAt = at
-    print("exec: " .. at)
+    print(verb() .. ": " .. at)
   end
 end
 
@@ -741,9 +782,25 @@ end
 --- Say, once, that the board has not taken the line yet
 local function warn()
   sending.warned = true
-  say("exec: the board has not taken " .. where() .. " yet," ..
-      " and exec is still waiting; restart_microbit() stops" ..
-      " it. " .. UPLOADED)
+  local who = verb()
+  local still = " and " .. who .. " is still waiting;"
+  say(who .. ": the board has not taken " .. where() .. " yet,"
+      .. still .. " restart_microbit() stops it. " .. UPLOADED)
+end
+
+--- A line send has sent, which the board took and still runs
+--- with no prompt: a loop, or a long move. send says so once,
+--- QUIET_S on, and stops at TAKE_S, with the rest unsent.
+local function running()
+  local due = QUIET_S < sending.since and not sending.long
+  if TAKE_S < sending.since then
+    stopAt(STILL_RUNNING)
+  elseif due then
+    sending.long = true
+    say("send: " .. where() .. " is still running; send waits"
+        .. " for its end before the next line, and" ..
+        " restart_microbit() stops it.")
+  end
 end
 
 --- The board has not taken the line in flight: its prompt may
@@ -766,6 +823,20 @@ local function untaken()
   end
 end
 
+--- The board has taken the line in flight: send waits for its
+--- prompt, exec for the last line's end or a prompt, and stops
+--- on a board that goes quiet before one
+--- @param after string
+local function taken(after)
+  if sending.plain then
+    running()
+  elseif sending.at == #(sending.lines) then
+    lastLine(after)
+  elseif QUIET_S < sending.quiet then
+    stopAt(STOPPED)
+  end
+end
+
 --- Time passing while exec waits on the board: for it to take
 --- the line in flight, then for its prompt
 --- @param dt number
@@ -777,10 +848,8 @@ local function waiting(dt)
   local after = afterEcho()
   if not after then
     untaken()
-  elseif sending.at == #(sending.lines) then
-    lastLine(after)
-  elseif QUIET_S < sending.quiet then
-    stopAt(STOPPED)
+  else
+    taken(after)
   end
 end
 
@@ -818,21 +887,33 @@ local function setAside(mine)
   return kept
 end
 
---- What exec keeps while it sends a file
+--- A project file's lines, as they are
 --- @param filename string
+--- @return string[]
+local function plainLines(filename)
+  local lines = { }
+  for line in fileForBoard(filename):gmatch("([^\r]*)\r") do
+    lines[#lines + 1] = line
+  end
+  return lines
+end
+
+--- What exec, or send (plain), keeps while it sends a file
+--- @param filename string
+--- @param plain boolean?
 --- @return table
-local function newSending(filename)
+local function newSending(filename, plain)
   local mine = handlers()
   return {
     name = filename,
-    lines = chunkLines(filename),
+    plain = plain,
+    lines = plain and plainLines(filename)
+         or chunkLines(filename),
     mine = mine,
     kept = setAside(mine),
     stop = stopped,
     exit = compy.before_exit,
-    at = 0,
-    quiet = 0,
-    told = 0
+    at = 0
   }
 end
 
@@ -849,7 +930,9 @@ local function busy()
   if not isSending() then
     return false
   end
-  print("exec is still sending " .. sending.name .. ". Wait")
+  print(
+    verb() .. " is still sending " .. sending.name .. ". Wait"
+  )
   print("until it says how it went, or type")
   print("restart_microbit() to stop it.")
   return true
@@ -859,31 +942,35 @@ end
 --- when it is not there, and false, said, while it takes new
 --- firmware or exec is still sending a file
 --- @return boolean
-local function readyToSend()
-  seen("exec")
+--- @param command string exec or send
+local function readyToSend(command)
+  seen(command)
   return not flashing() and not busy()
 end
 
---- Send a project file to the board, line by line, as if
---- typed
---- @param filename string
-function send(filename)
-  local held = flashing() or busy()
-  if held then
-    return
-  end
-  seen("send")
-  if not serial.send(fileForBoard(filename)) then
-    noBoard("send")
-  end
-end
-
---- exec's handlers take the board over while it sends
+--- exec's or send's handlers take the board over while it
+--- sends
 local function takeOver()
   for field, handler in pairs(sending.mine) do
     serial[field] = handler
   end
   compy.before_exit = stopped
+end
+
+--- Send a project file to the board, a line at a time, as if
+--- typed: each line once the board has answered the one
+--- before, its echo and the answers shown as they come
+--- @param filename string
+function send(filename)
+  if not readyToSend("send") then
+    return
+  end
+  if sending then
+    putBack()
+  end
+  sending = newSending(filename, true)
+  takeOver()
+  sendNext()
 end
 
 --- Run a project file on the board as one chunk, loaded from
@@ -892,7 +979,7 @@ end
 --- answers is.
 --- @param filename string
 function exec(filename)
-  if not readyToSend() then
+  if not readyToSend("exec") then
     return
   end
   if sending then

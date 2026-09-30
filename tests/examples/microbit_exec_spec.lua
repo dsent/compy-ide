@@ -929,6 +929,106 @@ describe('micro:bit exec #microbit', function()
     end)
 
   --- its lines would land in the middle of the file exec sends
+  --- send waits for each line's prompt as exec does: the
+  --- board keeps what comes while it runs a line in 254
+  --- characters, and lost the rest (UE174, 20 lines of a sleep
+  --- and a print)
+  describe('send', function()
+    --- the lines of a file of n steps, each a sleep and a print
+    local function steps(n)
+      local lines = {}
+      for i = 1, n do
+        lines[i] = ('microbit.sleep(400) print("step %02d")'):format(i)
+      end
+      return table.concat(lines, '\n') .. '\n'
+    end
+
+    it('sends a line once the board has answered the one before,'
+      .. ' and leaves echo on', function()
+        files['s.lua'] = steps(20)
+        local tools = load_tools()
+        echoes = {}
+        tools.send('s.lua')
+        for i = 1, 20 do
+          assert.equal(i, sent())
+          assert.equal(('microbit.sleep(400) print("step %02d")\r')
+            :format(i), backend.sent[i])
+          serial:update(0.4)
+          assert.equal(i, sent())
+          if i < 20 then
+            board(('step %02d\r\n'):format(i), '> ')
+          end
+        end
+        -- the last line is sent: send is done once it is taken
+        board()
+        assert.same({}, echoes)
+        assert.is_nil(port.onTick)
+        assert.has_no_error(function() tools.exec('f.lua') end)
+        assert.equal(21, sent())
+      end)
+
+    it('sends a blank line, and a chunk\'s open lines, each after'
+      .. ' its prompt', function()
+        files['s.lua'] = 'for i = 1, 2 do\n\nprint(i)\nend\n'
+        local tools = load_tools()
+        tools.send('s.lua')
+        board(nil, '>> ')
+        board(nil, '>> ')
+        board(nil, '>> ')
+        assert.same({ 'for i = 1, 2 do\r', '\r', 'print(i)\r',
+          'end\r' }, backend.sent)
+      end)
+
+    --- a line that loops keeps the board without a prompt
+    it('says a line still running, and stops at a minute with the'
+      .. ' rest unsent', function()
+        files['s.lua'] = 'x = 1\nwhile true do end\nprint(3)\n'
+        local tools = load_tools()
+        tools.send('s.lua')
+        board(nil, '> ')
+        board(nil, '')
+        said = {}
+        for _ = 1, 6 do serial:update(1) end
+        assert.truthy(allSaid():find('send: line 2 of 3 of s.lua is'
+          .. ' still running; send waits for its end before the next'
+          .. ' line, and restart_microbit() stops it.', 1, true))
+        assert.is_not_nil(port.onTick)
+        for _ = 1, 55 do serial:update(1) end
+        assert.truthy(allSaid():find('send stopped at line 2 of 3 of'
+          .. ' s.lua: that line was still running after a minute,'
+          .. ' and the rest was not sent. Type restart_microbit(),'
+          .. ' then try again.', 1, true), allSaid())
+        assert.equal(2, sent())
+        assert.is_nil(port.onTick)
+      end)
+
+    it('says a line the board never takes, in its own name',
+      function()
+        files['s.lua'] = 'x = 1\n'
+        local tools = load_tools()
+        tools.send('s.lua')
+        said = {}
+        for _ = 1, 61 do serial:update(1) end
+        local all = allSaid()
+        assert.truthy(all:find('send: the board has not taken line 1'
+          .. ' of 1 of s.lua yet, and send is still waiting', 1, true),
+          all)
+        assert.truthy(all:find('send stopped at line 1 of 1 of s.lua:'
+          .. ' the board did not take it', 1, true), all)
+      end)
+
+    it('holds exec and upload back while it sends', function()
+      files['s.lua'] = steps(2)
+      local tools = load_tools()
+      tools.send('s.lua')
+      said = {}
+      tools.exec('f.lua')
+      assert.equal(1, sent())
+      assert.truthy(allSaid():find('send is still sending s.lua', 1,
+        true))
+    end)
+  end)
+
   it('holds send back while it sends, in the same words',
     function()
       local tools = load_tools()
