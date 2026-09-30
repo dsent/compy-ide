@@ -1827,7 +1827,8 @@ function EditorController:keypressed(k)
       --- the Space's glyph follows its key press here;
       --- once the exit has closed the editor, the gate
       --- drops it
-      if exit and k == 'space' then
+      if exit and k == 'space'
+          and not Key.ctrl() and not Key.alt() then
         self.console.swallow_glyph = ' '
       end
       return self:_answer(act, exit)
