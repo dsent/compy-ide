@@ -1864,6 +1864,34 @@ describe('Serial flash', function()
       end
     end)
 
+  --- a flash before this one may have erased the board: a
+  --- stop while the next file is read must not say the board
+  --- kept its program
+  it('says the program may be gone when closed while it reads'
+    .. ' after a flash that may have erased it', function()
+      for _, how in ipairs({ 'abandon', 'stop' }) do
+        local chip = F.chip()
+        local s, b = connected(chip)
+        b.link.wiped = true
+        local now = 0
+        s.clock = function()
+          now = now + 0.001
+          return now
+        end
+        local said = {}
+        assert.is_true(s:flash(F.hex(400),
+          function(l) said[#said + 1] = l end))
+        s:update(1 / 30)
+        assert.is_true(getmetatable(s.job) == DapPrepare)
+        local cut = s[how](s)
+        local words = how == 'stop' and cut or said[#said]
+        assert.is_nil(words:find('keeps its program', 1, true), how)
+        assert.truthy(words:find('may be gone', 1, true), how)
+        assert.truthy(words:find('Send the file again', 1, true),
+          how)
+      end
+    end)
+
   --- a fault of the Compy's own sends no one for a new file
   it('tells its own fault from a damaged file', function()
     local chip = F.chip()

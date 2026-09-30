@@ -312,7 +312,7 @@ function Serial:flash(data, say, on)
   -- queued for the old one would be typed into its new REPL
   self:drop()
   self.job = DapPrepare.new(data, say, Dap.log,
-    self.clock or clock, on)
+    self.clock or clock, on, link.wiped)
   return true
 end
 
@@ -419,6 +419,9 @@ end
 local STOPPED_READING = 'The Compy stopped before the file went'
     .. ' to the micro:bit, which keeps its program. Send the file'
     .. ' again once the Compy is back.'
+local STOPPED_GONE = 'The Compy stopped before the file went to'
+    .. ' the micro:bit. ' .. DapFlash.GONE .. ' Send the file'
+    .. ' again once the Compy is back.'
 local CUT = 'A file was going to the micro:bit, and it did not'
     .. ' take it: the Compy stopped. Send the file again once'
     .. ' the Compy is back.'
@@ -431,7 +434,7 @@ function Serial:stop()
   local cut
   if self.job then
     if getmetatable(self.job) == DapPrepare then
-      cut = STOPPED_READING
+      cut = self.job:erased() and STOPPED_GONE or STOPPED_READING
       self.job:abandon(STOP_S)
     elseif self.job:abandon(STOP_S) then
       cut = DapFlash.TOOK

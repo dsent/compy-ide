@@ -44,10 +44,13 @@ DapPrepare.tell = tell
 --- @param log function a line for the device log
 --- @param clock function seconds
 --- @param on table? { read = fn(image), sending = fn() }
+--- @param wiped boolean? a flash before this one may have
+---   erased the board's program
 --- @return DapPrepare
-function DapPrepare.new(data, say, log, clock, on)
+function DapPrepare.new(data, say, log, clock, on, wiped)
   local self = setmetatable({}, DapPrepare)
   self.say = say
+  self.wiped = wiped == true
   self.log = log
   self.on = on or {}
   self.clock = clock
@@ -120,26 +123,32 @@ function DapPrepare:step(dt)
   return self.state
 end
 
---- Nothing has gone to the board yet
+--- Nothing has gone to the board from this file; a flash
+--- before it may have erased the board's program
 --- @return boolean
 function DapPrepare:erased()
-  return false
+  return self.wiped
 end
 
 DapPrepare.CLOSED = 'The Compy was closed before the file went'
     .. ' to the micro:bit, which keeps its program. Send the'
     .. ' file again once the Compy is back.'
+DapPrepare.CLOSED_GONE = 'The Compy was closed before the file'
+    .. ' went to the micro:bit. Its old program may be gone'
+    .. ' until a file goes onto it. Send the file again once the'
+    .. ' Compy is back.'
 
---- Stop reading; the board was never touched. Words are said
---- when a flash would say them, and they are the reading's
---- own: nothing was sent.
+--- Stop reading; this file never touched the board. Words are
+--- said when a flash would say them, and they are the
+--- reading's own: nothing was sent.
 --- @param _ number? seconds, as for a flash
 --- @param plain string? given for a flash; any means say
 function DapPrepare:abandon(_, plain)
   if self.state ~= 'running' then return end
   self.state = 'failed'
   if plain then
-    self.say(DapPrepare.CLOSED)
+    self.say(self.wiped and DapPrepare.CLOSED_GONE
+      or DapPrepare.CLOSED)
   end
   self.log('ABANDONED while preparing the file')
 end
