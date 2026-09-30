@@ -79,11 +79,12 @@ end
 -- that the metadata points at one at all
 local PEEK = 256
 
---- A project file, or a stop saying there is none
+--- A project file, or a stop saying there is none, in these
+--- words alone: the console is asked to say nothing of it
 --- @param filename string
 --- @return string
 local function read(filename)
-  local text = readfile(filename)
+  local text = readfile(filename, true)
   if not text then
     refuse(
       "This project has no file called " .. filename .. ".",
@@ -1129,7 +1130,7 @@ end
 --- @return boolean
 local function saved(hex_name, data)
   writefile(hex_name, data)
-  if readfile(hex_name) == data then
+  if readfile(hex_name, true) == data then
     return true
   end
   print(hex_name .. " could not be saved, so nothing was")

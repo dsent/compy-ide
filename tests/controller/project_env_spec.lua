@@ -205,6 +205,22 @@ describe('ConsoleController project env #project', function()
     assert.same('a = 1\n\nb = 2\n', env.readfile('tidy_me.lua'))
   end)
 
+  --- the micro:bit tools say a missing file in their own words
+  it('readfile says a missing file, unless asked to be quiet'
+    .. ' #project', function()
+      CC:open_project(ProjectService.DEFAULT)
+      local env = CC:get_project_env()
+      local said = { }
+      local print_ = _G.print
+      _G.print = function(s) said[#said + 1] = s end
+      local loud = env.readfile('nothere.lua')
+      local quiet = env.readfile('nothere.lua', true)
+      _G.print = print_
+      assert.is_nil(loud)
+      assert.is_nil(quiet)
+      assert.are.same({ 'nothere.lua does not exist' }, said)
+    end)
+
   it('get_effective_env is always the project env #project', function()
     assert.are.equal(CC:get_project_env(), CC:get_effective_env())
     love.state.app_state = 'running'

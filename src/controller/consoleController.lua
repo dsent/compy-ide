@@ -349,13 +349,16 @@ function ConsoleController:tidy(name)
   return true
 end
 
-function ConsoleController:_readfile(name)
+--- @param name string
+--- @param quiet boolean? a missing file is not said
+--- @return string?
+function ConsoleController:_readfile(name, quiet)
   local PS              = self.model.projects
   local p               = PS.current
   local ok, text_or_err = p:readfile(name)
   if ok then
     return text_or_err
-  else
+  elseif not quiet then
     print(text_or_err)
   end
 end
@@ -1545,10 +1548,12 @@ function ConsoleController.prepare_project_env(cc)
   end
 
   --- @param name string
+  --- @param quiet boolean? says nothing when there is no such
+  ---   file, for a caller that says it in its own words
   --- @return string?
-  project_env.readfile         = function(name)
+  project_env.readfile         = function(name, quiet)
     --- @diagnostic disable-next-line: invisible
-    return check_open_pr(cc._readfile, cc, name)
+    return check_open_pr(cc._readfile, cc, name, quiet)
   end
 
   --- @param name string

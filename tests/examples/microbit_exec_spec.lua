@@ -1567,6 +1567,12 @@ describe('micro:bit exec #microbit', function()
   it('says in words that a file is not in the project', function()
     local tools = load_tools()
     firmware()
+    --- the console says nothing of the missing file itself
+    local loud = 0
+    tools.readfile = function(name, quiet)
+      if not files[name] and not quiet then loud = loud + 1 end
+      return files[name]
+    end
     for _, call in ipairs({
       function() tools.exec('none.lua') end,
       function() tools.send('none.lua') end,
@@ -1579,6 +1585,7 @@ describe('micro:bit exec #microbit', function()
         'This project has no file called none.lua.',
         'Check the name, then try again.')
     end
+    assert.equal(0, loud)
     assert.equal(0, sent())
     assert.is_false(flashed)
   end)
