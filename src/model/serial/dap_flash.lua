@@ -304,7 +304,9 @@ function DapFlash:onOpen(status)
   self.statuses.open = self:name(status)
   self.log('open: ' .. self:name(status))
   if status == Dap.SUCCESS then
-    self:sayStart()
+    -- a stop that took this answer in says how it ended, and
+    -- nothing more goes: no start is said for it
+    if not self.abandoning then self:sayStart() end
     return self:enter('write')
   end
   if status == Dap.INTERNAL and not self.retried then
@@ -575,6 +577,7 @@ end
 --- @return boolean? took the board has the whole file
 function DapFlash:abandon(seconds, plain)
   if self.state ~= 'running' then return end
+  self.abandoning = true
   local link = self.link
   local deadline = self.clock() + seconds
   local function left()

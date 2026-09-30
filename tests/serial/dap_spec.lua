@@ -717,6 +717,25 @@ describe('DapFlash', function()
       assert.same(1, chip.resets)
     end)
 
+  --- the open's answer comes in while a stop waits for it:
+  --- nothing is said to start, only how it ended
+  it('says no start for an open a stop took in', function()
+    local chip = F.chip({ slow = { [0x8A] = 0.3 } })
+    local j, said = job(F.hex(40), chip)
+    local sounds = 0
+    j.sending = function() sounds = sounds + 1 end
+    while not (j.phase == 'open' and j.asked) do
+      j:step(1 / 30)
+      chip.now = chip.now + 1 / 30
+    end
+    j:abandon(1, 'The Compy stopped.')
+    local told = joined(said)
+    assert.is_nil(told:find('Sending the file', 1, true))
+    assert.same(0, sounds)
+    local _, n = told:gsub('did not take the file', '')
+    assert.same(1, n)
+  end)
+
   --- the reply comes after all, once the next flash has
   --- given its command up: it is passed over
   it('sends again after a reply that came too late', function()
