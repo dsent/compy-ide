@@ -1017,6 +1017,63 @@ describe('micro:bit exec #microbit', function()
           .. ' the board did not take it', 1, true), all)
       end)
 
+    --- UE174: send typed as exec said its verdict stopped at its
+    --- third line, not taken. Here send starts inside the tick
+    --- that says the verdict, from the verdict's own print, and
+    --- one tick after it; both go through their lines.
+    --- @param tools table
+    --- @param lines integer
+    local function sendsThrough(tools, lines)
+      for i = 1, lines do
+        assert.equal(i, sent() - 6)
+        board(('%d\r\n'):format(i), '> ')
+      end
+      assert.is_nil(port.onTick)
+      assert.is_nil(allSaid():find('not taken', 1, true))
+    end
+
+    it('starts in the tick that says exec\'s verdict', function()
+      files['s.lua'] = steps(3)
+      local tools = load_tools()
+      local print_ = tools.print
+      tools.print = function(text)
+        print_(text)
+        if text == 'f.lua is on the board' then
+          tools.send('s.lua')
+        end
+      end
+      run(tools)
+      assert.equal('f.lua is on the board', said[#said])
+      assert.equal(7, sent())
+      sendsThrough(tools, 3)
+    end)
+
+    it('starts one tick after exec\'s verdict', function()
+      files['s.lua'] = steps(3)
+      local tools = load_tools()
+      run(tools)
+      assert.equal('f.lua is on the board', said[#said])
+      serial:update(1 / 60)
+      tools.send('s.lua')
+      assert.equal(7, sent())
+      sendsThrough(tools, 3)
+    end)
+
+    --- the verdict from a frame that came with more after it, the
+    --- rest handed to echo: send starts on a board still talking
+    it('starts after a verdict that handed echo the rest',
+      function()
+        files['s.lua'] = steps(3)
+        local tools = load_tools()
+        printingUntilLate(tools)
+        backend:rx(framed('ok') .. '> late\r\n')
+        serial:update(0.15)
+        assert.truthy(allSaid():find('f.lua is on the board', 1, true))
+        tools.send('s.lua')
+        assert.equal(7, sent())
+        sendsThrough(tools, 3)
+      end)
+
     it('holds exec and upload back while it sends', function()
       files['s.lua'] = steps(2)
       local tools = load_tools()
