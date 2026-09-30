@@ -405,7 +405,7 @@ describe('micro:bit exec #microbit', function()
       --- the greeting of a board just reset, as the bundled
       --- firmware gives it: an empty line first
       backend:rx('\r\nmicro:bit\r\nLua 5.1 REPL\r\nfirmware'
-        .. ' 0a352f7\r\n> ')
+        .. ' 0a975a4\r\n> ')
       serial:update(0)
       assert.equal(1, sent())
       board()
