@@ -1338,6 +1338,17 @@ describe('Editor #editor', function()
         }
       end)
 
+      it('a checkpoint that cannot be written says so', function()
+        controller.console.write_checkpoint = function() return false end
+        mock.keystroke('C-k', press)
+        assert.is_true(inter:has_error())
+        cp_time = 1752400000
+        inter:clear_error()
+        mock.keystroke('C-k', press)
+        mock.keystroke('return', press)
+        assert.is_true(inter:has_error())
+      end)
+
       it('first checkpoint writes without asking', function()
         mock.keystroke('C-k', press)
         assert.same({ 'write:main.lua' }, calls)

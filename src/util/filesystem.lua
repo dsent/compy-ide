@@ -649,13 +649,34 @@ end
 --- leaves such files out, and a save removes one it finds.
 local TEMP_SUFFIX = '.compy-tmp'
 
+--- A file name's longest, in bytes, on Linux and the card
+local NAME_MAX = 255
+
+--- A short, stable stand-in for a name: 32 bits of it, in
+--- hex, by plain arithmetic, which every build has
+--- @param name string
+--- @return string
+local function digest(name)
+  local h = 2166136261
+  for i = 1, #name do
+    h = (h * 31 + string.byte(name, i)) % 4294967296
+  end
+  return string.format('%08x', h)
+end
+
 --- @param path string
 --- @return string --- the temporary file FS.replace writes
---- beside `path`
+--- beside `path`. A name so long the suffix would take it
+--- past the length limit gets a digest of it in its place,
+--- still in the namespace.
 function FS.replace_temp(path)
   local dir, name = string.match(path, '^(.*[/\\])([^/\\]+)$')
-  if not dir then return '.' .. path .. TEMP_SUFFIX end
-  return dir .. '.' .. name .. TEMP_SUFFIX
+  if not dir then dir, name = '', path end
+  local temp = '.' .. name .. TEMP_SUFFIX
+  if #temp > NAME_MAX then
+    temp = '.' .. digest(name) .. TEMP_SUFFIX
+  end
+  return dir .. temp
 end
 
 --- @param name string

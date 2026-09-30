@@ -225,6 +225,21 @@ describe("FS utils", function()
       assert.same('rw-r-----', lfs.attributes(target, 'permissions'))
     end)
 
+    it('of a name near the length limit', function()
+      --- 60 characters, four bytes each: the name fits, and a
+      --- checkpoint of it too, but not with the temporary
+      --- file's longer suffix
+      local long = FS.join_path(dir, string.rep('\240\144\128\128', 60)
+        .. '.~save')
+      local ltemp = FS.replace_temp(long)
+      local base = string.match(ltemp, '[^/]+$')
+      assert.is_true(#base <= 255)
+      assert.is_true(FS.is_replace_temp(base))
+      assert.is_true(FS.replace(long, 'x = 2\n', true))
+      assert.same('x = 2\n', read(long))
+      assert.is_false(FS.exists(ltemp))
+    end)
+
     it('removing a temporary file a power cut left', function()
       assert.is_true(FS.write(temp, 'half a fi'))
       assert.is_true(FS.replace(target, 'x = 2\n'))

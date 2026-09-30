@@ -757,6 +757,20 @@ function EditorController:_answer(act, exit)
   self._asked_by_gate = nil
 end
 
+--- @private
+--- Write the checkpoint of the file on screen, or say it
+--- could not be written
+--- @return boolean written
+function EditorController:_write_checkpoint()
+  local name = self:get_active_buffer().name
+  if self.console:write_checkpoint(name) then return true end
+  self:refuse({
+    'Could not save the checkpoint.'
+    .. ' Check the storage and try again.'
+  })
+  return false
+end
+
 --- Execute a confirmed dialog action (keypressed confirms on
 --- a fresh Enter or Space and cancels on any other fresh
 --- key; a repeat or a glyph answers nothing)
@@ -770,8 +784,7 @@ function EditorController:_confirm(act)
   end
   local con = self.console
   if act == 'overwrite' then
-    return con:write_checkpoint(
-      self:get_active_buffer().name)
+    return self:_write_checkpoint()
   end
   if act == 'restore' then
     local name = self:get_active_buffer().name
@@ -1594,7 +1607,7 @@ function EditorController:_normal_mode_keys(k)
       ) })
       return
     end
-    con:write_checkpoint(name)
+    self:_write_checkpoint()
   end
 
   --- spec 2.3: Shift+Esc discards the edit; on an empty
