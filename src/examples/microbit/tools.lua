@@ -211,6 +211,10 @@ local STOPPED = "the board stopped answering. Type" ..
     " restart_microbit(), then try again. " .. UPLOADED
 local NOT_TAKEN = "the board did not take it. Type" ..
     " restart_microbit(), then try again. " .. UPLOADED
+local CHANGED = table.concat({
+  "the board got that line changed, and the file would not",
+  " run as written. Type restart_microbit(), then try again."
+})
 local STILL_RUNNING = "that line was still running after a" ..
     " minute, and the rest was not sent. Type" ..
     " restart_microbit(), then try again."
@@ -468,6 +472,7 @@ local function fresh()
   sending.warned = false
   sending.shown = 0
   sending.long = false
+  sending.got = nil
 end
 
 --- The next line on its way, or the end of the file
@@ -510,9 +515,6 @@ local function answered(said, open)
   end
 end
 
---- The board's bytes while exec sends. The last line's prompt
---- is left to waiting, which lets the board settle first.
---- @param chunk string
 --- send's last line is done once the board has taken it: no
 --- line waits on its prompt
 local function heardLast()
@@ -522,9 +524,53 @@ local function heardLast()
   end
 end
 
-local function hear(chunk)
-  sending.heard = sending.heard .. chunk
-  sending.quiet = 0
+--- The line the board entered in place of the line in flight,
+--- once its prompt has come: the board ends a line it enters
+--- with CR CR LF, and what came before that differs from the
+--- line sent. nil while the line's own echo is there, or may
+--- yet come.
+--- @return string?
+local function changed()
+  local prompt = sending.heard:find(">>? $")
+  local got = not afterEcho() and prompt and sending.got
+  return got or nil
+end
+
+--- What send says after the line of the board's it got changed
+local GOT_CHANGED = table.concat({
+  " changed, so what it ran may differ from the file; the",
+  " lines above show what it got."
+})
+
+--- The board entered the line changed: send says so and goes
+--- on, echo having shown what the board got; exec stops, the
+--- file changed on its way
+local function mistook()
+  if not sending.plain then
+    stopAt(CHANGED)
+    return
+  end
+  say("send: the board got " .. where() .. GOT_CHANGED)
+  sendNext()
+end
+
+--- Whether the board entered the line in flight changed, done
+--- with when it did: the first line it entered is kept, as
+--- what it got, before a wait can show and drop it
+--- @return boolean
+local function heardChanged()
+  local entered = sending.heard:match("([^\n]*)\r\r\n")
+  sending.got = sending.got or entered
+  local got = changed()
+  if got then
+    mistook()
+  end
+  return got ~= nil
+end
+
+--- What the board has said of the line in flight: the last
+--- line's is send's alone, exec leaving its prompt to waiting
+local function heardLine()
   if sending.at == #(sending.lines) then
     heardLast()
     return
@@ -532,6 +578,18 @@ local function hear(chunk)
   local said, open = reply(afterEcho() or "")
   if said then
     answered(said, open)
+  end
+end
+
+--- The board's bytes while exec or send sends: a line it
+--- entered changed is seen first. exec leaves its last line's
+--- prompt to waiting, which lets the board settle first.
+--- @param chunk string
+local function hear(chunk)
+  sending.heard = sending.heard .. chunk
+  sending.quiet = 0
+  if not heardChanged() then
+    heardLine()
   end
 end
 
@@ -758,11 +816,13 @@ end
 
 --- What the board says while the line waits is a program's of
 --- its own, or a greeting, and is shown, a whole line at a
---- time: all but what may be the start of the line's echo
+--- time, to its line feed: all but what may be the start of the
+--- line's echo. A line the board entered ends CR CR LF, and
+--- stays whole until it is told from the line's own.
 local function showHeard()
   local heard = sending.heard
   local head = heard:sub(1, #heard - echoed())
-  local lines = head:match("^.*[\r\n]")
+  local lines = head:match("^.*\n")
   if lines then
     show(lines)
     sending.heard = heard:sub(#lines + 1)
