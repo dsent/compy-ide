@@ -675,6 +675,44 @@ describe('micro:bit exec #microbit', function()
       assert.is_nil(told:find('\30', 1, true))
     end)
 
+  --- the end line, the prompt and an on_event's line in one
+  --- chunk, just past the wait (Codex round 11, M1)
+  it('shows a line that comes with the end line in one piece',
+    function()
+      local tools = load_tools()
+      consoleEcho(tools)
+      printingUntilLate(tools)
+      backend:rx(framed('ok') .. '> callback fired\r\n')
+      serial:update(0.15)
+      local told = table.concat(said, '\n')
+      assert.truthy(told:find('f.lua is on the board\ncallback fired',
+        1, true), told)
+    end)
+
+  --- a line that begins as this exec's frame and goes on as no
+  --- end line does is the program's own (Codex round 11, m1)
+  for _, word in ipairs({ 'oops', 'errands', 'okay' }) do
+    it('takes the frame and ' .. word .. ' for the program\'s own',
+      function()
+        local tools = load_tools()
+        consoleEcho(tools)
+        printingUntilLate(tools)
+        local frame = framed('ok'):match('^\r\n(.-)ok\r\n$')
+        backend:rx('\r\n' .. frame .. word .. '\r\n')
+        serial:update(0.15)
+        local told = table.concat(said, '\n')
+        assert.is_nil(told:find('has not said', 1, true))
+        assert.is_nil(told:find('is on the board\n', 1, true))
+        backend:rx(framed('ok') .. '> ')
+        serial:update(0)
+        serial:update(0.25)
+        told = table.concat(said, '\n')
+        assert.truthy(told:find(word, 1, true), told)
+        assert.truthy(told:find('f.lua is on the board', 1, true)
+          or told:find('has ended', 1, true), told)
+      end)
+  end
+
   --- a program that writes a "> " of its own and waits: exec
   --- cannot tell, and echo says the end when it comes
   it('lets echo say the end of a file whose own "> " came first',

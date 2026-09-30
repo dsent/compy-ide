@@ -498,6 +498,15 @@ local function quietLast(after)
   finish(sending.name .. running, sending.lines.frame, after)
 end
 
+--- How a frame says the file ended, and what exec says of it
+--- after the file's name: it ran; it ran, and stopped on a
+--- mistake; the board could not compile it, so it never ran
+local VERDICTS = {
+  ok = " is on the board",
+  error = " was run, and stopped on the mistake above",
+  compile = " could not run, because of the mistake above"
+}
+
 --- What the board said, less this exec's frame at its end and
 --- the line break that went before it; and how the frame says
 --- the file ended. A frame anywhere else, or of another exec,
@@ -509,7 +518,8 @@ local function framed(said)
   local frame = sending.lines.frame
   local at = said:find(frame, 1, true)
   while at do
-    local status = said:sub(at + #frame):match("^(%a+)\r?\n?$")
+    local word = said:sub(at + #frame):match("^(%a+)\r?\n?$")
+    local status = VERDICTS[word or ""] and word
     if status then
       local text = said:sub(1, at - 1)
       return (text:gsub("\r?\n$", "")), status
@@ -518,15 +528,6 @@ local function framed(said)
   end
   return said
 end
-
---- How a frame says the file ended, and what exec says of it
---- after the file's name: it ran; it ran, and stopped on a
---- mistake; the board could not compile it, so it never ran
-local VERDICTS = {
-  ok = " is on the board",
-  error = " was run, and stopped on the mistake above",
-  compile = " could not run, because of the mistake above"
-}
 
 --- What exec says once the board has run the file, from its
 --- frame alone
@@ -555,7 +556,8 @@ local function frameIn(after)
   local frame = sending.lines.frame
   local at = after:find(frame, 1, true)
   while at do
-    local status = after:sub(at + #frame):match("^(%a+)\r\n")
+    local word = after:sub(at + #frame):match("^(%a+)\r\n")
+    local status = VERDICTS[word or ""] and word
     if status then
       local rest = after:sub(at + #frame + #status + 2)
       return (after:sub(1, at - 1):gsub("\r?\n$", "")), status,
