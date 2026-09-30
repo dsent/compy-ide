@@ -203,6 +203,19 @@ describe('editor key contract #input', function()
       end)
     end
 
+    it('a held Shift+Esc keeps its question open', function()
+      open_dirty_block()
+      F.session.press('lshift')
+      F.session.press('escape')
+      assert.same('discard', ed.pending_confirm)
+      for _ = 1, 3 do
+        F.session.repeat_press('escape')
+        assert.same('discard', ed.pending_confirm)
+      end
+      F.session.release('escape')
+      F.session.release('lshift')
+    end)
+
     it('Ctrl+Shift+S asks, and Escape keeps the block', function()
       open_dirty_block()
       local draft = ed.input:get_text():items()

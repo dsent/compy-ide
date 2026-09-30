@@ -2074,7 +2074,9 @@ function ConsoleController:textinput(t)
 end
 
 --- @param k string
-function ConsoleController:keypressed(k)
+--- @param sc string? --- LÖVE's scancode, unused
+--- @param isrepeat boolean? --- the key is held
+function ConsoleController:keypressed(k, sc, isrepeat)
   local input = self.input
 
   local function terminal_test()
@@ -2093,7 +2095,7 @@ function ConsoleController:keypressed(k)
   end
 
   if love.state.app_state == 'editor' then
-    self.editor:keypressed(k)
+    self.editor:keypressed(k, sc, isrepeat)
   else
     if love.state.testing == 'running' then
       return

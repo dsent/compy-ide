@@ -539,7 +539,7 @@ Controller = {
   --- @private
   --- @param CC ConsoleController
   set_love_keypressed = function(CC)
-    local function keypressed(k, _, isr)
+    local function keypressed(k, sc, isr)
       -- TODO(debt): these debug-hotkey if-blocks predate
       -- combos; migrate onto the combo-table mechanism
       -- (doc/development/decisions/input.md, D-COMBO-TABLES).
@@ -574,7 +574,7 @@ Controller = {
       -- D-ROUTE-OWNS): a project's widget is reached inside the
       -- PROJECT route's chain, and the console never holds the
       -- slot while one is up.
-      CC:keypressed(k)
+      CC:keypressed(k, sc, isr)
     end
     Controller._defaults.keypressed = keypressed
     love.keypressed = keypressed

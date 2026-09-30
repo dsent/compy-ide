@@ -631,6 +631,46 @@ describe('the editor across files #input', function()
           assert.same({}, took)
         end)
 
+      it('a held Enter answers one question', function()
+        open()
+        draft("local lib = require('lib')\nkept = 99")
+        chord('lctrl', 'j')
+        draft('libvalue = 2')
+        chord('lctrl', 'q')
+        F.session.press('return')
+        for _ = 1, 3 do F.session.repeat_press('return') end
+        F.session.release('return')
+
+        assert.same('discard', ed.pending_confirm)
+        assert.same('main.lua', ed:get_active_buffer().name)
+        assert.same({}, took)
+      end)
+
+      it('a held Space on the device answers one question', function()
+        open()
+        draft("local lib = require('lib')\nkept = 99")
+        chord('lctrl', 'j')
+        draft('libvalue = 2')
+        chord('lctrl', 'q')
+        --- the glyph, then the key; then held
+        F.session.type(' ')
+        F.session.press('space')
+        for _ = 1, 3 do
+          F.session.type(' ')
+          F.session.repeat_press('space')
+        end
+        F.session.release('space')
+
+        assert.same('discard', ed.pending_confirm)
+        assert.same('main.lua', ed:get_active_buffer().name)
+        assert.same({}, took)
+        --- a fresh Space answers
+        F.session.type(' ')
+        F.session.press('space')
+        F.session.release('space')
+        assert.same({ 'quit_project' }, took)
+      end)
+
       it('takes the exit once the draft is answered', function()
         open()
         draft("local lib = require('lib')\nkept = 99")

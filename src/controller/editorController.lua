@@ -755,6 +755,9 @@ function EditorController:_answer(act, exit)
   --- an exit that asks again asks with no chord key still
   --- on its way: the next key answers
   self._asked_by_gate = nil
+  --- a held key's glyphs, and the rest of this one, answer
+  --- nothing further
+  self._await_key = self.pending_confirm and true or nil
 end
 
 --- Execute a confirmed dialog action (the dispatch in
@@ -828,6 +831,7 @@ function EditorController:_drop_dialog()
   self.pending_confirm = nil
   self.pending_then = nil
   self._asked_by_gate = nil
+  self._await_key = nil
   self._swallow_glyph = nil
 end
 
@@ -842,6 +846,9 @@ function EditorController:_dialog_textinput(t)
   --- a chord's glyph answers nothing (the device leaks
   --- them, compy-input-quirks, quirk 3)
   if Key.ctrl() or Key.alt() then return true end
+  --- a glyph carries no repeat flag: after an answer that
+  --- asked again, only a fresh key press answers
+  if self._await_key then return true end
   local act, exit = self.pending_confirm, self.pending_then
   self.pending_confirm = nil
   self.pending_then = nil
@@ -1796,19 +1803,23 @@ function EditorController:_normal_mode_keys(k)
 end
 
 --- @param k string
-function EditorController:keypressed(k)
+--- @param _ string? --- LÖVE's scancode, unused
+--- @param isrepeat boolean? --- the key is held
+function EditorController:keypressed(k, _, isrepeat)
   self.input:update_view()
   if self.pending_confirm then
-    --- dialogs are repeat-proof by construction: the
-    --- confirming key differs from the invoking one, so
-    --- key repeat lands on the idempotent cancel.
     --- Enter or Space confirms, a modifier on its own
     --- waits for the key it goes with, everything else
-    --- cancels
+    --- cancels; a held key's repeats answer nothing
     if self._asked_by_gate then
       self._asked_by_gate = nil
       return
     end
+    --- a held key answers nothing: one answer's key would be
+    --- the next question's answer, before it could be read
+    if isrepeat then return end
+    --- a fresh press: glyphs answer again
+    self._await_key = nil
     --- the chord that asked, held: its repeat neither
     --- answers nor cancels (Ctrl+Shift+S; the gate's
     --- chords ask again on theirs)
