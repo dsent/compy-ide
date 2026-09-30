@@ -199,7 +199,8 @@ function EditorController:pop_buffer()
   if n_buffers < 2 then return end
   self:_drop_dialog()
   self:_remember_position()
-  bs:pop_front()
+  local out = bs:pop_front()
+  self:_let_go(out)
   local b = bs:first()
   local bv = self.view:get_current_buffer()
   bv:open(b)
@@ -259,6 +260,17 @@ function EditorController:reload_active(text)
   for i, b in ipairs(bs) do
     if b == old then bs:update(new, i) end
   end
+  self:_let_go(old)
+end
+
+--- @private
+--- A buffer gone from the stack takes its view with it
+--- @param b BufferModel
+function EditorController:_let_go(b)
+  for _, open in ipairs(self.model.buffers) do
+    if open == b then return end
+  end
+  self.view.buffers[b:get_id()] = nil
 end
 
 function EditorController:close_buffer()

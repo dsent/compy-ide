@@ -197,6 +197,18 @@ describe('the editor across files #input', function()
         open()
         assert.same(1, ed:get_active_buffer():get_selection())
       end)
+
+    it('lets a file it leaves go', function()
+      files['main.lua'] = "local lib = require('lib')\n"
+      files['lib.lua'] = 'libvalue = 1\n'
+      open()
+      chord('lctrl', 'j')
+      chord('lshift', 'escape')
+
+      local views = 0
+      for _ in pairs(ed.view.buffers) do views = views + 1 end
+      assert.same(1, views)
+    end)
   end)
 
   describe('Ctrl+J', function()
