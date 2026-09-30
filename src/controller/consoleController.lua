@@ -2395,11 +2395,13 @@ function ConsoleController:use_canvas(f, console)
   -- Console code owns no run: what it draws after a stop stays.
   -- The keypress that submits it runs inside the program's own
   -- call, so the console hands the canvas over by moving
-  -- canvas_handed on, and that call leaves it alone.
-  if live and not self.run_live then
+  -- canvas_handed on, and that call leaves it alone. It does so
+  -- whenever no run is live afterwards: a program's input hook
+  -- may have stopped the run before the console line began.
+  if not self.run_live then
     if console then
       self.canvas_handed = (self.canvas_handed or 0) + 1
-    elseif self.canvas_handed == handed then
+    elseif live and self.canvas_handed == handed then
       self.model.output:clear_canvas()
     end
   end

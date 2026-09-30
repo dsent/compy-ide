@@ -371,6 +371,42 @@ describe('a program\'s canvas after it stops #canvas', function()
       assert.equal('typed', who())
     end)
 
+  -- Enter reaches the console through the program's input hook,
+  -- which here stops the run and lets the key fall through.
+  it('a console line keeps what it drew when the program\'s input'
+    .. ' hook stopped the run on Enter', function()
+      F.run_project(function()
+        local env = F.cc:get_project_env()
+        draw('prog')
+        env.love.update = function() end
+        env.compy.input.hooks.keypressed = function(k)
+          if k == 'return' then env.stop() end
+          return false
+        end
+      end)
+      local env = F.cc:get_project_env()
+      env.mark = function() draw('typed') end
+      F.session.type('mark()')
+      press({ 'return' })
+      env.love.update = nil
+      env.compy.input.hooks.keypressed = nil
+      assert.equal('ready', love.state.app_state)
+      assert.equal('typed', who())
+    end)
+
+  it('the same line over a program with an update handler keeps'
+    .. ' what it drew', function()
+      F.run_project(function()
+        draw('prog')
+        F.cc:get_project_env().love.update = function() end
+      end)
+      assert.equal('running', love.state.app_state)
+      submit_stop_and_draw()
+      F.cc:get_project_env().love.update = nil
+      assert.equal('ready', love.state.app_state)
+      assert.equal('typed', who())
+    end)
+
   it('the same line over a run with a live handler keeps what'
     .. ' it drew', function()
       F.run_project(function()

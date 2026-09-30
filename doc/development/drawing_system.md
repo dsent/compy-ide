@@ -34,7 +34,7 @@ The canvas belongs to the run that drew on it, and to the console between runs:
 - Every stop clears it: Ctrl+S, Ctrl+T, `stop()`, restart (Ctrl+Alt+R), Ctrl+Q, the program's own quit, and a top-level error. `_stop_project_run` clears it after the project's `before_exit` hook, so what the hook draws goes too.
 - The clear covers the whole canvas whatever scissor or color mask the program left; `CanvasModel:clear_canvas` puts the caller's graphics state back.
 - A program's call that stops its own run and goes on drawing is cleared again when its `use_canvas` call unwinds: the run was live when the call began and is stopped now (`run_live`), so the clear holds whatever run replaced it, unless that replacement is live (restart), which keeps its canvas. A top-level error clears only its own run's canvas (`run_id`), never a rerun it started.
-- Console code passes `console = true` and owns no run. A console line that stops and then draws keeps its drawing, in every state: its `use_canvas` call moves `canvas_handed` on, and the program call that encloses the submitting keypress leaves the canvas alone.
+- Console code passes `console = true` and owns no run. A console line that stops and then draws keeps its drawing, in every state: when no run is live afterwards its `use_canvas` call moves `canvas_handed` on, and the program call that encloses the submitting keypress leaves the canvas alone. The exception is a line that starts a run with `run()` before it draws: the nested run ends by unbinding the canvas, so what the line draws next misses it (a known limit of nested execution).
 - Drawing typed at the console shares the canvas: it lasts until the next stop, run or close, and a stop clears it too, with no program running.
 - A paused run (Ctrl+Pause, an error in a handler) has not stopped: its canvas stays, and `continue()` draws on it again.
 - A run that finishes its top-level code is in `ready`, not stopped, and keeps its picture until it stops or the project closes. That covers a run with nothing live (no handlers, no widget), as the sine example is, and a run with live handlers but no `update` or `draw`. Ctrl+S stops a `running` program only, so it leaves a `ready` one alone; `stop()`, Ctrl+T, restart and Ctrl+Q end it.
@@ -46,8 +46,9 @@ function ConsoleController:use_canvas(f, console)
   gfx.setCanvas({ canvas, stencil = true })
   local r = f()
   gfx.setCanvas()
-  -- a program's call that stopped its own run: clear again
-  -- (skipped for console code, and when a newer run started)
+  -- a program's call that began live and finds no run live now:
+  -- clear again, unless console code took the canvas over
+  -- (canvas_handed)
   return r
 end
 ```
