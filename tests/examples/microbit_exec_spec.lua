@@ -1301,6 +1301,7 @@ write(table.concat(out))
         assert.truthy(told:find('robot.hex could not be saved', 1,
           true))
         assert.truthy(told:find('upload it again', 1, true))
+        assert.truthy(told:find('The lines above say why', 1, true))
         assert.falsy(told:find('written', 1, true))
       end)
 
