@@ -767,28 +767,22 @@ describe('micro:bit exec #microbit', function()
       --- @return table env
       --- @return string? err
       local function boot(data)
-        local out, env = {}, nil
+        local out = {}
         local microbit = anything()
         microbit.serial.send = function(c) out[#out + 1] = c end
         microbit.serial.eventAfterAsync = function()
           out[#out + 1] = '<armed>'
         end
         microbit.display.scrollAsync = function(text)
-          -- a scroll while on_event is set could let the
-          -- firmware call in mid-call
-          local quiet = rawget(env, 'on_event') == nil
           out[#out + 1] = '<scrolled ' .. tostring(text) .. '>'
-          out[#out + 1] = quiet and '<quiet>' or '<live>'
         end
-        env = setmetatable({ microbit = microbit },
+        local env = setmetatable({ microbit = microbit },
           { __index = _G })
         env._G = env
         -- a string library of the board's own: a file that
         -- changes it changes nothing outside this board
         env.string = {}
         for k, v in pairs(string) do env.string[k] = v end
-        --- the board's own on_event, as the firmware finds it
-        env.peek = function() return rawget(env, 'on_event') end
         -- the thread's globals are the test run's: level 0 is
         -- left to the runs on Lua 5.1
         env.setfenv = function(f, t)
@@ -856,21 +850,42 @@ microbit.serial.getCharAsync = function()
   typed = typed:sub(2)
   if c ~= '' then return c end
 end
-function peek() return rawget(_G, 'on_event') end
+-- The firmware's dispatcher: the thread's on_event, or, when
+-- that is not a function, the handler given to eventFallback;
+-- one Lua call at a time, so an event that comes while Lua
+-- runs waits, and goes once the call ends, or at a sleep,
+-- each to its end
+local fallback, waiting, running = nil, {}, true
+microbit.eventFallback = function(f) fallback = fallback or f end
+local function handle(source, value)
+  local h = rawget(getfenv(0), 'on_event')
+  if type(h) ~= 'function' then h = fallback end
+  if h then pcall(h, source, value, 0) end
+end
+local function drain()
+  local now = waiting
+  waiting = {}
+  for _, e in ipairs(now) do handle(e[1], e[2]) end
+end
+function arrive(source, value)
+  if running then
+    waiting[#waiting + 1] = { source, value }
+  else
+    handle(source, value)
+  end
+end
+microbit.sleep = function() drain() end
 local f = assert(io.open(arg[1], 'rb'))
 local chunk = assert(loadstring(f:read('*a'), 'embedded'))
 f:close()
 pcall(chunk)
+running = false
+drain()
 up = true
-local ok, got = pcall(rawget(_G, 'on_event'))
--- what is typed reaches Lua as the firmware sends it: the
--- thread's on_event, called with the serial event
-local handler = rawget(getfenv(0), 'on_event')
-if type(handler) == 'function' then
-  pcall(handler, microbit.DEVICE_ID_SERIAL,
-    microbit.CODAL_SERIAL_EVT_HEAD_MATCH)
-end
-write(table.concat(out), '<on_event ', tostring(got), '>')
+-- what is typed reaches Lua as the firmware sends it
+handle(microbit.DEVICE_ID_SERIAL,
+  microbit.CODAL_SERIAL_EVT_HEAD_MATCH)
+write(table.concat(out))
 ]==]
 
       --- What the board said, booted on lua5.1
@@ -904,34 +919,17 @@ write(table.concat(out), '<on_event ', tostring(got), '>')
             files['robot.lua'], 1, true))
         end)
 
-      it('runs the file before the prompt, with nothing to call'
-        .. ' into Lua', function()
+      it('runs the file before the prompt', function()
           local tools = load_tools()
-          files['robot.lua'] =
-            'print("blink-ok", peek() == nil)\n'
+          files['robot.lua'] = 'print("blink-ok")\n'
           local out, env, err = boot(uploaded(tools))
           assert.is_nil(err)
           assert.is_function(env.on_event)
           local repl = assert(out:find('Lua 5.1 REPL', 1, true))
-          local ran = assert(out:find('blink-ok\ttrue\r\n', repl,
-            true))
+          local ran = assert(out:find('blink-ok\r\n', repl, true))
           local prompt = assert(out:find('> ', ran, true))
           assert.truthy(out:find('<armed>', prompt, true))
           assert.truthy(ran < assert(out:find('<armed>', 1, true)))
-        end)
-
-      --- set at once, it would let the firmware call in while
-      --- the file still runs
-      it('holds an on_event the file sets until the file returns',
-        function()
-          local tools = load_tools()
-          files['robot.lua'] =
-            'function on_event() return "mine" end\n'
-            .. 'print(peek() == nil, on_event())\n'
-          local out, env, err = boot(uploaded(tools))
-          assert.is_nil(err)
-          assert.truthy(out:find('true\tmine\r\n', 1, true))
-          assert.equal('mine', env.on_event())
         end)
 
       it('lets the file call the firmware\'s on_event', function()
@@ -958,15 +956,17 @@ write(table.concat(out), '<on_event ', tostring(got), '>')
           assert.equal(2, env.on_event())
         end)
 
-      it('keeps the firmware\'s on_event when the file stops on a'
-        .. ' mistake', function()
+      --- the board's globals are the file's: what it set before
+      --- a mistake stays
+      it('keeps an on_event the file set before a mistake',
+        function()
           local tools = load_tools()
           files['robot.lua'] =
             'function on_event() return "mine" end\nerror("oops")\n'
           local out, env, err = boot(uploaded(tools))
           assert.is_nil(err)
           assert.truthy(out:find('oops', 1, true))
-          assert.is_true(typing(env, env.on_event))
+          assert.equal('mine', env.on_event())
         end)
 
       --- The board's Lua is 5.1 itself, stricter than LuaJIT
@@ -989,36 +989,20 @@ write(table.concat(out), '<on_event ', tostring(got), '>')
           end)
       end
 
-      --- each way to the board's globals, set while the file
-      --- still runs: the firmware would call in at once
+      --- an on_event the file sets, by any way to the board's
+      --- globals: an event that came while the file ran waits
+      --- for it to end, then goes to that on_event (the board
+      --- runs one Lua call at a time)
       for _, text in ipairs({
+        'function on_event(...) return f(...) end',
         '_G.on_event = f',
         'rawset(_G, "on_event", f)',
         'getfenv(0).on_event = f',
-        'getfenv(print).on_event = f',
+        'setfenv(0, { on_event = f })',
         'loadstring("on_event = ...")(f)',
-        'local s = "on_event = ..."\n'
-          .. 'load(function() local t = s s = nil return t end)(f)',
       }) do
-        local file = 'local function f() return "mine" end\n' .. text
-          .. '\nprint(peek() == nil)\n'
-
-        --- LuaJIT's thread globals here are the test's, not the
-        --- board's: getfenv(0) is left to the run on Lua 5.1
-        if not text:find('getfenv(0)', 1, true) then
-          it('holds an on_event set by ' .. text, function()
-            local tools = load_tools()
-            files['robot.lua'] = file
-            local out, env, err = boot(uploaded(tools))
-            assert.is_nil(err)
-            assert.truthy(out:find('true\r\n', 1, true))
-            assert.equal('mine', env.on_event())
-          end)
-        end
-
-        --- the board's Lua itself, whose thread globals are the
-        --- board's, as getfenv(0) finds them
-        it('holds an on_event set by ' .. text .. ', on Lua 5.1',
+        it('hands an event that came while the file ran to an'
+          .. ' on_event set by ' .. text .. ', once the file ends',
           function()
             local lua = lua51()
             if not lua then
@@ -1026,18 +1010,40 @@ write(table.concat(out), '<on_event ', tostring(got), '>')
               return
             end
             local tools = load_tools()
-            files['robot.lua'] = file
+            files['robot.lua'] = 'local function f(source)'
+              .. ' print("event", source) end\n' .. text
+              .. '\narrive(7)\nprint("still running")\n'
             local said = bootOn(lua, uploaded(tools))
-            assert.truthy(said:find('true\r\n', 1, true))
-            assert.truthy(said:find('<on_event mine>', 1, true))
+            local running = assert(said:find('still running', 1,
+              true))
+            assert.truthy(said:find('event\t7', running, true))
           end)
       end
+
+      --- the coming firmware hands waiting events on at a sleep,
+      --- each to its end: the file's code goes on after it
+      it('goes on after a sleep that handed an event on',
+        function()
+          local lua = lua51()
+          if not lua then
+            pending('lua5.1 is not installed')
+            return
+          end
+          local tools = load_tools()
+          files['robot.lua'] = 'function on_event(source)'
+            .. ' print("event", source) end\narrive(7)\n'
+            .. 'microbit.sleep(10)\nprint("after the sleep")\n'
+          local said = bootOn(lua, uploaded(tools), 'print(6*7)\r')
+          local event = assert(said:find('event\t7', 1, true))
+          assert.truthy(said:find('after the sleep', event, true))
+        end)
 
       --- the board's own Lua, with a command typed once it is
       --- up: the prompt has to answer it
       for _, text in ipairs({ 'setmetatable(_G, { __metatable ='
         .. ' false })', 'getmetatable(_G).__metatable = 1',
-        'setfenv(0, {})', 'error("oops")', '' }) do
+        'setfenv(0, {})', 'error("oops")', 'on_event = 5',
+        '' }) do
         it('answers print(6*7) after a file that runs ' .. text,
           function()
             local lua = lua51()
@@ -1130,7 +1136,6 @@ write(table.concat(out), '<on_event ', tostring(got), '>')
             end
             local at = assert(out:find(why .. '\r\n', 1, true))
             local line = why:match(':(%d+):')
-            assert.truthy(out:find('<quiet>', 1, true))
             assert.truthy(out:find('<scrolled error, line ' .. line
               .. '>', at, true))
             local prompt = assert(out:find('> ', at, true))
@@ -1309,6 +1314,13 @@ write(table.concat(out), '<on_event ', tostring(got), '>')
             on = hooks
             return true
           end
+          -- the shipped firmware, its version mark worn off
+          local blocks = hex.parse(files['MICROBIT.hex'])
+          for _, b in ipairs(blocks) do
+            b.data = b.data:gsub('microbit%-lua firmware ',
+              ('-'):rep(22))
+          end
+          files['MICROBIT.hex'] = hex.write(blocks)
           files['robot.lua'] = 'print("robot")\n'
           said = {}
           tools.upload('robot.lua')
@@ -1335,7 +1347,9 @@ write(table.concat(out), '<on_event ', tostring(got), '>')
           assert.same({
             "robot.hex is sent. The micro:bit's light blinks",
             'while it writes it, then it restarts with it.',
-          }, said)
+          }, { said[1], said[2] })
+          assert.truthy(said[3]:match(
+            '^robot%.hex holds firmware %x+'))
         end)
       end)
 

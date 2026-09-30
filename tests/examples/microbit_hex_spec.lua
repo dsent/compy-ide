@@ -35,12 +35,28 @@ describe('micro:bit hex files #microbit', function()
       assert.are.equal('86c8e16-drift', hex.version(blocks))
     end)
 
+  --- @return string the shipped firmware's hex file
+  local function shipped()
+    local f = assert(io.open('src/examples/microbit/MICROBIT.hex'))
+    local text = f:read('*a')
+    f:close()
+    return text
+  end
+
+  it('reads the version the shipped firmware carries', function()
+    assert.truthy(hex.version(hex.parse(shipped())):match('^%x+'))
+  end)
+
+  --- a firmware from before the mark: the shipped one, its mark
+  --- worn off
   it('reads no version from firmware built before the mark',
     function()
-      local f = assert(io.open('src/examples/microbit/MICROBIT.hex'))
-      local shipped = f:read('*a')
-      f:close()
-      assert.is_nil(hex.version(hex.parse(shipped)))
+      local blocks = hex.parse(shipped())
+      for _, b in ipairs(blocks) do
+        b.data = b.data:gsub('microbit%-lua firmware ',
+          ('-'):rep(22))
+      end
+      assert.is_nil(hex.version(hex.parse(hex.write(blocks))))
     end)
 
   it('refuses a record whose checksum does not agree', function()

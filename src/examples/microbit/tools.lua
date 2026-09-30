@@ -602,107 +602,24 @@ end
 local ARMING = ".*()\nserial_session%.prompt%(%)"
 
 --- The Lua file, run where the firmware's script is about to
---- arm the port. Nothing else may run Lua meanwhile: the
---- firmware calls in through on_event from fibers of its own,
---- on the same Lua state, so on_event is set aside while the
---- file runs.
----
---- The file's globals are the board's, save on_event: the file
---- reads the firmware's, and one it defines is held until it
---- returns without a mistake. Its _G, getfenv, loadstring and
---- load hand out the file's own globals in place of the
---- board's, so _G.on_event, rawset(_G, ...) and getfenv(0)
---- are held too. A function of the firmware's script that
---- sets a global still sets the board's; none sets on_event.
---- Until the firmware refuses to call in while Lua runs, a
---- way round these that is not known here stays open.
----
---- Everything the wrapper uses after the file is taken before
---- it runs. The string library, the session the prompt writes
---- to and the thread's globals are put back first, then a
---- mistake is said, and on_event comes last: nothing calls in
---- while the mistake is printed, and the scroll runs on its
---- own. A mistake stops only the file; it is printed, and the
---- lights scroll "error" and its line.
-local RUN_TAKE = table.concat({
+--- show its prompt and arm the port, with the board's globals:
+--- print, the robot commands, and on_event, which the file may
+--- set. The firmware runs one Lua call at a time, so no event
+--- comes into Lua while the file's code runs. A mistake stops
+--- only the file: it is printed, the lights scroll "error" and
+--- its line, and the prompt comes after it all the same. What
+--- the wrapper uses after the file it takes before, so a file
+--- that sets those globals changes nothing here.
+local RUN_FILE = table.concat({
   "",
   "do",
-  "local G, firmware, proxy, held = _G, on_event, { }, { }",
-  "on_event = nil",
-  "local rawget, rawset = rawget, rawset",
-  "local setmetatable, pcall = setmetatable, pcall",
-  "local tostring, print, type = tostring, print, type",
-  "local getfenv, setfenv = getfenv, setfenv",
-  "local loadstring, load = loadstring, load",
-  "local strings, gmatch = string, string.gmatch",
+  "local pcall, tostring, print = pcall, tostring, print",
   "local match, sub = string.match, string.sub",
-  "local scroll = microbit.display.scrollAsync"
-}, "\n")
-
---- What the file's globals hand out: its own on_event, or
---- the firmware's until it has one; itself for _G
-local RUN_GLOBALS = table.concat({
-  "local function get(t, k)",
-  "  if held[k] ~= nil then return held[k] end",
-  "  if k == 'on_event' then return firmware end",
-  "  return G[k]",
-  "end",
-  "local function set(t, k, v)",
-  "  if k ~= 'on_event' then G[k] = v",
-  "  else rawset(t, k, v) end",
-  "end",
-  "local function own(fn)",
-  "  if fn then setfenv(fn, proxy) end",
-  "end"
-}, "\n")
-
---- The ways to the board's globals, turned to the file's
-local RUN_HELD = table.concat({
-  "function held.loadstring(...)",
-  "  local fn, err = loadstring(...) own(fn) return fn, err",
-  "end",
-  "function held.load(...)",
-  "  local fn, err = load(...) own(fn) return fn, err",
-  "end",
-  "function held.getfenv(f)",
-  "  if f == nil then f = 1 end",
-  "  if type(f) == 'number' and f > 0 then f = f + 1 end",
-  "  local env = getfenv(f)",
-  "  if env == G then return proxy end return env",
-  "end"
-}, "\n")
-
---- What goes before the file: the same for every file
-local RUN_START = RUN_TAKE .. "\n" .. RUN_GLOBALS .. "\n" ..
-    RUN_HELD
-
---- The file's run: its text, and its name for mistakes
-local RUN_FILE = table.concat({
-  "held._G = proxy",
-  "setmetatable(proxy, { __index = get, __newindex = set })",
+  "local scroll = microbit.display.scrollAsync",
   "local file, err = loadstring(%s, %s)",
   "local ran = file ~= nil",
-  "if ran then ran, err = pcall(setfenv(file, proxy)) end"
+  "if ran then ran, err = pcall(file) end"
 }, "\n")
-
---- After the file, before anything can call in: its globals
---- are the board's alone from here on, the board's globals
---- are the thread's again, and what the prompt needs is back.
---- A metatable the file locked stays; only its own functions
---- see it.
-local RUN_BACK = table.concat({
-  "local mine = ran and rawget(proxy, 'on_event')",
-  "rawset(proxy, 'on_event', nil)",
-  "local plain = { __index = G, __newindex = G }",
-  "pcall(setmetatable, proxy, plain)",
-  "pcall(setfenv, 0, G)",
-  "rawset(G, 'string', strings)",
-  "rawset(strings, 'gmatch', gmatch)",
-  "rawset(G, 'active_session', nil)"
-}, "\n")
-
---- Last: the file's on_event, or the firmware's, takes over
-local RUN_ARM = "rawset(G, 'on_event', mine or firmware)\nend"
 
 --- A mistake, said: the whole of it printed, and on the
 --- lights "error" and its line in the file, or, when it names
@@ -718,7 +635,8 @@ local RUN_SAY = table.concat({
   "  local first = match(text, '^[^.]+') or 'error'",
   "  scroll(short or sub(first, 1, 40))",
   "end",
-  "if not ran then pcall(say) end"
+  "if not ran then pcall(say) end",
+  "end"
 }, "\n")
 
 --- The largest Lua file upload puts on the board, in bytes.
@@ -760,9 +678,7 @@ local function runOf(script, filename)
   local file = RUN_FILE:format(quoted(script), name)
   local silent = filename .. " stopped, and said nothing more."
   local line = "^" .. filename:gsub("%p", "%%%0") .. ":(%d+):"
-  local say = RUN_SAY:format(silent, line)
-  local after = RUN_BACK .. "\n" .. say .. "\n" .. RUN_ARM
-  return RUN_START .. "\n" .. file .. "\n" .. after
+  return file .. "\n" .. RUN_SAY:format(silent, line)
 end
 
 --- The firmware's own script with a Lua file run in it; nil,

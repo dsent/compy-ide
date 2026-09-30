@@ -99,7 +99,13 @@ describe('IntelHex', function()
       local image = assert(IntelHex.parse(example()))
       local n = 0
       for _, run in ipairs(image) do n = n + #run.data end
-      assert.same(231996, n)
+      -- the data records' own count of their bytes
+      local counted = 0
+      for len, kind in example():gmatch(':(%x%x)%x%x%x%x(%x%x)') do
+        if kind == '00' then counted = counted + tonumber(len, 16) end
+      end
+      assert.is_true(counted > 200000)
+      assert.same(counted, n)
       placesExactly(image)
     end)
 
