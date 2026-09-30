@@ -440,14 +440,14 @@ else
   --- @return string? error
   function FS.write(path, data)
     local f, oerr = io.open(path, 'w')
-    if f then
-      io.output(f)
-      local _, err = io.write(data)
-      io.close(f)
-      io.output(io.stdout)
-      return true, err
-    end
-    return false, oerr
+    if not f then return false, oerr end
+    --- the data may wait in a buffer until close, so a write
+    --- has succeeded only when both have
+    local wok, werr = f:write(data)
+    local cok, cerr = f:close()
+    if not wok then return false, werr end
+    if not cok then return false, cerr end
+    return true
   end
 
   --- @param path string

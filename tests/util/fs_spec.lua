@@ -106,6 +106,16 @@ describe("FS utils", function()
     end)
   end)
 
+  describe('writes', function()
+    it('and fails when the data does not reach the file', function()
+      --- /dev/full takes the write into its buffer and fails
+      --- when the buffer goes out, at close
+      local ok, err = FS.write('/dev/full', 'x = 1\n')
+      assert.is_false(ok)
+      assert.is_not_nil(err)
+    end)
+  end)
+
   describe('replaces a file', function()
     local dir, target, temp
 
