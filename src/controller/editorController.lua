@@ -1131,6 +1131,7 @@ function EditorController:format_file()
     --- the screen keeps showing the file, so trying again
     --- formats it again; the buffer is as unsaved as it was
     buf:replace_text(before)
+    buf:analyze()
     buf.unsaved = was_unsaved
     self.view:refresh()
     return self:refuse({
@@ -1423,6 +1424,7 @@ function EditorController:_normal_mode_keys(k)
         --- the file keeps what it had, and so does the
         --- buffer, so a retry inserts the draft once
         buf:replace_text(before)
+        buf:analyze()
         buf:set_selection(sel)
         buf.unsaved = was_unsaved
         self.view:refresh()

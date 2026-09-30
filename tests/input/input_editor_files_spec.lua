@@ -182,6 +182,17 @@ describe('the editor across files #input', function()
       end)
     end)
 
+    it('leaves no require of the draft behind', function()
+      open()
+      chord('lctrl', 'return')
+      ed.input:set_text("local lib = require('lib')")
+      chord('return')
+      assert.is_true(ed.input:has_error())
+
+      local sem = ed:get_active_buffer().semantic
+      assert.same({}, sem and sem.requires or {})
+    end)
+
     it('keeps a fresh block open, its draft and the file as they were',
       function()
         open()
