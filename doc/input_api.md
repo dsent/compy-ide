@@ -851,8 +851,8 @@ editor keeps it for itself.
 Ctrl+Shift+S, Ctrl+T, Ctrl+Q, Ctrl+Shift+R and Ctrl+Alt+R leave the editor too.
 When a block you have changed is open, each first asks the question Shift+Esc
 asks: Enter or Space discards the change and goes on, anything else keeps the
-block open. The contract is `doc/development/decisions/input.md`,
-`D-EDITOR-KEYS`, statement 6.
+block open. Ctrl+Esc exits the IDE from anywhere and does not ask. The contract
+is `doc/development/decisions/input.md`, `D-EDITOR-KEYS`, statement 6.
 
 Ctrl+J while you edit a block opens the file it requires and keeps your edit
 with the first file: Shift+Esc back to it shows the edit again, still open.

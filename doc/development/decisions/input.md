@@ -2523,10 +2523,11 @@ it.
 6. **Two exits are historically unguarded, and the release ships them that way** (owner ruling,
    2026-09-07, at `OP-04`: *"ship both, document the defect"*).
 
-   **AMENDED 2026-09-30: every exit is guarded.** With a changed block open, `Ctrl+Shift+S`,
-   `Ctrl+T`, and the gate's `Ctrl+Q`, `Ctrl+Shift+R` and `Ctrl+Alt+R` ask `Shift+Esc`'s own question
-   (`EditorController:ask_to_leave`); Enter or Space discards the change as `Shift+Esc` does and
-   takes the exit, anything else keeps the block open. No key and no dialog is added: this is the
+   **AMENDED 2026-09-30: the five editor exits are guarded.** With a changed block open, or a draft
+   `Ctrl+J` left in a file below, `Ctrl+Shift+S`, `Ctrl+T`, and the gate's `Ctrl+Q`, `Ctrl+Shift+R`
+   and `Ctrl+Alt+R` ask `Shift+Esc`'s own question (`EditorController:ask_to_leave`); Enter or Space
+   discards the change as `Shift+Esc` does and takes the exit, anything else keeps the block open.
+   `Ctrl+Esc` exits the IDE from any state and does not ask. No key and no dialog is added: this is the
    *editor-side `request_leave`* named below. The pinned cases are now *"Ctrl+Shift+S asks before it
    drops a changed block"* and *"Ctrl+T asks before it drops a changed block"*, with the gate's
    chords under *"the project exits ask first"*. What follows is the entry as ruled.

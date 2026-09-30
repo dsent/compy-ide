@@ -2079,9 +2079,10 @@ changes.
 
 ### T-LEAVE-KEYS-LOSES-BLOCK — the editor's whole-editor exits do not write an open changed block (PAID, 2026-09-30)
 
-**PAID 2026-09-30:** every whole-editor exit — `Ctrl+Shift+S`, `Ctrl+T`, and the gate's `Ctrl+Q`,
-`Ctrl+Shift+R` and `Ctrl+Alt+R` — asks `Shift+Esc`'s discard question before it drops a changed open
-block (`EditorController:ask_to_leave`, `T-EXITS-BYPASS-GUARD`). The pinned *"(w/o confirmation)"*
+**PAID 2026-09-30:** the five editor exits — `Ctrl+Shift+S`, `Ctrl+T`, and the gate's `Ctrl+Q`,
+`Ctrl+Shift+R` and `Ctrl+Alt+R` — ask `Shift+Esc`'s discard question before they drop a changed open
+block (`EditorController:ask_to_leave`, `T-EXITS-BYPASS-GUARD`). `Ctrl+Esc` exits the IDE from any
+state and does not ask. The pinned *"(w/o confirmation)"*
 cases flipped to *"asks before it drops a changed block"*. What follows is the entry as it stood.
 
 **RULED AND MOVED TO `BACKLOG`, 2026-09-07** (owner, at `OP-04`): *"ship both, document the
