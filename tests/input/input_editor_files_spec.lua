@@ -135,6 +135,27 @@ describe('the editor across files #input', function()
     end)
   end)
 
+  describe('a file open already', function()
+    it('comes back where it is, not where it was', function()
+      files['main.lua'] = "local lib = require('lib')\na = 1\nb = 2\nc = 3\n"
+      files['lib.lua'] = "local main = require('main')\n"
+      open()
+      chord('lctrl', 'j')
+      chord('lctrl', 'j')
+      for _ = 1, 3 do chord('lctrl', 'down') end
+      assert.same(4, ed:get_active_buffer():get_selection())
+      chord('lshift', 'escape')
+      chord('lshift', 'escape')
+      for _ = 1, 3 do chord('lctrl', 'up') end
+      assert.same(1, ed:get_active_buffer():get_selection())
+
+      chord('lctrl', 'j')
+      chord('lctrl', 'j')
+      assert.same('main.lua', ed:get_active_buffer().name)
+      assert.same(1, ed:get_active_buffer():get_selection())
+    end)
+  end)
+
   describe('a restore', function()
     it('reaches the file wherever it is open', function()
       files['main.lua'] = "local lib = require('lib')\nx = 1\n"

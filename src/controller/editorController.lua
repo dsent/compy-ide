@@ -125,7 +125,8 @@ function EditorController:open(name, content, save, key, fresh)
   --- one buffer per file: a second copy would save a
   --- stale snapshot over the first one's changes
   local b = not fresh and key and self:_find_buffer(key)
-  if not b then
+  local created = not b
+  if created then
     b = BufferModel(name, content, save, ch, hl, pp, tr)
     b.key = key
   end
@@ -137,7 +138,8 @@ function EditorController:open(name, content, save, key, fresh)
   self.model.buffers:push_front(b)
   self.view:open(b)
   self:set_mode('nav')
-  if not self:_restore_position(b) then
+  --- a buffer open already keeps where it is
+  if not (created and self:_restore_position(b)) then
     self.view:get_current_buffer():follow_selection()
   end
   self:_unpark(b)
