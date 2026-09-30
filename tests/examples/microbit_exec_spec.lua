@@ -195,7 +195,8 @@ describe('micro:bit exec #microbit', function()
     local tools = load_tools()
     tools.exec('f.lua')
     for _ = 1, 3 do board() end
-    board('seen: Runtime error: none\r\n', '> ')
+    board('seen: Runtime error: none\r\nRuntime error: mine'
+      .. '\r\nall done\r\n', '> ')
     serial:update(0.25)
     assert.same('f.lua is on the board', said[#said])
   end)

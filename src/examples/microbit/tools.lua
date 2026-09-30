@@ -284,13 +284,14 @@ end
 
 --- What exec says once the board has run the file: whether
 --- the board's answer tells of a mistake that stopped it,
---- which the board says at the start of a line
+--- which the board says on the last line before its prompt,
+--- after all the program printed
 --- @param said string
 --- @return string
 local function verdict(said)
-  local lines = "\n" .. said
-  local unread = lines:find("\nCompile error: ", 1, true)
-  local failed = lines:find("\nRuntime error: ", 1, true)
+  local last = said:match("([^\r\n]*)[\r\n]*$")
+  local unread = last:find("^Compile error: ")
+  local failed = last:find("^Runtime error: ")
   local stopped = unread or failed
   if not stopped then
     return sending.name .. " is on the board"
