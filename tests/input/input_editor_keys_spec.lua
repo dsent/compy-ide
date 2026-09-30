@@ -153,16 +153,43 @@ describe('editor key contract #input', function()
       F.cc.run_project = orig_run
     end)
 
-    it('Ctrl+Shift+S leaves (w/o confirmation)', function()
+    -- FLIPPED: this case pinned the silent loss until the
+    -- chord learned to ask, as the gate's exits did.
+    it('Ctrl+Shift+S asks before it drops a changed block', function()
       open_dirty_block()
 
       F.session.press('lctrl')
       F.session.press('lshift')
       F.session.press('s')
+      F.session.release('s')
+      F.session.release('lshift')
+      F.session.release('lctrl')
 
+      assert.is_false(left)
+      assert.same('discard', ed.pending_confirm)
+      assert.same('edit', ed:get_mode())
+
+      F.session.press('return')
       assert.is_true(left)
-      --- the edit reached no write on the way out
+      --- confirmed: the change is discarded, not written
       assert.same({}, saved)
+    end)
+
+    it('Ctrl+Shift+S asks, and Escape keeps the block', function()
+      open_dirty_block()
+      local draft = ed.input:get_text():items()
+      F.session.press('lctrl')
+      F.session.press('lshift')
+      F.session.press('s')
+      F.session.release('s')
+      F.session.release('lshift')
+      F.session.release('lctrl')
+
+      F.session.press('escape')
+      assert.is_false(left)
+      assert.is_nil(ed.pending_confirm)
+      assert.same('edit', ed:get_mode())
+      assert.same(draft, ed.input:get_text():items())
     end)
 
     -- FLIPPED: this case pinned the silent loss until the
@@ -323,9 +350,14 @@ describe('editor key contract #input', function()
       love.debug = nil
     end)
 
-    --- the key that selects each mode from navigation
+    --- the key that selects each mode from navigation; the
+    --- block opened for editing is unchanged, so the chord
+    --- has nothing to ask
     local enter = {
-      edit    = open_dirty_block,
+      edit    = function()
+        F.session.press('return')
+        F.session.release('return')
+      end,
       search  = function()
         F.session.press('lctrl')
         F.session.press('f')
@@ -341,10 +373,7 @@ describe('editor key contract #input', function()
     }
 
     for _, mode in ipairs({ 'nav', 'edit', 'search', 'reorder' }) do
-      --- from an open changed block the chord leaves
-      --- without asking, as the unguarded exits above do
-      local how = mode == 'edit' and ' (w/o confirmation)' or ''
-      it('leaves from ' .. mode .. ' to the console' .. how, function()
+      it('leaves from ' .. mode .. ' to the console', function()
         if enter[mode] then enter[mode]() end
         assert.same(mode, ed:get_mode())
         --- once the editor is closed, the chord's own key

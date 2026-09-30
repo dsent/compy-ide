@@ -186,9 +186,9 @@ with <kbd>Enter ⏎</kbd>
 
 Happy with the modifications now, we can leave the editor by
 pressing <kbd>Shift-Esc</kbd>. <kbd>Ctrl-Shift-S</kbd> also
-leaves, but it is **deprecated** and will be removed — it skips
-the acceptance step, so an open block you have changed is not
-written.
+leaves, but it is **deprecated** and will be removed. If a
+block you have changed is still open, either one asks before
+it discards your change.
 
 ![quit](./doc/interface/quit_editor.apng)
 

@@ -59,19 +59,20 @@ EditorController = class.create(new)
 --- editor spec, and it is undocumented in the editor's own
 --- keymap. It is kept only because our shipped guide, the
 --- README walkthrough and a spec of ours all carry it.
---- It also LOSES an open changed block: this path reaches
---- finish_edit with no acceptance step
---- (technical_debt/input.md, T-LEAVE-KEYS-LOSES-BLOCK).
+--- With a changed block open it asks Shift+Esc's question
+--- first, as the gate's exits do (ask_to_leave).
 --- Route-level and not a gate reservation, because the gate
 --- binds only what competes with a running project
 --- (D-EXACT-RESERVE, "Scope"), and nothing runs while the
 --- editor owns the route.
 --- @param k string
---- @return boolean left --- the editor is closed, so the
---- key must reach no mode handler after it
+--- @return boolean handled --- the editor is closed, or a
+--- question is open, so the key must reach no mode handler
+--- after it
 function EditorController:_leave_keys(k)
   if k == "s" and Key.shift() and not Key.alt() then
-    self.console:finish_edit()
+    local leave = function() self.console:finish_edit() end
+    if not self:ask_to_leave(leave, true) then leave() end
     return true
   end
   return false
@@ -650,14 +651,16 @@ end
 --- and then carries the exit on; cancelling keeps the block
 --- open and the exit untaken.
 --- @param exit function --- the exit, taken on confirmation
+--- @param own_key boolean? --- the editor is handling the
+--- chord's key itself (Ctrl+Shift+S), so no later key is it
 --- @return boolean asked
-function EditorController:ask_to_leave(exit)
+function EditorController:ask_to_leave(exit, own_key)
   if not self:_block_changed() then return false end
   self:discard_edit()
   self.pending_then = exit
-  --- the chord's own key reaches the editor next, after
-  --- the gate; it must not answer the question it asked
-  self._asked_by_gate = true
+  --- a gate chord's own key reaches the editor next; it
+  --- must not answer the question it asked
+  self._asked_by_gate = not own_key
   return true
 end
 

@@ -848,15 +848,11 @@ that is the editor's own handling, not a reservation: it applies when you are
 editing, not while your project runs. Bare Ctrl+S does nothing there; the
 editor keeps it for itself.
 
-Ctrl+T, Ctrl+Q, Ctrl+Shift+R and Ctrl+Alt+R leave the editor too. When a block
-you have changed is open, each first asks the question Shift+Esc asks: Enter or
-Space discards the change and goes on, anything else keeps the block open.
-
-**Known limitation, and it ships this way.** Ctrl+Shift+S leaves the editor
-**without writing an open, changed block** — the changes are lost without a
-prompt. Shift+Esc is the supported way out; use it. The chord predates this
-release and is documented rather than fixed here — the contract is
-`doc/development/decisions/input.md`, `D-EDITOR-KEYS`, statement 6.
+Ctrl+Shift+S, Ctrl+T, Ctrl+Q, Ctrl+Shift+R and Ctrl+Alt+R leave the editor too.
+When a block you have changed is open, each first asks the question Shift+Esc
+asks: Enter or Space discards the change and goes on, anything else keeps the
+block open. The contract is `doc/development/decisions/input.md`,
+`D-EDITOR-KEYS`, statement 6.
 
 Ctrl+J while you edit a block opens the file it requires and keeps your edit
 with the first file: Shift+Esc back to it shows the edit again, still open.
