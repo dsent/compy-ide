@@ -315,6 +315,8 @@ end
 -- events still use love.handlers.
 function F.activate_project(handlers)
   love.state.app_state = 'running'
+  -- and a live run, as run_project makes it
+  CC.run_live = true
   -- A real run builds the widget at this same boundary
   -- (D-WIDGET-AT-BOOT as amended), so the narrow seam does too
   -- — otherwise a case that stops and re-activates would find

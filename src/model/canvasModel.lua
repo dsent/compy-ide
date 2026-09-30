@@ -98,7 +98,7 @@ function CanvasModel:get_canvas()
 end
 
 --- Clear the whole canvas, whatever graphics state a program
---- left: a scissor or a colour mask would spare part of it.
+--- left: a scissor or a color mask would spare part of it.
 --- The caller's scissor, mask and render target come back.
 function CanvasModel:clear_canvas()
   local sx, sy, sw, sh = gfx.getScissor()

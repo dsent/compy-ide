@@ -35,6 +35,8 @@ local messages = {
 --- @field view ConsoleView?
 --- @field cfg Config
 --- @field paused_mouse table? the paused program's, see suspend
+--- @field run_id integer? the current run's number
+--- @field run_live boolean? the run is not stopped
 --- methods
 --- @field edit function
 --- @field finish_edit function
@@ -119,6 +121,7 @@ local function run_user_code(f, cc, project_path)
   local env = cc:get_base_env()
 
   local ok, call_err
+  -- console code owns no run: the unwind clear is for programs
   cc:use_canvas(function()
     if project_path then
       env = cc:get_project_env()
@@ -132,7 +135,7 @@ local function run_user_code(f, cc, project_path)
       cc.main_ctrl.set_user_handlers(env['love'], cc)
     end
     output:restore_main()
-  end)
+  end, not project_path)
   if not ok then
     local msg = LANG.get_call_error(call_err)
     return false, msg
@@ -503,6 +506,10 @@ function ConsoleController:run_project(name)
       local n = name or P.current.name or 'project'
       Log.info('Running \'' .. n .. '\'')
       self:flush_program_state()
+      -- A new run, by its number: what a stopped run's calls
+      -- still in flight may clear is decided against it.
+      self.run_id = (self.run_id or 0) + 1
+      local run_id = self.run_id
       self.run_live = true
       love.state.app_state = 'running'
       -- Before the project's top-level code, which may show the
@@ -543,8 +550,12 @@ function ConsoleController:run_project(name)
         SerialPort:programEnded()
         self:flush_program_state()
         -- The run is over: what it drew before raising goes.
-        self.model.output:clear_canvas()
-        self.run_live = false
+        -- Only this run's own: one it started again meanwhile
+        -- owns the canvas now.
+        if self.run_id == run_id then
+          self.model.output:clear_canvas()
+          self.run_live = false
+        end
         love.state.app_state = 'ready'
         print('Error: ', run_err)
       else
@@ -2033,7 +2044,6 @@ function ConsoleController:_stop_project_run()
   -- stays.
   self.model.output:clear_canvas()
   self.run_live = false
-  self.stop_count = (self.stop_count or 0) + 1
   View.clear_snapshot()
   self.main_ctrl.set_love_draw(self, self.view)
   self.main_ctrl.clear_user_handlers(self)
@@ -2366,21 +2376,24 @@ function ConsoleController:get_canvas()
 end
 
 --- @param f function
+--- @param console boolean? console code, which owns no run
 --- @return any ... result of f
-function ConsoleController:use_canvas(f)
+function ConsoleController:use_canvas(f, console)
   local canvas = self.model.output.canvas
   gfx.setCanvas({
     canvas, -- this is actually [1] = canvas
     stencil = true
   })
-  local stops = self.stop_count
+  local run_id, live = self.run_id, self.run_live
   local r = { pcall(f) }
   gfx.setCanvas()
-  -- A handler that stopped its own run and went on drawing
-  -- repainted the canvas after the stop's clear: the clear is
-  -- final for the call that was running. A run started since
-  -- (restart) owns the canvas and is left alone.
-  if self.stop_count ~= stops and not self.run_live then
+  -- A program's call that stopped its own run and went on
+  -- drawing repainted the canvas after the stop's clear: the
+  -- clear is final for that call. A run started since
+  -- (restart) owns the canvas and is left alone, and console
+  -- code, which owns no run, draws after a stop as it likes.
+  if not console and live and not self.run_live
+      and self.run_id == run_id then
     self.model.output:clear_canvas()
   end
   if not r[1] then error(r[2], 0) end

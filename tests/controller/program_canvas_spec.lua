@@ -13,26 +13,44 @@ local F = require('tests.helpers.input_fixture')
 
 local gfx
 
--- Two pixels: one inside any scissor, one outside it.
-local canvas, pixels, drawing, scissor, mask
+-- Two pixels: one inside any scissor, one outside it. Each
+-- holds the tag of what drew it. Drawing lands where the render
+-- target says: the canvas, or the screen, which is not watched.
+local canvas, pixels, drawing, scissor, mask, target
 
 --- A canvas that remembers what is drawn on it
 local function fake_canvas()
   local c = {}
   function c.renderTo(_, f)
-    drawing = true
+    local prev = target
+    target, drawing = c, true
     f()
-    drawing = false
+    target, drawing = prev, false
   end
   return c
 end
 
 --- @return boolean anything is drawn on the canvas
-local function shown() return pixels.inside or pixels.outside end
+local function shown()
+  return (pixels.inside or pixels.outside) and true or false
+end
 
---- What a program does in a handler or at its top level
-local function draw()
-  pixels.inside, pixels.outside = true, true
+--- @return string? tag of what is drawn outside any scissor
+local function who() return pixels.outside end
+
+--- What a program does in a handler or at its top level: it
+--- lands on whatever is bound
+--- @param tag string?
+local function draw(tag)
+  if target == canvas then
+    pixels.inside, pixels.outside = tag or 'p', tag or 'p'
+  end
+end
+
+--- What was on the canvas before the case began
+--- @param tag string?
+local function paint(tag)
+  pixels.inside, pixels.outside = tag or 'p', tag or 'p'
 end
 
 --- What a program leaves in the graphics state
@@ -44,7 +62,7 @@ end
 --- A running program that has drawn
 local function run_drawing()
   F.activate_project({ update = function() end })
-  draw()
+  paint()
   assert.is_true(shown())
 end
 
@@ -70,7 +88,7 @@ end
 
 describe('a program\'s canvas after it stops #canvas', function()
   local saved = {}
-  local names = { 'clear', 'getScissor', 'setScissor',
+  local names = { 'setCanvas', 'clear', 'getScissor', 'setScissor',
     'getColorMask', 'setColorMask' }
   local o_canvas
   setup(function()
@@ -88,7 +106,10 @@ describe('a program\'s canvas after it stops #canvas', function()
     F.reset()
     canvas = fake_canvas()
     pixels = { inside = false, outside = false }
-    scissor, mask = false, { true, true, true, true }
+    scissor, mask, target = false, { true, true, true, true }, nil
+    gfx.setCanvas = function(t)
+      target = t and (t[1] or t) or nil
+    end
     F.cc.model.output.canvas = canvas
     gfx.getScissor = function()
       if scissor then return 0, 0, 1, 1 end
@@ -97,7 +118,7 @@ describe('a program\'s canvas after it stops #canvas', function()
     gfx.getColorMask = function() return unpack(mask) end
     gfx.setColorMask = function(...) mask = { ... } end
     -- as LÖVE clears: the scissor spares what is outside it, a
-    -- colour mask spares what it does not write
+    -- color mask spares what it does not write
     gfx.clear = function()
       if not drawing then return end
       if mask[1] and mask[2] and mask[3] and mask[4] then
@@ -169,7 +190,7 @@ describe('a program\'s canvas after it stops #canvas', function()
     end)
 
   it('a run starts on a blank canvas', function()
-    draw()
+    paint()
     local seen
     F.run_project(function() seen = shown() end)
     assert.is_false(seen)
@@ -186,7 +207,7 @@ describe('a program\'s canvas after it stops #canvas', function()
 
   it('a project that fails to load leaves no picture under'
     .. ' its error', function()
-      draw()
+      paint()
       local P = F.cc.model.projects
       local cur, run = P.current, P.run
       P.current = { name = 'p', required = { } }
@@ -199,7 +220,7 @@ describe('a program\'s canvas after it stops #canvas', function()
 
   it('what a before_exit hook draws is cleared too', function()
     run_drawing()
-    F.cc:get_project_env().compy.before_exit = draw
+    F.cc:get_project_env().compy.before_exit = paint
     press({ 'lctrl', 's' })
     assert.is_false(shown())
   end)
@@ -223,9 +244,9 @@ describe('a program\'s canvas after it stops #canvas', function()
         assert.is_false(shown())
       end)
 
-    it('a colour mask does not keep the old picture into the'
+    it('a color mask does not keep the old picture into the'
       .. ' next run', function()
-        draw()
+        paint()
         restrict()
         local seen
         F.run_project(function() seen = shown() end)
@@ -233,7 +254,7 @@ describe('a program\'s canvas after it stops #canvas', function()
       end)
 
     it('the program\'s own scissor and mask come back', function()
-      draw()
+      paint()
       restrict()
       F.cc.model.output:clear_canvas()
       assert.is_false(shown())
@@ -256,16 +277,27 @@ describe('a program\'s canvas after it stops #canvas', function()
     end)
 
     it('does not clear the run it restarted', function()
-      local undo = project(draw)
+      local undo = project(function() draw('new') end)
       F.activate_project({
-        update = function()
-          F.cc:restart()
-          draw()
-        end,
+        update = function() F.cc:restart() end,
       })
       F.love_update(0.1)
       undo()
-      assert.is_true(shown())
+      assert.equal('new', who())
+    end)
+
+    it('clears a restart whose top-level code fails', function()
+      local undo = project(function()
+        draw('new')
+        error('boom')
+      end)
+      F.activate_project({
+        update = function() F.cc:restart() end,
+      })
+      F.love_update(0.1)
+      undo()
+      assert.equal('ready', love.state.app_state)
+      assert.is_false(shown())
     end)
 
     it('leaves the console\'s own drawing working', function()
@@ -273,10 +305,54 @@ describe('a program\'s canvas after it stops #canvas', function()
         update = function() F.cc:get_project_env().stop() end,
       })
       F.love_update(0.1)
-      F.cc:use_canvas(draw)
+      F.cc:use_canvas(draw, true)
       assert.is_true(shown())
     end)
   end)
+
+  -- One console line that stops and then draws: the console
+  -- owns no run, so its drawing after the stop stays.
+  it('a console line that stops and then draws keeps what it'
+    .. ' drew', function()
+      paint('old')
+      F.cc:get_project_env().mark = function() draw('typed') end
+      F.session.type('stop() mark()')
+      press({ 'return' })
+      assert.equal('typed', who())
+    end)
+
+  it('console code run over a live program keeps what it draws'
+    .. ' after a stop', function()
+      run_drawing()
+      F.cc:use_canvas(function()
+        F.cc:get_project_env().stop()
+        draw('typed')
+      end, true)
+      assert.equal('typed', who())
+    end)
+
+  -- Top-level code that stops its run, starts it again, and
+  -- then fails: the failed call is the old run's, the canvas
+  -- the new one's.
+  it('a top-level error after a rerun leaves the rerun\'s'
+    .. ' picture', function()
+      local calls = 0
+      local undo = project(function()
+        calls = calls + 1
+        if calls == 1 then
+          F.cc:get_project_env().stop()
+          F.cc:run_project()
+          error('outgoing')
+        else
+          draw('new')
+        end
+      end)
+      local ok, err = pcall(F.cc.run_project, F.cc)
+      undo()
+      assert(ok, err)
+      assert.equal(2, calls)
+      assert.equal('new', who())
+    end)
 
   it('a paused program keeps it, and continue() gives it its'
     .. ' handlers back', function()
@@ -285,21 +361,20 @@ describe('a program\'s canvas after it stops #canvas', function()
         update = function()
           updates = updates + 1
           if updates == 1 then error('boom') end
-          draw()
+          draw('resumed')
         end,
       })
-      draw()
+      paint('before')
       F.love_update(0.1)
       F.cc:suspend()
       assert.equal('inspect', love.state.app_state)
-      assert.is_true(shown())
-      -- the resumed handler is what draws now
-      pixels.inside, pixels.outside = false, false
+      assert.equal('before', who())
       F.cc:get_project_env().continue()
       assert.equal('running', love.state.app_state)
+      assert.equal('before', who())
       F.love_update(0.1)
       assert.equal(2, updates)
-      assert.is_true(shown())
+      assert.equal('resumed', who())
     end)
 
   -- Finished its top-level code with nothing live: idle, not
