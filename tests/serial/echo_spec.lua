@@ -54,8 +54,8 @@ describe("echo", function()
     local ENDED = "The program on the micro:bit has ended."
     local STOPPED = "The program on the micro:bit stopped on the"
       .. " mistake above."
-    local UNREAD = "The program on the micro:bit could not run,"
-      .. " because of the mistake above."
+    local UNREAD = "The program on the micro:bit never ran: see the"
+      .. " mistake above."
 
     before_each(function() e:expect(F) end)
 
@@ -82,6 +82,13 @@ describe("echo", function()
 
     --- every place the line can be cut, the status word too, with
     --- a pause the tail would otherwise be written in
+    --- the console is 64 wide, and a longer line breaks mid-word
+    it("says each end in a line that fits the console", function()
+      for _, words in ipairs({ ENDED, STOPPED, UNREAD }) do
+        assert.is_true(#words <= 64, words)
+      end
+    end)
+
     for _, case in ipairs({ { "ok", ENDED }, { "error", STOPPED },
       { "compile", UNREAD } }) do
       local line = F .. case[1] .. "\r\n"
