@@ -617,8 +617,10 @@ describe('DapFlash', function()
     assert.truthy(joined(said):find('memory', 1, true))
   end)
 
+  --- the chunks after it, the one that erases among them, went
+  --- before the refusal came back
   it('stops on a damaged first record: closes, the old'
-    .. ' program stays', function()
+    .. ' program may be gone', function()
       local chip = F.chip()
       local data = F.hex(40):gsub('^(:10001000)', ':10001001')
       local j, said, logged = job(data, chip)
@@ -626,9 +628,10 @@ describe('DapFlash', function()
       assert.same('CLOSED', chip.stream)
       assert.same(0x8B, chip.got[#chip.got])
       assert.same(0, count(chip.got, 0x89))
+      assert.is_true(j.sent >= j.eraseChunk)
       local s = joined(said)
       assert.truthy(s:find('damaged', 1, true))
-      assert.is_nil(s:find('old program', 1, true))
+      assert.truthy(s:find('old program', 1, true))
       assert.is_nil(s:find('21', 1, true))
       assert.truthy(joined(logged):find('HEX_CKSUM (21)', 1, true))
     end)
@@ -844,16 +847,17 @@ describe('DapFlash', function()
 
   --- the chip erases nothing before it starts writing: 48
   --- bytes in a row, or a second run
-  it('says the old program may be gone only once the chip'
-    .. ' may have erased it', function()
+  it('says the old program may be gone only once the chunk that'
+    .. ' erases went', function()
       local chip = F.chip()
-      chip.over[0x8C] = function(packet, c)
-        c.n = (c.n or 0) + 1
-        if c.n == 2 then return string.char(0x8C, 21) end
+      chip.over[0x8A] = function(_, c)
+        c.stream = 'ERROR'
+        return string.char(0x8A, 11)
       end
       local j, said = job(F.hex(40), chip)
       assert.is_true(j.eraseChunk >= 2)
       assert.same('failed', run(j, chip))
+      assert.same(0, j.sent)
       assert.is_nil(joined(said):find('old program', 1, true))
     end)
 
@@ -875,15 +879,9 @@ describe('DapFlash', function()
         assert.same('failed', run(j, chip))
         return joined(said):find('old program', 1, true) ~= nil
       end
-      assert.is_true(refusing(17))
-      assert.is_true(refusing(16))
-      assert.is_true(refusing(13))
-      -- a bad record may come after records that started the
-      -- erase in the same chunk
-      assert.is_true(refusing(21))
-      assert.is_true(refusing(22))
-      for _, before in ipairs({ 26, 27, 28, 29 }) do
-        assert.is_false(refusing(before), before)
+      for _, status in ipairs({ 13, 16, 17, 21, 22, 26, 27, 28,
+        29 }) do
+        assert.is_true(refusing(status), status)
       end
 
       local quiet_chip = F.chip()
@@ -1317,12 +1315,12 @@ describe('DapFlash', function()
       assert.truthy(joined(said):find('did not take', 1, true))
     end)
 
-  --- a stop takes in the answers already on their way before
-  --- it says whether the old program may be gone: a refusal
-  --- before the erase point keeps it
+  --- a refusal of an earlier chunk keeps nothing once the chunk
+  --- that erases went
   for _, how in ipairs({ 'abandon', 'stop' }) do
-    it('says the old program stays after a refusal before the'
-      .. ' erase, stopped with writes in flight (' .. how .. ')',
+    it('says the old program may be gone after a refusal, once'
+      .. ' the chunk that erases went, stopped with writes in'
+      .. ' flight (' .. how .. ')',
       function()
         local chip = F.chip({ latency = 0.1 })
         local first = true
@@ -1354,7 +1352,7 @@ describe('DapFlash', function()
           words = joined(said)
         end
         assert.truthy(words:find('did not take', 1, true))
-        assert.is_nil(words:find('old program', 1, true))
+        assert.truthy(words:find('old program', 1, true))
       end)
   end
 

@@ -152,40 +152,14 @@ function DapFlash:fail(plain, why)
   self:mayBeGone()
 end
 
---- The old program may be gone once the chip took the chunk
---- that starts it writing the board's memory
---- Refusals the chip makes before it erases, which it does in
---- flash_manager_init (flash_manager.c: erase_chip): an image
---- it will not take, 26 to 28 from flash_decoder_get_flash and
---- 29 from flash_decoder_validate_target_image, both before
---- flash_manager_init in flash_decoder_write. A bad record,
---- 21 or 22, may come after it: the hex reader hands on the
---- records before it in the same chunk (file_stream.c
---- write_hex), which can start the erase. 13 comes after the
---- erase (target_flash.c), and 23 to 25 are not raised in
---- 0257.
-local BEFORE_ERASE = { [26] = true, [27] = true, [28] = true,
-  [29] = true }
-
 --- The old program may be gone once the chunk that carries the
 --- erase point went to the chip: a micro:bit V2 erases the
 --- whole chip within that write, whatever its reply, or none.
---- Not when the chip refused an earlier chunk, which leaves
---- its stream in error, nor when it refused that chunk before
---- reading its data through. A flash on the same link that
---- ended so leaves the program gone for all anyone knows,
---- until one succeeds (link.wiped).
+--- A flash on the same link that ended so leaves the program
+--- gone for all anyone knows, until one succeeds (link.wiped).
 --- @return boolean
 function DapFlash:erased()
-  if self.link.wiped then return true end
-  if self.sent < self.eraseChunk then return false end
-  local at = self.refusedAt
-  if at and at < self.eraseChunk then return false end
-  if at == self.eraseChunk and BEFORE_ERASE[self.refusedStatus]
-  then
-    return false
-  end
-  return true
+  return self.link.wiped or self.sent >= self.eraseChunk
 end
 
 function DapFlash:mayBeGone()
@@ -375,7 +349,6 @@ function DapFlash:wrote(i, status)
   end
   self.log(string.format('write %d of %d refused: %s', i,
     self.chunks, self:name(status)))
-  self.refusedAt, self.refusedStatus = i, status
   self.unsure = self:lostReply(i, status)
   self:refuse(Dap.plain(status), 'write ' .. self:name(status))
 end
