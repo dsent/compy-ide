@@ -34,6 +34,23 @@ describe('Dispatcher', function()
     assert.same({ 'new' }, got)
   end)
 
+  --- the microbit tools' exec hears the board in the program's
+  --- table and turns the console's echo on as it ends: the
+  --- chunk it ended on never reaches the echo too
+  it('goes to the console first, then the program', function()
+    local d = Dispatcher.new()
+    local console = d:table_for('console')
+    local got = {}
+    d:table_for('program').onBytes = function(b)
+      got[#got + 1] = 'program ' .. b
+      console.onBytes = function(c) got[#got + 1] = 'console ' .. c end
+    end
+    d:push('bytes', 'A')
+    d:push('bytes', 'B')
+    d:pump()
+    assert.same({ 'program A', 'console B', 'program B' }, got)
+  end)
+
   it('a nil field delivers nothing', function()
     local d = Dispatcher.new()
     d:push('line', 'X')

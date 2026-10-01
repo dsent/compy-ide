@@ -29,6 +29,11 @@ local FIELDS = {
 
 local ENVS = { console = true, program = true }
 
+--- The order each event goes round in: the console first, so
+--- a program's handler that turns the console's on hands it
+--- the next event, never this one again
+local ORDER = { 'console', 'program' }
+
 --- @param env SerialEnv
 local function check_env(env)
   if not ENVS[env] then
@@ -112,7 +117,8 @@ function Dispatcher:pump()
   local errors = {}
   for _, ev in ipairs(batch) do
     local field = FIELDS[ev.event]
-    for env, t in pairs(self.tables) do
+    for _, env in ipairs(ORDER) do
+      local t = self.tables[env]
       if not self.suspended[env] then
         local fn = t[field]
         if type(fn) == 'function' then
