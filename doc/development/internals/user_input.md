@@ -187,8 +187,11 @@ input. This is used for parse errors, runtime errors, and validation failures.
   ignored until the error is cleared. Cleared by: Enter, space, or arrow keys.
 - **Console:** the failed line stays in the input, to be corrected. Enter,
   Escape, Up and Down only close the message; any other key or typed character
-  closes it and does its usual work, so nothing typed is lost
+  closes it and does its usual work, so nothing typed is lost. A modifier
+  alone leaves it up, and a key pressed with it closes it as that key would
   (`ConsoleController:keypressed`, `:textinput`).
+- **Editor:** its own rules, in `EditorController:keypressed` and
+  `:textinput`.
 - **Drawing:** each line of a message is wrapped on its own, a tab shows as two
   spaces, and a message taller than the input area shows its first rows and
   ends in `...` (`UserInputModel:get_wrapped_error`,

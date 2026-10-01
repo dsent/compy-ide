@@ -2207,8 +2207,16 @@ function ConsoleController:keypressed(k, sc, isrepeat)
     -- the line under the error is the one that failed, kept to
     -- be corrected. Enter, Escape, Up and Down only close the
     -- error; any other key closes it and does its usual work.
+    -- A modifier alone leaves it up; a held Shift then anchors
+    -- its selection when the next key closes it.
     if input:has_error() then
+      if Key.is_mod(k) then
+        return
+      end
       input:clear_error()
+      if Key.shift() then
+        input:keypressed('lshift')
+      end
       if Key.is_enter(k) or k == 'escape'
           or k == "up" or k == "down" then
         return

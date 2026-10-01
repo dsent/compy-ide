@@ -97,6 +97,58 @@ describe('console error message #input', function()
       assert.is_true(#rows <= F.cfg.view.input_max,
         #rows .. ' rows drawn')
     end)
+
+    it('shows the head of a long message and ends in ...',
+      function()
+        local msg = { 'first line' }
+        for i = 1, 30 do
+          msg[#msg + 1] = '\tpath ' .. i
+        end
+        F.console:set_error({ table.concat(msg, '\n') })
+        local rows = draw_error()
+        local max = F.cfg.view.input_max
+        assert.equal(max, #rows)
+        assert.equal('Errors:', rows[1].s)
+        assert.equal('first line', rows[2].s)
+        assert.equal('  path 1', rows[3].s)
+        assert.equal('...', rows[max].s)
+      end)
+
+    --- A message of n lines under the header.
+    --- @param n integer
+    local function set_lines(n)
+      local msg = { }
+      for i = 1, n do msg[i] = 'line ' .. i end
+      F.console:set_error({ table.concat(msg, '\n') })
+    end
+
+    it('draws a message of exactly the rows whole', function()
+      local max = F.cfg.view.input_max
+      set_lines(max - 1)
+      local rows = draw_error()
+      assert.equal(max, #rows)
+      assert.equal('line ' .. (max - 1), rows[max].s)
+    end)
+
+    it('ends a message one row too tall in ...', function()
+      local max = F.cfg.view.input_max
+      set_lines(max)
+      local rows = draw_error()
+      assert.equal(max, #rows)
+      assert.equal('line ' .. (max - 2), rows[max - 1].s)
+      assert.equal('...', rows[max].s)
+    end)
+
+    -- A message from a file or a program may break its lines
+    -- with \r\n or \r; the \r must not count as a character.
+    it('breaks a line at \\r\\n and \\r as at \\n', function()
+      local w = F.cfg.view.drawableChars
+      F.console:set_error({
+        string.rep('a', w) .. '\r\n' .. 'tail\rend' })
+      assert.same(
+        { 'Errors:', string.rep('a', w), 'tail', 'end' },
+        F.console:get_wrapped_error())
+    end)
   end)
 
   describe('keys', function()
@@ -156,6 +208,75 @@ describe('console error message #input', function()
         stroke('return')
         assert.is_false(F.console:has_error())
         assert.equal('', text())
+      end)
+
+    it('Up closes the message and keeps the line', function()
+      type_line('x=1')
+      stroke('return')
+      fail()
+      stroke('up')
+      assert.is_false(F.console:has_error())
+      -- the next Up walks history: the failed line, then x=1
+      stroke('up')
+      assert.equal(failing, text())
+    end)
+
+    --- Count the runs of the input while f is called.
+    --- @param f function
+    --- @return integer
+    local function runs(f)
+      local n = 0
+      local orig = F.cc.evaluate_input
+      F.cc.evaluate_input = function(...)
+        n = n + 1
+        return orig(...)
+      end
+      local ok, err = pcall(f)
+      F.cc.evaluate_input = orig
+      assert(ok, err)
+      return n
+    end
+
+    --- @param mod string
+    --- @param k string
+    local function chord(mod, k)
+      F.session.press(mod)
+      stroke(k)
+      F.session.release(mod)
+    end
+
+    -- A modifier pressed on its own leaves the message up, so
+    -- the key it is held for only closes it.
+    for _, mod in ipairs({ 'lctrl', 'lalt', 'lshift' }) do
+      it(mod .. '+Enter closes the message without running',
+        function()
+          fail()
+          local n = runs(function() chord(mod, 'return') end)
+          assert.equal(0, n)
+          assert.is_false(F.console:has_error())
+          assert.equal(failing, text())
+        end)
+    end
+
+    it('Shift+Escape closes the message and keeps the line',
+      function()
+        fail()
+        chord('lshift', 'escape')
+        assert.is_false(F.console:has_error())
+        assert.equal(failing, text())
+      end)
+
+    -- Shift's own press is held back with the message up; the
+    -- selection it starts must still cover what Home passes.
+    it('Shift+Home selects the line, and a glyph replaces it',
+      function()
+        fail()
+        F.session.press('lshift')
+        stroke('home')
+        F.session.release('lshift')
+        assert.is_false(F.console:has_error())
+        key('x')
+        assert.equal('x', text())
       end)
   end)
 end)
