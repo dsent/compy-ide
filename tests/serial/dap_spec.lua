@@ -845,10 +845,10 @@ describe('DapFlash', function()
       assert.truthy(told:find('keeps its program', 1, true))
     end)
 
-  --- the chip erases nothing before it starts writing: 48
-  --- bytes in a row, or a second run
-  it('says the old program may be gone only once the chunk that'
-    .. ' erases went', function()
+  --- a flash refused at its open sent no chunk, so the board
+  --- keeps its program
+  it('says nothing of the old program when the chip refuses the'
+    .. ' open', function()
       local chip = F.chip()
       chip.over[0x8A] = function(_, c)
         c.stream = 'ERROR'
