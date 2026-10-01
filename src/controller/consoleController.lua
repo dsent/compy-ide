@@ -2226,14 +2226,14 @@ function ConsoleController:textinput(t)
     --- console is disabled in this mode
   else
     local input = self.input
-    if input:has_error() then
-      input:clear_error()
-    else
-      if Key.ctrl() and Key.shift() then
-        return
-      end
-      input:textinput(t)
+    --- a glyph typed over an error closes it and lands on
+    --- the line under it; on the device it may come before
+    --- its key press
+    input:clear_error()
+    if Key.ctrl() and Key.shift() then
+      return
     end
+    input:textinput(t)
   end
 end
 
@@ -2269,12 +2269,24 @@ function ConsoleController:keypressed(k, sc, isrepeat)
       return
     end
 
+    -- doc/development/internals/user_input.md, "Error state":
+    -- the line under the error is the one that failed, kept to
+    -- be corrected. Enter, Escape, Up and Down only close the
+    -- error; any other key closes it and does its usual work.
+    -- A modifier alone leaves it up; a held Shift then anchors
+    -- its selection when the next key closes it.
     if input:has_error() then
-      if k == 'space' or Key.is_enter(k)
-          or k == "up" or k == "down" then
-        input:clear_error()
+      if Key.is_mod(k) then
+        return
       end
-      return
+      input:clear_error()
+      if Key.shift() then
+        input:keypressed('lshift')
+      end
+      if Key.is_enter(k) or k == 'escape'
+          or k == "up" or k == "down" then
+        return
+      end
     end
 
     if k == "pageup" then

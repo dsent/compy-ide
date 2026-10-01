@@ -180,7 +180,22 @@ Mouse click on the input widget (translated from screen coordinates to input gri
 
 ### Error state
 
-When an error is set on the model (`set_error()`), the input is visually locked: text input and most keys are ignored until the error is cleared. Cleared by: Enter, space, or arrow keys. This is used for parse errors, runtime errors, and validation failures.
+When an error is set on the model (`set_error()`), the message covers the
+input. This is used for parse errors, runtime errors, and validation failures.
+
+- **Project widget:** the input is locked — text input and most keys are
+  ignored until the error is cleared. Cleared by: Enter, space, or arrow keys.
+- **Console:** the failed line stays in the input, to be corrected. Enter,
+  Escape, Up and Down only close the message; any other key or typed character
+  closes it and does its usual work, so nothing typed is lost. A modifier
+  alone leaves it up, and a key pressed with it closes it as that key would
+  (`ConsoleController:keypressed`, `:textinput`).
+- **Editor:** its own rules, in `EditorController:keypressed` and
+  `:textinput`.
+- **Drawing:** each line of a message is wrapped on its own, a tab shows as two
+  spaces, and a message taller than the input area shows its first rows and
+  ends in `...` (`UserInputModel:get_wrapped_error`,
+  `UserInputView:render_error`).
 
 ### Evaluator and validation
 

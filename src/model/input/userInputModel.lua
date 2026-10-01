@@ -1063,12 +1063,22 @@ function UserInputModel:clear_error()
   self.error = nil
 end
 
+--- One entry per screen row: a message's own line breaks
+--- (\n, \r\n or \r) split it before wrapping (a failed
+--- require lists a path per line), and a tab becomes two
+--- spaces.
 --- @return string[]?
 function UserInputModel:get_wrapped_error()
   if self.error then
-    local e = table.map(self.error, function(er)
-      return tostring(er)
-    end)
+    local e = { }
+    for _, er in ipairs(self.error) do
+      local s = tostring(er)
+        :gsub('\r\n?', '\n')
+        :gsub('\t', '  ')
+      for _, l in ipairs(string.lines(s)) do
+        table.insert(e, l)
+      end
+    end
     local we = string.wrap_array(
       e,
       self.visible.wrap_w)
