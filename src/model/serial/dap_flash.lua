@@ -100,6 +100,7 @@ function DapFlash.new(data, link, say, log, clock, sending)
   self.phase = 'ask'
   self.sent = 0
   self.acked = 0
+  self.answered = 0
   self.accepted = 0
   self.eraseChunk = Dap.eraseChunk(data)
   self.retried = false
@@ -172,14 +173,18 @@ local BEFORE_ERASE = { [26] = true, [27] = true, [28] = true,
 --- whole chip within that write, whatever its reply, or none.
 --- Not when the chip refused an earlier chunk, which leaves
 --- its stream in error, nor when it refused that chunk before
---- reading its data through. A flash on the same link that
---- ended so leaves the program gone for all anyone knows,
---- until one succeeds (link.wiped).
+--- reading its data through. A refusal names its chunk only
+--- once every chunk sent has had its reply: replies carry no
+--- number, and after a lost one each is taken for the chunk
+--- before its own. A flash on the same link that ended so
+--- leaves the program gone for all anyone knows, until one
+--- succeeds (link.wiped).
 --- @return boolean
 function DapFlash:erased()
   if self.link.wiped then return true end
   if self.sent < self.eraseChunk then return false end
   local at = self.refusedAt
+  if at and self.answered < self.sent then return true end
   if at and at < self.eraseChunk then return false end
   if at == self.eraseChunk and BEFORE_ERASE[self.refusedStatus]
   then
@@ -353,6 +358,7 @@ end
 --- @param i integer
 --- @param status integer
 function DapFlash:wrote(i, status)
+  self.answered = i
   if self.phase ~= 'write' then return end
   self.acked = i
   self.statuses.write = self:name(status)
