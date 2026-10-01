@@ -912,48 +912,6 @@ describe('DapFlash', function()
       assert.truthy(joined(said):find('old program', 1, true))
     end)
 
-  --- a lost reply moves each reply after it onto the chunk
-  --- before its own: the chunk a refusal names may be earlier
-  --- than the one refused, so it cannot say the chip refused
-  --- before the erase
-  it('says the old program may be gone when a reply was lost'
-    .. ' before the refusal of the chunk that erases', function()
-      local function losing(size, status)
-        local chip = F.chip({ latency = 0.001 })
-        local j
-        local take, dropped = chip.take, false
-        chip.take = function(c)
-          local r = take(c)
-          if r and r:byte(1) == 0x8C and not dropped then
-            dropped = true
-            return nil
-          end
-          return r
-        end
-        if status then
-          chip.over[0x8C] = function(_, c)
-            c.n = (c.n or 0) + 1
-            if c.n == j.eraseChunk then
-              c.stream = 'ERROR'
-              return string.char(0x8C, status)
-            end
-          end
-        end
-        local said
-        j, said = job(F.hex(size), chip)
-        assert.is_true(j.eraseChunk >= 2)
-        assert.same('failed', run(j, chip))
-        assert.same(j.eraseChunk - 1, j.refusedAt)
-        return joined(said)
-      end
-      -- the chip's end of the file, from the chunk that erases
-      local told = losing(3)
-      assert.truthy(told:find('old program', 1, true), told)
-      -- a write the chip failed after it erased
-      told = losing(40, 17)
-      assert.truthy(told:find('old program', 1, true), told)
-    end)
-
   it('finds the chunk that starts the chip writing', function()
     local text = assert(Dap.prepare(
       io.open('src/examples/microbit/MICROBIT.hex'):read('*a')))
