@@ -90,6 +90,23 @@ describe('micro:bit hex files #microbit', function()
       assert.is_nil(hex.meta(blocks))
     end)
 
+  --- a file cut short in its script: the metadata is whole,
+  --- and the script it names is not all there
+  it('takes no metadata whose script runs past the file',
+    function()
+      local blocks = { metaBlock(0, 0x64, 0x6E, 0x100),
+        { addr = 0x64, data = 'foo' } }
+      assert.is_nil(hex.meta(blocks))
+      blocks[2].data = 'foo = 1   '
+      assert.equal(0, (hex.meta(blocks)))
+      local lines, cut = {}, {}
+      for line in shipped():gmatch('[^\n]+') do
+        lines[#lines + 1] = line
+      end
+      for i = 1, #lines - 200 do cut[i] = lines[i] end
+      assert.is_nil(hex.meta(hex.parse(table.concat(cut, '\n'))))
+    end)
+
   --- the shipped firmware puts its metadata just before the
   --- script: the script may take all the space
   it('fills the shipped firmware\'s space to its end, and no'

@@ -204,23 +204,24 @@ end
 --- Whether metadata's fields are all there and agree with
 --- each other: the magic can turn up in ordinary data as well,
 --- and a block cut short leaves words out. The script lies
---- within its space, and starts somewhere real.
+--- within its space, and the file holds all of it.
 --- @param blocks table[]
 --- @param m table
 --- @return boolean
 local function fieldsAgree(blocks, m)
   local whole = m.start and m.stop and m.size and m.space
+  local first = whole and hex.at(blocks, m.start)
   return whole and m.start < m.stop
        and m.size == m.stop - m.start
        and m.size <= m.space
-       and hex.at(blocks, m.start) ~= nil
+       and first ~= nil
+       and first == hex.at(blocks, m.stop - 1)
 end
 
 --- The metadata at an address, if that is what is there
 --- @param blocks table[]
 --- @param addr integer
 --- @return table? meta
-
 local function meta_at(blocks, addr)
   local m = {
     start = word(blocks, addr + 4),
@@ -233,10 +234,6 @@ local function meta_at(blocks, addr)
   end
 end
 
---- Where the firmware says its Lua script lives
---- @param blocks table[]
---- @return integer? addr of the metadata
---- @return table? meta
 local function candidate(blocks, block, i)
   local addr = block.addr + i - 1
   local m = addr % 4 == 0 and meta_at(blocks, addr)
@@ -260,6 +257,10 @@ local function metaIn(blocks, block)
   end
 end
 
+--- Where the firmware says its Lua script lives
+--- @param blocks table[]
+--- @return integer? addr of the metadata
+--- @return table? meta
 function hex.meta(blocks)
   for _, block in ipairs(blocks) do
     local addr, m = metaIn(blocks, block)
