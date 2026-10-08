@@ -134,10 +134,13 @@ compy.input.shortcuts.keypressed["ctrl+r"] = function()
 end
 
 -- On the Compy a Ctrl chord can also bring its letter as
--- text; this "r" is not meant for the board.
-compy.input.shortcuts.textinput["ctrl+r"] = function()
+-- text; the letters of the chords here are not meant for the
+-- board.
+local function noLetter()
   return true
 end
+
+compy.input.shortcuts.textinput["ctrl+r"] = noLetter
 
 -- What has been sent, newest last, the hundred most recent
 -- of them. The widget keeps a history of its own but hands
@@ -173,6 +176,14 @@ local function recall(step)
   input.set_text(sent[at] or "")
 end
 
+--- @param bytes string
+local function send(bytes)
+  local ok, err = serial.send(bytes)
+  if not ok then
+    print("[send failed: " .. tostring(err) .. "]")
+  end
+end
+
 -- What was typed, the way the REPL reads it: CR ends a line.
 -- The prompt above was written with the line left open and
 -- the typed text has just landed on it, so close it: what
@@ -183,11 +194,26 @@ local function sendLine(text)
   at = #sent + 1
   io.write("\n")
   local cr = text:gsub("\n", "\r")
-  local ok, err = serial.send(cr .. "\r")
-  if not ok then
-    print("[send failed: " .. tostring(err) .. "]")
-  end
+  send(cr .. "\r")
 end
+
+-- Ctrl+C and Ctrl+D go to the board as the one byte each is.
+-- Ctrl+C starts the board's line afresh, so the line being
+-- typed here is dropped with it; Ctrl+D closes a radio link.
+compy.input.shortcuts.keypressed["ctrl+c"] = function()
+  input.clear()
+  at = #sent + 1
+  send("\3")
+  return true
+end
+
+compy.input.shortcuts.keypressed["ctrl+d"] = function()
+  send("\4")
+  return true
+end
+
+compy.input.shortcuts.textinput["ctrl+c"] = noLetter
+compy.input.shortcuts.textinput["ctrl+d"] = noLetter
 
 input.callbacks.after_submit = input.clear
 
