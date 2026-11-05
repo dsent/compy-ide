@@ -64,3 +64,47 @@ describe('terminal Ctrl+R #microbit', function()
       1, true))
   end)
 end)
+
+describe('terminal Ctrl+C and Ctrl+D #microbit', function()
+  local function connected(sent)
+    return {
+      send = function(bytes)
+        sent[#sent + 1] = bytes
+        return true
+      end,
+      isConnected = function() return true end,
+    }
+  end
+
+  it('sends Ctrl+C as one byte and drops the line typed',
+    function()
+      local sent = {}
+      local input = load_terminal(connected(sent))
+      local cleared = 0
+      input.clear = function() cleared = cleared + 1 end
+      assert.is_true(input.shortcuts.keypressed['ctrl+c']())
+      assert.same({ '\3' }, sent)
+      assert.same(1, cleared)
+      assert.is_true(input.shortcuts.textinput['ctrl+c']())
+    end)
+
+  it('sends Ctrl+D as one byte and keeps the line typed',
+    function()
+      local sent = {}
+      local input = load_terminal(connected(sent))
+      input.clear = function() error('Ctrl+D cleared the line') end
+      assert.is_true(input.shortcuts.keypressed['ctrl+d']())
+      assert.same({ '\4' }, sent)
+      assert.is_true(input.shortcuts.textinput['ctrl+d']())
+    end)
+
+  it('says so when the byte cannot be sent', function()
+    local serial = {
+      send = function() return false, 'no board' end,
+      isConnected = function() return false end,
+    }
+    local input, said = load_terminal(serial)
+    input.shortcuts.keypressed['ctrl+c']()
+    assert.same('[send failed: no board]', said[#said])
+  end)
+end)
