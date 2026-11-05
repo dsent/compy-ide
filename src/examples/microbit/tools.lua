@@ -258,8 +258,7 @@ local FRAME = "\30exec "
 local RAN = table.concat({
   "local z='\\r\\n\\30exec %s '..(o and'ok'or f and'error'",
   "or'compile')if not o then z=(f and'Runtime'or'Compile')",
-  "..' error: '..T(e)..z end if s then s(z..'\\r\\n')else W(z)",
-  "end end"
+  "..' error: '..T(e)..z end W(z..'\\n')end"
 })
 
 --- How many frames exec has made
@@ -276,30 +275,26 @@ end
 --- The first line exec sends begins so: what the chunk uses
 --- is taken from the board's globals as they are before the
 --- file runs, so what the file puts there changes nothing; the
---- frame goes straight to the port, when the board has one,
---- past whatever print is. With no pcall left from an earlier
---- file, the file runs unprotected. With no rawget or
---- loadstring the chunk stops before the file runs, and exec
---- says the board did not say whether it ran: the board's
---- prompt keeps a loadstring of its own, and reads every line;
---- with no tostring the file runs, and a mistake in it comes
---- with no frame.
+--- frame goes out by io.write, the way the board answers the
+--- line, over a radio link as over the cable. With no pcall
+--- left from an earlier file, the file runs unprotected. With
+--- no rawget, loadstring or io the chunk stops before the file
+--- runs, and exec says the board did not say whether it ran:
+--- the board's prompt keeps a loadstring of its own, and reads
+--- every line; with no tostring the file runs, and a mistake
+--- in it comes with no frame.
 local OPENING =
     "do local R,G=rawget,_G local f,e=R(G,'loadstring')("
 
 --- What the closing line adds after the file's name: the rest
 --- the chunk uses, taken still before the file runs
-local TAKE = table.concat({
-  "local m,P,T,W=R(G,'microbit'),R(G,'pcall'),",
-  "R(G,'tostring'),R(G,'print')"
-})
+local TAKE =
+    "local P,T,W=R(G,'pcall'),R(G,'tostring'),R(G,'io').write"
 
---- The line after it: where the chunk says how the file
---- ended, the port or else print; and the file's run, with
---- a pcall that runs it unprotected when there is none
+--- The line after it: the file's run, with a pcall that runs
+--- it unprotected when there is none
 local SAY = table.concat({
-  "local s=m and m.serial s=s and s.send",
-  " P=P or function(g)return true,g()end",
+  "P=P or function(g)return true,g()end",
   " local o if f then o,e=P(f)end"
 })
 
@@ -345,16 +340,14 @@ local function chunkLines(filename)
 end
 
 --- What the board has said since it echoed the line in flight
---- and started a new line on taking it. What came before the
---- echo, such as the greeting of a board just reset, is not
---- the line's.
+--- and started a new line on taking it, with CR LF, or CR CR LF
+--- on the bundled firmware. What came before the echo, such as
+--- the greeting of a board just reset, is not the line's.
 --- @return string?
 local function afterEcho()
   local line = sending.lines[sending.at]
-  local _, at = sending.heard:find(line .. "\r\r\n", 1, true)
-  if at then
-    return sending.heard:sub(at + 1)
-  end
+  local _, at = sending.heard:find(line .. "\r", 1, true)
+  return at and sending.heard:match("^\r?\n(.*)", at + 1)
 end
 
 --- The board's answer once its prompt has come, and whether
@@ -525,13 +518,17 @@ local function heardLast()
 end
 
 --- The line the board entered in place of the line in flight,
---- once its prompt has come: the board ends a line it enters
---- with CR CR LF, and what came before that differs from the
---- line sent. nil while the line's own echo is there, or may
---- yet come.
+--- once its prompt has come. nil while the line's own echo is
+--- there, or may yet come. A prompt starts a line: a "> " in
+--- the middle of one is the echo's, cut there. Bytes alone do
+--- not always tell. A line sent whole still reads as changed
+--- when a program prints some of its characters as a line just
+--- before its echo, and then the program starts a line with
+--- "> ", or the line itself starts with "> " and its echo is
+--- cut right after that.
 --- @return string?
 local function changed()
-  local prompt = sending.heard:find(">>? $")
+  local prompt = ("\n" .. sending.heard):find("\n>>? $")
   local got = not afterEcho() and prompt and sending.got
   return got or nil
 end
@@ -554,13 +551,46 @@ local function mistook()
   sendNext()
 end
 
+--- Whether a line the board said is the line sent less some
+--- of its characters
+--- @param said string
+--- @param line string
+--- @return boolean
+local function lost(said, line)
+  local at = 0
+  for c in said:gmatch(".") do
+    at = line:find(c, at + 1, true)
+    if not at then
+      return false
+    end
+  end
+  return said ~= ""
+end
+
+--- The first line the board said before the line in flight's
+--- echo that is that line less some characters: how a line
+--- goes wrong on its way. A prompt it starts with, as the
+--- greeting of a board just reset leaves, is not the line's.
+--- @return string?
+local function lostLine()
+  local line = sending.lines[sending.at]
+  for said in sending.heard:gmatch("([^\r\n]*)\r?\r\n") do
+    local typed = said:gsub("^>>? ", "")
+    if typed == line then
+      return
+    end
+    if lost(typed, line) then
+      return typed
+    end
+  end
+end
+
 --- Whether the board entered the line in flight changed, done
 --- with when it did: the first line it entered is kept, as
 --- what it got, before a wait can show and drop it
 --- @return boolean
 local function heardChanged()
-  local entered = sending.heard:match("([^\n]*)\r\r\n")
-  sending.got = sending.got or entered
+  sending.got = sending.got or lostLine()
   local got = changed()
   if got then
     mistook()
@@ -792,10 +822,10 @@ local function lastLine(after)
 end
 
 --- How much of the line in flight's echo has come, at the end
---- of what the board said
+--- of what the board said, short of the LF that ends it whole
 --- @return integer
 local function echoed()
-  local echo = sending.lines[sending.at] .. "\r\r\n"
+  local echo = sending.lines[sending.at] .. "\r\r"
   local heard = sending.heard
   for n = math.min(#heard, #echo), 1, -1 do
     if heard:sub(-n) == echo:sub(1, n) then

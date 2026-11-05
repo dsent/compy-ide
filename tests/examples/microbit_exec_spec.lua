@@ -75,13 +75,17 @@ describe('micro:bit exec #microbit', function()
     return env
   end
 
+  --- How the board ends the echo of a line it takes: CR CR LF
+  --- on the bundled firmware
+  local entered
+
   --- The board takes the last line sent: its echo, what it has
   --- to say, and a prompt, ">> " unless given another
   --- @param answer string?
   --- @param prompt string?
   local function board(answer, prompt)
     local line = backend.sent[#backend.sent]:gsub('\r$', '')
-    backend:rx(line .. '\r\r\n' .. (answer or '')
+    backend:rx(line .. entered .. (answer or '')
       .. (prompt or '>> '))
     serial:update(0)
   end
@@ -137,6 +141,7 @@ describe('micro:bit exec #microbit', function()
     serial = Serial.new(backend)
     port = serial:table_for('program')
     said, echoes, flashed = {}, {}, false
+    entered = '\r\r\n'
     files = { ['f.lua'] = 'a = 1\nprint(a)\n' }
     backend:attach()
     serial:update(0)
@@ -368,6 +373,23 @@ describe('micro:bit exec #microbit', function()
         assert.equal('h.lua is on the board', said[#said])
       end)
   end
+
+  --- over a radio link the port is the far board's own: the
+  --- end comes back the way the board answers, and none of it
+  --- goes to that port
+  it('reads the end of a file run over a radio link', function()
+    local on = newBoard()
+    local port = {}
+    on.env.microbit.serial.send = function(text)
+      port[#port + 1] = text
+    end
+    files['g.lua'] = 'x = 1\n'
+    local tools = load_tools()
+    board(ranOnBoard(tools, 'g.lua', on), '> ')
+    serial:update(0.25)
+    assert.equal('g.lua is on the board', said[#said])
+    assert.same({}, port)
+  end)
 
   --- the verdict comes from this exec's frame at the end,
   --- never from what the program printed; a frame of the
@@ -909,14 +931,14 @@ describe('micro:bit exec #microbit', function()
     assert.equal(2, sent())
   end)
 
-  --- A line that reached the board changed: its echo, ended as
-  --- the board ends an entered line, differs from the line sent,
-  --- and a prompt follows. exec stops at once.
+  --- A line that reached the board changed: its echo is the line
+  --- sent less some characters, and a prompt follows. exec stops
+  --- at once.
   it('stops at once when the board got a line changed', function()
     local tools = load_tools()
     tools.exec('f.lua')
     board()
-    backend:rx('a = 2\r\r\n>> ')
+    backend:rx('a 1\r\r\n>> ')
     serial:update(0)
     assert.equal(2, sent())
     assert.is_nil(port.onTick)
@@ -932,13 +954,27 @@ describe('micro:bit exec #microbit', function()
     local tools = load_tools()
     tools.exec('f.lua')
     board()
-    backend:rx('a = 2\r')
+    backend:rx('a 1\r')
     serial:update(1)
     backend:rx('\r\n>> ')
     serial:update(0)
     assert.is_nil(port.onTick)
     assert.truthy(allSaid():find('got that line changed', 1, true))
   end)
+
+  --- the greeting of a board just reset ends in a prompt, and
+  --- the first line's echo comes after it on the same line
+  it('stops at once on a changed first line after a greeting',
+    function()
+      local tools = load_tools()
+      tools.exec('f.lua')
+      local line = backend.sent[1]:gsub('\r$', '')
+      backend:rx('micro:bit\r\nLua 5.1 REPL\r\n> '
+        .. line:sub(1, 10) .. line:sub(12) .. '\r\r\n>> ')
+      serial:update(0)
+      assert.is_nil(port.onTick)
+      assert.truthy(allSaid():find('got that line changed', 1, true))
+    end)
 
   --- what legitimately comes before or around a line's echo
   --- never reads as the line changed
@@ -997,6 +1033,23 @@ describe('micro:bit exec #microbit', function()
       local tools = load_tools()
       tools.exec('g.lua')
       through(tools, 3)
+      assert.equal('g.lua is on the board', said[#said])
+    end)
+
+    it('a program\'s line made of the line\'s characters, then an'
+      .. ' echo cut after its "> "', function()
+      files['g.lua'] = 'if distance > 10 then\nend\n'
+      local tools = load_tools()
+      tools.exec('g.lua')
+      board()
+      backend:rx('10\r\n')
+      serial:update(0)
+      backend:rx('if distance > ')
+      serial:update(0)
+      assert.is_nil(allSaid():find('changed', 1, true), allSaid())
+      backend:rx('10 then\r\r\n>> ')
+      serial:update(0)
+      through(tools, 16)
       assert.equal('g.lua is on the board', said[#said])
     end)
 
@@ -1183,14 +1236,14 @@ describe('micro:bit exec #microbit', function()
       tools.send('s.lua')
       board(nil, '> ')
       said = {}
-      backend:rx('b = 3\r\r\n> ')
+      backend:rx('b 2\r\r\n> ')
       serial:update(0)
       assert.equal(3, sent())
       assert.equal('c = 3\r', backend.sent[3])
       assert.truthy(allSaid():find('send: the board got line 2 of 3 of'
         .. ' s.lua changed, so what it ran may differ from the file;'
         .. ' the lines above show what it got.', 1, true), allSaid())
-      backend:rx('c = 4\r\r\n> ')
+      backend:rx('c 3\r\r\n> ')
       serial:update(0)
       assert.is_nil(port.onTick)
       local _, n = allSaid():gsub('changed', '')
@@ -2221,5 +2274,65 @@ describe('micro:bit exec #microbit', function()
       'big.lua is 300000 bytes, and MICROBIT.hex has room for',
       'Make it shorter')
     assert.is_nil(files['mine.hex'])
+  end)
+
+  --- The REPL on nagydani/microbit-lua main writes the end of a
+  --- line it takes once, CR LF, where the bundled one wrote CR
+  --- CR LF
+  describe('on firmware that ends a taken line CR LF', function()
+    before_each(function()
+      entered = '\r\n'
+    end)
+
+    it('runs a file', function()
+      local tools = load_tools()
+      run(tools)
+      assert.equal(6, sent())
+      assert.equal(RAN, said[#said])
+    end)
+
+    it('sends a file a line after another', function()
+      files['s.lua'] = 'a = 1\nb = 2\nc = 3\n'
+      local tools = load_tools()
+      tools.send('s.lua')
+      board(nil, '> ')
+      board(nil, '> ')
+      assert.equal(3, sent())
+      board(nil, '> ')
+      assert.is_nil(port.onTick)
+    end)
+
+    it('stops exec at once on a line the board got changed',
+      function()
+        local tools = load_tools()
+        tools.exec('f.lua')
+        board()
+        backend:rx('a 1\r\n>> ')
+        serial:update(0)
+        assert.is_nil(port.onTick)
+        assert.truthy(allSaid():find('got that line changed', 1, true))
+      end)
+
+    it('tells send\'s line the board got changed', function()
+      files['s.lua'] = 'a = 1\nb = 2\nc = 3\n'
+      local tools = load_tools()
+      tools.send('s.lua')
+      board(nil, '> ')
+      backend:rx('b 2\r\n> ')
+      serial:update(0)
+      assert.equal(3, sent())
+      assert.truthy(allSaid():find('s.lua changed', 1, true))
+    end)
+
+    it('takes what came before the echo for none of its own',
+      function()
+        local tools = load_tools()
+        tools.exec('f.lua')
+        backend:rx('\r\nmicro:bit\r\nLua 5.1 REPL\r\n> ')
+        serial:update(0)
+        assert.equal(1, sent())
+        board()
+        assert.equal(2, sent())
+      end)
   end)
 end)
