@@ -43,7 +43,19 @@ local VENDOR = 0xFF
 local EP_BULK = 2
 local DIR_IN = 0x80
 local RX_SIZE = 64
+--- Slices a poll takes at most, until one comes back empty.
+--- The board says up to 11.5 KB a second, and the chip drops
+--- what its buffer cannot hold. On UE175 (2026-11-05), 40
+--- lines of 72 characters: with one slice a poll, 12 came
+--- whole at full speed and 12 at 2.8 KB a second; with eight,
+--- 27 to 31 at full speed and all 40 at 2.8. The Compy polls
+--- about every 60 ms while the lines scroll.
+local RX_SLICES = 8
 local READ_MS = 5
+--- The wait of a slice after a poll's first: what the chip
+--- holds comes at once, and a board that prints little and
+--- often holds the poll no more than a millisecond a slice
+local READ_ON_MS = 1
 local WRITE_MS = 1000
 --- Bytes per poll on the way out, a poll a frame. The board
 --- reads a character in about a millisecond, and keeps what
@@ -533,14 +545,28 @@ function AndroidBackend:release(port)
 end
 
 --- One bulk-in slice; '' when the slice brought nothing
+--- @param ms integer? how long to wait for it, READ_MS if nil
 --- @return string
-function AndroidBackend:read()
+function AndroidBackend:read(ms)
   local env = self.env
   local port = self.port
   local n = jniCallInt(env, port.conn, port.bulkM,
-    port.epIn, port.rx, RX_SIZE, READ_MS)
+    port.epIn, port.rx, RX_SIZE, ms or READ_MS)
   if n <= 0 then return '' end
   return jniReadBytes(env, port.rx, n)
+end
+
+--- What the board said since the last poll: slices until one
+--- brings nothing, at most RX_SLICES
+--- @return string
+function AndroidBackend:drain()
+  local slices = {}
+  for i = 1, RX_SLICES do
+    local slice = self:read(i > 1 and READ_ON_MS or nil)
+    if slice == '' then break end
+    slices[i] = slice
+  end
+  return table.concat(slices)
 end
 
 --- Queued, not written here: the bytes leave one per poll,
@@ -877,7 +903,7 @@ function AndroidBackend:pollOpen(busy)
     self:probe(self.port)
   end
   if not busy then
-    local chunk = self:read()
+    local chunk = self:drain()
     if chunk ~= '' then self.sink.bytes(chunk) end
     local fault = self:write()
     if fault then return fault end
