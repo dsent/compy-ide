@@ -2,6 +2,7 @@ require('util.jni')
 require('model.serial.dap')
 require('model.serial.dap_link')
 require('model.serial.usbfs')
+require('model.serial.serial_in')
 
 --- USB CDC-ACM over the Android USB host API, driven from
 --- Lua through the LuaJIT FFI. Ported from the robot USB
@@ -43,7 +44,8 @@ local VENDOR = 0xFF
 local EP_BULK = 2
 local DIR_IN = 0x80
 local RX_SIZE = 64
---- Slices a poll takes at most, until one comes back empty.
+--- Slices a poll takes at most, until one comes back empty,
+--- when no reads can be kept in the kernel (SerialIn).
 --- The board says up to 11.5 KB a second, and the chip drops
 --- what its buffer cannot hold. On UE175 (2026-11-05), 40
 --- lines of 72 characters: with one slice a poll, 12 came
@@ -333,6 +335,7 @@ function AndroidBackend:endpoints(dev)
         if jniCallInt(env, ep, epType) == EP_BULK then
           if jniCallInt(env, ep, epDir) == DIR_IN then
             found.epIn = jniGlobal(env, ep)
+            found.inAddr = jniCallInt(env, ep, epAddr)
           else
             found.epOut = jniGlobal(env, ep)
           end
@@ -417,6 +420,7 @@ function AndroidBackend:openDevice(entry)
     comm = eps.comm,
     data = eps.data,
     epIn = eps.epIn,
+    inAddr = eps.inAddr,
     epOut = eps.epOut,
     commId = eps.commId,
     msc = eps.msc,
@@ -448,8 +452,31 @@ function AndroidBackend:openDevice(entry)
     return nil, 'data interface refused'
   end
   port.acm = self:configureAcm(port)
+  local fok, fd = pcall(jniCallInt, env, port.conn, port.fdM)
+  if fok and fd >= 0 then
+    port.usbfs = Usbfs.new(fd)
+  else
+    log('no file descriptor for the connection: '
+      .. tostring(fd))
+  end
   self:claimDap(port)
+  self:startSerialIn(port)
   return port
+end
+
+--- The board's output read by transfers kept in the kernel,
+--- see SerialIn; without them, a slice a poll, see drain
+function AndroidBackend:startSerialIn(port)
+  if not (port.usbfs and port.inAddr) then return end
+  local reads = SerialIn.new(port.usbfs:share({ port.inAddr }),
+    port.inAddr, log)
+  if reads:start() then
+    log(string.format('serial read by %d transfers on 0x%02X',
+      SerialIn.COUNT, port.inAddr))
+  end
+  -- those posted before a refusal still take the output
+  -- first, so they are taken before drain reads again
+  if reads.posted > 0 then port.serialIn = reads end
 end
 
 --- The CMSIS-DAP interface, claimed with force on the same
@@ -475,19 +502,15 @@ function AndroidBackend:claimDap(port)
     return
   end
   dap.claimed = true
-  local fok, fd = pcall(jniCallInt, env, port.conn, port.fdM)
-  if not fok or fd < 0 then
-    log('no file descriptor for the connection: '
-      .. tostring(fd))
-    return
-  end
-  port.link = DapLink.new(Usbfs.new(fd), dap.outAddr,
-    dap.inAddr, log, now)
+  if not port.usbfs then return end
+  port.link = DapLink.new(port.usbfs:share({ dap.outAddr,
+    dap.inAddr }), dap.outAddr, dap.inAddr, log, now)
   -- a flash that finds the probe's questions unanswered gives
   -- them up: they are asked again
   port.link.onResync = function() port.probed = false end
   port.link:start()
-  log('CMSIS-DAP interface claimed, descriptor ' .. fd)
+  log('CMSIS-DAP interface claimed, descriptor '
+    .. port.usbfs.fd)
 end
 
 --- The one close path: interfaces, connection, refs.
@@ -509,10 +532,15 @@ function AndroidBackend:release(port)
     log('drive left without a driver: back when the board'
       .. ' is plugged in again')
   end
-  -- the link stops touching the descriptor before it closes
+  -- the link and the reads stop touching the descriptor
+  -- before it closes
   if port.link then
     port.link:kill()
     port.link = nil
+  end
+  if port.serialIn then
+    port.serialIn:stop('port closed')
+    port.serialIn = nil
   end
   local dap = port.dap
   if dap then
@@ -903,7 +931,8 @@ function AndroidBackend:pollOpen(busy)
     self:probe(self.port)
   end
   if not busy then
-    local chunk = self:drain()
+    local reads = self.port.serialIn
+    local chunk = reads and reads:take() or self:drain()
     if chunk ~= '' then self.sink.bytes(chunk) end
     local fault = self:write()
     if fault then return fault end
