@@ -200,6 +200,63 @@ describe('AndroidBackend drive hold', function()
       assert.same(1, writes)
     end)
 
+  --- the chip drops what its buffer cannot hold, so a poll
+  --- takes all the board said, not one slice of it
+  it('reads slices until one brings nothing, at most 8 a poll',
+    function()
+      local p = port(F.chip())
+      local b = backend(p)
+      b:openReady()
+      b.due = math.huge
+      local waiting = { 'a', 'b', 'c' }
+      for i = 4, 12 do waiting[i] = tostring(i) end
+      local reads, got, waits = 0, {}, {}
+      b.read = function(_, ms)
+        reads = reads + 1
+        waits[#waits + 1] = ms or 'first'
+        return table.remove(waiting, 1) or ''
+      end
+      b.write = function() end
+      b.sink.bytes = function(chunk) got[#got + 1] = chunk end
+      b:poll(false)
+      assert.same({ 'abc45678' }, got)
+      assert.same(8, reads)
+      assert.same({ 'first', 1, 1, 1, 1, 1, 1, 1 }, waits)
+      b:poll(false)
+      assert.same({ 'abc45678', '9101112' }, got)
+      assert.same(13, reads)
+      b:poll(false)
+      assert.same(2, #got)
+      assert.same(14, reads)
+    end)
+
+  --- the reads kept in the kernel take the output while they
+  --- last; then a slice a poll does
+  it('takes the output from the kept reads, then from slices',
+    function()
+      local p = port(F.chip())
+      local b = backend(p)
+      b:openReady()
+      b.due = math.huge
+      local taken = { 'kept', '', nil }
+      local takes = 0
+      p.serialIn = { take = function()
+        takes = takes + 1
+        return taken[takes]
+      end }
+      local reads, got = 0, {}
+      b.read = function()
+        reads = reads + 1
+        return reads == 1 and 'slice' or ''
+      end
+      b.write = function() end
+      b.sink.bytes = function(chunk) got[#got + 1] = chunk end
+      for _ = 1, 3 do b:poll(false) end
+      assert.same({ 'kept', 'slice' }, got)
+      assert.same(3, takes)
+      assert.same(2, reads)
+    end)
+
   --- the chip may hold a control request back while it
   --- writes a page: a board taking a file is not asked
   it('asks a board taking a file no control request',

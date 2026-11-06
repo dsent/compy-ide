@@ -163,3 +163,82 @@ function Usbfs:inFlight()
   for _ in pairs(self.live) do n = n + 1 end
   return n
 end
+
+--- @return number seconds
+local function clock()
+  if love and love.timer then return love.timer.getTime() end
+  return os.clock()
+end
+
+--- @class UsbfsShare
+--- @field usbfs Usbfs
+--- @field queue table finished transfers reaped for this share
+UsbfsShare = {}
+UsbfsShare.__index = UsbfsShare
+
+--- A share of the descriptor for the transfers on some
+--- endpoints. The kernel hands back every finished transfer
+--- on the descriptor, whoever submitted it, so a transfer one
+--- share reaps for another is held for that one, in the order
+--- it finished. Shares have the io of Usbfs: submit, reap,
+--- wait.
+--- @param endpoints integer[]
+--- @return UsbfsShare
+function Usbfs:share(endpoints)
+  self.owners = self.owners or {}
+  local s = setmetatable({ usbfs = self, queue = {} },
+    UsbfsShare)
+  for _, e in ipairs(endpoints) do self.owners[e] = s end
+  return s
+end
+
+--- Reap from the kernel until it has nothing, holding each
+--- transfer for its share
+--- @return string? err
+function Usbfs:reapAll()
+  while true do
+    local done, err = self:reap()
+    if err then return err end
+    if not done then return end
+    local owner = self.owners and self.owners[done.endpoint]
+    if not owner then
+      return string.format('reaped a transfer on 0x%02X,'
+        .. ' which no share takes', done.endpoint)
+    end
+    local q = owner.queue
+    q[#q + 1] = done
+  end
+end
+
+--- @param endpoint integer
+--- @param data string|integer
+--- @return boolean? ok
+--- @return string? err
+function UsbfsShare:submit(endpoint, data)
+  return self.usbfs:submit(endpoint, data)
+end
+
+--- One finished transfer of this share, or nil
+--- @return table? done
+--- @return string? err
+function UsbfsShare:reap()
+  if #self.queue == 0 then
+    local err = self.usbfs:reapAll()
+    if err and #self.queue == 0 then return nil, err end
+  end
+  return table.remove(self.queue, 1)
+end
+
+--- Wait up to ms for a transfer of this share to finish;
+--- another share's that finishes meanwhile is held for it
+--- @param ms integer
+--- @return boolean ready
+function UsbfsShare:wait(ms)
+  local til = clock() + ms / 1000
+  while #self.queue == 0 do
+    local left = math.floor((til - clock()) * 1000)
+    if left <= 0 or not self.usbfs:wait(left) then break end
+    if self.usbfs:reapAll() then break end
+  end
+  return #self.queue > 0
+end
