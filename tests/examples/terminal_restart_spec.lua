@@ -48,7 +48,8 @@ describe('terminal Ctrl+R #microbit', function()
       true))
     -- a restart only starts a program from upload again
     assert.truthy(said[#said]:find('upload() in the microbit'
-      .. ' project puts the Compy\'s firmware back', 1, true))
+      .. ' project puts the Compy\'s firmware back, or'
+      .. ' upload("tpbot.lua") for a robot', 1, true))
   end)
 
   it('waits while a file goes to the board', function()

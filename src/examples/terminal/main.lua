@@ -106,7 +106,8 @@ local RESTARTING = table.concat({
   BUTTON,
   ". If a program of yours is",
   " on it from upload, upload() in the microbit project puts",
-  " the Compy's firmware back]"
+  " the Compy's firmware back, or upload(\"tpbot.lua\") for",
+  " a robot]"
 })
 
 -- The way back from a board that no longer reads what is
