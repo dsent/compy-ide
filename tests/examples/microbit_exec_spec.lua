@@ -354,11 +354,9 @@ describe('micro:bit exec #microbit', function()
     return table.concat(on.out)
   end
 
-  --- a program that puts its own print or takes pcall away in
-  --- the board's globals: the next exec still says how its file
-  --- ended
-  for _, text in ipairs({ 'print = function() end', 'print = nil',
-    'pcall = nil' }) do
+  --- a program that puts its own print in the board's globals:
+  --- the next exec still says how its file ended
+  for _, text in ipairs({ 'print = function() end', 'print = nil' }) do
     it('reads the next file\'s end after a program runs ' .. text,
       function()
         local on = newBoard()
@@ -373,6 +371,24 @@ describe('micro:bit exec #microbit', function()
         assert.equal('h.lua is on the board', said[#said])
       end)
   end
+
+  --- exec's own lines run the file unprotected when the
+  --- board's globals have no pcall. This is the tools alone: on
+  --- the Compy's firmware the prompt itself calls the global
+  --- pcall, so a program that takes it away leaves every line
+  --- failing, these lines included, until restart_microbit()
+  it('runs the file unprotected when the board has no pcall',
+    function()
+      local on = newBoard()
+      on.env.pcall = nil
+      files['h.lua'] = 'x = 1\n'
+      local tools = load_tools()
+      said = {}
+      board(ranOnBoard(tools, 'h.lua', on), '> ')
+      serial:update(0.25)
+      assert.equal(1, rawget(on.env, 'x'))
+      assert.equal('h.lua is on the board', said[#said])
+    end)
 
   --- over a radio link the port is the far board's own: the
   --- end comes back the way the board answers, and none of it
@@ -515,7 +531,8 @@ describe('micro:bit exec #microbit', function()
       assert.truthy(allSaid():find('did not take it. Type'
         .. ' restart_microbit(), then try again. If a program of'
         .. ' yours is on it from upload, upload() puts the Compy\'s'
-        .. ' firmware back.', 1, true))
+        .. ' firmware back, or upload("tpbot.lua") for a robot.', 1,
+        true))
       assert.is_nil(port.onBytes)
       assert.equal(1, sent())
     end)
@@ -1610,7 +1627,7 @@ describe('micro:bit exec #microbit', function()
     local shipped = files['MICROBIT.hex']
     refusedPlainly(function()
       tools.extract('MICROBIT.hex', 'microbit.HEX')
-    end, 'MICROBIT.hex is the robots\' firmware and is never written',
+    end, 'MICROBIT.hex is the shipped firmware and is never written',
       'extract("MICROBIT.hex", "mine.lua")')
     assert.equal(shipped, files['MICROBIT.hex'])
   end)
@@ -1694,7 +1711,7 @@ describe('micro:bit exec #microbit', function()
     for _, name in ipairs({ 'MICROBIT.hex', 'microbit.hex',
       'MicroBit.HEX' }) do
       refusedPlainly(function() tools.embed(name, 'x.lua') end,
-        'MICROBIT.hex is the robots\' firmware and is never',
+        'MICROBIT.hex is the shipped firmware and is never',
         'embed("mine.hex")')
     end
     assert.are.equal(shipped, files['MICROBIT.hex'])
@@ -1939,7 +1956,8 @@ describe('micro:bit exec #microbit', function()
           assert.truthy(told:find('The micro:bit took the file. A sad'
             .. ' face and 020 on the micro:bit mean your program ran out'
             .. ' of the board\'s memory; upload() puts the Compy\'s'
-            .. ' firmware back.', 1, true), told)
+            .. ' firmware back, or upload("tpbot.lua") for a robot.', 1,
+            true), told)
         end)
 
       it('says nothing of memory for a firmware file, or a refused'

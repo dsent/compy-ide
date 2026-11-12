@@ -3,8 +3,12 @@
 -- Nothing runs here. The tools are functions, and they are
 -- loaded into the console, where you call them.
 --
--- MICROBIT.hex is the firmware for the TPBot robots, built
--- from https://github.com/dsent/microbit-lua at 596378a.
+-- MICROBIT.hex is the firmware, built from
+-- https://github.com/dsent/microbit-lua branch compy-release
+-- at ff37956: nagydani/microbit-lua main with its pull
+-- request #40, and CODAL pinned. tpbot.lua and tpbot-radio.lua
+-- are that firmware's start-up script with the TPBot words,
+-- made from it again whenever MICROBIT.hex changes.
 
 print("micro:bit tools")
 print("")
@@ -12,6 +16,10 @@ print("In the console, type:")
 print("")
 print("  require(\"tools\")")
 print("")
-print("MICROBIT.hex is the firmware for the TPBot robots,")
-print("the Edu and the Classic; upload() puts it on the")
-print("micro:bit.")
+print("MICROBIT.hex is the firmware; upload() puts it on")
+print("the micro:bit. tpbot.lua adds the words for the")
+print("TPBot robots, the Edu and the Classic;")
+print("upload(\"tpbot.lua\") puts the firmware on with")
+print("them. tpbot-radio.lua is the same for a robot")
+print("driven by radio: it waits for a call at every")
+print("start.")

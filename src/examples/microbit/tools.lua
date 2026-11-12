@@ -206,7 +206,8 @@ local TAKE_S = 60
 --- The way back when the board runs a program of its own from
 --- upload: restart_microbit only starts that program again
 local UPLOADED = "If a program of yours is on it from upload,"
-    .. " upload() puts the Compy's firmware back."
+    .. " upload() puts the Compy's firmware back, or"
+    .. " upload(\"tpbot.lua\") for a robot."
 local STOPPED = "the board stopped answering. Type" ..
     " restart_microbit(), then try again. " .. UPLOADED
 local NOT_TAKEN = "the board did not take it. Type" ..
@@ -279,10 +280,14 @@ end
 --- line, over a radio link as over the cable. With no pcall
 --- left from an earlier file, the file runs unprotected. With
 --- no rawget, loadstring or io the chunk stops before the file
---- runs, and exec says the board did not say whether it ran:
---- the board's prompt keeps a loadstring of its own, and reads
---- every line; with no tostring the file runs, and a mistake
---- in it comes with no frame.
+--- runs, and exec says the board did not say whether it ran;
+--- with no tostring the file runs, and a mistake in it comes
+--- with no frame. On the Compy's firmware the prompt itself
+--- reads globals as it runs each line, until the board
+--- restarts: without pcall, loadstring, setfenv, string or
+--- table every line fails, this one included; without print,
+--- tostring or select the first line that shows an answer,
+--- prints or fails fails, and every line after it.
 local OPENING =
     "do local R,G=rawget,_G local f,e=R(G,'loadstring')("
 
@@ -1093,7 +1098,8 @@ local function greetingNote()
   print("is ready. If it does not within a minute, press")
   print("its reset button, on the back next to the USB")
   print("socket. If a program of yours is on it from")
-  print("upload, upload() puts the Compy's firmware back.")
+  print("upload, upload() puts the Compy's firmware back,")
+  print("or upload(\"tpbot.lua\") for a robot.")
 end
 
 --- What to do once the board was asked to restart: wait for
@@ -1237,7 +1243,7 @@ function hexmap(filename)
   print(head(hex.script(blocks)))
 end
 
---- Whether a name is the robots' firmware's, in any case: the
+--- Whether a name is the shipped firmware's, in any case: the
 --- card does not tell microbit.hex from MICROBIT.hex
 --- @param name string
 --- @return boolean
@@ -1246,7 +1252,7 @@ local function isFirmware(name)
 end
 
 --- Stop a command when it has no file to write, or would
---- write over the robots' firmware
+--- write over the shipped firmware
 --- @param name any the file it writes
 --- @param example string the command, written with another name
 local function writable(name, example)
@@ -1255,7 +1261,7 @@ local function writable(name, example)
   end
   if isFirmware(name) then
     refuse(
-      HEX .. " is the robots' firmware and is never written",
+      HEX .. " is the shipped firmware and is never written",
       "to. Name another file, such as " .. example .. "."
     )
   end
@@ -1436,12 +1442,12 @@ end
 --- @param filename string
 local function renameWay(filename)
   local free = freeName()
-  print("robots' firmware. Give your script another name:")
+  print("shipped firmware. Give your script another name:")
   print(("writefile(%q, readfile(%q))"):format(free, filename))
   print(("upload(%q)"):format(free))
 end
 
---- Whether a Lua file's hex would overwrite the robots'
+--- Whether a Lua file's hex would overwrite the shipped
 --- firmware, said when it would
 --- @param filename string
 --- @param hex_name string
@@ -1479,7 +1485,7 @@ end
 --- The hex file upload sends, and what it holds: the file
 --- itself, or for a Lua file, a hex file of its name with the
 --- file as its program; nil, said, when that would overwrite
---- the robots' firmware, cannot be built or is not saved
+--- the shipped firmware, cannot be built or is not saved
 --- @param filename string
 --- @return string? name
 --- @return string? data
@@ -1525,7 +1531,8 @@ local function memoryNote(filename)
   end
   print("A sad face and 020 on the micro:bit mean your")
   print("program ran out of the board's memory; upload()")
-  print("puts the Compy's firmware back.")
+  print("puts the Compy's firmware back, or")
+  print("upload(\"tpbot.lua\") for a robot.")
 end
 
 --- What the Compy tells the upload: the file it read, the
@@ -1671,7 +1678,10 @@ function help()
   end
   print("")
   print("upload() with no file sends MICROBIT.hex, the")
-  print("firmware for the TPBot robots.")
+  print("firmware. upload(\"tpbot.lua\") sends it with the")
+  print("words for the TPBot robots, and")
+  print("upload(\"tpbot-radio.lua\") does the same for a")
+  print("robot driven by radio.")
   print("Write the files with edit(filename), type to the")
   print("board in the \"terminal\" project.")
 end
