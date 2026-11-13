@@ -1101,19 +1101,35 @@ function UserInputModel:get_wrapped_error()
   end
 end
 
+--- An error as the text it shows. A project's validator may
+--- give a plain { msg = ... } table, which has no __tostring
+--- of its own: it shows its message, with its line (and
+--- column) when it has them.
+--- @param e Error|string|{ msg: string }
+--- @return string
+local function position(e)
+  if not e.l then return "" end
+  return "L" .. e.l .. ":" .. (e.c and e.c .. ":" or "")
+end
+
+local function error_text(e)
+  local mt = type(e) == "table" and getmetatable(e)
+  local plain = type(e) == "table" and not (mt and mt.__tostring)
+  if not (plain and e.msg ~= nil) then return tostring(e) end
+  return position(e) .. tostring(e.msg)
+end
+
 --- @TODO support error[] and string[]
 --- @param errors Error[]?
 function UserInputModel:set_error(errors)
   self.error = nil
-  if type(errors) == "table" then
-    if type(errors[1]) == "string" then
-      self.error = errors
-    else
-      self.error = {}
-      for _, e in ipairs(errors) do
-        table.insert(self.error, tostring(e))
-      end
-    end
+  if errors == nil then return end
+  --- one error alone, not in a list, is a list of one
+  local one = type(errors) ~= "table" or errors.msg ~= nil
+  if one then errors = { errors } end
+  self.error = {}
+  for _, e in ipairs(errors) do
+    table.insert(self.error, error_text(e))
   end
 end
 
