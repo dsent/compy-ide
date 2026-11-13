@@ -25,6 +25,20 @@ Compy programs such as the examples. The strict ones,
 `module-local`, `one-char-name` and `function-name`, are
 conventions much existing code breaks.
 
+#### make-tpbot
+
+Makes the microbit project's `tpbot.lua` and `tpbot-radio.lua`
+again from the bundled `MICROBIT.hex`: its start-up script and
+version, with the robot lessons' words, the block in the
+current `tpbot.lua`, added before the script's own setup. Run
+it after `MICROBIT.hex` changes, or after the words change in
+`tpbot.lua`.
+
+```shell
+# run from repo root, use lua 5.1 or luajit
+luajit util/make-tpbot.lua
+```
+
 ## Unit tests
 
 Run the full Lua 5.1 suite from the repository root:
