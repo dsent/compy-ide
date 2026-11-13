@@ -194,7 +194,7 @@ function BufferView:scroll(dir, by, warp)
       local er = self:_get_end_range()
       local c = self.content:get_range()
       if warp then
-        return er.start - c.start - self.LINES
+        return er.start - c.start
       else
         return by
       end

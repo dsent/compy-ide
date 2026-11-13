@@ -227,6 +227,20 @@ local function normalized_lines(text)
   return string.lines(clean)
 end
 
+--- The draft canonically formatted, as one change to it: what
+--- was typed before stays undoable, and the cursor keeps its
+--- line and column as far as the new text allows.
+--- @param text str
+function UserInputModel:reformat(text)
+  local lines = normalized_lines(text)
+  if not lines then return end
+  self:_record_edit('format', true)
+  self.entered = InputText(lines)
+  self:text_change()
+  self:_clamp_cursor_pos()
+  self:_note_edit()
+end
+
 --- Both spellings normalise identically, so the cursor's
 --- (line, column) address is unambiguous over whatever is
 --- stored (doc/development/decisions/input.md, D-CONTENT-NORM).
