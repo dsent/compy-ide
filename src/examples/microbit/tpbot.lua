@@ -1,5 +1,5 @@
 -- tpbot.lua: the micro:bit firmware for the Compy's robot lessons. It is
--- the start-up script of the firmware the Compy ships (ff37956), prompt
+-- the start-up script of the firmware the Compy ships (773ed3e), prompt
 -- and radio link included, with the lessons' words added near its end:
 -- robot_info(), robot_move(left, right, seconds), turn(hours) and
 -- straight(steps). upload("tpbot.lua") puts it on the board, which then
@@ -217,6 +217,8 @@ local function make_session(send)
   --- What was typed: a run of plain characters goes into the
   --- line and is echoed; the key after it erases or enters.
   --- Ctrl+C drops all that came before it and starts afresh.
+  --- Ctrl+D, which only a link or a listen() takes, is no key
+  --- here and is dropped.
   function s.keys(text)
     local rest = text:match(".*\3(.*)")
     if rest then
@@ -225,6 +227,7 @@ local function make_session(send)
       s.prompt()
       text = rest
     end
+    text = string.gsub(text, "\4", "")
     for plain, key in string.gmatch(text, "([^\r\n\b\127]*)(.?)") do
       if #plain > 0 then
         s.buffer = s.buffer .. plain
