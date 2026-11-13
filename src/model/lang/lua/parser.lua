@@ -35,6 +35,8 @@ return function(lib)
   end
 
   local mlc = require('metalua.metalua.compiler').new()
+  local a2s_module = 'metalua.metalua.compiler.ast_to_src'
+  local long_brackets = require(a2s_module).long_brackets
 
   --- Iterates over lexstream
   --- @param stream table
@@ -234,7 +236,9 @@ return function(lib)
             colored_tokens[ls][i] = ct['comment']
           end
         else
-          local tl = 4 --- a block comment starts with '--[['
+          --- a block comment starts with '--' and its long
+          --- bracket, '[[' or one with a level, '[==['
+          local tl = 2 + #long_brackets(co.text)
           multiline(co.first, co.last, co.text, 'comment', tl)
         end
       end
@@ -420,13 +424,14 @@ return function(lib)
                   if c.prepend_newline then
                     table.insert(lines, 1, '')
                   end
+                  local open, close = long_brackets(c.text)
                   local l1 = lines[1] or ''
                   if #lines == 1 then
-                    lines[1] = '--[[' .. l1 .. ']]'
+                    lines[1] = '--' .. open .. l1 .. close
                   else
                     local llast = lines[#lines] or ''
-                    lines[1] = '--[[' .. l1
-                    lines[#lines] = llast .. ']]'
+                    lines[1] = '--' .. open .. l1
+                    lines[#lines] = llast .. close
                   end
                   local wrapped = string.wrap_array(lines, wrap)
                   local w_t = string.unlines(wrapped)
