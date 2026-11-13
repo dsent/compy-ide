@@ -219,7 +219,9 @@ hooks into it.
 
 Host evaluators can validate during editing. The project widget's public
 validator runs at submit and receives `string[]`; it returns `true` or
-`false, Error[]`. `LuaHighlighter`, `LuaSyntaxValidator`, and
+`false, Error[]`. Each error may also be a string, or a plain `{ msg = ... }`
+table (with `l` and `c` when it has a position), and shows by its message.
+`LuaHighlighter`, `LuaSyntaxValidator`, and
 `LineValidators` are the only evaluator-derived helpers exported to a project.
 
 ### Cursor manipulation and "reset" — three API layers, now all connected

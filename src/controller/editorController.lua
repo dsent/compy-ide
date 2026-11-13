@@ -541,10 +541,11 @@ end
 ---------------------------
 
 --- @private
---- The gate (model.lang.lua.check) gives the verdict; the
---- input shows the text as it will be written, and a line
---- or parse refusal lands the cursor on the error. A block
---- too large is go's to refuse, after its own checks.
+--- The gate (model.lang.lua.check) gives the verdict. An
+--- accepted draft goes to go as its formatted blocks; a line
+--- or parse refusal shows the draft formatted where it
+--- formats, and lands the cursor on the error. A block too
+--- large is go's to refuse, after its own checks.
 --- @param go fun(newtext: Block[]|string[], verdict: GateVerdict?): boolean
 --- @return boolean accepted --- go's verdict, or false
 --- when the input does not evaluate
@@ -562,11 +563,16 @@ function EditorController:_handle_submit(go)
     else
       local verdict = check.gate(raw,
         self.model.cfg.view.drawableChars, self:_size_limit())
-      if verdict.formatted then
-        inter:set_text(verdict.lines)
-      end
+      --- an accepted draft goes as its formatted blocks; one
+      --- that fails to land (a write refused) stays as typed
       if #verdict.errors == 0 then
         return go(verdict.blocks, verdict)
+      end
+      --- a draft refused for a line or a parse failure is
+      --- shown formatted where it formats, as one undoable
+      --- change to it
+      if verdict.formatted then
+        inter.model:reformat(verdict.lines)
       end
       local eval_err = verdict.errors
       self:refuse()
@@ -998,6 +1004,11 @@ function EditorController:_reject_oversized(verdict)
   local first = verdict and verdict.oversized[1]
   if not first then return false end
   local block = verdict.blocks[first]
+  --- the refused draft stays shown formatted, as one
+  --- undoable change to it
+  if verdict.formatted then
+    self.input.model:reformat(verdict.lines)
+  end
   --- the wording follows 1.4: say what to do, not what
   --- the machine measured
   self:refuse({ string.format(
@@ -1635,6 +1646,9 @@ function EditorController:_normal_mode_keys(k)
   --- delete-next-word
   local function delete()
     if self.mode ~= 'nav' then return end
+    --- Shift+Delete is the cut copycut() has done already;
+    --- deleting here too would take the next block
+    if Key.shift() then return end
     --- bare Delete joins in with 1.1: the deletion is
     --- undoable now, which is what gated it (2.7)
     if k == "delete" then

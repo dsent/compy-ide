@@ -25,6 +25,16 @@ Compy programs such as the examples. The strict ones,
 `module-local`, `one-char-name` and `function-name`, are
 conventions much existing code breaks.
 
+#### spec_count
+
+How many tests check each item of the editor spec, and how
+many of them mark a gap or a deviation
+(`doc/development/tests.md`, "Editor spec tests").
+
+```shell
+luajit util/spec_count.lua tests/editor/spec/*.lua
+```
+
 ## Unit tests
 
 Run the full Lua 5.1 suite from the repository root:
