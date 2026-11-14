@@ -184,7 +184,8 @@ describe("IS1 files #editor #spec", function()
         assert.same({ }, K.writes())
         assert.same(5, K.blocks())
         assert.truthy(
-          (K.message() or ""):find("Not valid Lua", 1, true)
+          (K.message() or ""):find("cannot split this file", 1,
+            true)
         )
       end)
 

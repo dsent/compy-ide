@@ -1,8 +1,9 @@
 --- The text cursor's blink (H-NFR4.4). The cursor is shown
 --- for `duty` of each `period` and hidden for the rest. A key
---- press, a typed character or a click restarts the cycle and
---- keeps the cursor shown for one whole period, so that it
---- never goes while a person types or moves. One clock for
+--- press, a typed character, a click or a program's move of
+--- the cursor (the input API) restarts the cycle and keeps the
+--- cursor shown for one whole period, so that it never goes
+--- while a person types or moves. One clock for
 --- every input field: the frame time the app's update passes
 --- (`pass_time`); the blink has no timer of its own.
 local Blink = {
@@ -17,7 +18,8 @@ function Blink.pass_time(dt)
   Blink.time = Blink.time + dt
 end
 
---- The person pressed a key, typed or clicked.
+--- The person pressed a key, typed or clicked, or a program
+--- moved the cursor.
 function Blink.restart()
   Blink.since = Blink.time
 end

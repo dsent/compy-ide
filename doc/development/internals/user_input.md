@@ -440,11 +440,13 @@ whatever it is (the French `us-alt` layout types `6` through AltGr).
 text itself and the order of text and key press do not enter the rule,
 which is why it holds in both orders.
 
-The simple API's `on_key` (`arrives_as_text`, `consoleController.lua`)
-reports every key pressed with Ctrl or Alt held. On a computer that includes
-AltGr: a key whose composed character is typed is reported as well, because
-the key press comes before its text and cannot tell whether the layout
-composes a character for it.
+A key pressed under AltGr belongs to typing, so AltGr is no Ctrl and no
+Alt: on a computer `Key.ctrl()` and `Key.alt()` answer false while `altgr()`
+holds, and no chord fires from such a key press, not a reserved key, not the
+console's, the file editor's or a field's, and not a project's combo. A
+project's hooks still receive the key press. The simple API's `on_key`
+(`arrives_as_text`, `consoleController.lua`) reports every key pressed with
+Ctrl or Alt held; a printable pressed under AltGr is not one of them.
 
 One text source bypasses the gate: the web build's synthesised space
 (`UserInputController:keypressed`), which asks `Key.chord_text` itself.
@@ -453,9 +455,9 @@ One text source bypasses the gate: the web build's synthesised space
 
 Modifier state is read from the device. `Key.ctrl()` / `Key.alt()` /
 `Key.shift()` (`util/key.lua`) are `love.keyboard.isDown` over the
-left/right pair of one modifier, and they are the single source of
-held-modifier truth in dispatch (`../decisions/input.md`,
-D-ASK-THE-DEVICE). The framework maintains no held-key table of its own:
+left/right pair of one modifier (Ctrl and Alt not while AltGr is held, as
+above), and they are the single source of held-modifier truth in dispatch
+(`../decisions/input.md`, D-ASK-THE-DEVICE). The framework maintains no held-key table of its own:
 there is no accumulated model to go stale when a release never
 arrives, and so nothing to reconcile against the device afterwards.
 
@@ -607,7 +609,7 @@ consumes upstream, console/project set (or don't set) callbacks — no instance 
 
 ### UserInputController keypressed (shared)
 
-`UserInputController:keypressed` handles the low-level input operations that apply regardless of which route is driving it (console, editor, or the project widget): removers (backspace, delete, Ctrl+Y delete line), vertical cursor movement, horizontal movement (Left/Right, Home/End, Alt+Home/End for line vs field boundaries), Shift+Enter newline (unconditional — see "Multiline input" above), Ctrl+D duplicate line, copy/cut/paste (Ctrl+C/X/V and Shift+Insert/Delete), selection management. It never inserts literal characters — see "Text Input Widget" above for why `keypressed` and `textinput` divide the work this way.
+`UserInputController:keypressed` handles the low-level input operations that apply regardless of which route is driving it (console, editor, or the project widget): removers (backspace, delete, and Ctrl+Y delete line outside the editor, whose Ctrl+Y is redo alone), vertical cursor movement, horizontal movement (Left/Right, Home/End, Alt+Home/End for line vs field boundaries), Shift+Enter newline (unconditional — see "Multiline input" above), Ctrl+D duplicate line, copy/cut/paste (Ctrl+C/X/V and Shift+Insert/Delete), selection management. It never inserts literal characters — see "Text Input Widget" above for why `keypressed` and `textinput` divide the work this way.
 
 The body is a **single uniform sequence** (no `love.state.app_state` branch since 2026-07-21):
 `removers → vertical → horizontal → newline → (modify if enabled) → copypaste → selection`, then

@@ -248,7 +248,9 @@ describe("text safety #editor #spec", function()
       K.type("a = 1")
       K.keys("return")
       assert.same("a = 1", K.draft())
-      assert.truthy(K.message():find(STALE, 1, true))
+      -- no change from outside: the notice says what happened
+      assert.truthy(K.message():find(
+        "Could not read main.lua, so nothing is saved", 1, true))
       assert.same({ }, K.writes())
       -- read again as it was, the file takes the text
       K.mend_reads()

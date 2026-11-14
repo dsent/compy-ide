@@ -1071,6 +1071,11 @@ Controller = {
     -- restart() call, made in both branches).
     local function reserved_restart()
       if refused() then return end
+      --- a run from the editor, as Ctrl+T's: Ctrl+T comes
+      --- back to its files and their timelines (IS1.4, IS6.6)
+      if love.state.app_state == 'editor' then
+        CC.editor:keep_timelines()
+      end
       CC:restart()
     end
 

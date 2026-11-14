@@ -107,56 +107,53 @@ local function ended_lines(text)
   return lines, ends
 end
 
---- The line ending most lines of a text end with; the first
---- one in the text when two are as frequent, a newline when
---- there is none
+--- The line ending most lines of a text end with; of two as
+--- frequent, the one that comes first in the text; a newline
+--- when there is none
 --- @param ends string[]
 --- @return string
 local function main_ending(ends)
-  local count, best = {}, nil
+  local count, order = {}, {}
   for _, e in ipairs(ends) do
     if e ~= '' then
-      count[e] = (count[e] or 0) + 1
-      if not best or count[e] > count[best] then best = e end
+      if not count[e] then
+        count[e] = 0
+        order[#order + 1] = e
+      end
+      count[e] = count[e] + 1
     end
+  end
+  local best
+  for _, e in ipairs(order) do
+    if not best or count[e] > count[best] then best = e end
   end
   return best or '\n'
 end
 
---- The text to write for `lines` over `stored`, the text the
---- file holds: a line the change left as it was keeps its own
---- line ending, a new or changed one takes the file's main
---- ending, and every line ends in one, the last one too
---- (util.textfile)
+--- The text to write: every line with its own ending, and
+--- the file's main ending for a line that has none, the last
+--- one too (util.textfile)
 --- @param lines string[]
---- @param stored string? --- nil for a file not yet written
+--- @param ends string[]
 --- @param eol string --- the file's main ending
 --- @return string
-local function file_text(lines, stored, eol)
-  local old, ends = ended_lines(stored or '')
-  local nb, na = #old, #lines
-  local head = 0
-  while head < nb and head < na
-      and old[head + 1] == lines[head + 1] do
-    head = head + 1
-  end
-  local tail = 0
-  while tail < nb - head and tail < na - head
-      and old[nb - tail] == lines[na - tail] do
-    tail = tail + 1
-  end
+local function file_text(lines, ends, eol)
   local out = {}
   for i, l in ipairs(lines) do
-    local e
-    if i <= head then
-      e = ends[i]
-    elseif i > na - tail then
-      e = ends[nb - (na - i)]
-    end
+    local e = ends[i]
     if not e or e == '' then e = eol end
     out[i] = l .. e
   end
   return table.concat(out)
+end
+
+--- @param n integer
+--- @return string[] --- the ending of `n` new lines: none of
+--- their own, so each is written with the main one
+local function no_ends(n)
+  local ends = {}
+  for i = 1, n do ends[i] = '' end
+  return ends
 end
 
 --- Todo: convert to class, store revmap
@@ -180,24 +177,25 @@ local function new(
     truncer)
   local _content, sel, ct, semantic
   local invalid = false
-  --- the file keeps the line endings it was read with; its
-  --- lines are held without them, in blocks, drafts and
-  --- checks (file_text)
+  --- every line keeps the ending it was read with; lines are
+  --- held without it, in blocks, drafts and checks, and their
+  --- endings beside them (`ends`, file_text). The newline
+  --- ending the last line is no line of its own.
   local eol = '\n'
-  local stored
+  local stored, lines, ends
   if type(content) == 'string' then
     stored = content
-    eol = main_ending(select(2, ended_lines(content)))
-    content = string.gsub(content, '\r\n', '\n')
-    content = string.gsub(content, '\r', '\n')
+    lines, ends = ended_lines(content)
+    eol = main_ending(ends)
+  else
+    lines = type(content) == 'table' and string.lines(content)
+        or textfile.lines(content)
+    ends = no_ends(#lines)
   end
 
   local function plaintext()
     ct = 'plain'
-    --- a block per line (IS8); the newline ending the last
-    --- line is no line of its own
-    local lines = type(content) == 'table'
-        and string.lines(content) or textfile.lines(content)
+    --- a block per line (IS8)
     _content = Dequeue(lines, 'string')
     sel = 1
   end
@@ -205,9 +203,6 @@ local function new(
   --- @param chk function
   local function luacontent(chk)
     ct = 'lua'
-    --- a file's text, or lines as they are
-    local lines = type(content) == 'table'
-        and string.lines(content) or textfile.lines(content)
     _content, invalid = file_blocks(chk, lines)
     sel = 1
   end
@@ -236,6 +231,7 @@ local function new(
     active_line = 1,
     invalid = invalid,
     eol = eol,
+    ends = ends,
     stored = stored,
     history = {},
     redo_history = {}
@@ -259,8 +255,10 @@ end
 --- @field active_line integer --- source line inside the selection
 --- @field loaded integer?
 --- @field key string? --- the file's identity, project and name
---- @field eol string --- the line ending the file was read
---- with and is written with
+--- @field eol string --- the file's main line ending, which a
+--- line without one of its own is written with
+--- @field ends string[] --- each line's own ending, '' for
+--- none
 --- @field invalid boolean --- a Lua file whose text does not
 --- parse: its blocks are its lines, until it parses again
 --- @field semantic BufferSemanticInfo?
@@ -291,69 +289,119 @@ end
 --- move, delete, insert, discard pair): the timeline grows
 --- with the text changed, and goes when the file is left.
 --- Applying a step is a splice; the caller re-chunks and
---- saves, the same path every write takes.
+--- saves, the same path every write takes. A step carries
+--- each line's ending, so that undo and redo give a line
+--- back the one it had.
 
---- @param before string[] --- file lines pre-operation
---- @param after string[] --- file lines post-operation
+--- The file's lines and their endings, as a change found
+--- them: what it is undone to (push_history), and what a
+--- refused one puts back (restore)
+--- @class TextState
+--- @field lines string[]
+--- @field ends string[]
+
+--- @return TextState
+function BufferModel:snapshot()
+  local lines = {}
+  for i, l in ipairs(self:get_text_content()) do lines[i] = l end
+  return { lines = lines, ends = table.clone(self.ends) }
+end
+
+--- @param a TextState
+--- @param i integer
+--- @param b TextState
+--- @param j integer
+--- @return boolean --- line `i` of `a` is line `j` of `b`,
+--- its ending included
+local function same_line(a, i, b, j)
+  return a.lines[i] == b.lines[j] and a.ends[i] == b.ends[j]
+end
+
+--- @param before TextState --- the file pre-operation
+--- @param after TextState --- the file post-operation
 --- @param sel_b integer --- selection before
 --- @param sel_a integer --- selection after
 --- @return table? --- nil when nothing changed
 local function make_step(before, after, sel_b, sel_a)
-  local nb, na = #before, #after
+  local nb, na = #before.lines, #after.lines
   local head = 0
   while head < nb and head < na
-      and before[head + 1] == after[head + 1] do
+      and same_line(before, head + 1, after, head + 1) do
     head = head + 1
   end
   local tail = 0
   while tail < nb - head and tail < na - head
-      and before[nb - tail] == after[na - tail] do
+      and same_line(before, nb - tail, after, na - tail) do
     tail = tail + 1
   end
   if head + tail == nb and nb == na then return end
-  local removed, inserted = {}, {}
-  for i = head + 1, nb - tail do
-    table.insert(removed, before[i])
-  end
-  for i = head + 1, na - tail do
-    table.insert(inserted, after[i])
-  end
-  return {
+  local step = {
     start = head + 1,
-    removed = removed,
-    inserted = inserted,
+    removed = {},
+    removed_ends = {},
+    inserted = {},
+    inserted_ends = {},
     sel_before = sel_b,
     sel_after = sel_a,
   }
+  for i = head + 1, nb - tail do
+    table.insert(step.removed, before.lines[i])
+    table.insert(step.removed_ends, before.ends[i])
+  end
+  for i = head + 1, na - tail do
+    table.insert(step.inserted, after.lines[i])
+    table.insert(step.inserted_ends, after.ends[i])
+  end
+  return step
 end
 
---- @param before string[]
---- @param after string[]
+--- Record the change from `before` to the file as it is now
+--- @param before TextState
 --- @param sel_b integer
 --- @param sel_a integer
-function BufferModel:push_history(before, after, sel_b, sel_a)
-  local step = make_step(before, after, sel_b, sel_a)
+function BufferModel:push_history(before, sel_b, sel_a)
+  local step = make_step(before, self:snapshot(), sel_b, sel_a)
   if not step then return end
   table.insert(self.history, step)
   self.redo_history = {}
 end
 
 --- @private
---- Splice a step's lines into the content and re-chunk
+--- Splice lines into the content and re-chunk. Lines given
+--- without their endings take, at either edge of the lines
+--- they replace, the ending of a line they are the same as;
+--- the others have none of their own.
 --- @param start integer
 --- @param n_out integer --- lines to remove
 --- @param lines_in string[]
-function BufferModel:_splice(start, n_out, lines_in)
-  local text = self:get_text_content()
-  --- no line at all is no text: unlines would make it one
-  --- empty line
-  local lines = #text == 0 and {}
-      or string.lines(string.unlines(text))
+--- @param ends_in string[]?
+function BufferModel:_splice(start, n_out, lines_in, ends_in)
+  local lines = self:snapshot().lines
+  local ends = self.ends
+  local n_in = #lines_in
+  if not ends_in then
+    ends_in = no_ends(n_in)
+    local head = 0
+    while head < n_out and head < n_in
+        and lines[start + head] == lines_in[head + 1] do
+      ends_in[head + 1] = ends[start + head]
+      head = head + 1
+    end
+    local tail = 0
+    local last = start + n_out - 1
+    while tail < n_out - head and tail < n_in - head
+        and lines[last - tail] == lines_in[n_in - tail] do
+      ends_in[n_in - tail] = ends[last - tail]
+      tail = tail + 1
+    end
+  end
   for _ = 1, n_out do
     table.remove(lines, start)
+    table.remove(ends, start)
   end
-  for i = #lines_in, 1, -1 do
+  for i = n_in, 1, -1 do
     table.insert(lines, start, lines_in[i])
+    table.insert(ends, start, ends_in[i] or '')
   end
   if self.content_type == 'lua' then
     self.content, self.invalid = file_blocks(self.chunker, lines)
@@ -364,8 +412,15 @@ end
 
 --- Replace the whole text and re-chunk it
 --- @param lines string[]
-function BufferModel:replace_text(lines)
-  self:_splice(1, #self:get_text_content(), lines)
+--- @param ends string[]? --- their endings (_splice)
+function BufferModel:replace_text(lines, ends)
+  self:_splice(1, #self:get_text_content(), lines, ends)
+end
+
+--- Put the file back as a snapshot holds it
+--- @param state TextState
+function BufferModel:restore(state)
+  self:replace_text(state.lines, state.ends)
 end
 
 --- @return table? --- the applied step, nil when empty
@@ -374,7 +429,8 @@ function BufferModel:undo()
   if n == 0 then return end
   local step = self.history[n]
   table.remove(self.history, n)
-  self:_splice(step.start, #step.inserted, step.removed)
+  self:_splice(step.start, #step.inserted, step.removed,
+    step.removed_ends)
   table.insert(self.redo_history, step)
   return step
 end
@@ -385,7 +441,8 @@ function BufferModel:redo()
   if n == 0 then return end
   local step = self.redo_history[n]
   table.remove(self.redo_history, n)
-  self:_splice(step.start, #step.removed, step.inserted)
+  self:_splice(step.start, #step.removed, step.inserted,
+    step.inserted_ends)
   table.insert(self.history, step)
   return step
 end
@@ -419,7 +476,7 @@ function BufferModel:save()
   self:_text_change()
   local text = self:get_text_content()
   self:analyze()
-  local out = file_text(text, self.stored, self.eol)
+  local out = file_text(text, self.ends, self.eol)
   local ok, err = self.save_file(out)
   if ok then self.stored = out end
   return ok, err
@@ -682,15 +739,9 @@ function BufferModel:delete_selected_text()
   --- the block open in the input is gone; what the input
   --- holds now is new text for this place
   if self.loaded == sel then self:clear_loaded() end
-  if self.content_type == 'lua' then
-    local sb = self.content[sel]
-    if not sb then return end
-
-    self.content:remove(sel)
-    self:rechunk()
-  else
-    self.content:remove(sel)
-  end
+  if not self.content[sel] then return end
+  local start, len = self:_span_of(sel)
+  self:_splice(start, len, {}, {})
   self:_text_change()
   --- the content shrank under the selection, so the
   --- active line still points into the block that was
@@ -871,11 +922,29 @@ function BufferModel:insert_content(t, lbn)
   end
 end
 
+--- Block `i` goes to place `npos`, its lines with their
+--- endings
 --- @param i integer
 --- @param npos integer
 function BufferModel:move(i, npos)
-  self.content:move(i, npos)
-  self:_text_change(true)
+  local si, li = self:_span_of(i)
+  local sj, lj = self:_span_of(npos)
+  local now = self:snapshot()
+  local lines, ends = now.lines, now.ends
+  local moved, moved_ends = {}, {}
+  for _ = 1, li do
+    table.insert(moved, table.remove(lines, si))
+    table.insert(moved_ends, table.remove(ends, si))
+  end
+  --- before the block it passes going up, after it going
+  --- down, which stands `li` lines higher by now
+  local at = npos < i and sj or sj - li + lj
+  for k = li, 1, -1 do
+    table.insert(lines, at, moved[k])
+    table.insert(ends, at, moved_ends[k])
+  end
+  self:replace_text(lines, ends)
+  self:_text_change()
 end
 
 --------------------------

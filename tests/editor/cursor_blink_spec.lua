@@ -211,6 +211,49 @@ describe("the text cursor's blink #editor", function()
       tostring(renders))
   end)
 
+  describe("a program's move of the cursor", function()
+    local Blink = require("view.input.cursorBlink")
+    local input
+
+    --- the blink clock's answer: a project's field draws it
+    local function clock()
+      return Blink.shown(cfg().blink)
+    end
+
+    before_each(function()
+      input = F.activate_project()
+      F.show_widget({ text = "abc" })
+      -- a key restarts the clock, so the cursor hides at the
+      -- same moment of every case
+      K.keys("lshift")
+      pass(PERIOD + DUTY * PERIOD + 2 * TICK)
+      assert.is_false(clock())
+    end)
+
+    it("with set_cursor restarts it", function()
+      input.set_cursor(1, 1)
+      blinks(clock)
+    end)
+
+    it("with set_text restarts it", function()
+      input.set_text("abcdef")
+      assert.same({ 1, 7 }, { input.get_cursor() })
+      blinks(clock)
+    end)
+
+    it("with clear restarts it", function()
+      input.clear()
+      blinks(clock)
+    end)
+
+    it("restarts nothing when the cursor stays", function()
+      input.set_cursor(1, 4)
+      input.set_text("xyz", true)
+      assert.same({ 1, 4 }, { input.get_cursor() })
+      assert.is_false(clock())
+    end)
+  end)
+
   it("a click restarts it", function()
     -- in the console: the fixture's configuration has no
     -- section for the editor's mouse

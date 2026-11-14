@@ -1063,6 +1063,25 @@ local function merge_callback_keys(state, cfg)
   end
 end
 
+--- A cursor a program moves shows steadily for a while, as one
+--- a person moves does (H-NFR4.4); a call that leaves it where
+--- it was restarts nothing.
+--- @param ui UserInputController?
+--- @param l integer?
+--- @param c integer? --- where the cursor was before the call
+local function blink_if_moved(ui, l, c)
+  if not ui then return end
+  local nl, nc = ui:get_cursor_pos()
+  if nl ~= l or nc ~= c then Blink.restart() end
+end
+
+--- @param ui UserInputController?
+--- @return integer? line
+--- @return integer? col
+local function cursor_of(ui)
+  if ui then return ui:get_cursor_pos() end
+end
+
 --- The two that DO something, lifted out of the api table below
 --- so they read as functions rather than as entries. Everything
 --- still in the table is a one-line delegation to the widget.
@@ -1078,7 +1097,9 @@ local function api_show(get_widget, state, cfg)
     checked_text('compy.input.show', next_cfg.text)
   merge_callback_keys(state, next_cfg)
   local ui = get_widget()
+  local l, c = cursor_of(ui)
   if ui then ui:show(next_cfg) end
+  blink_if_moved(ui, l, c)
 end
 
 --- Lifted out for check_keys' depth rule, like api_configure.
@@ -1093,7 +1114,10 @@ local function api_set_cursor(get_widget, get_active, line, col)
   end
   local pair =
     checked_cursor('compy.input.set_cursor', { line, col })
-  get_widget():set_cursor_pos(pair[1], pair[2])
+  local ui = get_widget()
+  local l, c = cursor_of(ui)
+  ui:set_cursor_pos(pair[1], pair[2])
+  blink_if_moved(ui, l, c)
 end
 
 --- Lifted out for the same depth rule as api_set_cursor: the
@@ -1109,8 +1133,11 @@ local function api_set_text(get_widget, get_active,
     Log.warn('compy.input.set_text ignored — hidden')
     return
   end
-  get_widget():set_text(
+  local ui = get_widget()
+  local l, c = cursor_of(ui)
+  ui:set_text(
     checked_text('compy.input.set_text', text), keep_cursor)
+  blink_if_moved(ui, l, c)
 end
 
 --- Sibling of api_show, and lifted out for the same reason it
@@ -1226,7 +1253,9 @@ local function build_widget_api(get_widget, get_active_flag, state)
         return
       end
       local ui = get_widget()
+      local l, c = cursor_of(ui)
       ui:clear()
+      blink_if_moved(ui, l, c)
       ui:update_view()
     end,
   }
@@ -1314,9 +1343,8 @@ local ASK_FLAGS = {
 --- produces text. With Ctrl or Alt held the key is a chord,
 --- whose text the event gate stops (Key.chord_text), so a
 --- chord over a printable IS reportable. On a computer, AltGr
---- is the exception: the key is reported and the character it
---- composes is typed as well, as whether it composes one is
---- known only from its text, which comes after the key press.
+--- is no Ctrl and no Alt (Key.ctrl, Key.alt): a printable
+--- pressed under it arrives as the text the layout composes.
 --- @param k string
 --- @return boolean
 local function arrives_as_text(k)

@@ -710,7 +710,10 @@ key is an Alt like the left one, so what it sends is a chord's character
 too, whatever the character. On a computer running the IDE, the right Alt
 key is AltGr and composes text in the keyboard layout set there: whatever
 it types reaches the widget, `@`, `ł`, `€` or a digit alike, since a
-computer sends no text for a chord.
+computer sends no text for a chord. AltGr is no Ctrl and no Alt, so a key
+pressed under it makes no chord: no combo fires from it, and `Key.ctrl()` and
+`Key.alt()` answer false while it is held, even on Windows, which reports
+AltGr as left Ctrl plus right Alt.
 
 ### Why the widget sits at tier 3
 
@@ -960,7 +963,8 @@ call site. When a binding and a held key have to work together, see
 
 **2. Ask `Key` — allowed, and worth a second look.** `Key` is available to
 every project, like `compy`. `Key.shift()`, `Key.ctrl()` and `Key.alt()`
-answer whether that modifier is held right now, either side:
+answer whether that modifier is held right now, either side (on a computer,
+AltGr counts as neither Ctrl nor Alt):
 
 ```lua
 function love.draw()

@@ -202,6 +202,25 @@ end
 function M.gate(lines, width, max_block, keep_empty)
   width = width or display.columns
   max_block = max_block or MAX_BLOCK_LINES
+  --- a `#!` line is skipped at the top of a file alone, which
+  --- a draft is not: read below a line, as Lua reads it there,
+  --- it fails
+  if lines[1] and string.match(lines[1], '^#!') then
+    local below = { '' }
+    for i, l in ipairs(lines) do below[i + 1] = l end
+    local _, err = get_parser().parse(below)
+    local failure = get_parser().failure(below, err)
+    failure.l = failure.l - 1
+    return {
+      ok = false,
+      lines = lines,
+      formatted = false,
+      failure = failure,
+      errors = { failure },
+      oversized = {},
+      max_block = max_block,
+    }
+  end
   local text, formatted = format.format(lines, width)
   if formatted and keep_empty then
     text = keep_empty_lines(lines, text)

@@ -4,16 +4,16 @@ local class = require('util.class')
 --- the block opens, dies when it closes; never touches the
 --- file. Snapshots are taken before a mutation; consecutive
 --- same-kind edits at the expected cursor coalesce into one
---- step, so undo removes a typed word, not a letter.
+--- step, so undo removes a typed word, not a letter. No step
+--- is dropped: every change to a draft stays undoable while
+--- its file is open (IS6.6).
 --- @class EditHistory
---- @field cap integer
 --- @field steps table[] --- snapshots {text, cursor}
 --- @field redo_steps table[]
 --- @field last_kind string?
 --- @field last_cursor table? --- {l, c} after the last edit
-EditHistory = class.create(function(cap)
+EditHistory = class.create(function()
   return {
-    cap = cap,
     steps = {},
     redo_steps = {},
     last_kind = nil,
@@ -48,9 +48,6 @@ function EditHistory:record(snapshot, kind, boundary)
       and self:_continues(c.l, c.c)
   if not coalesce then
     table.insert(self.steps, snapshot)
-    if #self.steps > self.cap then
-      table.remove(self.steps, 1)
-    end
   end
   self.redo_steps = {}
   self.last_kind = kind

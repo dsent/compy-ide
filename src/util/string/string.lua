@@ -107,6 +107,64 @@ string.ulen = function(s)
   end
 end
 
+--- the character shown for bytes that are not UTF-8
+string.REPLACEMENT = '\239\191\189' -- U+FFFD
+
+--- The second byte's range for a lead byte, where it is
+--- narrower than 80-BF (RFC 3629: no overlong form, no
+--- surrogate, nothing past U+10FFFF)
+local SECOND = {
+  [0xE0] = { 0xA0, 0xBF },
+  [0xED] = { 0x80, 0x9F },
+  [0xF0] = { 0x90, 0xBF },
+  [0xF4] = { 0x80, 0x8F },
+}
+
+--- The length of the UTF-8 character at byte i of s, nil
+--- when the bytes there do not form one
+--- @param s string
+--- @param i integer
+--- @return integer?
+local function char_len(s, i)
+  local b = s:byte(i)
+  if b < 0x80 then return 1 end
+  local n = (0xC2 <= b and b <= 0xDF and 2)
+      or (0xE0 <= b and b <= 0xEF and 3)
+      or (0xF0 <= b and b <= 0xF4 and 4)
+  if not n then return nil end
+  local lo, hi = 0x80, 0xBF
+  if SECOND[b] then lo, hi = SECOND[b][1], SECOND[b][2] end
+  for k = 1, n - 1 do
+    local c = s:byte(i + k)
+    if not c or c < lo or hi < c then return nil end
+    lo, hi = 0x80, 0xBF
+  end
+  return n
+end
+
+--- s as text that can be shown: each byte that does not
+--- form a UTF-8 character becomes U+FFFD
+--- @param s string
+--- @return string
+string.scrub = function(s)
+  local out, i, n = { }, 1, #s
+  local from = 1
+  while i <= n do
+    local len = char_len(s, i)
+    if len then
+      i = i + len
+    else
+      out[#out + 1] = s:sub(from, i - 1)
+      out[#out + 1] = string.REPLACEMENT
+      i = i + 1
+      from = i
+    end
+  end
+  if from == 1 then return s end
+  out[#out + 1] = s:sub(from)
+  return table.concat(out)
+end
+
 -- original from http://lua-users.org/lists/lua-l/2014-04/msg00590.html
 --- @param s string
 --- @param i integer
@@ -210,14 +268,15 @@ end
 
 --- The words of s as lines of at most i characters: a line
 --- breaks between words, never inside one, and a word longer
---- than i stands on a line of its own
+--- than i stands on a line of its own; bytes that are not
+--- UTF-8 show as U+FFFD
 --- @param s string
 --- @param i integer
 --- @return string[]
 string.wrap_words = function(s, i)
   local res = {}
   local line
-  for word in s:gmatch('%S+') do
+  for word in string.scrub(s):gmatch('%S+') do
     if not line then
       line = word
     elseif string.ulen(line) + 1 + string.ulen(word) <= i then

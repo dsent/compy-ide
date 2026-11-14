@@ -136,16 +136,10 @@ return function(M)
     --------------------------------------------------------------------------------
     -- Chunk reader: block + Eof
     --------------------------------------------------------------------------------
+    -- Compy: lexer:newstream() skips a `#!` first line, as
+    -- LuaJIT does; any other `#` line is no Lua, so nothing
+    -- more is skipped here
     function M.skip_initial_sharp_comment (lx)
-        -- Dirty hack: I'm happily fondling lexer's private parts
-        -- FIXME: redundant with lexer:newstream()
-        lx :sync()
-        local i = lx.src:match ("^#.-\n()", lx.i)
-        if i then
-            lx.i = i
-            lx.column_offset = i
-            lx.line = lx.line and lx.line + 1 or 1
-        end
     end
 
     local function chunk (lx)

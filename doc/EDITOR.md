@@ -36,11 +36,10 @@
 | Move in history (if in first/last line)                           | <kbd>⇧</kbd>/<kbd>⇩</kbd>                     |
 | Jump to start                                                     | <kbd>Ctrl</kbd>+<kbd>Home</kbd>               |
 | Jump to end                                                       | <kbd>Ctrl</kbd>+<kbd>End</kbd>                |
-| Jump to line start                                                | <kbd>Home</kbd>                               |
-| Jump to line end                                                  | <kbd>End</kbd>                                |
+| Jump to the start of the row (a long line takes several rows)     | <kbd>Home</kbd>                               |
+| Jump to the end of the row                                        | <kbd>End</kbd>                                |
 | Insert newline                                                    | <kbd>Shift</kbd>+<kbd>Enter ⏎</kbd>           |
 | Delete current line                                               | <kbd>Ctrl</kbd>+<kbd>Y</kbd>                  |
-| Duplicate current line                                            | <kbd>Ctrl</kbd>+<kbd>D</kbd>                  |
 | Copy                                                              | <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>Insert</kbd> |
 | Cut                                                               | <kbd>Ctrl</kbd>+<kbd>X</kbd> / <kbd>Shift</kbd>+<kbd>Delete</kbd> |
 | Paste                                                             | <kbd>Ctrl</kbd>+<kbd>V</kbd> / <kbd>Shift</kbd>+<kbd>Insert</kbd> |
@@ -48,6 +47,7 @@
 | Evaluate input                                                    | <kbd>Enter ⏎</kbd>                            |
 | **Editor**                                                        |                                               |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; _same as Input in the field, except for:_ |                                               |
+| No text selection: Shift with an arrow moves the cursor, and Ctrl+C and Ctrl+X do nothing | <kbd>Shift</kbd>+<kbd>⇦</kbd>/<kbd>⇨</kbd>/<kbd>⇧</kbd>/<kbd>⇩</kbd>, <kbd>Ctrl</kbd>+<kbd>C</kbd>, <kbd>Ctrl</kbd>+<kbd>X</kbd> |
 | Browse the file block by block                                    | <kbd>Ctrl</kbd>+<kbd>⇧</kbd>/<kbd>Ctrl</kbd>+<kbd>⇩</kbd> |
 | Browse block by block (empty field) / move the cursor a row (text in the field) | <kbd>⇧</kbd>/<kbd>⇩</kbd>                     |
 | Browse ten blocks                                                 | <kbd>PageUp</kbd>/<kbd>PageDown</kbd>         |
@@ -61,10 +61,12 @@
 | Leave the editor for the console, every open file with it (empty field) | <kbd>Ctrl</kbd>+<kbd>Q</kbd>                  |
 | Copy the highlighted block into the field                         | <kbd>Ctrl</kbd>+<kbd>Insert</kbd>             |
 | Cut the highlighted block into the field (empty field)            | <kbd>Ctrl</kbd>+<kbd>Delete</kbd> / <kbd>Shift</kbd>+<kbd>Delete</kbd> |
+| Delete the character after the cursor (text in the field)         | <kbd>Shift</kbd>+<kbd>Delete</kbd>            |
 | Move the highlighted block up / down                              | <kbd>Alt</kbd>+<kbd>⇧</kbd>/<kbd>Alt</kbd>+<kbd>⇩</kbd> |
 | Undo / redo                                                       | <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> |
 | Delete the previous word in the field                             | <kbd>Ctrl</kbd>+<kbd>Backspace</kbd> / <kbd>Ctrl</kbd>+<kbd>W</kbd> |
 | Delete to the end of the line in the field                        | <kbd>Ctrl</kbd>+<kbd>K</kbd>                  |
+| Duplicate the field's current line                                | <kbd>Ctrl</kbd>+<kbd>D</kbd>                  |
 | Scroll the view one page, the highlight stays                     | <kbd>Alt</kbd>+<kbd>PageUp</kbd>/<kbd>Alt</kbd>+<kbd>PageDown</kbd> or <kbd>Alt</kbd>+<kbd>⇦</kbd>/<kbd>Alt</kbd>+<kbd>⇨</kbd> |
 | Scroll the view to the start / end of the file                    | <kbd>Alt</kbd>+<kbd>Home</kbd> / <kbd>Alt</kbd>+<kbd>End</kbd> |
 | Checkpoint the file (asks when one exists)                        | _no key at present_                           |

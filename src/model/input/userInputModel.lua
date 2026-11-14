@@ -54,7 +54,7 @@ function UserInputModel.new(cfg, eval, custom_label, editing)
     editing = editing or false,
     entered = InputText(),
     history = History(cfg.input_history),
-    edit_history = EditHistory(32),
+    edit_history = EditHistory(),
     evaluator = eval,
     cursor = Cursor(),
     selection = InputSelection(),
@@ -1055,12 +1055,14 @@ end
 --- Past ASCII, the punctuation, signs and symbols that
 --- separate words, as code point ranges. LÖVE's utf8 module,
 --- which the IDE runs on, has no character classes.
+--- A number is a word's, as a letter is (², ½, ①).
 --- In order, by script: Latin-1, Greek, Cyrillic, Armenian,
 --- Hebrew, Arabic, Devanagari, then the shared blocks of
 --- punctuation and symbols, fullwidth forms and pictographs.
 local NON_WORD = {
-  { 0xA0, 0xA9 }, { 0xAB, 0xB4 }, { 0xB6, 0xB9 },
-  { 0xBB, 0xBF }, { 0xD7, 0xD7 }, { 0xF7, 0xF7 },
+  { 0xA0, 0xA9 }, { 0xAB, 0xB1 }, { 0xB4, 0xB4 },
+  { 0xB6, 0xB8 }, { 0xBB, 0xBB }, { 0xBF, 0xBF },
+  { 0xD7, 0xD7 }, { 0xF7, 0xF7 },
   { 0x37E, 0x37E }, { 0x387, 0x387 },
   { 0x482, 0x482 },
   { 0x55A, 0x55F }, { 0x589, 0x58A },
@@ -1069,7 +1071,18 @@ local NON_WORD = {
   { 0x600, 0x60F }, { 0x61B, 0x61F }, { 0x66A, 0x66D },
   { 0x6D4, 0x6D4 }, { 0x6DD, 0x6DE }, { 0x6E9, 0x6E9 },
   { 0x964, 0x965 },
-  { 0x2000, 0x2BFF }, { 0x2E00, 0x2E7F }, { 0x3000, 0x303F },
+  --- from U+2000 to U+2BFF, the letters and numbers among
+  --- the signs are a word's: superscripts and subscripts,
+  --- letterlike symbols (ℝ), number forms (Ⅻ) and circled
+  --- numbers (①)
+  { 0x2000, 0x206F }, { 0x207A, 0x207E }, { 0x208A, 0x208E },
+  { 0x20A0, 0x2101 }, { 0x2103, 0x2106 }, { 0x2108, 0x2109 },
+  { 0x2114, 0x2114 }, { 0x2116, 0x2118 }, { 0x211E, 0x2123 },
+  { 0x2125, 0x2125 }, { 0x2127, 0x2127 }, { 0x2129, 0x2129 },
+  { 0x212E, 0x212E }, { 0x213A, 0x213B }, { 0x2140, 0x2144 },
+  { 0x214A, 0x214D }, { 0x214F, 0x214F }, { 0x218A, 0x245F },
+  { 0x249C, 0x24E9 }, { 0x2500, 0x2775 }, { 0x2794, 0x2BFF },
+  { 0x2E00, 0x2E7F }, { 0x3000, 0x303F },
   { 0xFE10, 0xFE1F }, { 0xFE30, 0xFE6F }, { 0xFF01, 0xFF0F },
   { 0xFF1A, 0xFF20 }, { 0xFF3B, 0xFF3E }, { 0xFF40, 0xFF40 },
   { 0xFF5B, 0xFF65 },
@@ -1261,14 +1274,14 @@ end
 
 --- One entry per screen row: a message's own line breaks
 --- (\n, \r\n or \r) split it before wrapping (a failed
---- require lists a path per line), and a tab becomes two
---- spaces.
+--- require lists a path per line), a tab becomes two
+--- spaces, and bytes that are not UTF-8 show as U+FFFD.
 --- @return string[]?
 function UserInputModel:get_wrapped_error()
   if self.error then
     local e = { }
     for _, er in ipairs(self.error) do
-      local s = tostring(er)
+      local s = string.scrub(tostring(er))
         :gsub('\r\n?', '\n')
         :gsub('\t', '  ')
       for _, l in ipairs(string.lines(s)) do

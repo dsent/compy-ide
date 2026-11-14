@@ -681,3 +681,127 @@ describe("Key.chord_text #input", function()
     end)
   end)
 end)
+
+-- On a computer a key pressed under AltGr belongs to typing:
+-- no Ctrl, Alt or Ctrl+Alt chord fires from it, in the
+-- reserved keys, the console, the file editor or a field. On
+-- a Compy the right Alt is an Alt, and its chords fire.
+describe("a key pressed under AltGr makes no chord #input",
+    function()
+  setup(K.setup)
+  teardown(K.teardown)
+  after_each(K.cleanup)
+
+  local WINDOWS_ALTGR = {
+    "lctrl",
+    "ralt"
+  }
+
+  describe("on a computer (Windows)", function()
+    posing_as("Windows")
+
+    in_both_orders("in the console, AltGr+L types and keeps "
+        .. "the output (Ctrl+L clears it)", function(order)
+      K.reset()
+      print("KEEP_ME")
+      K.frame()
+      chord(order, WINDOWS_ALTGR, "l", "ł")
+      assert.same("ł", K.console_draft())
+      assert.truthy(K.console_text():find("KEEP_ME", 1, true))
+    end)
+
+    in_both_orders("in the console, AltGr+R types and starts "
+        .. "no program (Ctrl+Alt+R does)", function(order)
+      K.reset()
+      chord(order, WINDOWS_ALTGR, "r", "®")
+      assert.same("®", K.console_draft())
+      assert.is_falsy(K.cc.run_live)
+    end)
+
+    in_both_orders("in the file editor, AltGr+F types and opens "
+        .. "no search (Ctrl+F does)", function(order)
+      K.reset({ ["a.txt"] = "" })
+      K.open("a.txt")
+      chord(order, WINDOWS_ALTGR, "f", "[")
+      assert.same("[", K.draft())
+      assert.are_not.equal("search", K.ed.mode)
+    end)
+
+    in_both_orders("in a project's field, AltGr+V types and "
+        .. "pastes nothing (Ctrl+V pastes)", function(order)
+      K.reset()
+      F.activate_project()
+      local widget = F.show_widget({ text = "hey" })
+      love.system.setClipboardText("ZZ")
+      chord(order, WINDOWS_ALTGR, "v", "@")
+      assert.same("hey@", table.concat(widget:get_text(), "\n"))
+    end)
+
+    in_both_orders("a project's Ctrl+Alt combo does not fire "
+        .. "from AltGr, and its hook gets the key", function(order)
+      K.reset()
+      local input = F.activate_project()
+      local fired, keys = 0, { }
+      input.shortcuts.keypressed["ctrl+alt+r"] = function()
+        fired = fired + 1
+        return true
+      end
+      input.hooks.keypressed = function(k)
+        keys[#keys + 1] = k
+      end
+      chord(order, WINDOWS_ALTGR, "r", "®")
+      assert.same(0, fired)
+      assert.truthy(table.is_member(keys, "r"))
+    end)
+
+    it("left Ctrl and right Alt with the left Alt too are "
+        .. "still Ctrl+Alt+R", function()
+      K.reset()
+      chord(ORDERS[2], {
+        "lctrl",
+        "lalt",
+        "ralt"
+      }, "r")
+      assert.is_true(K.cc.run_live)
+    end)
+  end)
+
+  --- the console's draft, two lines, the cursor on the second
+  local function two_lines()
+    K.reset()
+    K.type("a")
+    K.keys("lshift", "return")
+    K.type("b")
+  end
+
+  describe("on a computer (Linux)", function()
+    posing_as("Linux")
+
+    it("in the console, AltGr+Up moves the cursor and swaps "
+        .. "no line (Alt+Up does)", function()
+      two_lines()
+      chord(ORDERS[2], { "ralt" }, "up")
+      assert.same("a\nb", K.console_draft())
+      chord(ORDERS[2], { "lalt" }, "down")
+      assert.same("b\na", K.console_draft())
+    end)
+  end)
+
+  describe("on a Compy (Android)", function()
+    posing_as("Android")
+
+    it("the right Alt with Up swaps lines, as Alt+Up does",
+        function()
+      two_lines()
+      chord(ORDERS[2], { "ralt" }, "up")
+      assert.same("b\na", K.console_draft())
+    end)
+
+    it("left Ctrl with the right Alt and R is Ctrl+Alt+R",
+        function()
+      K.reset()
+      chord(ORDERS[2], WINDOWS_ALTGR, "r", "r")
+      assert.is_true(K.cc.run_live)
+    end)
+  end)
+end)

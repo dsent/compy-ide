@@ -168,17 +168,23 @@ function EditorController:open(name, content, save, key)
     b.key = key
     --- what the file held when it was read, missing included:
     --- a later change from outside is told from it
-    --- (_file_matches)
+    --- (_baseline)
     if type(content) == 'table' then
-      self:_note_saved(b)
+      --- lines given, no text read: the card says what it holds
+      b.disk_seen = self:_disk_text(b)
     else
       self:_note_read(b, content)
     end
   end
+  --- the file under it stays open, its draft's changes on its
+  --- timeline (IS1.5, IS6.6)
+  local under = self:get_active_buffer()
+  if under and under ~= b then self:timeline_park(under) end
   --- the file comes in with an input of its own: nothing
   --- typed, no message, no search of another file's
   self.input:clear()
   self.search:clear()
+  self:timeline_unpark(b)
   self.model.buffers:push_front(b)
   self.view:open(b)
   self:set_mode('nav')
@@ -245,6 +251,7 @@ function EditorController:pop_buffer()
   bv:open(b)
   bv:scroll_to(off)
   self.input:clear()
+  self:timeline_unpark(b)
   self:update_status()
 end
 
@@ -509,39 +516,48 @@ function EditorController:restore_state(state)
   end
 end
 
---- The next close is for a test run (Ctrl+T): the open
---- files' undo timelines are kept for the return
+--- The next close is for a run of the project from the
+--- editor (Ctrl+T, Ctrl+Alt+R): the open files' undo
+--- timelines are kept for the return
 function EditorController:keep_timelines()
   self._keep_timelines = true
 end
 
---- Back from a test run: the files opened again take their
---- timelines up where they stood
+--- Back from a run: the files opened again take their
+--- timelines up where they stood, the draft's changes
+--- included. A timeline whose file did not open stays kept
+--- for a later return.
 function EditorController:restore_timelines()
   local kept = self.timelines or {}
-  self.timelines = nil
   for _, b in ipairs(self.model.buffers) do
-    local t = kept[b.key or b.name]
+    local id = b.key or b.name
+    local t = kept[id]
+    kept[id] = nil
     --- a run that changed the file ends its timeline (IS6.6)
     if t and t.disk_seen == b.disk_seen then
       b.history = t.history
       b.redo_history = t.redo_history
+      b.draft_steps = t.draft_steps
     end
   end
+  local front = self:get_active_buffer()
+  if front then self:timeline_unpark(front) end
 end
 
 --- @return {name: string, content: string[]}[]
 function EditorController:close()
-  --- a test run is no leaving of the file (IS1.4): its
-  --- timeline waits for the return; any other close ends it
-  --- (IS6.6)
+  --- a run is no leaving of the file (IS1.4): its timeline
+  --- waits for the return; any other close ends it (IS6.6)
   self.timelines = nil
   if self._keep_timelines then
     self.timelines = {}
+    local front = self:get_active_buffer()
+    if front then self:timeline_park(front) end
     for _, b in ipairs(self.model.buffers) do
       self.timelines[b.key or b.name] = {
         history = b.history,
         redo_history = b.redo_history,
+        draft_steps = b.draft_steps,
         disk_seen = b.disk_seen,
       }
     end
@@ -819,18 +835,22 @@ function EditorController:format_file()
   if buf.content_type ~= 'lua' then
     return self:refuse()
   end
-  --- text that does not parse has no tidy form: it stays
+  --- text the editor cannot read has no tidy form: it stays
   --- as it is, line for line
   if buf.invalid then
     return self:refuse({
-      'Not valid Lua, so the file stays as it is.'
-      .. ' Ctrl+Delete cuts a line to fix.'
+      'The editor cannot split this file into blocks,'
+      .. ' so it stays as it is.'
     })
   end
-  if self:_refuse_stale(buf) then return end
-  local before = string.lines(
-    string.unlines(buf:get_text_content()))
-  local after, formatted = format.format(before,
+  if self:_refuse_stale(buf, 'tidied') then return end
+  local snap = buf:snapshot()
+  local before = snap.lines
+  --- a `#!` first line is no Lua, and stays as it is
+  local head = before[1] and string.match(before[1], '^#!')
+      and { before[1] } or {}
+  local after, formatted = format.format(
+    table.slice(before, #head + 1, #before),
     self.model.cfg.view.drawableChars)
   if not formatted then
     return self:refuse({
@@ -838,6 +858,8 @@ function EditorController:format_file()
       .. ' it does, so it stays as it is'
     })
   end
+  for _, l in ipairs(after) do head[#head + 1] = l end
+  after = head
   if string.unlines(after) == string.unlines(before) then
     return
   end
@@ -858,7 +880,7 @@ function EditorController:format_file()
     --- the screen keeps showing the file, so trying again
     --- formats it again. A failed save leaves the file as it
     --- was (FS.replace), and so the buffer goes back
-    buf:replace_text(before)
+    buf:restore(snap)
     buf:analyze()
     self.view:refresh()
     return self:refuse({
@@ -872,8 +894,7 @@ function EditorController:format_file()
       and buf:block_at_line(target.lineinfo.first.line)
       or buf:get_content_length()
   buf:set_selection(sel)
-  buf:push_history(before, table.clone(buf:get_text_content()),
-    sel_before, sel)
+  buf:push_history(snap, sel_before, sel)
   self.view:refresh()
   self.view:get_current_buffer():follow_selection()
   self:update_status()
@@ -967,11 +988,11 @@ function EditorController:_editable_lines(bn)
     return nil, 'An empty line has nothing to edit.'
         .. ' Move onto a block.'
   end
-  --- a line of a file that does not parse is cut for repair,
-  --- as a block over the limit is (IS1.3)
+  --- a line of a file the editor cannot read is cut for
+  --- repair, as a block over the limit is (IS1.3)
   if buf.invalid then
-    return nil, 'Not valid Lua: no editing in place.'
-        .. ' Ctrl+Delete cuts to fix.'
+    return nil, 'The editor cannot split this file into'
+        .. ' blocks. Ctrl+Delete cuts a line to fix.'
   end
   local max = self:_size_limit()
   if buf.content_type == 'lua' and #lines > max then
@@ -1030,12 +1051,21 @@ function EditorController:cancel_edit()
   self:_action_done('abort')
 end
 
---- A file changed from outside is not written over: the
---- action is refused with a notice and state stays (IS3.11)
+--- A file is written only over what the editor last read or
+--- wrote there (_baseline): a file changed from outside, or
+--- one that cannot be read just now, is not written over,
+--- and the action is refused with a notice and state stays
+--- (IS3.11)
 --- @param buf BufferModel
+--- @param undone string --- what did not happen: 'saved'
 --- @return boolean refused
-function EditorController:_refuse_stale(buf)
-  if self:_file_matches(buf) then return false end
+function EditorController:_refuse_stale(buf, undone)
+  local seen = self:_baseline(buf)
+  if seen == 'same' then return false end
+  if seen == 'unknown' then
+    self:_refuse_unread(buf, undone)
+    return true
+  end
   --- reopening is leaving, which drops the field: with text
   --- there, possibly a cut block's only copy, the notice says so
   if self:state_name() == 'browsing' then
@@ -1065,18 +1095,19 @@ end
 --- @param n integer? --- the blocks the lines make on their
 --- own, for a Lua file
 --- @return boolean landed
+--- @return string[]? lines --- the lines landed
 function EditorController:_land(lines, kind, n)
   local buf = self:get_active_buffer()
   local target = buf.loaded
   local sel = buf:get_selection()
   local count = buf:get_content_length() - (target and 1 or 0)
-  local before = table.clone(buf:get_text_content())
-  if self:_refuse_stale(buf) then return false end
-  local ran = buf:loads()
+  local before = buf:snapshot()
+  if self:_refuse_stale(buf, 'saved') then return false end
+  local whole = self:_reads_whole()
   --- the buffer goes back to what the file holds, and the
   --- edit stays open
   local function put_back()
-    buf:replace_text(before)
+    buf:restore(before)
     buf:_text_change()
     buf:analyze()
     buf:set_selection(sel)
@@ -1088,7 +1119,7 @@ function EditorController:_land(lines, kind, n)
   else
     pos = buf:insert_lines(sel, lines)
   end
-  local why = self:_reuse_refusal(ran, n and count + n,
+  local why = self:_reuse_refusal(whole, n and count + n,
     'This would merge with the block next to it'
     .. ' into one statement.')
   if why then
@@ -1106,8 +1137,7 @@ function EditorController:_land(lines, kind, n)
   --- refuse it, and before its step is pushed
   self:_record_action(kind)
   local top = buf.history[#buf.history]
-  buf:push_history(before,
-    table.clone(buf:get_text_content()), sel, pos)
+  buf:push_history(before, sel, pos)
   local step = buf.history[#buf.history]
   if step ~= top then
     --- undone, the position is the first restored block, or
@@ -1121,12 +1151,13 @@ function EditorController:_land(lines, kind, n)
   self.view:get_current_buffer():follow_selection()
   self:update_status()
   self:_action_done(kind)
-  return true
+  return true, lines
 end
 
 --- Enter: submit the draft (IS4.1, IS4.2, IS5.3); an empty
 --- one is an empty line (IS4.3)
 --- @return boolean accepted
+--- @return string[]? lines --- the lines the file took
 function EditorController:submit()
   local buf = self:get_active_buffer()
   --- a draft of empty lines alone is not empty: each of its

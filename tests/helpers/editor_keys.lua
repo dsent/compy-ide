@@ -16,6 +16,8 @@ K.PROJECT = "demo"
 local files, writes, restore
 -- a write fails with this reason while it is set
 local write_failure, read_failure
+-- the SD card is out: no file and no project folder is there
+local card_out = false
 -- Caps Lock, a device state its key toggles
 local caps = false
 
@@ -44,7 +46,7 @@ local function write(_, f, text)
   if not valid then
     return false, invalid
   end
-  if write_failure then
+  if write_failure or card_out then
     return false, write_failure
   end
   writes[#writes + 1] = f
@@ -63,13 +65,16 @@ local function memory_project()
   }
 end
 
---- FS.exists answered for the memory project, `exists` asked
---- for every other path.
+--- FS.exists answered for the memory project, its folder
+--- included, `exists` asked for every other path.
 local function exists_over(exists)
   return function(path)
+    if path == ROOT or path == ROOT:sub(1, -2) then
+      return not card_out
+    end
     local f = path:match("^/memory%-k/(.+)$")
     if f then
-      return files[f] ~= nil
+      return not card_out and files[f] ~= nil
     end
     return exists(path)
   end
@@ -83,7 +88,7 @@ local function read_over(combined_read)
     if not f then
       return combined_read(path)
     end
-    if read_failure then
+    if read_failure or card_out then
       return nil
     end
     return files[f]
@@ -215,7 +220,7 @@ function K.reset(contents)
   K.cc.editor.state = nil
   files = contents or { ["main.lua"] = "x = 1\n" }
   writes, write_failure, caps = { }, nil, false
-  read_failure = nil
+  read_failure, card_out = nil, false
   local back = use_memory_project()
   -- what the console prints reaches its terminal, as the
   -- running IDE wires it (model.io.redirect)
@@ -284,6 +289,17 @@ end
 --- From now on, reads succeed again.
 function K.mend_reads()
   read_failure = nil
+end
+
+--- Take the SD card out: the project's folder and its files
+--- are not there, and nothing can be read.
+function K.remove_card()
+  card_out = true
+end
+
+--- Put the SD card back: everything is as it was.
+function K.insert_card()
+  card_out = false
 end
 
 -- keystrokes -------------------------------------------------

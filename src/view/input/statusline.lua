@@ -26,6 +26,15 @@ local function fit(text, chars)
   return string.usub(text, 1, chars - 1) .. '…'
 end
 
+--- A name or a label as it can be shown: a program's prompt
+--- may hold bytes that are not UTF-8.
+--- @param text any
+--- @return string?
+local function shown(text)
+  if not text then return nil end
+  return string.scrub(tostring(text))
+end
+
 --- @param status Status
 --- @param start_y integer?
 function Statusline:draw(status, start_y)
@@ -102,9 +111,9 @@ function Statusline:draw(status, start_y)
     --- the file's.
     --- @param limit number?
     local function drawLeft(limit)
-      local project = custom and custom.project
-          or status.project
-      local name = custom and custom.name
+      local project = shown(custom and custom.project
+          or status.project)
+      local name = shown(custom and custom.name)
       local state = custom and custom.state
       local caps = status.caps
       if limit then
@@ -138,6 +147,7 @@ function Statusline:draw(status, start_y)
           gfx.setColor(colors[tone])
         end
       end
+      text = shown(text) or ''
       gfx.print(text, start_text.x, start_text.y)
       gfx.setColor(colors.fg)
       left_x = left_x + cols(text .. '  ')

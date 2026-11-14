@@ -73,6 +73,9 @@ local function validate_filename(name)
   if not string.is_non_empty_string(name) then
     return false, messages.invalid_filename('Empty')
   end
+  if not string.ulen(name) then
+    return false, messages.invalid_filename('Not UTF-8 text')
+  end
   if string.ulen(name) > 60 then
     return false, messages.invalid_filename('Too long')
   end

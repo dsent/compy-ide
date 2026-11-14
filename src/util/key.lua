@@ -166,20 +166,10 @@ end
 local function is_ctrl(k)
   return table.is_member(ctrl_k, k)
 end
---- @return boolean
-local function ctrl()
-  ---@diagnostic disable-next-line: param-type-mismatch
-  return love.keyboard.isDown(unpack(ctrl_k))
-end
 
 --- @return boolean
 local function is_alt(k)
   return table.is_member(alt_k, k)
-end
---- @return boolean
-local function alt()
-  ---@diagnostic disable-next-line: param-type-mismatch
-  return love.keyboard.isDown(unpack(alt_k))
 end
 
 --- @return string?
@@ -206,6 +196,22 @@ local function altgr()
   return not down('lctrl') or name == 'Windows'
 end
 
+--- Ctrl held, either side. AltGr is no Ctrl: on Windows its
+--- left Ctrl is the system's, not a key the person pressed.
+--- @return boolean
+local function ctrl()
+  ---@diagnostic disable-next-line: param-type-mismatch
+  return love.keyboard.isDown(unpack(ctrl_k)) and not altgr()
+end
+
+--- Alt held, either side. AltGr is no Alt: a key pressed
+--- under it types, and makes no chord.
+--- @return boolean
+local function alt()
+  ---@diagnostic disable-next-line: param-type-mismatch
+  return love.keyboard.isDown(unpack(alt_k)) and not altgr()
+end
+
 --- Whether text that arrives now is a modifier chord's own
 --- glyph and no typed text. With Ctrl or Alt held, a key makes
 --- a chord; on the device its glyph is sent as text all the
@@ -220,7 +226,7 @@ end
 --- @param _ string --- the text, which does not enter the rule
 --- @return boolean
 local function chord_text(_)
-  return (ctrl() or alt()) and not altgr()
+  return ctrl() or alt()
 end
 
 Key = {

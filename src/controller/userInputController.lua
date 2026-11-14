@@ -710,10 +710,9 @@ function UserInputController:keypressed(k, sc, isr)
       input:delete()
     end
     if Key.ctrl() then
-      if k == "y" then
-        --- in the editor, bare Ctrl+Y is redo, which its
-        --- controller takes first; with Shift or Alt held it
-        --- comes here and deletes the line, undoably
+      --- the plain widget's delete-line; the editor's Ctrl+Y is
+      --- redo alone, with Shift or Alt too (D-UNDO-KEYS)
+      if k == "y" and not editing then
         input:delete_line()
       end
       if k == "w" and editing then

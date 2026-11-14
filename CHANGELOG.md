@@ -66,7 +66,8 @@ Project-author guide: `doc/input_api.md`.
 - **The text cursor is a blinking block.** In the file editor, the console and a
   project's input alike, the cursor is a block on the character it stands before,
   which stays readable on it, and on the empty cell at a line's end. It blinks as
-  the `blink` setting says and stays shown for a moment after every key press.
+  the `blink` setting says and stays shown for a moment after every key press, and
+  after a project moves it with `compy.input`.
 - **A notice is orange, the parser's message red.** The message above the status
   line has no frame.
 - **Leaving waits for the edit to end.** Ctrl+T, Ctrl+Q, Ctrl+Alt+R and the
@@ -95,12 +96,17 @@ Project-author guide: `doc/input_api.md`.
   the console and opens nothing.
 - **Two statements sharing a line are one block.** Editing elsewhere in such a file no
   longer breaks it.
-- **A file keeps its line ends.** Its lines are shown and edited without them; a line
-  you did not change is written back with the line end it had, and a new or changed
-  line takes the one most of the file's lines have (Windows CRLF, LF or CR).
-- **A Lua file with a syntax error opens, so you can fix it.** Each of its lines is a
-  block until the file is valid Lua again: you can add text, and Ctrl+Delete cuts a
-  broken line into the field to repair it. F2 on such a line is refused with a notice.
+- **A file keeps its line ends.** Its lines are shown and edited without them. A line
+  keeps the line end it had when it is moved, and when undo or redo puts it back; a
+  line that comes from the field takes the one most of the file's lines have (Windows
+  CRLF, LF or CR), the first in the file when two are as common.
+- **A Lua file the editor cannot split into blocks opens, so you can fix it:** one with
+  a syntax error, or Lua the editor does not read, such as `goto`. Each of its lines
+  is a block until the editor can read the file: you can add text, and Ctrl+Delete
+  cuts a line into the field to repair it. F2 on such a line is refused with a notice.
+- **An SD card that cannot be read refuses the key, and forgets nothing.** Enter, a
+  cut, a move, Ctrl+Z and Ctrl+Y say the file could not be read; the same key works
+  once it can.
 - Ctrl+Up / Ctrl+Down browse blocks in every state, PageUp / PageDown browse ten
   blocks, and Ctrl+K in the field deletes to the end of the line.
 
@@ -128,6 +134,14 @@ Project-author guide: `doc/input_api.md`.
 
 ### Fixed
 
+- **A letter outside ASCII no longer crashes the IDE.** Enter on a Lua line such as
+  `п = 1` or `x = é` in the console or the file editor stopped the IDE; the message now
+  names the whole letter. A message holding bytes that are not UTF-8 shows `�` for them,
+  and a file name that is not UTF-8 is refused with a reason.
+- **On a computer, AltGr only types.** A character typed with AltGr no longer runs a Ctrl
+  or Alt command as well: on Windows, which reports AltGr as Ctrl+Alt, AltGr+L cleared the
+  console, AltGr+F opened search and AltGr+R restarted the program. On a Compy the right
+  Alt stays an Alt.
 - **Opening a Lua file no longer loses lines.** A comment line after a line that ends in
   a comment, the later lines of a long comment that starts after code, a `#!` first
   line and a line of spaces were dropped or emptied on opening, and the next save wrote
