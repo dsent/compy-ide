@@ -107,15 +107,21 @@ local function terminal_frame(terminal, style, x, y, w, h)
     })
 end
 
+-- A row's states move with its characters; the row leaving the
+-- top comes back at the bottom, blank in the cursor's colors.
 local function terminal_roll_up(terminal, how_many)
+    local buffer, state_buffer = terminal.buffer, terminal.state_buffer
     for _ = 1, how_many do
-        local first_row = terminal.buffer[1]
+        -- the row leaving the top, characters and states, whole
+        local first_row, first_states = buffer[1], state_buffer[1]
         for y = 2, terminal.height do
-            terminal.buffer[y - 1] = terminal.buffer[y]
+            buffer[y - 1] = buffer[y]
+            state_buffer[y - 1] = state_buffer[y]
         end
-        terminal.buffer[terminal.height] = first_row
-        for i = 1, terminal.width do
-            first_row[i] = ' '
+        buffer[terminal.height] = first_row
+        state_buffer[terminal.height] = first_states
+        for x = 1, terminal.width do
+            terminal_update_character(terminal, x, terminal.height, ' ')
         end
     end
 end

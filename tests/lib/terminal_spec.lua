@@ -51,3 +51,84 @@ describe("terminal output", function()
     assert.same({ "A", "B" }, t.stdin)
   end)
 end)
+
+--- A row's colors are its own: when the output scrolls, every
+--- cell keeps its color, back color and reversal, and the row
+--- coming in at the bottom is blank in the cursor's colors.
+describe("terminal scrolling", function()
+  local STYLES = {
+    { color = { 1, 0, 0, 1 }, back = { 0, 0, 0, 1 }, rev = false },
+    { color = { 0, 1, 0, 1 }, back = { 0, 0, 1, 1 }, rev = true },
+    { color = { 0, 0, 1, 1 }, back = { 1, 1, 0, 1 }, rev = false },
+  }
+  local OTHER =
+    { color = { 1, 1, 1, 1 }, back = { 1, 0, 1, 1 }, rev = true }
+
+  --- Make `s` the cursor's style. reverse_cursor(false) is not
+  --- used: given false, it toggles.
+  local function set_style(t, s)
+    t:set_cursor_color(s.color)
+    t:set_cursor_backcolor(s.back)
+    if s.rev ~= (t.test_reversed or false) then
+      t:reverse_cursor()
+      t.test_reversed = s.rev
+    end
+  end
+
+  --- Print `n` rows, each as wide as the grid, so that each
+  --- wraps to the next by itself, in styles taking turns
+  --- @return table terminal, string[] texts, table[] styles
+  local function print_rows(n)
+    local t = new_term()
+    local texts, styles = {}, {}
+    for i = 1, n do
+      local s = STYLES[(i - 1) % #STYLES + 1]
+      set_style(t, s)
+      local ch = string.char(string.byte('a') + (i - 1) % 26)
+      texts[i] = string.rep(ch, t.width)
+      styles[i] = s
+      t:print(texts[i])
+    end
+    t:update(1000)
+    return t, texts, styles
+  end
+
+  --- Cells `from` to `to` of grid row `y` hold `ch` in style `s`
+  local function assert_cells(t, y, from, to, ch, s)
+    for x = from, to do
+      local st = t.state_buffer[y][x]
+      local where = string.format("row %d, column %d", y, x)
+      assert.equal(ch, t.buffer[y][x], where)
+      assert.same(s.color, st.color, where)
+      assert.same(s.back, st.backcolor, where)
+      assert.equal(s.rev, st.reversed == true, where)
+    end
+  end
+
+  for _, rolls in ipairs({ 1, 8 }) do
+    it("keeps each row's colors after " .. rolls .. " rolls",
+      function()
+        local t, texts, styles = print_rows(19 + rolls)
+        assert.equal(t.height, t.cursor_y)
+        for y = 1, t.height - 1 do
+          local line = y + rolls
+          assert_cells(t, y, 1, t.width,
+            string.sub(texts[line], 1, 1), styles[line])
+        end
+      end)
+
+    --- the row printed last is in one style, the cursor in
+    --- another when the newline brings the blank row in
+    it("brings a blank row in the cursor's colors after "
+      .. rolls .. " rolls", function()
+        local t = print_rows(19 + rolls)
+        set_style(t, STYLES[1])
+        t:print("aaa")
+        set_style(t, OTHER)
+        t:print("\n")
+        t:update(1000)
+        assert_cells(t, t.height - 1, 1, 3, "a", STYLES[1])
+        assert_cells(t, t.height, 1, t.width, " ", OTHER)
+      end)
+  end
+end)
