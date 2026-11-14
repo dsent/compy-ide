@@ -835,33 +835,36 @@ console it returns you to is not there to return to. Note `f10` is the one
 reservation with no modifier at all: bare F10 is the platform's in a profiling
 build, and F10 with any modifier is yours.
 
-It is also the only F-key worth binding at all. On the current hardware the
-function row is the keyboard's Fn layer — Insert is Fn+F12, Scroll Lock is
-Fn+F10, mute and the media keys are Fn+F5 through Fn+F8 — so **F1 to F9 never
-reach your project**; the firmware answers them. F10 does arrive, which is why
-the platform could take it; F11 and F12 are untested. Bind help, pause and debug
-gestures to letter chords instead: an example that wants a held help overlay
-uses Alt+H (`doc/development/keyboard.md` is the per-key availability table).
+It is also the only F-key that arrives on every Compy. The function row shares
+its keys with the keyboard's Fn layer — Insert is Fn+F12, Scroll Lock is
+Fn+F10, mute and the media keys are Fn+F5 through Fn+F8 — and on a stock,
+unrooted Compy **F1 to F9 never reach your project**; the system answers them.
+The rooted system image maps the keyboard's browser key to F1 and releases F1
+to F12 from Android's shortcuts, and the IDE's own editor uses F1 and F2 there.
+Which of the other function keys a physical press delivers on the rooted image
+is not recorded here; several of them share a key with a volume or brightness
+control. F10 arrives on both, which is why the platform could take it. Until a
+key is known to arrive on the Compies your project runs on, bind help, pause
+and debug gestures to letter chords instead: an example that wants a held help
+overlay uses Alt+H (`doc/development/keyboard.md` is the per-key availability
+table, measured on a stock Compy).
 
-Ctrl+Shift+S also does something in the **editor** — it leaves the edit — but
+Ctrl+Shift+S also does something in the **editor** — it leaves the editor — but
 that is the editor's own handling, not a reservation: it applies when you are
 editing, not while your project runs. Bare Ctrl+S does nothing there; the
 editor keeps it for itself.
 
 Ctrl+Shift+S, Ctrl+Q, Ctrl+Shift+R and Ctrl+Alt+R leave the editor too, and so
-does Ctrl+T while you navigate or edit a block; in search or while moving a
-block, Ctrl+T does nothing. Each first asks the question Shift+Esc asks when
-you would lose a change: a block you have changed and left open, one you left
-open in another file with Ctrl+J, or a file whose last save failed, which the
-question names. The question brings you to the file it asks about. Enter or
-Space discards that change and goes on to the next one, and leaves once none is
-left. Anything else keeps the change: you stay on that file, and the files you
-had opened from it with Ctrl+J are closed. Ctrl+Esc exits the IDE from anywhere
-and does not ask. The contract is `doc/development/decisions/input.md`,
-`D-EDITOR-KEYS`, statement 6.
+does Ctrl+T while you browse the file; in search, Ctrl+T does nothing. None of
+them asks a question. While there is text in the editor's field, or a block is
+loaded to be replaced, each is refused with a one-line notice: submit the text
+with Enter or drop it with Escape first, and the exit works. A text whose save
+failed stays in the field, so it holds the exit back the same way. Ctrl+Esc
+exits the IDE from anywhere and does not ask.
 
-Ctrl+J while you edit a block opens the file it requires and keeps your edit
-with the first file: Shift+Esc back to it shows the edit again, still open.
+Ctrl+J opens the file the highlighted block names with `require` or `dofile`,
+and Escape steps back to the file you came from, at the place you left it.
+While there is text in the field, Ctrl+J is refused with a notice.
 
 ### Pointer and click hooks
 

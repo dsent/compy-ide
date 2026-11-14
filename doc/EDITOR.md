@@ -12,8 +12,11 @@
 - Editor contents should only change when it's the user's
   explicit aim. Operations which could be interpreted otherwise
   should not make changes as a side effect.
-  - Hence, submitting the content only replaces if the highlight
-    is the same it was loaded from.
+  - Hence, submitting the content only replaces the block that
+    was loaded with <kbd>F2</kbd>, wherever the highlight has
+    moved since; any other text is inserted as new blocks.
+- The editor asks no questions. A refused action shows a notice
+  and changes nothing.
 
 ### Keys
 
@@ -46,36 +49,32 @@
 | Select text                                                       | <kbd>Shift</kbd>+<kbd>⇦</kbd>/<kbd>⇨</kbd>/<kbd>⇧</kbd>/<kbd>⇩</kbd> |
 | Evaluate input                                                    | <kbd>Enter ⏎</kbd>                            |
 | **Editor**                                                        |                                               |
-| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; _same as Input, except for:_ |                                               |
-| Move the active line by one line (nav)                            | <kbd>⇧</kbd>/<kbd>⇩</kbd>                     |
-| Move the active line by a page (nav)                              | <kbd>PageUp</kbd>/<kbd>PageDown</kbd>         |
-| First / last line of the file (nav)                               | <kbd>Home</kbd> / <kbd>End</kbd>              |
-| Move the cursor through the block (editing)                       | <kbd>⇧</kbd>/<kbd>⇩</kbd>                     |
-| Jump block-wise (nav) / accept and jump (editing)                 | <kbd>Ctrl</kbd>+<kbd>⇧</kbd>/<kbd>Ctrl</kbd>+<kbd>⇩</kbd> |
-| Accept the block, write it to the file (editing)                  | <kbd>Enter ⏎</kbd>                            |
-| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; _additionally_               |                                               |
-| Open the selected block for editing (nav)                         | <kbd>Enter ⏎</kbd> / typing                   |
-| New empty block below / above, opened (nav)                       | <kbd>Ctrl</kbd>+<kbd>Enter ⏎</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Enter ⏎</kbd> |
-| Accept and return to navigation (editing)                         | <kbd>Ctrl</kbd>+<kbd>Enter ⏎</kbd>            |
-| Discard the edit, asks when changed (editing) / leave (nav)       | <kbd>Shift</kbd>+<kbd>Esc</kbd>               |
-| Confirm / cancel a dialog                                         | <kbd>Enter ⏎</kbd> or <kbd>Space</kbd> / <kbd>Esc</kbd> |
-| Delete the previous word (editing)                                | <kbd>Ctrl</kbd>+<kbd>Backspace</kbd> / <kbd>Ctrl</kbd>+<kbd>W</kbd> |
-| Undo / redo: text (editing), file operations (nav)                | <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> |
-| Peek-scroll one line, the selection stays                         | <kbd>Alt</kbd>+<kbd>⇧</kbd>/<kbd>Alt</kbd>+<kbd>⇩</kbd> |
-| Peek-scroll one page                                              | <kbd>Alt</kbd>+<kbd>PageUp</kbd>/<kbd>Alt</kbd>+<kbd>PageDown</kbd> or <kbd>Alt</kbd>+<kbd>⇦</kbd>/<kbd>Alt</kbd>+<kbd>⇨</kbd> |
-| Peek to the start / end of the file                               | <kbd>Alt</kbd>+<kbd>Home</kbd> / <kbd>Alt</kbd>+<kbd>End</kbd> |
-| Copy block                                                        | <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>Insert</kbd> |
-| Cut block                                                         | <kbd>Ctrl</kbd>+<kbd>X</kbd> / <kbd>Shift</kbd>+<kbd>Delete</kbd> |
-| Paste                                                             | <kbd>Ctrl</kbd>+<kbd>V</kbd> / <kbd>Shift</kbd>+<kbd>Insert</kbd> |
-| Delete the selected block (nav)                                   | <kbd>Delete</kbd> / <kbd>Ctrl</kbd>+<kbd>Delete</kbd> |
-| Checkpoint the file (asks when one exists)                        | <kbd>Ctrl</kbd>+<kbd>K</kbd>                  |
-| Restore from the checkpoint (asks)                                | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> |
-| Follow the require under selection                                | <kbd>Ctrl</kbd>+<kbd>J</kbd>                  |
-| Block reorder mode                                                | <kbd>Ctrl</kbd>+<kbd>M</kbd>                  |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; _same as Input in the field, except for:_ |                                               |
+| Browse the file block by block                                    | <kbd>Ctrl</kbd>+<kbd>⇧</kbd>/<kbd>Ctrl</kbd>+<kbd>⇩</kbd> |
+| Browse block by block (empty field) / move the cursor a row (text in the field) | <kbd>⇧</kbd>/<kbd>⇩</kbd>                     |
+| Browse ten blocks                                                 | <kbd>PageUp</kbd>/<kbd>PageDown</kbd>         |
+| Insert the field's text before the highlighted block, or at the end of the file | <kbd>Enter ⏎</kbd>                            |
+| Insert an empty line (empty field)                                | <kbd>Enter ⏎</kbd>                            |
+| Load the highlighted block into the field, to replace it          | <kbd>F2</kbd>                                 |
+| Replace the loaded block with the field's text                    | <kbd>Enter ⏎</kbd>                            |
+| Insert or replace, and keep the text in the field                 | <kbd>Shift</kbd>+<kbd>Insert</kbd>            |
+| Break a line in the field                                         | <kbd>Shift</kbd>+<kbd>Enter ⏎</kbd> / <kbd>Alt</kbd>+<kbd>Enter ⏎</kbd> |
+| Dismiss a notice; drop the field's text or the replacement; step back from the file (empty field) | <kbd>Esc</kbd>                                |
+| Copy the highlighted block into the field                         | <kbd>Ctrl</kbd>+<kbd>Insert</kbd>             |
+| Cut the highlighted block into the field (empty field)            | <kbd>Ctrl</kbd>+<kbd>Delete</kbd> / <kbd>Shift</kbd>+<kbd>Delete</kbd> |
+| Move the highlighted block up / down                              | <kbd>Alt</kbd>+<kbd>⇧</kbd>/<kbd>Alt</kbd>+<kbd>⇩</kbd> |
+| Undo / redo                                                       | <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> |
+| Delete the previous word in the field                             | <kbd>Ctrl</kbd>+<kbd>Backspace</kbd> / <kbd>Ctrl</kbd>+<kbd>W</kbd> |
+| Delete to the end of the line in the field                        | <kbd>Ctrl</kbd>+<kbd>K</kbd>                  |
+| Scroll the view one page, the highlight stays                     | <kbd>Alt</kbd>+<kbd>PageUp</kbd>/<kbd>Alt</kbd>+<kbd>PageDown</kbd> or <kbd>Alt</kbd>+<kbd>⇦</kbd>/<kbd>Alt</kbd>+<kbd>⇨</kbd> |
+| Scroll the view to the start / end of the file                    | <kbd>Alt</kbd>+<kbd>Home</kbd> / <kbd>Alt</kbd>+<kbd>End</kbd> |
+| Checkpoint the file (asks when one exists)                        | _no key at present_                           |
+| Restore from the checkpoint (asks)                                | _no key at present_                           |
+| Follow the require or dofile of the highlighted block (empty field) | <kbd>Ctrl</kbd>+<kbd>J</kbd>                  |
 | Search definitions                                                | <kbd>Ctrl</kbd>+<kbd>F</kbd>                  |
-| Format the whole file (nav)                                       | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> |
-| Scroll to start / end                                             | <kbd>Ctrl</kbd>+<kbd>PageUp</kbd> / <kbd>Ctrl</kbd>+<kbd>PageDown</kbd> |
-| Scroll up / down by one line                                      | <kbd>Shift</kbd>+<kbd>PageUp</kbd> / <kbd>Shift</kbd>+<kbd>PageDown</kbd> |
+| Format the whole file (empty field)                               | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> |
+| Show the keys of the current state                                | hold <kbd>F1</kbd>                            |
+| Leave the editor (deprecated; empty field)                        | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> |
 
 ### Usage
 
@@ -89,14 +88,34 @@ default, and entered input will be appended to the end.
 
 ![hello](./interface/hello.apng)
 
+The editor is always in one of three states, which the status
+line names. With an empty field you are _browsing_: the
+highlight shows the block you are on, or no block at the end of
+the file. Once you type, you are _inserting_: <kbd>Enter ⏎</kbd>
+puts the text before the highlighted block, or at the end of the
+file. Hold <kbd>F1</kbd> to see the keys of the current state.
+
 To modify an existing block, navigate to it with
-<kbd>⇧</kbd>/<kbd>⇩</kbd>. Open it for editing by pressing
-<kbd>Enter ⏎</kbd>, make the desired changes, then send it back
-with <kbd>Enter ⏎</kbd>
+<kbd>⇧</kbd>/<kbd>⇩</kbd>. Load it into the field by pressing
+<kbd>F2</kbd>: you are now _replacing_ it. Make the desired
+changes, then send it back with <kbd>Enter ⏎</kbd>.
+<kbd>Esc</kbd> drops the change and leaves the block as it was.
 
 ![capitalized](./interface/hello_cap.apng)
 
+In a Lua file a block is a statement or an empty line, and a
+text that is not valid Lua is not accepted. In a text or
+Markdown file every line is a block, and a line is accepted as
+written.
+
+When the editor cannot do what a key asks, it shows a one-line
+notice over the field that says why and what would work. The
+next key dismisses it. The editor asks no questions.
+
 Happy with the modifications now, we can leave the editor by
-pressing <kbd>Shift-Esc</kbd>
+pressing <kbd>Esc</kbd> with an empty field.
+While there is text in the field or a block is being replaced,
+leaving is refused with a notice: submit the text with
+<kbd>Enter ⏎</kbd> or drop it with <kbd>Esc</kbd> first.
 
 ![quit](./interface/quit_editor.apng)

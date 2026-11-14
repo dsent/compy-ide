@@ -7,7 +7,6 @@
 local K = require("tests.helpers.editor_keys")
 local marks = require("tests.helpers.spec_marks")
 local spec_it, spec_gap = marks.spec_it, marks.spec_gap
-local spec_deviation = marks.spec_deviation
 
 --- An assignment `n` characters long, to one long name: no
 --- formatting can shorten it.
@@ -42,17 +41,15 @@ describe("IS3 input #editor #spec", function()
       }, { K.cursor() })
     end)
 
-    spec_gap("IS3.1 Prepare input: typing on a block begins an "
-        .. "insertion and leaves the block alone", function(gap)
+    spec_it("IS3.1 Prepare input: typing on a block begins an "
+        .. "insertion and leaves the block alone", function()
       K.reset({ ["main.lua"] = "x = 1\ny = 2\n" })
       K.open()
       K.browse_to(1)
       K.type("z")
-      gap(function()
-        assert.same("inserting", K.state())
-        assert.same("z", K.draft())
-        assert.is_nil(K.target())
-      end)
+      assert.same("inserting", K.state())
+      assert.same("z", K.draft())
+      assert.is_nil(K.target())
     end)
 
     spec_it("IS3.1 Prepare input: removing text leaves the " ..
@@ -132,31 +129,25 @@ describe("IS3 input #editor #spec", function()
       assert.same("ready", K.app_state())
     end)
 
-    spec_gap("IS3.3 Check Lua submission: a line over 64 " ..
-        "characters is refused, the notice naming 64", function(
-      gap
-    )
+    spec_it("IS3.3 Check Lua submission: a line over 64 " ..
+        "characters is refused, the notice naming 64", function()
       at_end()
       K.type(long_line(70))
       K.keys("return")
-      gap(function()
-        -- the draft stays, shown formatted (IS3.2)
-        assert.are_not.same("", K.draft())
-        assert.same("x = 1\ny = 2\n", K.file())
-        assert.truthy((K.message() or ""):find("64", 1, true))
-      end)
+      -- the draft stays, shown formatted (IS3.2)
+      assert.are_not.same("", K.draft())
+      assert.same("x = 1\ny = 2\n", K.file())
+      assert.truthy((K.message() or ""):find("64", 1, true))
     end)
 
-    spec_gap(
+    spec_it(
         "IS3.3 Check Lua submission: a block over 14 lines " ..
-        "is refused, the notice naming 14", function(gap)
+        "is refused, the notice naming 14", function()
       at_end()
       K.type_lines(K.block_lines(15))
       K.keys("return")
-      gap(function()
-        assert.same("x = 1\ny = 2\n", K.file())
-        assert.truthy((K.message() or ""):find("14", 1, true))
-      end)
+      assert.same("x = 1\ny = 2\n", K.file())
+      assert.truthy((K.message() or ""):find("14", 1, true))
     end)
   end)
 
@@ -174,62 +165,52 @@ describe("IS3 input #editor #spec", function()
   end)
 
   describe("IS3.4 and IS3.5", function()
-    spec_gap("IS3.4 Locate a syntax failure: Enter puts the "
-        .. "cursor before the failing character", function(gap)
+    spec_it("IS3.4 Locate a syntax failure: Enter puts the "
+        .. "cursor before the failing character", function()
       at_end()
       -- the second "=" (column 5) is where parsing fails
       K.type("z = = 1 + 2")
       K.keys("return")
-      gap(function()
-        assert.same({
-          1,
-          5
-        }, { K.cursor() })
-      end)
+      assert.same({
+        1,
+        5
+      }, { K.cursor() })
     end)
 
-    spec_gap("IS3.4 Locate a syntax failure: the text from the "
-        .. "failing character on is red", function(gap)
+    spec_it("IS3.4 Locate a syntax failure: the text from the "
+        .. "failing character on is red", function()
       at_end()
       K.type("z = = 1 + 2")
       local _, at = K.field_highlight()
-      gap(function()
-        assert.same({
-          1,
-          5
-        }, at)
-      end)
+      assert.same({
+        1,
+        5
+      }, at)
     end)
 
-    spec_gap("IS3.5 Continue input on a new line: a draft that "
-        .. "fails only at its end shows no red", function(gap)
+    spec_it("IS3.5 Continue input on a new line: a draft that "
+        .. "fails only at its end shows no red", function()
       at_end()
       local line = "for i = 1, 2 do"
       K.type(line)
       local _, at = K.field_highlight()
-      gap(function()
-        -- an error, if any, starts past the last character
-        local red = at and at[1] == 1 and at[2] <= #line
-        assert.is_falsy(red)
-      end)
+      -- an error, if any, starts past the last character
+      local red = at and at[1] == 1 and at[2] <= #line
+      assert.is_falsy(red)
     end)
 
-    spec_gap("IS3.5 Continue input on a new line: Enter on a "
-        .. "draft incomplete at its end adds a line", function(
-      gap
-    )
+    spec_it("IS3.5 Continue input on a new line: Enter on a "
+        .. "draft incomplete at its end adds a line", function()
       at_end()
       K.type("for i = 1, 2 do")
       K.keys("home")
       K.keys("return")
-      gap(function()
-        assert.same("for i = 1, 2 do\n", K.draft())
-        assert.same({
-          2,
-          1
-        }, { K.cursor() })
-        assert.same("x = 1\ny = 2\n", K.file())
-      end)
+      assert.same("for i = 1, 2 do\n", K.draft())
+      assert.same({
+        2,
+        1
+      }, { K.cursor() })
+      assert.same("x = 1\ny = 2\n", K.file())
     end)
   end)
 
@@ -244,9 +225,9 @@ describe("IS3 input #editor #spec", function()
       assert.same("x = 1\ny = 2\na = 1\nb = 2\n", K.file())
     end)
 
-    spec_gap(
+    spec_it(
         "IS3.7 Preserve accepted Lua: each empty line of a " ..
-        "draft becomes an empty-line block", function(gap)
+        "draft becomes an empty-line block", function()
       at_end()
       K.type_lines({
         "a = 1",
@@ -255,27 +236,27 @@ describe("IS3 input #editor #spec", function()
         "b = 2"
       })
       K.keys("return")
-      gap(function()
-        assert.same(
-          "x = 1\ny = 2\na = 1\n\n\nb = 2\n",
-          K.file()
-        )
-      end)
+      assert.same(
+        "x = 1\ny = 2\na = 1\n\n\nb = 2\n",
+        K.file()
+      )
     end)
   end)
 
   describe("IS3.7, a draft of empty lines", function()
-    spec_gap(
+    spec_it(
         "IS3.7 Preserve accepted Lua: a draft of only empty "
-        .. "lines becomes empty-line blocks", function(gap)
+        .. "lines becomes empty-line blocks", function()
+      -- IS3.7 names the empty lines between blocks; for a
+      -- draft with no statement the reference decides (Luditor
+      -- src/lua/chunker.rs: one empty-line block per blank
+      -- line), as an empty draft is one line (IS4.3)
       at_end()
       K.keys("lshift", "return")
       local drafted = K.draft()
       K.keys("return")
-      gap(function()
-        assert.same("\n", drafted)
-        assert.same("x = 1\ny = 2\n\n\n", K.file())
-      end)
+      assert.same("\n", drafted)
+      assert.same("x = 1\ny = 2\n\n\n", K.file())
     end)
   end)
 
@@ -296,8 +277,8 @@ describe("IS3 input #editor #spec", function()
       }, { K.cursor() })
     end)
 
-    spec_gap("IS3.8 Position the text cursor: Ctrl+Left and "
-        .. "Ctrl+Right move by word", function(gap)
+    spec_it("IS3.8 Position the text cursor: Ctrl+Left and "
+        .. "Ctrl+Right move by word", function()
       at_end()
       K.type("foo bar_baz")
       K.keys("lctrl", "left")
@@ -305,20 +286,18 @@ describe("IS3 input #editor #spec", function()
       K.keys("lctrl", "left")
       local start = { K.cursor() }
       K.keys("lctrl", "right")
-      gap(function()
-        assert.same({
-          1,
-          5
-        }, left)
-        assert.same({
-          1,
-          1
-        }, start)
-        assert.same({
-          1,
-          4
-        }, { K.cursor() })
-      end)
+      assert.same({
+        1,
+        5
+      }, left)
+      assert.same({
+        1,
+        1
+      }, start)
+      assert.same({
+        1,
+        4
+      }, { K.cursor() })
     end)
 
     spec_it("IS3.8 Position the text cursor: Ctrl+Home and " ..
@@ -359,23 +338,21 @@ describe("IS3 input #editor #spec", function()
       assert.same("end", K.position())
     end)
 
-    spec_gap(
+    spec_it(
         "IS3.8 Position the text cursor: in a replacement, " ..
-        "Up on the first row never browses", function(gap)
+        "Up on the first row never browses", function()
       K.reset({ ["main.lua"] = "x = 1\ny = 2\n" })
       K.open()
       K.browse_to(2)
       K.keys("f2")
       K.keys("up")
-      gap(function()
-        assert.same("replacing", K.state())
-        assert.same("y = 2", K.draft())
-        assert.same({
-          1,
-          1
-        }, { K.cursor() })
-        assert.same(2, K.position())
-      end)
+      assert.same("replacing", K.state())
+      assert.same("y = 2", K.draft())
+      assert.same({
+        1,
+        1
+      }, { K.cursor() })
+      assert.same(2, K.position())
     end)
 
     spec_it("IS3.8 Position the text cursor: Down keeps the "
@@ -427,83 +404,68 @@ describe("IS3 input #editor #spec", function()
       K.keys("return")
     end
 
-    spec_gap("IS3.9 Preserve cursor through formatting: at an "
-        .. "element's boundary, on the same side", function(gap)
+    spec_it("IS3.9 Preserve cursor through formatting: at an "
+        .. "element's boundary, on the same side", function()
       refuse_formatted()
-      gap(function()
-        assert.truthy(K.draft():find("\n  v1 = 1\n", 1, true))
-        -- "=" and "1" shared the boundary: the end of "=" is
-        -- preferred (IS3.9), in "  v1 = 1" column 7
-        assert.same({
-          2,
-          7
-        }, { K.cursor() })
-      end)
+      assert.truthy(K.draft():find("\n  v1 = 1\n", 1, true))
+      -- "=" and "1" shared the boundary: the end of "=" is
+      -- preferred (IS3.9), in "  v1 = 1" column 7
+      assert.same({
+        2,
+        7
+      }, { K.cursor() })
     end)
 
-    spec_gap(
+    spec_it(
         "FR3.6 Preserve cursor position through formatting: "
-        .. "the browsing position is unchanged too", function(
-      gap
-    )
+        .. "the browsing position is unchanged too", function()
       refuse_formatted()
-      gap(function()
-        assert.same({
-          2,
-          7
-        }, { K.cursor() })
-        assert.same("end", K.position())
-      end)
+      assert.same({
+        2,
+        7
+      }, { K.cursor() })
+      assert.same("end", K.position())
     end)
   end)
 
   describe("IS3.10 to IS3.12", function()
-    spec_gap(
+    spec_it(
         "IS3.10 Keep the cursor visible: below many wrapped "
-        .. "rows, the cursor's row is shown", function(gap)
+        .. "rows, the cursor's row is shown", function()
       at_end()
       local lines = { }
+      -- 92 characters, two rows; a line's number ends its
+      -- second row, where the cursor comes to stand
       for n = 1, 10 do
-        lines[n] = string.format("%02d", n) .. string.rep(
-          "x",
-          90
-        )
+        local nn = string.format("%02d", n)
+        lines[n] = nn .. string.rep("x", 88) .. nn
       end
       K.type_lines(lines)
-      gap(function()
-        local shown = false
-        for _, r in ipairs(K.field_rows()) do
-          if r:sub(1, 2) == "10" then
-            shown = true
-          end
-        end
-        assert.is_true(shown)
-      end)
+      local rows = K.field_rows()
+      assert.same(string.rep("x", 26) .. "10", rows[#rows])
     end)
 
-    spec_gap("IS3.11 Preserve state on refusal: a refused cut "
-        .. "keeps the draft and the cursor", function(gap)
+    spec_it("IS3.11 Preserve state on refusal: a refused cut "
+        .. "keeps the draft and the cursor", function()
       at_end()
       K.type("abc")
       K.keys("left")
       K.keys("left")
       -- a cut is the browsing state's; here it is refused
       K.keys("lctrl", "delete")
-      gap(function()
-        assert.same("abc", K.draft())
-        assert.same({
-          1,
-          2
-        }, { K.cursor() })
-        assert.same("end", K.position())
-        assert.same("x = 1\ny = 2\n", K.file())
-      end)
+      assert.same("abc", K.draft())
+      assert.same({
+        1,
+        2
+      }, { K.cursor() })
+      assert.same("end", K.position())
+      assert.same("x = 1\ny = 2\n", K.file())
     end)
 
-    spec_gap(
+    spec_it(
         "IS3.12 Keep deletion keys in the draft: Delete and "
         .. "Backspace on an empty field change nothing",
-        function(gap)
+        function()
       K.reset({ ["main.lua"] = "x = 1\ny = 2\n" })
       K.open()
       K.browse_to(1)
@@ -511,15 +473,13 @@ describe("IS3 input #editor #spec", function()
         K.keys("backspace")
         K.keys("delete")
       end
-      gap(function()
-        assert.same("x = 1\ny = 2\n", K.file())
-        assert.same(2, K.blocks())
-        assert.same(1, K.position())
-      end)
+      assert.same("x = 1\ny = 2\n", K.file())
+      assert.same(2, K.blocks())
+      assert.same(1, K.position())
     end)
 
-    spec_gap("IS3.12 Keep deletion keys in the draft: Ctrl+K "
-        .. "removes to the end of the line", function(gap)
+    spec_it("IS3.12 Keep deletion keys in the draft: Ctrl+K "
+        .. "removes to the end of the line", function()
       at_end()
       K.type_lines({
         "abc def",
@@ -530,10 +490,8 @@ describe("IS3 input #editor #spec", function()
         K.keys("right")
       end
       K.keys("lctrl", "k")
-      gap(function()
-        assert.same("abc\ngh", K.draft())
-        assert.same("x = 1\ny = 2\n", K.file())
-      end)
+      assert.same("abc\ngh", K.draft())
+      assert.same("x = 1\ny = 2\n", K.file())
     end)
   end)
 
@@ -557,20 +515,18 @@ describe("IS3 input #editor #spec", function()
       assert.same(line:sub(1, 63) .. line:sub(65), K.draft())
     end)
 
-    spec_gap("IS3.13 Wrap long lines: Home and End move by row"
-        , function(gap)
+    spec_it("IS3.13 Wrap long lines: Home and End move by row"
+        , function()
       K.reset({ ["a.txt"] = "one\n" })
       K.open("a.txt")
       K.browse_to_end()
       K.type(string.rep("abcdefghij", 7))
       K.keys("home")
-      gap(function()
-        -- the second row starts after 64 characters
-        assert.same({
-          1,
-          65
-        }, { K.cursor() })
-      end)
+      -- the second row starts after 64 characters
+      assert.same({
+        1,
+        65
+      }, { K.cursor() })
     end)
 
     spec_it(
@@ -590,8 +546,8 @@ describe("IS3 input #editor #spec", function()
       assert.same("line 1", K.field_rows()[1])
     end)
 
-    spec_gap("IS3.13 Wrap long lines: the field takes at most "
-        .. "half the rows", function(gap)
+    spec_it("IS3.13 Wrap long lines: the field takes at most "
+        .. "half the rows", function()
       K.reset({ ["a.txt"] = "one\n" })
       K.open("a.txt")
       K.browse_to_end()
@@ -600,17 +556,15 @@ describe("IS3 input #editor #spec", function()
         lines[n] = "line " .. n
       end
       K.type_lines(lines)
-      gap(function()
-        -- 17 rows besides the status line on this screen
-        assert.is_true(#K.field_rows() <= 8)
-      end)
+      -- 17 rows besides the status line on this screen
+      assert.is_true(#K.field_rows() <= 8)
     end)
   end)
 
   describe("IS3.14 and IS3.15", function()
-    spec_gap(
+    spec_it(
         "IS3.14 Explain a refusal: a refused action shows a "
-        .. "notice the next key dismisses", function(gap)
+        .. "notice the next key dismisses", function()
       K.reset({ ["main.lua"] = "x = 1\ny = 2\n" })
       K.open()
       K.browse_to_end()
@@ -618,12 +572,35 @@ describe("IS3 input #editor #spec", function()
       K.keys("lctrl", "delete")
       local notice = K.message()
       K.keys("lctrl", "up")
-      gap(function()
-        assert.is_not_nil(notice)
-        assert.is_nil(K.message())
-        assert.same(2, K.position())
-        assert.same("x = 1\ny = 2\n", K.file())
-      end)
+      assert.is_not_nil(notice)
+      -- it names what was refused and the action that works
+      assert.truthy(notice:find("no block to cut", 1, true))
+      assert.truthy(notice:find("Move up", 1, true))
+      assert.is_nil(K.message())
+      assert.same(2, K.position())
+      assert.same("x = 1\ny = 2\n", K.file())
+    end)
+
+    spec_it("IS3.14 Explain a refusal: a modifier or a lock "
+        .. "on its own leaves the notice showing", function()
+      K.reset({ ["main.lua"] = "x = 1\ny = 2\n" })
+      K.open()
+      K.browse_to_end()
+      K.keys("lctrl", "delete")
+      local notice = K.message()
+      for _, k in ipairs({
+        "lshift", "rshift", "lctrl", "lalt", "ralt",
+        "capslock", "f1"
+      }) do
+        K.keys(k)
+        assert.same(notice, K.message(), k)
+      end
+      K.keys("capslock")
+      -- the next key that does something dismisses it
+      K.keys("lctrl", "up")
+      assert.is_not_nil(notice)
+      assert.is_nil(K.message())
+      assert.same(2, K.position())
     end)
 
     spec_it(
@@ -643,17 +620,15 @@ describe("IS3 input #editor #spec", function()
       assert.same("end", K.position())
     end)
 
-    spec_gap("IS3.15 Break a line: Alt+Enter breaks it too",
-        function(gap)
+    spec_it("IS3.15 Break a line: Alt+Enter breaks it too",
+        function()
       at_end()
       K.type("abcd")
       K.keys("left")
       K.keys("left")
       K.keys("lalt", "return")
-      gap(function()
-        assert.same("ab\ncd", K.draft())
-        assert.same("x = 1\ny = 2\n", K.file())
-      end)
+      assert.same("ab\ncd", K.draft())
+      assert.same("x = 1\ny = 2\n", K.file())
     end)
   end)
 
@@ -662,41 +637,69 @@ describe("IS3 input #editor #spec", function()
       K.reset({ ["main.lua"] = "x = 1\n" })
     end)
 
-    spec_gap(
+    spec_it(
         "IS3.16 Show the key card: in the file editor, while "
-        .. "F1 is held", function(gap)
+        .. "F1 is held", function()
       K.open()
       K.hold("f1")
       local card = K.key_card()
       K.release("f1")
-      gap(function()
-        assert.is_not_nil(card)
-      end)
+      assert.is_not_nil(card)
     end)
 
-    spec_gap("IS3.16 Show the key card: other keys do nothing "
-        .. "while F1 is held", function(gap)
+    spec_it("IS3.16 Show the key card: other keys do nothing "
+        .. "while F1 is held", function()
       K.open()
       K.browse_to_end()
       K.hold("f1")
       K.type("z")
       K.release("f1")
-      gap(function()
-        assert.same("", K.draft())
-      end)
+      assert.same("", K.draft())
     end)
 
-    spec_deviation("IS3.16 Show the key card: in the console "
-        .. "no card shows",
-        "design decision D3: the key card is " ..
-        "the file editor's only, for now", function()
+    spec_it("IS3.16 Show the key card: Escape and Ctrl+Q do "
+        .. "nothing while F1 is held", function()
+      K.open()
+      K.hold("f1")
+      K.keys("escape")
+      K.keys("lctrl", "q")
+      K.release("f1")
+      assert.same("editor", K.app_state())
+      assert.same("main.lua", K.file_name())
+    end)
+
+    spec_it("IS3.16 Show the key card: a notice comes back "
+        .. "as it was once F1 is released", function()
+      K.open()
+      K.browse_to_end()
+      K.keys("lctrl", "delete")
+      local notice = K.message()
+      K.hold("f1")
+      K.type("z")
+      K.release("f1")
+      assert.is_not_nil(notice)
+      assert.same(notice, K.message())
+      assert.same("", K.draft())
+    end)
+
+    spec_it("IS3.16 Show the key card: in the console, while "
+        .. "F1 is held", function()
       K.type("x")
       K.hold("f1")
       local card = K.key_card()
+      -- other keys do nothing meanwhile, Ctrl+Q included
+      K.type("y")
+      K.keys("return")
+      K.keys("lctrl", "q")
       K.release("f1")
-      assert.is_nil(card)
+      assert.is_not_nil(card)
+      assert.truthy(
+        table.concat(card, "\n"):find("Enter", 1, true)
+      )
+      assert.is_nil(K.key_card())
       assert.same("ready", K.app_state())
       assert.same("x", K.console_draft())
+      assert.is_not_nil(K.cc.model.projects.current)
     end)
   end)
 end)

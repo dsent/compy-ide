@@ -6,6 +6,7 @@ require("model.lang.lua.error")
 require("view.editor.visibleContent")
 
 local class = require('util.class')
+local cursor_map = require('model.lang.lua.cursor_map')
 require("util.wrapped_text")
 require("util.dequeue")
 require("util.string.string")
@@ -83,6 +84,11 @@ end
 function UserInputModel:init_visible(text)
   local w = self.cfg.view.drawableChars
   local s = self.cfg.view.input_max
+  if self.editing then
+    --- the editor field takes at most half the rows it
+    --- shares with the document view (IS3.13)
+    s = math.floor((self.cfg.view.lines + 1) / 2)
+  end
   self.visible = VisibleContent(w, text, 1, s)
   self.visible:set_default_range()
 end
@@ -235,9 +241,40 @@ function UserInputModel:reformat(text)
   local lines = normalized_lines(text)
   if not lines then return end
   self:_record_edit('format', true)
+  --- the cursor follows the text element it stood at (IS3.9)
+  local cl, cc = self:get_cursor_pos()
+  local nl, nc = cursor_map.cursor(self:get_text(), lines, cl, cc)
   self.entered = InputText(lines)
+  self:set_cursor(Cursor(nl, nc))
   self:text_change()
   self:_clamp_cursor_pos()
+  self:_follow_cursor()
+  self:_note_edit()
+end
+
+--- Continue the draft on a new line (IS3.5): a line break
+--- after its last character, the cursor after the break,
+--- wherever it stood.
+function UserInputModel:continue_line()
+  self:_record_edit('newline', true)
+  self:clear_selection()
+  local n = self:get_n_text_lines()
+  self:insert_text_line('', n + 1)
+  self:move_cursor(n + 1, 1)
+  self:text_change()
+  self:_note_edit()
+end
+
+--- Remove the text from the cursor to the end of its line,
+--- the line break excluded (IS3.12, Ctrl+K).
+function UserInputModel:kill_to_line_end()
+  local cl, cc = self:get_cursor_pos()
+  local line = self:get_text_line(cl)
+  if cc > string.ulen(line) then return end
+  self:_record_edit('remove_line', true)
+  self:clear_selection()
+  self:_set_text_line(string.usub(line, 1, cc - 1), cl, true)
+  self:text_change()
   self:_note_edit()
 end
 
@@ -546,7 +583,9 @@ function UserInputModel:highlight()
     local ok, p_err = p.parse(text)
     local parse_err
     if not ok then
-      parse_err = p_err
+      --- red starts at the failing character (IS3.4); a draft
+      --- that fails only at its end has none (IS3.5)
+      parse_err = p.failure and p.failure(text, p_err) or p_err
     end
     local hl
     if ev.highlighter then
@@ -637,7 +676,10 @@ end
 function UserInputModel:_follow_cursor()
   local cl, cc = self:get_cursor_pos()
   local w = self.cfg.view.drawableChars
-  local acl = cl + math.intdiv(cc, w)
+  --- the cursor's row among the wrapped rows (IS3.10)
+  local rows = self.visible.wrap_forward[cl] or { cl }
+  local nth = math.intdiv(math.max(cc - 1, 0), w) + 1
+  local acl = rows[math.min(nth, #rows)]
   local vrange = self.visible:get_range()
   local diff = vrange:outside(acl)
   if diff ~= 0 then
@@ -791,93 +833,91 @@ function UserInputModel:get_input()
   }
 end
 
---- @param dir VerticalDir
---- @return boolean? limit
-function UserInputModel:cursor_vertical_move(dir)
-  local cl, cc = self:get_cursor_pos()
+--- @private
+--- A line's rows, as the field wraps it (IS3.13). A line that
+--- fills its last row does not wrap further: its end shows on
+--- that row, as in Luditor.
+--- @param l integer
+--- @return integer last --- the last row, counted from 0
+--- @return integer len --- the line's length in characters
+function UserInputModel:_line_rows(l)
   local w = self.visible.wrap_w
-  local n = self:get_n_text_lines()
-  local llen = string.ulen(self:get_text_line(cl))
-  local full_lines = math.floor(llen / w)
+  local len = string.ulen(self:get_text_line(l))
+  return math.max(math.ceil(len / w) - 1, 0), len
+end
 
-  --- @param is_inline function
-  --- @param is_not_last_line function
-  --- @return boolean? limit
-  local function move(is_inline, is_not_last_line)
-    local keep = (function()
-      if self.selection:is_held() then
-        return 'keep'
-      end
-    end)()
-    local function sgn(back, fwd)
-      if dir == 'up' then
-        return back()
-      elseif dir == 'down' then
-        return fwd()
-      end
-    end
-    if llen > w and is_inline() then
-      local newc = sgn(
-        function() return math.max(cc - w, 0) end,
-        function() return math.min(cc + w, llen + 1) end
-      )
-      self:move_cursor(cl, newc, keep)
-      if keep then self:end_selection() end
-      return
-    end
-    if is_not_last_line() then
-      local nl = sgn(
-        function() return cl - 1 end,
-        function() return cl + 1 end
-      )
-      local target_line = self:get_text_line(nl)
-      local target_len = string.ulen(target_line)
-      local offset = math.fmod(cc, w)
-      local newc
-      if target_len > w then
-        local base = sgn(
-          function() return math.floor(target_len / w) * w end,
-          function() return 0 end
-        )
-        local t_offset = sgn(
-          function() return math.fmod(target_len, w) + 1 end,
-          function() return math.fmod(w, target_len) end
-        )
+--- @private
+--- @param l integer
+--- @param c integer
+--- @return integer row --- the row of position l:c, from 0
+function UserInputModel:_row_of(l, c)
+  local w = self.visible.wrap_w
+  return math.min(math.floor((c - 1) / w), (self:_line_rows(l)))
+end
 
-        local new_off = math.min(offset, t_offset)
-        newc = base + new_off
-      else
-        newc = math.min(offset, 1 + string.ulen(target_line))
-      end
-      self:move_cursor(nl, newc, keep)
-      if keep then self:end_selection() end
-    else
-      if self:is_selection_held() then
-        sgn(
-          function() self:jump_home() end,
-          function() self:jump_end() end
-        )
-      end
-      return true
-    end
-  end
+--- @private
+--- The first and the last cursor position a row shows. The
+--- position after a row's last character shows on the row
+--- below, the line's end on its last row.
+--- @param l integer
+--- @param row integer
+--- @return integer first
+--- @return integer last
+function UserInputModel:_row_bounds(l, row)
+  local w = self.visible.wrap_w
+  local last_row, len = self:_line_rows(l)
+  local first = row * w + 1
+  if row >= last_row then return first, len + 1 end
+  return first, first + w - 1
+end
 
-  local limit
+--- @private
+--- The row above or below the cursor's, a wrapped line's rows
+--- included (IS3.8, IS3.13)
+--- @param dir VerticalDir
+--- @return integer? line --- nil at the draft's first or last row
+--- @return integer? row --- counted from 0 within the line
+function UserInputModel:_neighbor_row(dir)
+  local cl, cc = self:get_cursor_pos()
+  local row = self:_row_of(cl, cc)
   if dir == 'up' then
-    limit = move(
-      function() return cc - w > 0 end,
-      function() return cl > 1 end
-    )
-  elseif dir == 'down' then
-    limit = move(
-      function() return cc <= full_lines * w end,
-      function() return cl < n end
-    )
-  else
-    return
+    if row > 0 then return cl, row - 1 end
+    if cl == 1 then return nil end
+    return cl - 1, (self:_line_rows(cl - 1))
   end
-  if not limit then self:_follow_cursor() end
-  return limit
+  if row < self:_line_rows(cl) then return cl, row + 1 end
+  if cl < self:get_n_text_lines() then return cl + 1, 0 end
+  return nil
+end
+
+--- Up and Down move the cursor by row, keeping its offset
+--- from the row's first position where the target row is long
+--- enough, at the row's last position otherwise (IS3.8).
+--- @param dir VerticalDir
+--- @return boolean? limit --- no row lies that way
+function UserInputModel:cursor_vertical_move(dir)
+  if dir ~= 'up' and dir ~= 'down' then return end
+  local nl, nrow = self:_neighbor_row(dir)
+  if not nl then
+    --- IS3.8: in the editor's field, Up on the first row
+    --- goes to the draft's start and Down on the last row to
+    --- its end
+    if self.editing or self:is_selection_held() then
+      if dir == 'up' then
+        self:jump_home()
+      else
+        self:jump_end()
+      end
+    end
+    return true
+  end
+  local cl, cc = self:get_cursor_pos()
+  local offset = cc - self:_row_bounds(cl, self:_row_of(cl, cc))
+  local first, last = self:_row_bounds(nl, nrow)
+  local keep = self.selection:is_held() and 'keep' or nil
+  self:move_cursor(nl, math.min(first + offset, last), keep)
+  if keep then self:end_selection() end
+  self:_follow_cursor()
 end
 
 function UserInputModel:cursor_left()
@@ -950,40 +990,137 @@ function UserInputModel:jump_end()
   self.visible:check_range()
 end
 
+--- Whether Caps Lock is on: it changes the case of typed
+--- letters, so the status line shows it (H-NFR4.4).
+--- @return boolean
+local function caps_lock()
+  local active = love.keyboard.isModifierActive
+  return active ~= nil and active('capslock') == true
+end
+
+--- A host that sets status_source (the file editor) has its
+--- custom status read afresh each time; one that sets
+--- project_source (the console) names the open project.
 --- @return Status
 function UserInputModel:get_status()
+  local src = self.status_source
+  local project = self.project_source
   return {
     label = self:get_label(),
     cursor = self.cursor,
     n_lines = self:get_n_text_lines(),
-    custom = self.custom_status,
+    custom = src and src() or self.custom_status,
     input_more = self.visible:get_more(),
+    caps = caps_lock() and 'CAPS' or nil,
+    project = project and project() or nil,
   }
 end
 
-function UserInputModel:jump_line_start()
-  local keep = (function()
-    if self.selection:is_held() then
-      return 'keep'
-    end
-  end)()
-  local l = self.cursor.l
-  local nc = 1
-  self:end_selection(l, nc)
-  self:move_cursor(l, nc, keep)
+--- The cursor's row within its wrapped line (IS3.13): the
+--- columns of the first and the last cursor position the row
+--- shows.
+--- @return integer first
+--- @return integer last
+function UserInputModel:get_row_span()
+  local cl, cc = self:get_cursor_pos()
+  return self:_row_bounds(cl, self:_row_of(cl, cc))
 end
 
-function UserInputModel:jump_line_end()
-  local ent = self:get_text()
-  local line = self.cursor.l
-  local char = string.ulen(ent[line]) + 1
+--- @private
+--- @param l integer
+--- @param c integer
+function UserInputModel:_jump_to(l, c)
   local keep = (function()
     if self.selection:is_held() then
       return 'keep'
     end
   end)()
-  self:end_selection(line, char)
-  self:move_cursor(line, char, keep)
+  self:end_selection(l, c)
+  self:move_cursor(l, c, keep)
+end
+
+--- Home: the first cursor position shown on the cursor's row
+--- (IS3.8), the line's start unless the line wraps
+function UserInputModel:jump_line_start()
+  local first = self:get_row_span()
+  self:_jump_to(self.cursor.l, first)
+end
+
+--- End: the last cursor position shown on the cursor's row
+function UserInputModel:jump_line_end()
+  local _, last = self:get_row_span()
+  self:_jump_to(self.cursor.l, last)
+end
+
+--- @param ch string?
+--- @return boolean --- a letter, a digit or an underscore
+local function is_word_char(ch)
+  if not ch or ch == '' then return false end
+  if string.byte(ch) < 128 then
+    return string.match(ch, '^[%w_]') ~= nil
+  end
+  --- past ASCII a character is a letter unless it lies in a
+  --- block of punctuation, signs or symbols
+  local ok, cp = pcall(utf8.codepoint, ch)
+  if not ok then return false end
+  local sign = (cp >= 0xA0 and cp <= 0xBF)
+      or cp == 0xD7 or cp == 0xF7
+      or (cp >= 0x2000 and cp <= 0x2BFF)
+      or (cp >= 0x3000 and cp <= 0x303F)
+  return not sign
+end
+
+--- Ctrl+Left: to the start of the word under or before the
+--- cursor (IS3.8); everything that is no letter, digit or
+--- underscore separates words, line breaks included.
+function UserInputModel:cursor_word_left()
+  local l, c = self:get_cursor_pos()
+  while true do
+    local ch
+    if c > 1 then
+      ch = string.usub(self:get_text_line(l), c - 1, c - 1)
+    end
+    if ch and is_word_char(ch) then break end
+    if ch then
+      c = c - 1
+    elseif l > 1 then
+      l = l - 1
+      c = string.ulen(self:get_text_line(l)) + 1
+    else
+      break
+    end
+  end
+  local line = self:get_text_line(l)
+  while c > 1 and is_word_char(string.usub(line, c - 1, c - 1)) do
+    c = c - 1
+  end
+  self:_jump_to(l, c)
+end
+
+--- Ctrl+Right: to the end of the word under or after the
+--- cursor (IS3.8)
+function UserInputModel:cursor_word_right()
+  local l, c = self:get_cursor_pos()
+  local n = self:get_n_text_lines()
+  while true do
+    local line = self:get_text_line(l)
+    local len = string.ulen(line)
+    local ch = c <= len and string.usub(line, c, c) or nil
+    if ch and is_word_char(ch) then break end
+    if ch then
+      c = c + 1
+    elseif l < n then
+      l, c = l + 1, 1
+    else
+      break
+    end
+  end
+  local line = self:get_text_line(l)
+  local len = string.ulen(line)
+  while c <= len and is_word_char(string.usub(line, c, c)) do
+    c = c + 1
+  end
+  self:_jump_to(l, c)
 end
 
 --- @param cs CustomStatus
@@ -1031,6 +1168,18 @@ local function char_col(line, byte_c)
 end
 
 --- @private
+--- @param ent InputText
+--- @return Error? --- where the text fails to parse, at the
+--- failing character, when the evaluator's parser can say
+function UserInputModel:_parse_failure(ent)
+  local p = self.evaluator.parser
+  if not p or not p.failure then return nil end
+  local parses, err = p.parse(ent)
+  if parses then return nil end
+  return p.failure(ent, err)
+end
+
+--- @private
 --- On a reject, seat the cursor on the error position.
 --- @param ent InputText
 --- @return boolean ok
@@ -1038,9 +1187,20 @@ end
 function UserInputModel:_apply_eval(ent)
   local ok, result = self.evaluator:apply(ent)
   if ok then return ok, result end
-  --- @TODO check line len and move to next if at end
   local perr = result[1]
   if not perr or not perr.c then return ok, result end
+  --- a draft unfinished at its end goes on, on a new line,
+  --- with no error to show (IS3.5); a failure before the end
+  --- seats the cursor before the failing character (IS3.4)
+  local failure = self:_parse_failure(ent)
+  if failure and failure.at_end then
+    self:continue_line()
+    return false, nil
+  end
+  if failure then
+    self:move_cursor(failure.l, failure.c)
+    return ok, { failure }
+  end
   local c = char_col(self:get_text_line(perr.l), perr.c)
   if c > 1 then c = c + 1 end
   self:move_cursor(perr.l, c)
@@ -1096,7 +1256,10 @@ function UserInputModel:get_wrapped_error()
     local we = string.wrap_array(
       e,
       self.visible.wrap_w)
-    table.insert(we, 1, 'Errors:')
+    --- a notice (IS3.14) is its own one line
+    if not self.error.notice then
+      table.insert(we, 1, 'Errors:')
+    end
     return we
   end
 end

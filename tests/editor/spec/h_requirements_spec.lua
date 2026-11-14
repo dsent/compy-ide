@@ -42,15 +42,13 @@ describe("high-level requirements #editor #spec", function()
     assert.same("a = = 1", K.draft())
   end)
 
-  spec_gap("H-NFR1.1 Limit typing loss: browsing keeps what "
-      .. "was typed", function(gap)
+  spec_it("H-NFR1.1 Limit typing loss: browsing keeps what "
+      .. "was typed", function()
     K.browse_to_end()
     K.type("a = = 1")
     local browsed = pcall(K.browse_to, 1)
-    gap(function()
-      assert.is_true(browsed)
-      assert.same("a = = 1", K.draft())
-    end)
+    assert.is_true(browsed)
+    assert.same("a = = 1", K.draft())
   end)
 
   spec_it("H-NFR1.3 Identify safe work: a draft never shows "
@@ -84,8 +82,8 @@ describe("high-level requirements #editor #spec", function()
     assert.is_true(shown)
   end)
 
-  spec_gap("H-NFR3.1 Accidental deletion protection: held " ..
-      "Backspace and Delete leave the file alone", function(gap)
+  spec_it("H-NFR3.1 Accidental deletion protection: held " ..
+      "Backspace and Delete leave the file alone", function()
     K.browse_to(2)
     for _, key in ipairs({
       "backspace",
@@ -97,15 +95,13 @@ describe("high-level requirements #editor #spec", function()
       end
       K.release(key)
     end
-    gap(function()
-      assert.same(FILE, K.file())
-      assert.same(2, K.position())
-      assert.same("browsing", K.state())
-    end)
+    assert.same(FILE, K.file())
+    assert.same(2, K.position())
+    assert.same("browsing", K.state())
   end)
 
-  spec_gap("H-NFR3.2 Avoid sudden disappearance: a held cut "
-      .. "removes one block and stops", function(gap)
+  spec_it("H-NFR3.2 Avoid sudden disappearance: a held cut "
+      .. "removes one block and stops", function()
     K.browse_to(1)
     K.hold("lctrl")
     K.hold("delete")
@@ -114,14 +110,12 @@ describe("high-level requirements #editor #spec", function()
     end
     K.release("delete")
     K.release("lctrl")
-    gap(function()
-      assert.same("y = 2\nz = 3\n", K.file())
-      assert.same("x = 1", K.draft())
-    end)
+    assert.same("y = 2\nz = 3\n", K.file())
+    assert.same("x = 1", K.draft())
   end)
 
-  spec_gap("H-NFR4.4 Visible cursor and keyboard state: Caps "
-      .. "Lock shows", function(gap)
+  spec_it("H-NFR4.4 Visible cursor and keyboard state: Caps "
+      .. "Lock shows", function()
     K.browse_to_end()
     local off = {
       K.status_text(),
@@ -133,33 +127,30 @@ describe("high-level requirements #editor #spec", function()
       K.field_rows()
     }
     K.keys("capslock")
-    gap(function()
-      -- shown on the status line or in the field
-      assert.are_not.same(off, on)
-      assert.same(off, {
-        K.status_text(),
-        K.field_rows()
-      })
-    end)
+    -- shown on the status line or in the field
+    assert.are_not.same(off, on)
+    assert.same(off, {
+      K.status_text(),
+      K.field_rows()
+    })
   end)
 
-  spec_gap("H-NFR4.6 No blocking confirmation dialogs: leaving "
-      .. "after a failed write asks nothing", function(gap)
+  spec_it("H-NFR4.6 No blocking confirmation dialogs: leaving "
+      .. "after a failed write asks nothing", function()
     K.fail_writes("the card is full")
     K.browse_to_end()
     K.type("a = 1")
     K.keys("return")
+    -- the notice goes first (IS5.7), then the edit, then the
+    -- file
     K.keys("escape")
     K.keys("escape")
-    gap(function()
-      assert.same("ready", K.app_state())
-    end)
+    K.keys("escape")
+    assert.same("ready", K.app_state())
   end)
 
-  spec_gap("H-FR5.2 Typewriter entry: lines typed as written, "
-      .. "Enter after each, are entered as written", function(
-    gap
-  )
+  spec_it("H-FR5.2 Typewriter entry: lines typed as written, "
+      .. "Enter after each, are entered as written", function()
     K.browse_to_end()
     for _, line in ipairs({
       "function f()",
@@ -169,11 +160,9 @@ describe("high-level requirements #editor #spec", function()
       K.type(line)
       K.keys("return")
     end
-    gap(function()
-      assert.same(
-        FILE .. "function f()\n  return 1\nend\n",
-        K.file()
-      )
-    end)
+    assert.same(
+      FILE .. "function f()\n  return 1\nend\n",
+      K.file()
+    )
   end)
 end)

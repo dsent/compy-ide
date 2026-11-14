@@ -194,12 +194,14 @@ per-run boundary) rather than as a phase of a lifecycle.
 - **Where:** the editor's opening path — `src/model/editor/bufferModel.lua`, which our merge took
   from upstream PR #45 whole (`git diff f4cf338c HEAD -- src/model/editor/bufferModel.lua` →
   empty, so ours is byte-identical to theirs). Observable from
-  `tests/input/input_widget_callbacks_spec.lua`, *"editor Alt+Enter, an unclaimed variant"*.
+  `tests/input/input_widget_callbacks_spec.lua`, *"editor Alt+Enter"* (it was *"an unclaimed
+  variant"* until Alt+Enter became a line break, editor principles IS3.15).
 - **What changed.** Before the import the editor opened with the **last** block selected; at HEAD it
   opens with the **first**. Measured on the document `{ 'first line', 'second line', '' }` that
   three of our cases use: at `21eb7f53^` the selection was **3** and `up` walked to `'second line'`;
   at HEAD it is **1**, `up` moves nothing, and Enter loads `'first line'`. The HEAD half is no
-  longer a probe — the Alt+Enter case asserts `{ 'first line' }` literally as of 2026-09-06.
+  longer a probe — the Alt+Enter case asserted `{ 'first line' }` literally from 2026-09-06 until
+  the spec conformance work replaced it with a line-break test.
 - **What is owed is a record, not a change.** The behaviour is upstream's, deliberate, and taken
   faithfully; nothing here proposes to reverse it. The obligation is `MERGE-01-05`'s own rule, which
   this corpus applied correctly once in the same range and missed here: **a behaviour change gets a
@@ -2001,8 +2003,9 @@ contracts** but were **discovered as existing behaviour with no mandate to alter
 — treated as de-facto standards per the implementation and pinned so they can't
 be silently narrowed later (any change is a separate, owner-gated decision):
 
-- **Non-shift Enter submits** — Ctrl+Enter and Alt+Enter submit, not only bare
-  Enter (guard is `is_enter and not shift`; also consistent with
+- **Non-shift Enter submits** — Ctrl+Enter submits, not only bare Enter;
+  Alt+Enter breaks the line, as Shift+Enter does (editor principles, IS3.15)
+  (guard is `is_enter and not shift and not alt`; also consistent with
   `doc/development/decisions/input.md` D-EDIT-LIFECYCLE). Pinned for widget + console.
 - **`SearchController:keypressed` returns a jump target** (`{block, line}`) up its
   caller on Enter — the same "keypress return carries a domain result" shape the

@@ -90,6 +90,11 @@ function ConsoleController.new(M, main_ctrl)
   --- the editor has to know about us
   local EC = EditorController(M.editor, self)
   self.editor = EC
+  --- the console's status line names the open project (FR4.6)
+  M.input.project_source = function()
+    local p = M.projects and M.projects.current
+    return p and p.name
+  end
   -- initialize the user environment
   ConsoleController.prepare_project_env(self)
 
@@ -2153,7 +2158,9 @@ end
 
 --- @param name string
 --- @param state EditorState
-function ConsoleController:edit(name, state)
+--- @param must_exist boolean? --- a file followed to (IS1.5)
+--- is one the project holds; edit("name") creates its own
+function ConsoleController:edit(name, state, must_exist)
   if love.state.app_state == 'running' then return end
   --- a program's exit hook runs while its project closes:
   --- a file it opened then would outlive the project
@@ -2170,9 +2177,48 @@ function ConsoleController:edit(name, state)
   -- end
   local fpath = p:get_path(filename)
   local ex    = FS.exists(fpath)
+  --- a refusal is said where the person is: over the
+  --- editor's field, or in the console
+  local function refuse(msg)
+    if love.state.app_state == 'editor' then
+      self.editor:refuse({ msg })
+    else
+      print(msg)
+    end
+  end
   local text
   if ex then
-    text = self:_readfile(filename)
+    --- a file that is there and cannot be read stays shut
+    --- (IS1.2): opened empty, its first submission would
+    --- write over it
+    local ok, got = p:readfile(filename)
+    if not ok then
+      local why = type(got) == 'string' and got ~= ''
+          and string.format(' (%s)', got) or ''
+      refuse(string.format(
+        '%s could not be read%s, so it cannot be opened.',
+        filename, why))
+      return
+    end
+    text = got
+  end
+  if must_exist and not ex then
+    self.editor:refuse({
+      filename .. ' was not found in the project.'
+    })
+    return
+  end
+  --- a file is on the editor's stack once
+  if must_exist and self.editor:_find_buffer(fpath) then
+    self.editor:refuse({ filename .. ' is already open.' })
+    return
+  end
+  --- admission (IS1.2): text that is not UTF-8 stays shut,
+  --- and the caller keeps its file and state (IS1.5)
+  if type(text) == 'string' and not utf8.len(text) then
+    refuse(filename
+      .. ' is not UTF-8 text, so it cannot be opened.')
+    return
   end
 
   if love.state.app_state ~= 'editor' then
@@ -2191,8 +2237,14 @@ function ConsoleController:edit(name, state)
     return self:_writefile(filename, newcontent, p, true)
   end
 
+  --- opening writes the editor's state anew, in the same
+  --- table: what comes back is what was saved (IS1.4)
+  local saved = state and {
+    buffer = state.buffer,
+    clipboard = state.clipboard,
+  }
   self.editor:open(filename, text, save, fpath)
-  self.editor:restore_state(state)
+  self.editor:restore_state(saved)
 end
 
 --- @return EditorState?
@@ -2218,6 +2270,16 @@ end
 
 --- Handlers ---
 
+--- The console's key card while the help key is held in the
+--- console input context (IS3.16), nil otherwise.
+--- @return string[]?
+function ConsoleController:key_card()
+  if love.state.app_state ~= 'ready' then return nil end
+  local KeyCard = require('model.editor.keyCard')
+  if not KeyCard.held() then return nil end
+  return self.view.editor.key_card:console_lines()
+end
+
 --- @param t string
 function ConsoleController:textinput(t)
   if love.state.app_state == 'editor' then
@@ -2225,6 +2287,8 @@ function ConsoleController:textinput(t)
   elseif self.cfg.mode == 'play' then
     --- console is disabled in this mode
   else
+    --- the key card suspends the console's keys (IS3.16)
+    if self:key_card() then return end
     local input = self.input
     --- a glyph typed over an error closes it and lands on
     --- the line under it; on the device it may come before
@@ -2261,6 +2325,8 @@ function ConsoleController:keypressed(k, sc, isrepeat)
   if love.state.app_state == 'editor' then
     self.editor:keypressed(k, sc, isrepeat)
   else
+    --- the key card suspends the console's keys (IS3.16)
+    if self:key_card() then return end
     if love.state.testing == 'running' then
       return
     end

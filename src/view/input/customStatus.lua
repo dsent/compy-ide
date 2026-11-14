@@ -4,17 +4,17 @@ local class = require('util.class')
 --- @field name string
 --- @field content_type ContentType
 --- @field buflen integer
---- @field buffer_more More
 --- @field selection integer
 --- @field mode EditorMode
 --- @field range Range?
+--- @field state EditorStateName? --- the file editor's state
+--- @field project string? --- the open project's name
 CustomStatus = class.create(
-  function(name, ct, len, more, sel, mode, range)
+  function(name, ct, len, sel, mode, range)
     return {
       name = name,
       content_type = ct,
       buflen = len,
-      buffer_more = more,
       selection = sel,
       mode = mode,
       range = range,

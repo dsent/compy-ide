@@ -23,12 +23,13 @@ describe('Buffer #editor', function()
     local cbuffer = BufferModel('untitled', tst, noop)
     local bc = cbuffer:get_content()
     assert.same(cbuffer.content_type, 'plain')
-    assert.same(5, #bc)
+    --- a block per line, and nothing after the last (IS8)
+    assert.same(4, #bc)
     assert.same(l1, bc[1])
     assert.same(l2, bc[2])
     assert.same(l3, bc[3])
     assert.same(l4, bc[4])
-    assert.same('', bc[5])
+    assert.is_nil(bc[5])
   end)
 
   it('renders lua', function()
@@ -174,11 +175,10 @@ print(sierpinski(4))]])
         trtl,
         '',
         qed,
-        ''
       }
       it('insert newline', function()
-        --- buffers open at the top; this test works the end
-        buffer:move_selection('down', nil, true)
+        --- this test works the end position
+        buffer:set_selection(#turtle_doc + 1)
         assert.same(#turtle_doc + 1, buffer:get_selection())
         buffer:replace_content({ qed })
         assert.same(#turtle_doc + 1, buffer:get_selection())
@@ -200,7 +200,6 @@ print(sierpinski(4))]])
             '',
             'test',
             'Turtle graphics game inspired the LOGO family of languages.',
-            '',
           }
           local res = addbuf:get_text_content()
           assert.same(exp, res)
@@ -215,7 +214,6 @@ print(sierpinski(4))]])
             '',
             'test',
             'Turtle graphics game inspired the LOGO family of languages.',
-            '',
           }
           local res = addbuf:get_text_content()
           assert.same(exp, res)

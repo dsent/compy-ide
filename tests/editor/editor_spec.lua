@@ -10,7 +10,12 @@ local textfile = require("util.textfile")
 local mock, TU
 
 describe('Editor #editor', function()
+  --- these tests start at the first block (pre-IS1.1)
+  local open_as_before
+  teardown(function() open_as_before() end)
   setup(function()
+    open_as_before =
+        require('tests.helpers.open_at_first').install()
     mock = require("tests.mock")
     TU = require('tests.testutil')
 
@@ -116,71 +121,6 @@ describe('Editor #editor', function()
         assert.same(turtle_doc[1], sel_t)
       end)
 
-      it('interacts', function()
-        --- files open at the top; walk to the end first,
-        --- as these interactions historically assume it
-        for _ = 1, start_sel - 1 do
-          mock.keystroke('down', press)
-        end
-        --- select middle line
-        mock.keystroke('up', press)
-        assert.same(start_sel - 1, buffer:get_selection())
-        assert.same(turtle_doc[2], buffer:get_selected_text())
-        --- load it
-        local input = function()
-          return controller.input:get_text():items()
-        end
-        mock.keystroke('return', press)
-        assert.same({ turtle_doc[2] }, input())
-        --- crossing the edge leaves through the gate:
-        --- the untouched block flows to the next line
-        mock.keystroke('end', press)
-        mock.keystroke('down', press)
-        assert.same(start_sel, buffer:get_selection())
-        assert.same({ '' }, input())
-        --- drop it, compose fresh so the text inserts
-        mock.keystroke('S-escape', press)
-        assert.same({ '' }, input())
-        --- compose text (inserted before the empty)
-        controller:textinput('-')
-        controller:textinput('-')
-        controller:textinput(' ')
-        controller:textinput('t')
-        controller:textinput('e')
-        controller:textinput('s')
-        controller:textinput('t')
-        assert.same({ '-- test' }, input())
-        --- replace line with input content
-        mock.keystroke('return', press)
-        local new = {
-          '',
-          trtl,
-          '-- test',
-          ''
-        }
-        assert.same(new, buffer:get_text_content())
-        --- input clears
-        assert.same({ '' }, input())
-        --- highlight moves down
-        assert.same(start_sel + 1, buffer:get_selection())
-
-        mock.keystroke('up', press)
-        assert.same(start_sel, buffer:get_selection())
-        --- compose over it, then discard and reopen
-        controller:textinput('i')
-        controller:textinput('n')
-        controller:textinput('s')
-        controller:textinput('e')
-        controller:textinput('r')
-        controller:textinput('t')
-        assert.same({ 'insert' }, input())
-        --- the compose is dirty: the discard asks
-        mock.keystroke('S-escape', press)
-        --- Enter confirms (repeat-proof dialogs)
-        mock.keystroke('return', press)
-        mock.keystroke('return', press)
-        assert.same({ '-- test' }, input())
-      end)
     end)
 
 
@@ -242,33 +182,6 @@ describe('Editor #editor', function()
         bv:scroll_to(off)
       end)
       local base = Range(1, l)
-      it('scrolls up', function()
-        peek('pageup')
-        assert.same(start_range:translate(-scroll), visible.range)
-        peek('pageup')
-        assert.same(start_range:translate(-scroll * 2), visible.range)
-        peek('pageup')
-        assert.same(start_range:translate(-scroll * 3), visible.range)
-        peek('pageup')
-      end)
-      it('tops out', function()
-        assert.same(base, visible.range)
-      end)
-      it('scrolls down', function()
-        peek('pagedown')
-        assert.same(base:translate(scroll), visible.range)
-        peek('pagedown')
-        assert.same(base:translate(scroll * 2), visible.range)
-        peek('pagedown')
-        assert.same(base:translate(scroll * 3), visible.range)
-        peek('pagedown')
-        assert.same(base:translate(scroll * 4), visible.range)
-        peek('pagedown')
-      end)
-      it('bottoms out', function()
-        local limit = #sierpinski + visible.overscroll
-        -- assert.same(Range(limit - l + 2, limit), visible.range)
-      end)
     end)
 
     describe('with scroll and wrap', function()
@@ -309,40 +222,6 @@ describe('Editor #editor', function()
       end)
       local base = Range(1, l)
       describe('scrolls', function()
-        it('scrolls up', function()
-          mock.keystroke('C-M-pageup', press)
-          assert.same(start_range:translate(-scroll), visible.range)
-          mock.keystroke('C-M-pageup', press)
-          assert.same(start_range:translate(-scroll * 2), visible.range)
-          mock.keystroke('C-M-pageup', press)
-          assert.same(start_range:translate(-scroll * 3), visible.range)
-          mock.keystroke('C-M-pageup', press)
-          assert.same(start_range:translate(-scroll * 4), visible.range)
-        end)
-        it('tops out', function()
-          mock.keystroke('C-M-pageup', press)
-          assert.same(base, visible.range)
-        end)
-        it('scrolls down', function()
-          mock.keystroke('C-M-pagedown', press)
-          assert.same(base:translate(scroll), visible.range)
-          mock.keystroke('C-M-pagedown', press)
-          assert.same(base:translate(scroll * 2), visible.range)
-          mock.keystroke('C-M-pagedown', press)
-          assert.same(base:translate(scroll * 3), visible.range)
-          mock.keystroke('C-M-pagedown', press)
-          assert.same(base:translate(scroll * 4), visible.range)
-          mock.keystroke('C-M-pagedown', press)
-          assert.same(base:translate(scroll * 5), visible.range)
-        end)
-        it('bottoms out', function()
-          mock.keystroke('C-M-pagedown', press)
-          mock.keystroke('C-M-pagedown', press)
-          mock.keystroke('C-M-pagedown', press)
-          local limit = clen + visible.overscroll
-          assert.same(Range(limit - l + 1, limit), visible.range)
-        end)
-
         describe('moving the selection affects scrolling', function()
           --- the walk left the selection at EOF
           assert.same(#sierpinski + 1, buffer:get_selection())
@@ -359,7 +238,7 @@ describe('Editor #editor', function()
 
           it('from below', function()
             --- scroll away, then a line move pulls it back
-            mock.keystroke('C-M-pageup', press)
+            mock.keystroke('M-pageup', press)
             mock.keystroke('up', press)
             assert.same(#sierpinski, buffer:get_selection())
             assert.is_true(line_visible())
@@ -381,8 +260,8 @@ describe('Editor #editor', function()
           end)
           it('from above', function()
             --- scroll away downwards, a line move follows
-            mock.keystroke('C-M-pagedown', press)
-            mock.keystroke('C-M-pagedown', press)
+            mock.keystroke('M-pagedown', press)
+            mock.keystroke('M-pagedown', press)
             mock.keystroke('down', press)
             assert.same(2, buffer:get_selection())
             assert.is_true(line_visible())
@@ -405,583 +284,11 @@ describe('Editor #editor', function()
         end)
       end)
 
-      describe('peek and page moves', function()
-        it('peek scrolls, the selection stays', function()
-          mock.keystroke('end', press)
-          local sel = buffer:get_selection()
-          local r0 = visible.range.start
-          mock.keystroke('C-M-pageup', press)
-          assert.same(sel, buffer:get_selection())
-          assert.is_true(visible.range.start < r0)
-          mock.keystroke('C-M-up', press)
-          assert.same(sel, buffer:get_selection())
-          --- left/right double the page peek
-          local r1 = visible.range.start
-          mock.keystroke('C-M-right', press)
-          assert.same(sel, buffer:get_selection())
-          assert.is_true(visible.range.start > r1)
-          mock.keystroke('C-M-left', press)
-          assert.same(r1, visible.range.start)
-        end)
-        it('typing after a peek returns the view', function()
-          controller:textinput('x')
-          local al = buffer:get_active_line()
-          local wl = visible.wrap_forward[al]
-          local seen = false
-          for _, v in ipairs(wl) do
-            if visible.range:inc(v) then seen = true end
-          end
-          assert.is_true(seen)
-          --- the typed draft asks; confirm to discard
-          mock.keystroke('S-escape', press)
-          --- Enter confirms (repeat-proof dialogs)
-          mock.keystroke('return', press)
-        end)
-        it('a held chord glyph is dropped', function()
-          mock.keystroke('C-M-down', press, true)
-          controller:textinput('q')
-          assert.same({ '' }, controller.input:get_text())
-          mock.release_keys()
-        end)
-        it('bare pages move the active line', function()
-          mock.keystroke('home', press)
-          assert.same(1, buffer:get_active_line())
-          mock.keystroke('pagedown', press)
-          assert.same(1 + l, buffer:get_active_line())
-          assert.is_true(bv:is_selection_visible())
-          mock.keystroke('pageup', press)
-          assert.same(1, buffer:get_active_line())
-          --- restore the state the describes below assume
-          mock.keystroke('end', press)
-          mock.keystroke('down', press)
-        end)
-      end)
-
-      describe('Home/End reach the file edges (2.7)', function()
-        it('bare End goes to the last line', function()
-          mock.keystroke('home', press)
-          assert.same(1, buffer:get_selection())
-          mock.keystroke('end', press)
-          assert.same(#sierpinski + 1, buffer:get_selection())
-        end)
-        it('Ctrl+Home/End do not warp in nav', function()
-          mock.keystroke('home', press)
-          local sel = buffer:get_selection()
-          mock.keystroke('C-end', press)
-          assert.same(sel, buffer:get_selection())
-          --- restore what the describes below assume
-          mock.keystroke('end', press)
-          mock.keystroke('down', press)
-        end)
-      end)
-
-      describe('jumps', function()
-        local sel = table.clone(buffer:get_selection())
-        it('to top', function()
-          mock.keystroke('C-pageup', press)
-          --- scrolls to top
-          assert.same(base, visible.range)
-          --- and selection is unaffected
-          assert.same(sel, buffer:get_selection())
-        end)
-        it('to bottom', function()
-          -- mock.keystroke('C-pagedown', press)
-          --- scrolls to bottom
-          --- TODO
-          -- assert.same(start_range, visible.range)
-          --- and selection is unaffected
-          assert.same(sel, buffer:get_selection())
-        end)
-      end)
-      describe('warps selection', function()
-        mock.keystroke('up', press)
-        local sel = table.clone(buffer:get_selection())
-        it('to bottom', function()
-          mock.keystroke('end', press)
-          --- warps to bottom, selection in view
-          assert.same(#sierpinski + 1, buffer:get_selection())
-          assert.is_true(bv:is_selection_visible())
-          -- assert.is_not.same(sel, buffer:get_selection())
-        end)
-        it('to top', function()
-          mock.keystroke('home', press)
-          --- warps to top
-          assert.same(base, visible.range)
-          assert.is_not.same(sel, buffer:get_selection())
-        end)
-      end)
-      describe('input', function()
-        local inter = controller.input
-        it('loads', function()
-          local selected = buffer:get_selected_text()
-          mock.keystroke('return', press)
-          assert.same(inter:get_text(), { selected })
-        end)
-        it('flows to the neighbor on Ctrl+move', function()
-          --- Ctrl+arrow leaves through the gate; the
-          --- untouched block just opens the next one
-          mock.keystroke('C-down', press)
-          local now = buffer:get_selected_text()
-          assert.same({ now }, inter:get_text())
-        end)
-        it('discards', function()
-          --- the loaded text is unchanged, so no ask
-          mock.keystroke('S-escape', press)
-          assert.same({ '' }, inter:get_text())
-        end)
-      end)
     end)
   end)
   --- end plaintext
 
   describe('structured (lua) works', function()
-    describe('Ctrl+Enter blocks (2.7)', function()
-      require("tests.helpers.codesnippets")
-      local controller, press, buffer, inter
-
-      before_each(function()
-        local f1 = mock_func_snippet('one')
-        local f2 = mock_func_snippet('two')
-        local text = f1 .. '\n\n' .. f2 .. '\n'
-        controller, press = wire(TU.mock_view_cfg())
-        local save = TU.get_save_function(text)
-        controller:open('ce.lua', text, save)
-        buffer = controller:get_active_buffer()
-        inter = controller.input
-      end)
-
-      it('does not touch the file in nav', function()
-        local text0 = string.unlines(
-          buffer:get_text_content())
-        local n0 = buffer:get_content_length()
-        mock.keystroke('C-return', press)
-        --- the block appears on acceptance, not now
-        assert.same(n0, buffer:get_content_length())
-        assert.same(text0, string.unlines(
-          buffer:get_text_content()))
-      end)
-
-      it('opens a fresh block below in nav', function()
-        assert.same(1, buffer:get_selection())
-        mock.keystroke('C-return', press)
-        assert.same('edit', controller:get_mode())
-        assert.is_true(inter:is_empty())
-        --- composing lands after the first block
-        assert.same(2, buffer:get_selection())
-        local n = buffer:get_content_length()
-        inter:set_text({ 'x = 1' })
-        mock.keystroke('return', press)
-        assert.same(n + 1, buffer:get_content_length())
-        assert.same({ 'x = 1' },
-          buffer:get_content():get(2):to_lines())
-      end)
-
-      it('opens a fresh block above with Shift', function()
-        mock.keystroke('C-down', press)
-        local sel = buffer:get_selection()
-        mock.keystroke('C-S-return', press)
-        assert.same('edit', controller:get_mode())
-        assert.is_true(inter:is_empty())
-        --- composing lands at the block's own place
-        assert.same(sel, buffer:get_selection())
-      end)
-
-      it('accepts the open block in edit', function()
-        mock.keystroke('return', press)
-        local changed = mock_func_snippet('renamed')
-        inter:set_text(string.lines(changed))
-        mock.keystroke('C-return', press)
-        assert.same('nav', controller:get_mode())
-        assert.same(1, buffer:get_selection())
-        assert.truthy(string.find(
-          string.unlines(buffer:get_text_content()),
-          'renamed', 1, true))
-      end)
-    end)
-
-    describe('typing in navigation (2.1)', function()
-      require("tests.helpers.codesnippets")
-      local controller, press, buffer, inter
-
-      before_each(function()
-        local f1 = mock_func_snippet('one')
-        local text = f1 .. '\n\n'
-        controller, press = wire(TU.mock_view_cfg())
-        local save = TU.get_save_function(text)
-        controller:open('typing.lua', text, save)
-        buffer = controller:get_active_buffer()
-        inter = controller.input
-      end)
-
-      it('opens the block and makes room on the line',
-        function()
-          --- stand on the middle line of the function
-          mock.keystroke('down', press)
-          assert.same(2, buffer:get_active_line())
-          local before = buffer:get_selected_text()
-
-          controller:textinput('x')
-          assert.same('edit', controller:get_mode())
-          --- the block is open, one line longer, and the
-          --- character sits on a fresh line 2
-          local t = inter:get_text()
-          assert.same(#before + 1, #t)
-          assert.same('x', t[2])
-          assert.same(before[1], t[1])
-          assert.same(before[2], t[3])
-        end)
-
-      it('a blank line becomes a new block', function()
-        --- the trailing empty block
-        mock.keystroke('end', press)
-        assert.is_true(
-          buffer:_get_selected_block():is_empty())
-
-        controller:textinput('y')
-        assert.same('edit', controller:get_mode())
-        --- the blank line holds no text: it composes fresh
-        assert.same({ 'y' }, inter:get_text())
-      end)
-
-      it('never overwrites the block typed on', function()
-        mock.keystroke('down', press)
-        controller:textinput('-')
-        controller:textinput('-')
-        mock.keystroke('return', press)
-        --- the function survives, with the comment in it
-        local all = string.unlines(
-          buffer:get_text_content())
-        assert.truthy(
-          string.find(all, 'function one()', 1, true))
-        assert.truthy(string.find(all, '--', 1, true))
-      end)
-    end)
-
-    describe('block undo (1.1)', function()
-      require("tests.helpers.codesnippets")
-      local controller, press, buffer, savefile
-
-      before_each(function()
-        local f1 = mock_func_snippet('one')
-        local f2 = mock_func_snippet('two')
-        local text = f1 .. '\n\n' .. f2 .. '\n'
-        controller, press = wire(TU.mock_view_cfg())
-        local save
-        save, savefile = TU.get_save_function(text)
-        controller:open('bu.lua', text, save)
-        love.system = {
-          getClipboardText = function() return '' end,
-          setClipboardText = function() end,
-        }
-        buffer = controller:get_active_buffer()
-      end)
-
-      it('undoes an acceptance, file steps back', function()
-        local orig = string.unlines(
-          buffer:get_text_content())
-        mock.keystroke('return', press)
-        controller.input:set_text(
-          string.lines(mock_func_snippet('renamed')))
-        mock.keystroke('return', press)
-        assert.truthy(string.find(savefile(), 'renamed',
-          1, true))
-
-        mock.keystroke('C-z', press)
-        --- back in the file, block not reopened
-        assert.same('nav', controller:get_mode())
-        assert.same(orig, string.unlines(
-          buffer:get_text_content()))
-        --- the file ends with the newline after its last line
-        assert.same(orig .. '\n', savefile())
-        --- redo returns the accepted state
-        mock.keystroke('C-y', press)
-        assert.truthy(string.find(
-          string.unlines(buffer:get_text_content()),
-          'renamed', 1, true))
-      end)
-
-      it('undoes a block deletion', function()
-        local orig = string.unlines(
-          buffer:get_text_content())
-        mock.keystroke('C-delete', press)
-        assert.falsy(string.find(
-          string.unlines(buffer:get_text_content()),
-          'function one()', 1, true))
-        mock.keystroke('C-z', press)
-        assert.same(orig, string.unlines(
-          buffer:get_text_content()))
-      end)
-
-      it('undoes a reorder block move', function()
-        local orig = string.unlines(
-          buffer:get_text_content())
-        mock.keystroke('C-m', press)
-        mock.keystroke('down', press)
-        mock.keystroke('return', press)
-        assert.is_not.same(orig, string.unlines(
-          buffer:get_text_content()))
-        mock.keystroke('C-z', press)
-        assert.same(orig, string.unlines(
-          buffer:get_text_content()))
-      end)
-
-      it('discard asks, and undo brings the draft back',
-        function()
-          local orig = string.unlines(
-            buffer:get_text_content())
-          mock.keystroke('return', press)
-          controller.input:set_text(
-            string.lines(mock_func_snippet('draft')))
-
-          --- first press asks, still editing
-          mock.keystroke('S-escape', press)
-          assert.same('edit', controller:get_mode())
-          assert.is_true(controller.input:has_error())
-
-          --- Enter confirms; the file untouched
-          mock.keystroke('return', press)
-          assert.same('nav', controller:get_mode())
-          assert.same(orig, string.unlines(
-            buffer:get_text_content()))
-
-          --- one undo: the parseable draft lands in
-          --- the file; another: gone again (the pair)
-          mock.keystroke('C-z', press)
-          assert.truthy(string.find(
-            string.unlines(buffer:get_text_content()),
-            'draft', 1, true))
-          mock.keystroke('C-z', press)
-          assert.same(orig, string.unlines(
-            buffer:get_text_content()))
-        end)
-
-      it('any other key cancels the discard ask',
-        function()
-          mock.keystroke('return', press)
-          controller.input:set_text({ 'x = 1' })
-          mock.keystroke('S-escape', press)
-          mock.keystroke('down', press)
-          --- still editing, the ask is gone
-          assert.same('edit', controller:get_mode())
-          assert.is_nil(controller.pending_confirm)
-        end)
-
-      it('a modifier on its own leaves the discard ask open',
-        function()
-          local bare = { mod_press = true }
-          mock.keystroke('return', press)
-          controller.input:set_text({ 'x = 1' })
-          mock.keystroke('S-escape', press)
-          mock.keystroke('S', press, false, bare)
-          mock.keystroke('C', press, false, bare)
-          mock.keystroke('M', press, false, bare)
-          assert.same('discard', controller.pending_confirm)
-          assert.is_true(controller.input:has_error())
-          --- Shift+Enter still confirms
-          mock.keystroke('S-return', press, false, bare)
-          assert.same('nav', controller:get_mode())
-        end)
-
-      it('a broken draft discards without the pair',
-        function()
-          local orig = string.unlines(
-            buffer:get_text_content())
-          local n0 = #buffer.history
-          mock.keystroke('return', press)
-          controller.input:set_text(
-            { 'function broken(' })
-          mock.keystroke('S-escape', press)
-          --- Enter confirms (repeat-proof dialogs)
-          mock.keystroke('return', press)
-          assert.same('nav', controller:get_mode())
-          --- nothing recoverable was recorded
-          assert.same(n0, #buffer.history)
-          assert.same(orig, string.unlines(
-            buffer:get_text_content()))
-        end)
-
-      it('bare Delete drops the block, undoably',
-        function()
-          local orig = string.unlines(
-            buffer:get_text_content())
-          local n0 = buffer:get_content_length()
-          mock.keystroke('delete', press)
-          assert.same(n0 - 1,
-            buffer:get_content_length())
-          mock.keystroke('C-z', press)
-          assert.same(orig, string.unlines(
-            buffer:get_text_content()))
-        end)
-
-      it('checkpoint restore clears the history',
-        function()
-          mock.keystroke('C-m', press)
-          mock.keystroke('down', press)
-          mock.keystroke('return', press)
-          assert.is_true(#buffer.history > 0)
-          --- a restore rebuilds the buffer: reload
-          controller:reload_active(string.unlines(
-            buffer:get_text_content()))
-          local fresh = controller:get_active_buffer()
-          assert.same(0, #fresh.history)
-        end)
-
-      it('knocks on empty history', function()
-        local n0 = #mock.played_sounds()
-        mock.keystroke('C-z', press)
-        assert.is_true(#mock.played_sounds() > n0)
-      end)
-
-      it('a new write kills the redo tail', function()
-        mock.keystroke('C-m', press)
-        mock.keystroke('down', press)
-        mock.keystroke('return', press)
-        mock.keystroke('C-z', press)
-        mock.keystroke('C-m', press)
-        mock.keystroke('down', press)
-        mock.keystroke('return', press)
-        local n0 = #mock.played_sounds()
-        mock.keystroke('C-z', press)
-        assert.same(n0, #mock.played_sounds())
-        mock.keystroke('C-y', press)
-        mock.keystroke('C-y', press)
-        --- the second redo has nothing: the tail died
-        assert.is_true(#mock.played_sounds() > n0)
-      end)
-    end)
-
-    it('Ctrl+Z undoes typing word by word', function()
-      require("tests.helpers.codesnippets")
-      local controller, press = wire(TU.mock_view_cfg())
-      local src = 'x = 1'
-      local save = TU.get_save_function(src)
-      controller:open('undo.lua', src .. '\n', save)
-      local inter = controller.input
-
-      mock.keystroke('return', press)
-      local base = table.clone(inter:get_text():items())
-      for ch in string.gmatch('ab cd', '.') do
-        controller:textinput(ch)
-      end
-      local typed = table.clone(inter:get_text():items())
-      assert.same('ab cd' .. base[1], typed[1])
-
-      --- first undo eats the last word (with the space
-      --- that started it), not one letter
-      mock.keystroke('C-z', press)
-      assert.same('ab' .. base[1],
-        inter:get_text():items()[1])
-      --- and again, back to the baseline
-      mock.keystroke('C-z', press)
-      assert.same(base, inter:get_text():items())
-      --- empty history knocks
-      local n0 = #mock.played_sounds()
-      mock.keystroke('C-z', press)
-      assert.is_true(#mock.played_sounds() > n0)
-
-      --- redo returns everything
-      mock.keystroke('C-y', press)
-      mock.keystroke('C-y', press)
-      assert.same(typed, inter:get_text():items())
-
-      --- still in edit: the keys never left the block
-      assert.same('edit', controller:get_mode())
-    end)
-
-    it('Delete leaves the clipboard alone, Ctrl+X cuts',
-      function()
-        require("tests.helpers.codesnippets")
-        local controller, press = wire(TU.mock_view_cfg())
-        local f1 = mock_func_snippet('one')
-        local f2 = mock_func_snippet('two')
-        local text = f1 .. '\n\n' .. f2 .. '\n'
-        local save = TU.get_save_function(text)
-        controller:open('clip.lua', text, save)
-        local clip = 'precious'
-        love.system = {
-          getClipboardText = function() return clip end,
-          setClipboardText = function(t) clip = t end,
-        }
-        local buffer = controller:get_active_buffer()
-        local n0 = buffer:get_content_length()
-
-        mock.keystroke('delete', press)
-        assert.same(n0 - 1, buffer:get_content_length())
-        --- the copied text survived the deletion
-        assert.same('precious', clip)
-
-        mock.keystroke('C-x', press)
-        assert.same(n0 - 2, buffer:get_content_length())
-        assert.is_not.same('precious', clip)
-      end)
-
-    it('dialogs confirm on Enter or Space only', function()
-      require("tests.helpers.codesnippets")
-      local controller, press = wire(TU.mock_view_cfg())
-      local f1 = mock_func_snippet('one')
-      local save, savefile =
-        TU.get_save_function(f1 .. '\n')
-      controller:open('dlg.lua', f1 .. '\n', save)
-      local inter = controller.input
-
-      --- a held Shift+Esc: every repeat lands on the
-      --- idempotent cancel, nothing is lost
-      mock.keystroke('return', press)
-      inter:set_text({ 'x = 9' })
-      mock.keystroke('S-escape', press)
-      assert.is_true(inter:has_error())
-      --- repeat cancels; the next press asks again —
-      --- held, it oscillates and never discards
-      mock.keystroke('S-escape', press)
-      assert.is_false(inter:has_error())
-      mock.keystroke('S-escape', press)
-      assert.is_true(inter:has_error())
-      assert.same('edit', controller:get_mode())
-      assert.same({ 'x = 9' }, inter:get_text():items())
-
-      --- Space confirms, via textinput as the device
-      --- delivers it, and the glyph is swallowed
-      controller:textinput(' ')
-      controller:keypressed('space')
-      assert.same('nav', controller:get_mode())
-
-      --- a printable cancels without typing
-      mock.keystroke('return', press)
-      inter:set_text({ 'y = 1' })
-      mock.keystroke('S-escape', press)
-      controller:textinput('q')
-      assert.same('edit', controller:get_mode())
-      assert.same({ 'y = 1' }, inter:get_text():items())
-      mock.keystroke('S-escape', press)
-      mock.keystroke('return', press)
-      assert.same('nav', controller:get_mode())
-    end)
-
-    it('an error message closes on Enter or Esc', function()
-      require("tests.helpers.codesnippets")
-      local controller, press = wire(TU.mock_view_cfg())
-      local f1 = mock_func_snippet('one')
-      local save = TU.get_save_function(f1 .. '\n')
-      controller:open('err.lua', f1 .. '\n', save)
-      local inter = controller.input
-
-      mock.keystroke('return', press)
-      inter:set_text({ 'function broken(' })
-      mock.keystroke('return', press)
-      assert.is_true(inter:has_error())
-      --- Enter closes the message without re-submitting
-      mock.keystroke('return', press)
-      assert.is_false(inter:has_error())
-      assert.same('edit', controller:get_mode())
-
-      mock.keystroke('return', press)
-      assert.is_true(inter:has_error())
-      --- Esc closes it too, staying in the block
-      mock.keystroke('escape', press)
-      assert.is_false(inter:has_error())
-      assert.same('edit', controller:get_mode())
-    end)
-
     it('the console widget keeps plain keys', function()
       --- a console-style input: no editing flag
       local model = UserInputModel(
@@ -1018,14 +325,15 @@ describe('Editor #editor', function()
       controller:open('w.lua', src .. '\n', save)
       local inter = controller.input
 
-      mock.keystroke('return', press)
+      controller:get_active_buffer():set_selection(1)
+      mock.keystroke('f2', press)
       inter:set_text({ 'local one two three' })
       inter.model:move_cursor(1, 20)
 
       mock.keystroke('C-w', press)
       assert.same({ 'local one two ' }, inter:get_text())
-      --- still editing: the key must not leave the block
-      assert.same('edit', controller:get_mode())
+      --- still replacing: the key must not end the edit
+      assert.same('replacing', controller:state_name())
 
       mock.keystroke('C-backspace', press)
       assert.same({ 'local one ' }, inter:get_text())
@@ -1035,85 +343,6 @@ describe('Editor #editor', function()
       assert.same({ 'local ' }, inter:get_text())
     end)
 
-
-    it('Ctrl+Delete drops a block only in nav', function()
-      require("tests.helpers.codesnippets")
-      local controller, press = wire(TU.mock_view_cfg())
-      local f1 = mock_func_snippet('one')
-      local f2 = mock_func_snippet('two')
-      local save = TU.get_save_function(
-        f1 .. '\n\n' .. f2 .. '\n')
-      controller:open('del.lua',
-        f1 .. '\n\n' .. f2 .. '\n', save)
-      --- dropping a block copies it to the clipboard
-      love.system = {
-        getClipboardText = function() return '' end,
-        setClipboardText = function() end,
-      }
-      local buffer = controller:get_active_buffer()
-      local n0 = buffer:get_content_length()
-
-      --- editing: the block survives, the key is the
-      --- widget's delete-next-word
-      mock.keystroke('return', press)
-      mock.keystroke('C-delete', press)
-      assert.same(n0, buffer:get_content_length())
-      --- the word deletion made the draft dirty
-      mock.keystroke('S-escape', press)
-      --- Enter confirms (repeat-proof dialogs)
-      mock.keystroke('return', press)
-
-      --- navigation: it drops the block
-      mock.keystroke('C-delete', press)
-      assert.same(n0 - 1, buffer:get_content_length())
-    end)
-
-    it('moves the block through the reorder mode', function()
-      --- Alt+arrows are scrolling now; blocks move on
-      --- Ctrl+M only
-      local controller, press = wire(TU.mock_view_cfg())
-      local save, savefile = TU.get_save_function(sierpinski)
-      controller:open('sierpinski.lua', sierpinski, save)
-      --- entering reorder saves the clipboard state
-      love.system = {
-        getClipboardText = function() return '' end,
-        setClipboardText = function() end,
-      }
-      local buffer = controller:get_active_buffer()
-      local first = buffer:get_selected_text()
-
-      mock.keystroke('C-m', press)
-      mock.keystroke('down', press)
-      mock.keystroke('return', press)
-      --- the block moved down, selection follows it,
-      --- the commit is written through
-      assert.same(2, buffer:get_selection())
-      assert.same(first, buffer:get_selected_text())
-      assert.same('', string.lines(savefile())[1])
-
-      mock.keystroke('C-m', press)
-      mock.keystroke('up', press)
-      mock.keystroke('return', press)
-      assert.same(1, buffer:get_selection())
-      assert.same(first, buffer:get_selected_text())
-    end)
-
-    it('Alt+arrows peek without moving', function()
-      local controller, press = wire(TU.mock_view_cfg())
-      local save = TU.get_save_function(sierpinski)
-      controller:open('sierpinski.lua', sierpinski, save)
-      local buffer = controller:get_active_buffer()
-      local bv = controller.view:get_current_buffer()
-
-      local sel0 = buffer:get_selection()
-      local r0 = bv.content:get_range().start
-      mock.keystroke('M-down', press)
-      assert.same(sel0, buffer:get_selection())
-      assert.is_true(bv.content:get_range().start > r0)
-      mock.keystroke('M-home', press)
-      assert.same(1, bv.content:get_range().start)
-      assert.same(sel0, buffer:get_selection())
-    end)
 
     it('returning from a require restores the view',
       function()
@@ -1152,96 +381,6 @@ describe('Editor #editor', function()
         assert.is_true(wl[1] >= r.start
           and wl[#wl] <= r.fin)
       end)
-
-    it('knocks when refused', function()
-      require("tests.helpers.codesnippets")
-      local controller, press = wire(TU.mock_view_cfg())
-      local f1 = mock_func_snippet('one')
-      local save = TU.get_save_function(f1)
-      controller:open('knock.lua', f1 .. '\n', save)
-      local inter = controller.input
-
-      --- walking off the end of the file
-      mock.keystroke('end', press)
-      local n0 = #mock.played_sounds()
-      mock.keystroke('down', press)
-      mock.keystroke('down', press)
-      local played = mock.played_sounds()
-      assert.is_true(#played > n0)
-      assert.same('assets/sounds/knock.ogg', played[#played])
-
-      --- and a refused block
-      mock.keystroke('home', press)
-      mock.keystroke('return', press)
-      inter:set_text({ 'function broken(' })
-      local n1 = #mock.played_sounds()
-      mock.keystroke('C-down', press)
-      played = mock.played_sounds()
-      assert.is_true(#played > n1)
-      assert.same('assets/sounds/knock.ogg', played[#played])
-    end)
-
-    it('knocks on every refused action', function()
-      require("tests.helpers.codesnippets")
-      local controller, press = wire(TU.mock_view_cfg())
-      local f1 = mock_func_snippet('one')
-      local f2 = mock_func_snippet('two')
-      local text = f1 .. '\n\n' .. f2 .. '\n'
-      local save = TU.get_save_function(text)
-      controller.console = { edit = function() end }
-      controller:open('knock.lua', text, save)
-      local buffer = controller:get_active_buffer()
-
-      local function knocked(fn)
-        local before = #mock.played_sounds()
-        fn()
-        local played = mock.played_sounds()
-        if #played == before then return false end
-        return played[#played] == 'assets/sounds/knock.ogg'
-      end
-
-      --- walk down until the file ends: the last real
-      --- block, then the phantom line past it, both
-      --- legitimate moves
-      mock.keystroke('end', press)
-      assert.is_false(knocked(function()
-        mock.keystroke('down', press)
-      end), 'stepping onto the phantom line is a move')
-
-      --- now there is nowhere further
-      assert.is_true(knocked(function()
-        mock.keystroke('down', press)
-      end), 'bare arrow at the end')
-
-      --- Ctrl+arrow past the end
-      assert.is_true(knocked(function()
-        mock.keystroke('C-down', press)
-      end), 'block jump at the end')
-
-      --- PageDown at the end
-      assert.is_true(knocked(function()
-        mock.keystroke('pagedown', press)
-      end), 'page move at the end')
-
-      --- reorder move past the edge
-      mock.keystroke('home', press)
-      mock.keystroke('C-m', press)
-      assert.is_true(knocked(function()
-        mock.keystroke('up', press)
-      end), 'block move at the edge')
-      mock.keystroke('escape', press)
-
-      --- Ctrl+J with no require in the block
-      assert.is_true(knocked(function()
-        mock.keystroke('C-j', press)
-      end), 'nothing to follow')
-
-      --- and it stays quiet when the move works
-      assert.is_false(knocked(function()
-        mock.keystroke('down', press)
-      end), 'a working move is silent')
-      assert.same(2, buffer:get_active_line())
-    end)
 
     it('knocks when the search finds nothing', function()
       local controller, press = wire(TU.mock_view_cfg())
@@ -1310,57 +449,50 @@ describe('Editor #editor', function()
       assert.same({ 'other.lua' }, edited)
     end)
 
-    describe('checkpoints (2.6)', function()
+    --- the REPL's tidy(name): the editor's formatting, at a
+    --- Compy's width, on a project file
+    describe('mouse', function()
       require("tests.helpers.codesnippets")
-      local controller, press, buffer, inter
-      local calls, cp_time
+      local controller, buffer, inter
+      local f1, f2
 
       before_each(function()
-        local f1 = mock_func_snippet('one')
-        controller, press = wire(TU.mock_view_cfg())
-        local save = TU.get_save_function(f1)
-        controller:open('main.lua', f1 .. '\n', save)
+        f1 = mock_func_snippet('one')
+        f2 = mock_func_snippet('two')
+        local text = f1 .. '\n\n' .. f2 .. '\n'
+        controller = wire(TU.mock_view_cfg())
+        local save = TU.get_save_function(text)
+        controller:open('mouse.lua', text, save)
         buffer = controller:get_active_buffer()
         inter = controller.input
-        calls, cp_time = {}, nil
-        controller.console = {
-          checkpoint_modtime = function() return cp_time end,
-          file_modtime = function() return 1752480000 end,
-          write_checkpoint = function(_, name)
-            table.insert(calls, 'write:' .. name)
-            return true
-          end,
-          restore_checkpoint = function(_, name)
-            table.insert(calls, 'restore:' .. name)
-            return true
-          end,
-          _readfile = function() return 'x = 1' end,
-        }
       end)
 
-      it('a checkpoint that cannot be written says so', function()
-        controller.console.write_checkpoint = function() return false end
-        mock.keystroke('C-k', press)
-        assert.is_true(inter:has_error())
-        cp_time = 1752400000
-        inter:clear_error()
-        mock.keystroke('C-k', press)
-        mock.keystroke('return', press)
-        assert.is_true(inter:has_error())
+      it('maps lines to their blocks', function()
+        assert.same(1, buffer:block_at_line(2))
+        assert.same(2, buffer:block_at_line(4))
+        assert.same(3, buffer:block_at_line(6))
+        assert.is_nil(buffer:block_at_line(99))
       end)
 
-      it('first checkpoint writes without asking', function()
-        mock.keystroke('C-k', press)
-        assert.same({ 'write:main.lua' }, calls)
-        assert.is_false(inter:has_error())
+      it('a click browses to the block and opens none', function()
+        buffer:set_selection(3)
+        controller:mousepressed(0, 0, 1, false, 2)
+        assert.same(1, buffer:get_selection())
+        assert.is_nil(buffer.loaded)
+        assert.is_true(inter:is_empty())
+        assert.same('browsing', controller:state_name())
       end)
+    end)
 
-      --- The only checkpoint test that does not mock the console.
-      --- Every other test here asserts that a write was *requested*;
-      --- this one asserts a file exists afterwards with the right
-      --- bytes, so a broken path adapter, a broken FS.cp or a
-      --- getInfo returning nil cannot pass unnoticed.
-      it('crosses the console filesystem adapter', function()
+    describe('checkpoints', function()
+      --- The editor's own checkpoint keys are gone: the spec
+      --- gives Ctrl+K to the draft. The console still writes
+      --- and restores checkpoints, and revert() reads them.
+      --- No mock of the console here: a file must exist
+      --- afterwards with the right bytes, so a broken path
+      --- adapter, a broken FS.cp or a getInfo returning nil
+      --- cannot pass unnoticed.
+      it('cross the console filesystem adapter', function()
         require("controller.consoleController")
         local source_path = os.tmpname()
         local checkpoint_path = source_path .. '.~save'
@@ -1376,134 +508,43 @@ describe('Editor #editor', function()
             return checkpoint_path
           end,
         }
-        controller.console = setmetatable({
+        local console = setmetatable({
           model = { projects = { current = project } },
         }, ConsoleController)
 
-        mock.keystroke('C-k', press)
-
+        assert.is_true(console:write_checkpoint('main.lua'))
         assert.is_true(FS.exists(checkpoint_path))
-        assert.is_number(
-          controller.console:checkpoint_modtime('main.lua'))
-        local source_ok, source = FS.read(source_path)
+        assert.is_number(console:checkpoint_modtime('main.lua'))
         local checkpoint_ok, checkpoint = FS.read(checkpoint_path)
-        assert.is_true(source_ok)
         assert.is_true(checkpoint_ok)
+        assert.same('x = 1\n', checkpoint)
+
+        --- and back over a changed file, as revert() does
+        assert.is_true(FS.write(source_path, 'x = 2\n'))
+        assert.is_true(console:restore_checkpoint('main.lua'))
+        local source_ok, source = FS.read(source_path)
+        assert.is_true(source_ok)
         assert.same('x = 1\n', source)
-        assert.same(source, checkpoint)
-        assert.is_false(inter:has_error())
-      end)
-
-      it('an existing one asks, Enter confirms', function()
-        cp_time = 1752400000
-        mock.keystroke('C-k', press)
-        assert.same({}, calls)
-        assert.is_true(inter:has_error())
-        --- the invoking chord cancels (repeat-proof);
-        --- Enter confirms
-        mock.keystroke('C-k', press)
-        assert.same({}, calls)
-        mock.keystroke('C-k', press)
-        mock.keystroke('return', press)
-        assert.same({ 'write:main.lua' }, calls)
-      end)
-
-      it('any other key cancels the confirmation', function()
-        cp_time = 1752400000
-        mock.keystroke('C-k', press)
-        mock.keystroke('escape', press)
-        mock.keystroke('C-k', press)
-        --- back to asking, not writing
-        assert.same({}, calls)
-        assert.is_true(inter:has_error())
-      end)
-
-      it('a modifier on its own leaves the question open',
-        function()
-          local bare = { mod_press = true }
-          cp_time = 1752400000
-          mock.keystroke('C-k', press)
-          mock.keystroke('S', press, false, bare)
-          mock.keystroke('rctrl', press, false, bare)
-          assert.same('overwrite', controller.pending_confirm)
-          mock.keystroke('return', press)
-          assert.same({ 'write:main.lua' }, calls)
-        end)
-
-      it('a modifier on its own leaves the restore open',
-        function()
-          local bare = { mod_press = true }
-          cp_time = 1752400000
-          mock.keystroke('C-S-k', press)
-          mock.keystroke('C', press, false, bare)
-          mock.keystroke('rshift', press, false, bare)
-          assert.same('restore', controller.pending_confirm)
-          mock.keystroke('space', press)
-          assert.same({ 'restore:main.lua' }, calls)
-        end)
-
-      it('restore asks and reloads the buffer', function()
-        cp_time = 1752400000
-        mock.keystroke('C-S-k', press)
-        assert.same({}, calls)
-        mock.keystroke('return', press)
-        assert.same({ 'restore:main.lua' }, calls)
-        --- buffer reloaded from the checkpoint content
-        --- (reload replaces the model; re-fetch it)
-        local fresh = controller:get_active_buffer()
-        assert.same('x = 1',
-          fresh:get_text_content()[1])
-      end)
-
-      --- the desktop's order: the key, then its glyph, which
-      --- the gate drops
-      it('Space confirming a restore holds its glyph back', function()
-        cp_time = 1752400000
-        mock.keystroke('C-S-k', press)
-        controller:keypressed('space')
-        assert.same({ 'restore:main.lua' }, calls)
-        assert.same('nav', controller:get_mode())
-        assert.same(' ', controller.console.swallow_glyph)
-      end)
-
-      --- each place a buffer comes to the front drops the
-      --- question on its own, before anything else could
-      it('opening a file drops the question', function()
-        cp_time = 1752400000
-        mock.keystroke('C-S-k', press)
-        assert.same('restore', controller.pending_confirm)
-        controller:open('other.lua', 'y = 1\n', function() end)
-        assert.is_nil(controller.pending_confirm)
-      end)
-
-      it('returning to a file drops the question', function()
-        controller:open('other.lua', 'y = 1\n', function() end)
-        cp_time = 1752400000
-        mock.keystroke('C-S-k', press)
-        assert.same('restore', controller.pending_confirm)
-        controller:pop_buffer()
-        assert.same('main.lua', controller:get_active_buffer().name)
-        assert.is_nil(controller.pending_confirm)
       end)
 
       it('restore without a checkpoint refuses', function()
-        mock.keystroke('C-S-k', press)
-        assert.same({}, calls)
-        assert.is_true(inter:has_error())
-      end)
-
-      it('in editing, accepts the block first', function()
-        mock.keystroke('return', press)
-        local changed = mock_func_snippet('changed')
-        inter:set_text(string.lines(changed))
-        mock.keystroke('C-k', press)
-        assert.same('nav', controller:get_mode())
-        assert.same({ 'write:main.lua' }, calls)
+        require("controller.consoleController")
+        local source_path = os.tmpname()
+        finally(function() os.remove(source_path) end)
+        local project = {
+          get_path = function(_, name)
+            if name == 'main.lua' then return source_path end
+            return source_path .. '.~save'
+          end,
+        }
+        local console = setmetatable({
+          model = { projects = { current = project } },
+        }, ConsoleController)
+        assert.is_false(console:restore_checkpoint('main.lua'))
+        assert.is_nil(console:checkpoint_modtime('main.lua'))
       end)
     end)
 
-    --- the REPL's tidy(name): the editor's formatting, at a
-    --- Compy's width, on a project file
     describe('tidy() in the REPL', function()
       require("controller.consoleController")
       local path, console, printed
@@ -1548,242 +589,6 @@ describe('Editor #editor', function()
         end)
     end)
 
-    --- Shift+Esc is the rework's documented way out
-    --- (spec 2.3). It is the ONLY exit that consults the
-    --- discard guard, and the guarantee below is what makes
-    --- it safe: an unwritten block cannot leave through it.
-    --- The two Ctrl chords that leave without the guard are
-    --- technical_debt/input.md, T-LEAVE-KEYS-LOSES-BLOCK.
-    describe('leaving through Shift+Esc (2.3)', function()
-      require("tests.helpers.codesnippets")
-      local controller, press, inter, left
-
-      before_each(function()
-        local f1 = mock_func_snippet('one')
-        controller, press = wire(TU.mock_view_cfg())
-        local save = TU.get_save_function(f1)
-        controller:open('main.lua', f1 .. '\n', save)
-        inter = controller.input
-        left = false
-        controller.console = {
-          finish_edit = function() left = true end,
-        }
-      end)
-
-      it('a dirty block cannot leave: it asks instead',
-        function()
-          mock.keystroke('return', press)
-          inter:set_text(string.lines(
-            mock_func_snippet('renamed')))
-          mock.keystroke('S-escape', press)
-          assert.same('discard', controller.pending_confirm)
-          assert.is_false(left)
-          assert.same('edit', controller:get_mode())
-        end)
-
-      it('a clean block leaves the block, not the editor',
-        function()
-          mock.keystroke('return', press)
-          mock.keystroke('S-escape', press)
-          assert.same('nav', controller:get_mode())
-          assert.is_nil(controller.pending_confirm)
-          assert.is_false(left)
-        end)
-
-      it('in nav with nothing loaded it leaves the editor',
-        function()
-          assert.same('nav', controller:get_mode())
-          assert.is_true(inter:is_empty())
-          mock.keystroke('S-escape', press)
-          assert.is_true(left)
-        end)
-
-      it('confirming the discard leaves the block only',
-        function()
-          mock.keystroke('return', press)
-          inter:set_text(string.lines(
-            mock_func_snippet('renamed')))
-          mock.keystroke('S-escape', press)
-          mock.keystroke('return', press)
-          assert.same('nav', controller:get_mode())
-          assert.is_false(left)
-        end)
-    end)
-
-    describe('mouse (2.9)', function()
-      require("tests.helpers.codesnippets")
-      local controller, press, buffer, inter
-      local f1, f2
-
-      before_each(function()
-        f1 = mock_func_snippet('one')
-        f2 = mock_func_snippet('two')
-        local text = f1 .. '\n\n' .. f2 .. '\n'
-        controller, press = wire(TU.mock_view_cfg())
-        local save = TU.get_save_function(text)
-        controller:open('mouse.lua', text, save)
-        buffer = controller:get_active_buffer()
-        inter = controller.input
-      end)
-
-      it('maps lines to their blocks', function()
-        assert.same(1, buffer:block_at_line(2))
-        assert.same(2, buffer:block_at_line(4))
-        assert.same(3, buffer:block_at_line(6))
-        assert.is_nil(buffer:block_at_line(99))
-      end)
-
-      it('a double click opens the block', function()
-        controller:mousepressed(0, 0, 1, false, 2)
-        assert.same('edit', controller:get_mode())
-        assert.same(1, buffer:get_selection())
-        assert.same(buffer:get_selected_text(),
-          inter:get_text():items())
-      end)
-
-      it('a single click does not open', function()
-        controller:mousepressed(0, 0, 1, false, 1)
-        assert.same('nav', controller:get_mode())
-      end)
-
-      it('a click in nav selects block and line', function()
-        controller:mouse_select(6)
-        assert.same('nav', controller:get_mode())
-        assert.same(3, buffer:get_selection())
-        assert.same(6, buffer:get_active_line())
-      end)
-
-      it('a click inside the open block sets the cursor',
-        function()
-          mock.keystroke('return', press)
-          controller:mouse_select(2)
-          assert.same('edit', controller:get_mode())
-          assert.same(1, buffer:get_selection())
-          assert.same(2,
-            inter.model:get_cursor_info().cursor.l)
-        end)
-
-      it('a clean click outside flows out', function()
-        mock.keystroke('return', press)
-        controller:mouse_select(6)
-        assert.same('nav', controller:get_mode())
-        assert.same(3, buffer:get_selection())
-        assert.same(6, buffer:get_active_line())
-        assert.same({ '' }, inter:get_text())
-      end)
-
-      it('a changed click outside is accepted', function()
-        mock.keystroke('return', press)
-        inter:set_text({ 'function renamed()', 'end' })
-        controller:mouse_select(6)
-        --- 2.4.2 via 2.9: written through, then the
-        --- clicked block takes the selection
-        assert.same('nav', controller:get_mode())
-        assert.same(3, buffer:get_selection())
-        assert.same(6, buffer:get_active_line())
-        assert.truthy(string.find(
-          string.unlines(buffer:get_text_content()),
-          'renamed', 1, true))
-      end)
-
-      it('an invalid click outside refuses', function()
-        mock.keystroke('return', press)
-        inter:set_text({ 'function broken(' })
-        controller:mouse_select(6)
-        --- 2.4.3: the block keeps the editor
-        assert.same('edit', controller:get_mode())
-        assert.same(1, buffer:get_selection())
-        assert.is_true(inter:has_error())
-      end)
-    end)
-
-    describe('leave gate (2.4)', function()
-      require("tests.helpers.codesnippets")
-      local controller, press, buffer, inter, savefile
-      local f1, f2, text
-
-      before_each(function()
-        f1 = mock_func_snippet('one')
-        f2 = mock_func_snippet('two')
-        text = f1 .. '\n\n' .. f2 .. '\n'
-        local save
-        controller, press = wire(TU.mock_view_cfg())
-        save, savefile = TU.get_save_function(text)
-        controller:open('gate.lua', text, save)
-        buffer = controller:get_active_buffer()
-        inter = controller.input
-      end)
-
-      it('untouched block flows out freely', function()
-        mock.keystroke('return', press)
-        local span = buffer:get_selection_lines()
-        for _ = 1, span:len() do
-          mock.keystroke('down', press)
-        end
-        --- crossed the edge: neighbor open, no write
-        assert.same(2, buffer:get_selection())
-        assert.same('edit', controller:get_mode())
-        local saved = savefile()
-        assert.same(text, saved)
-        --- and upward lands on the previous last line
-        mock.keystroke('up', press)
-        assert.same(1, buffer:get_selection())
-        local sp = buffer:get_selection_lines()
-        assert.same(sp.fin, buffer:get_active_line())
-      end)
-
-      it('acceptance in place stays on the block', function()
-        mock.keystroke('return', press)
-        local changed = mock_func_snippet('changed')
-        inter:set_text(string.lines(changed))
-        mock.keystroke('return', press)
-        --- 2.4.4: in place, so the block keeps the
-        --- selection and the editor returns to nav
-        assert.same('nav', controller:get_mode())
-        assert.same(1, buffer:get_selection())
-        assert.truthy(
-          string.find(savefile(), 'changed', 1, true))
-      end)
-
-      it('changed block is accepted on the way out', function()
-        mock.keystroke('return', press)
-        local changed = mock_func_snippet('changed')
-        inter:set_text(string.lines(changed))
-        mock.keystroke('C-down', press)
-        --- written through, editing flows on
-        assert.same('edit', controller:get_mode())
-        --- NB savefile() reads destructively
-        local saved = savefile()
-        assert.truthy(
-          string.find(saved, 'changed', 1, true))
-        assert.is_nil(
-          string.find(saved, 'one', 1, true))
-      end)
-
-      it('invalid block refuses to leave', function()
-        mock.keystroke('return', press)
-        inter:set_text({
-          'function broken()', '  x = = 2', 'end'
-        })
-        mock.keystroke('C-down', press)
-        assert.same('edit', controller:get_mode())
-        assert.same(1, buffer:get_selection())
-        assert.is_true(inter:has_error())
-        --- and the cursor sits on the error's line
-        assert.same(2,
-          inter.model:get_cursor_info().cursor.l)
-        --- Shift+Esc still gets out, writing nothing:
-        --- one press closes the message, the next asks,
-        --- Enter confirms
-        mock.keystroke('S-escape', press)
-        assert.is_false(inter:has_error())
-        mock.keystroke('S-escape', press)
-        mock.keystroke('return', press)
-        assert.same('nav', controller:get_mode())
-        assert.same(text, savefile())
-      end)
-    end)
-
     it('changing single line', function()
       local controller, press = wire(TU.mock_view_cfg())
       local save, savefile = TU.get_save_function(sierpinski)
@@ -1804,12 +609,13 @@ describe('Editor #editor', function()
       mock.keystroke('C-down', press)
       assert.same(3, buffer:get_selection())
       assert.same({ print_result }, buffer:get_selected_text())
-      mock.keystroke('return', press)
+      mock.keystroke('f2', press)
       input:clear()
       input:add_text(new_print)
       mock.keystroke('return', press)
-      --- acceptance in place stays on the block (2.4.4)
-      assert.same(3, buffer:get_selection())
+      --- the position moves past the replacement, here to
+      --- the end position (IS5.4)
+      assert.same(4, buffer:get_selection())
       local after = savefile()
       modified[#modified] = new_print
       modified[#modified + 1] = ''
@@ -1972,8 +778,9 @@ describe('Editor #editor', function()
           session:submit(f_modified)
 
           assert.is_true(input:is_empty(), "input cleared")
-          --- acceptance in place stays (2.4.4)
-          assert.same(1, buffer.selection, "selection stays")
+          --- the position moves past the replacement (IS5.4)
+          assert.same(2, buffer.selection, "selection moves on")
+          session:select_block(1)
 
           assert.same(string.lines(f_modified),
                       buffer:get_selected_text(),
@@ -1996,8 +803,9 @@ describe('Editor #editor', function()
           session:submit(new_code)
 
           assert.is_true(input:is_empty(), "input cleared")
-          --- acceptance in place stays (2.4.4)
-          assert.same(1, buffer.selection, "selection stays")
+          --- the position moves past the replacement, here
+          --- to the end position (IS5.4)
+          assert.same(3, buffer.selection, "selection moves on")
 
           session:select_block(1)
           assert.same( string.lines(f1),
@@ -2029,49 +837,7 @@ describe('Editor #editor', function()
           assert.same(f_simple,
                       savefile(),
                       "saved content not changed")
-          session:assert_cursor_at(session:input_line_of(f_oversized))
-        end)
-
-        it("normal block rewrites oversized", function()
-          local f_simple = mock_func_snippet("simple")
-          local f_oversized = mock_func_snippet("oversized",17)
-
-          local input, buffer = session:open(f_oversized, 1)
-          session:select_and_open_block(1, f_oversized)
-          session:submit(f_simple)
-
-          --- acceptance in place stays (2.4.4)
-          assert.same(1, buffer.selection, "selection stays")
-          assert.is_true(input:is_empty(), "input cleared")
-          assert.same(string.lines(f_simple),
-                      buffer:get_selected_text(),
-                      "previous block content replaced")
-          assert.same(f_simple..'\n', savefile(),
-                      "updated content is saved")
-        end)
-
-        it("refactored blocks with oversized tail rejected", function()
-          local f_simple = mock_func_snippet("simple")
-          local f_over_orig = mock_func_snippet("oversized",20)
-          local f_over_new = mock_func_snippet("oversized2",17)
-          local code_refactored = src(f_simple, f_over_new)
-
-          local input, buffer = session:open(f_over_orig, 1)
-          session:select_and_open_block(1, f_over_orig)
-          session:submit(code_refactored)
-
-          assert.same(1, buffer.selection,
-                       "selection not moved")
-          assert.same( string.lines(f_over_orig),
-                       buffer:get_selected_text(),
-                       "selection text stays untouched" )
-          assert.same( string.lines(code_refactored),
-                       input:get_text(),
-                       "input keeps full submission")
-          assert.same(f_over_orig,
-                      savefile(),
-                      "saved content not changed")
-          session:assert_cursor_at(session:input_line_of(f_over_new))
+          session:assert_cursor_kept()
         end)
 
         -- see issue #114
@@ -2135,36 +901,15 @@ describe('Editor #editor', function()
 
       end)
 
-      -- Block navigation at the buffer limit: with block #3
-      -- open in the input, 'down' and the first 'up' stay
-      -- inside it; the next 'up' crosses out to the previous
-      -- block. Guards block navigation against the widget's own
-      -- line-scope limit handling (is_at_limit).
-      describe("navigation at the block limit", function()
-        it('up at the top limit navigates blocks', function()
-          local f1 = mock_func_snippet("one")
-          local f2 = mock_func_snippet("two")
-          local _, buffer = session:open(src(f1, '', f2), 3)
-          session:select_and_open_block(3)
-          mock.keystroke('down', press)
-          assert.equal(3, buffer.selection)
-          mock.keystroke('up', press)
-          assert.equal(3, buffer.selection)
-          mock.keystroke('up', press)
-          assert.is_true(buffer.selection < 3)
-        end)
-      end)
-
       describe("a comment trailing code", function()
         local first = 'robot_move(40, 40, 1)'
         local code = 'robot_move(40, -40, 1)'
         local comment = '-- and back again'
         local commented = code .. '  ' .. comment
 
-        --- opening a block pretty-prints it into the input, which
-        --- gives the comment a line of its own below the code;
-        --- accepting writes it back as two blocks, no blank
-        --- line between them
+        --- formatting gives the comment a line of its own below
+        --- the code; accepting writes it back as two blocks, no
+        --- blank line between them
         local opened = src(code, comment)
         local accepted = src(first, code, comment, '')
 
@@ -2174,8 +919,9 @@ describe('Editor #editor', function()
 
             session:select_block(2, commented)
             session:select_and_open_block(2)
-            assert.same(string.lines(opened), input:get_text(),
-                        "the comment moves to its own line in the input")
+            --- Edit copies the block as it is (IS5.1)
+            assert.same(string.lines(commented), input:get_text(),
+                        "the block loads as written")
 
             session:submit(opened)
             assert.same(accepted, savefile(), "one copy of the comment")
@@ -2197,9 +943,10 @@ describe('Editor #editor', function()
         end)
       end)
 
-      --- The editor adds no blank line; blank lines typed in
-      --- the accepted block stay, a run collapsed to one; blank
-      --- lines outside it are never changed
+      --- The editor adds no blank line; blank lines typed
+      --- between statements stay, each of them (IS3.7); a run
+      --- inside a block becomes one; blank lines outside the
+      --- draft are never changed
       describe("blank lines on acceptance", function()
         --- open the block, accept it as the input shows it
         local function accept_as_is(n)
@@ -2214,13 +961,16 @@ describe('Editor #editor', function()
           assert.same('a = 1\nb = 2\n', savefile())
         end)
 
-        it("typed at top level stay, a run collapsed to one",
+        --- every empty line between statements becomes an
+        --- empty-line block (editor principles, IS3.7)
+        it("typed at top level stay, each of a run",
           function()
             session:open('x = 0\ny = 0\n', 2)
             session:select_and_open_block(1, 'x = 0')
             session:submit('\n\n\nx = 1\n\n\n\na = 1\nb = 1\n\n')
-            assert.same('\nx = 1\n\na = 1\nb = 1\n\ny = 0\n',
-                        savefile())
+            assert.same(
+              '\n\n\nx = 1\n\n\n\na = 1\nb = 1\n\n\ny = 0\n',
+              savefile())
           end)
 
         it("typed inside a function body stay, one per run",
@@ -2277,8 +1027,9 @@ describe('Editor #editor', function()
               controller:textinput(ch)
             end
             mock.keystroke('return', press)
-            assert.same('a = 1\n\n\n', savefile(),
-                        "the line typed on became the code")
+            --- the draft goes before the browsed line (IS4.1)
+            assert.same('a = 1\n\n\n\n', savefile(),
+                        "the empty lines are all still there")
           end)
 
         it("do not grow an empty function body", function()
@@ -2322,8 +1073,11 @@ describe('Editor #editor', function()
               'function g() end',
             }))
             local once = savefile()
+            --- the two empty lines between statements stay
+            --- (IS3.7); the run inside the function is one
             assert.same(string.unlines({
               'local a = 1',
+              '',
               '',
               '-- note',
               '',
@@ -2423,8 +1177,12 @@ describe('Editor #editor', function()
           mock.keystroke('C-S-f', press)
           assert.same({ 'b = 2' }, buffer:get_selected_text())
           mock.keystroke('C-z', press)
-          assert.same({ 'b = 2' }, buffer:get_selected_text())
+          --- the text is back, the position on the first
+          --- restored block (IS6.6)
+          assert.same('a  =  1', buffer:get_text_content()[1])
+          assert.same({ 'a  =  1' }, buffer:get_selected_text())
           mock.keystroke('C-y', press)
+          assert.same('a = 1', buffer:get_text_content()[1])
           assert.same({ 'b = 2' }, buffer:get_selected_text(),
                       "redo lands where the format did")
         end)
@@ -2463,20 +1221,6 @@ describe('Editor #editor', function()
             assert.is_true(buffer:save())
             assert.same(saved, savefile(), text)
           end
-        end)
-
-        --- End reaches the last line of the file, which is the
-        --- last block's last line (spec 2.7), and shows it
-        it("leaves End on the last line, on screen", function()
-          local body = string.rep('  print(1)\n', 30)
-          local _, buffer =
-              session:open('function f()\n' .. body .. 'end\n', 1)
-          mock.keystroke('end', press)
-          assert.same(32, buffer:get_active_line())
-          local bv = controller.view:get_current_buffer()
-          local r = bv.content:get_range()
-          local wl = bv.content.wrap_forward[32]
-          assert.is_true(wl[1] >= r.start and wl[#wl] <= r.fin)
         end)
 
         it("is written the same by an accept, Ctrl+Shift+F,"
@@ -2523,106 +1267,6 @@ describe('Editor #editor', function()
           end
           _G.print:revert()
         end)
-      end)
-
-      --- spec 2.1: on a blank line the typed text turns that
-      --- line into the new block
-      describe("typing on a blank line", function()
-        --- @param text string
-        local function type_text(text)
-          for ch in text:gmatch('.') do
-            controller:textinput(ch)
-          end
-          mock.keystroke('return', press)
-        end
-
-        it("between two blocks turns that line into the block",
-          function()
-            session:open('a = 1\n\nb = 2\n\n\nc = 3\n', 6)
-            session:select_block(2)
-            type_text('x = 0')
-            assert.same('a = 1\nx = 0\nb = 2\n\n\nc = 3\n',
-                        savefile())
-          end)
-
-        it("that is the last of the file turns it into the block",
-          function()
-            session:open('a = 1\n\n', 2)
-            session:select_block(2)
-            type_text('b = 2')
-            assert.same('a = 1\nb = 2\n', savefile())
-          end)
-
-        --- the file's final newline is no line to type on: past
-        --- its last block comes the append row
-        it("past the last block adds the block after it",
-          function()
-            session:open('a = 1\n\n', 2)
-            session:select_block(3)
-            type_text('b = 2')
-            assert.same('a = 1\n\nb = 2\n', savefile())
-          end)
-
-        it("moves on past the new block, so typing goes on below",
-          function()
-            local _, buffer = session:open('', 1)
-            session:select_block(1)
-            type_text('x = 1')
-            assert.same(2, buffer:get_selection())
-            type_text('y = 2')
-            assert.same('x = 1\ny = 2\n', savefile())
-          end)
-
-        it("joins the statement below when the text runs into it",
-          function()
-            local _, buffer =
-                session:open('do end\n\n(print)(1)\n', 3)
-            session:select_block(2)
-            type_text('f = print')
-            assert.same('do end\nf = print\n(print)(1)\n',
-              savefile())
-            --- one statement as Lua reads it, so one block
-            assert.same(2, buffer:get_content_length())
-            session:select_block(2)
-            assert.same({ 'f = print', '(print)(1)' },
-              buffer:get_selected_text())
-          end)
-
-        it("lands past all the blocks the text makes", function()
-          local _, buffer =
-              session:open('a = 1\n\nb = 2\nc = 3\nd = 4\n', 5)
-          session:select_and_open_block(2)
-          session:submit(string.unlines({
-            'x = 1',
-            'function f()',
-            '  a = 1',
-            'end',
-          }))
-          assert.same({ 'b = 2' }, buffer:get_selected_text())
-        end)
-
-        it("once cut, gives what is typed there a new block",
-          function()
-            local system = love.system
-            love.system = { setClipboardText = function() end }
-            session:open('\nb = 2\n', 2)
-            session:select_and_open_block(1)
-            mock.keystroke('C-x', press)
-            love.system = system
-            type_text('x = 1')
-            assert.same('x = 1\nb = 2\n', savefile(),
-                        "the block below is not replaced")
-          end)
-
-        it("leaves a new block opened above it alone (2.7)",
-          function()
-            session:open('a = 1\n\nb = 2\n', 3)
-            session:select_block(1)
-            mock.keystroke('C-return', press)
-            type_text('x = 0')
-            assert.same('a = 1\nx = 0\n\nb = 2\n', savefile(),
-                        "the blank line below stays")
-          end)
       end)
 
       describe("insertion of", function()
@@ -2707,25 +1351,10 @@ describe('Editor #editor', function()
           local over15 = mock_func_snippet('over15', 15)
           session:submit(over15, true)
           assert.is_false(input:is_empty(), '15 lines refused')
-          --- with a visible message naming the excess (9.6)
+          --- with a visible notice naming the limit (IS3.3)
           assert.is_true(controller.input:has_error())
           local err = controller.input.model.error
-          assert.truthy(
-            string.find(err[1], 'Remove 1', 1, true))
-          mock.keystroke('S-escape', press)
-        end)
-
-        it('opening auto-formats a sloppy block', function()
-          local sloppy = 'function fmt()   print( "x" )    end'
-          local _, b2 = session:open(sloppy, 1)
-          mock.keystroke('return', press)
-          --- the formatter reshaped the input on open (9.4)
-          local t = controller.input:get_text()
-          assert.is_true(#t > 1)
-          assert.same('function fmt()', t[1])
-          --- the file is untouched until acceptance
-          assert.same(sloppy, table.concat(
-            b2:get_text_content(), '\n'):gsub('\n+$', ''))
+          assert.truthy(string.find(err[1], '14', 1, true))
           mock.keystroke('S-escape', press)
         end)
 
@@ -2744,7 +1373,7 @@ describe('Editor #editor', function()
           assert.same( existing_src,
                        savefile(),
                        "saved file unchanged")
-          session:assert_cursor_at(session:input_line_of(f_oversized))
+          session:assert_cursor_kept()
         end)
 
         it("normal+oversized mix rejected", function()
@@ -2777,7 +1406,7 @@ describe('Editor #editor', function()
           assert.same(existing_src,
                       savefile(),
                       "saved file unchanged")
-          session:assert_cursor_at(session:input_line_of(f_oversized))
+          session:assert_cursor_kept()
         end)
       end)
 

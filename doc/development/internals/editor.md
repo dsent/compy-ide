@@ -8,7 +8,7 @@ The editor does not operate on lines. For Lua files, it operates on **blocks** �
 
 The newline ending a file's last line belongs to that line, so no block stands for it: after the last block comes the view's append row. A blank line at the end of the file is an `Empty` like any other.
 
-For plain text and Markdown files, the model falls back to line-level editing — each line is its own "block".
+For plain text and Markdown files, each line is its own block, and a submitted draft is stored as written, one block per line. A file of no lines has no block, in either kind.
 
 This distinction pervades the entire editor stack. Understanding it is the prerequisite for understanding anything else here.
 
@@ -24,7 +24,7 @@ This distinction pervades the entire editor stack. Understanding it is the prere
 | `.md` | `md` | markdown highlighter only |
 | anything else | `plain` | none |
 
-A `BufferModel` (`src/model/editor/bufferModel.lua`) is created with these tools and immediately tries to chunk the file content. A Lua file is read as its lines (`src/util/textfile.lua`), the final newline part of the last one; a file without one reads the same, and saving gives it one. **If the initial Lua parse fails, the buffer is marked `readonly = true`** and the selection is set to 1. The file is viewable but nothing can be edited or saved — this prevents corrupting a file that the editor cannot parse.
+A `BufferModel` (`src/model/editor/bufferModel.lua`) is created with these tools and immediately tries to chunk the file content. A Lua file is read as its lines (`src/util/textfile.lua`), the final newline part of the last one; a file without one reads the same, and saving gives it one. **If the Lua text does not parse, the buffer is marked `invalid = true`** and its blocks are its lines, one block per line, each kept as it is. The file opens like any other: text can be inserted, and every other line is written back unchanged. Edit (`F2`) is refused on such a line with a notice; `Ctrl+Delete` cuts it into the input for repair. Each change re-chunks the file, so once the text parses the blocks are statements again and `invalid` is cleared (`file_blocks` in `bufferModel.lua`).
 
 After construction, `lateinit` calls `analyze()` immediately to populate semantic info.
 
@@ -34,13 +34,17 @@ After construction, `lateinit` calls `analyze()` immediately to populate semanti
 
 The editor does not have its own widget — it reuses `UserInputModel` / `UserInputController` / `UserInputView`, the same widget as the console REPL. The input strip at the bottom is how you type content to put into the buffer.
 
-The workflow is:
-1. Navigate the buffer selection to the block of interest
-2. Press `Esc` to **load** the selected block's text into the input
-3. Edit in the input
-4. Press `Enter` to **submit** the input back, replacing the selected block
+The editor is in one of three states, which nothing stores: `EditorController:state_name()` derives it. A replacement target (`BufferModel.loaded`) means **replacing**; otherwise a non-empty draft in the input means **inserting**; otherwise the editor is **browsing**. The browsing position is `buffer:get_selection()`, and the end position, after the last block, is `blocks + 1`. A file opens in the browsing state at the end position.
 
-`Shift+Esc` inserts the block text into the input at cursor rather than replacing it (additive load).
+The workflow is:
+1. Browse to the block of interest (`Ctrl+Up`/`Ctrl+Down`, or bare `Up`/`Down` while the input is empty)
+2. Press `F2` (Edit) to **load** the block's text into the input; the block becomes the replacement target
+3. Edit in the input
+4. Press `Enter` to **submit** the input back, replacing the target
+
+Text typed without a target is inserted: `Enter` puts it before the block at the browsing position, or at the end of the file from the end position. `Esc` aborts an edit (the draft and the target are dropped), and from the browsing state steps back from the file. `Ctrl+Insert` copies the viewed block into the input, `Ctrl+Delete` cuts it there, and `Alt+Up`/`Alt+Down` move it (`src/controller/editorReuse.lua`).
+
+A refused action never asks a question: `EditorController:refuse(msg)` knocks and shows a one-line notice over the input, which the next key press dismisses. `F1`, while held, shows the keys the current state admits (`src/model/editor/keyCard.lua`).
 
 The `LuaEditorEval` evaluator (`src/model/interpreter/eval/evaluator.lua:168`) is set on the editor input for Lua files. It adds a 64-character line length validator — the same limit as the code conventions — enforced live as you type.
 
@@ -54,11 +58,7 @@ The block size limit is `input_max`: `bufv:get_max_size()` returns it, and the e
 
 `BufferModel.loaded` records which block index was most recently loaded into the input. This prevents a specific foot-gun: if you load block 3, then navigate the selection to block 7 (the highlight moves), then press Enter, you don't want to overwrite block 7 with what you loaded from block 3.
 
-The submit handler checks `buf:loaded_is_sel(true)`. If the currently selected block is not the one that was loaded, the submit instead re-selects the loaded block and scrolls to it, giving you a chance to confirm. Only if selection and loaded agree does the replace proceed.
-
-This is the most important non-obvious invariant in the editor interaction model.
-
-Source: `BufferModel:set_loaded`, `loaded_is_sel`, `select_loaded` (bufferModel.lua:516–545); the check in `_normal_mode_keys` → `submit` → `replace` (editorController.lua:647–669).
+A submission with a replacement target replaces that block, wherever the browsing position stands by then (`EditorController:_land`). Browsing during a replacement moves the highlight only; the target keeps its own mark, and `Esc` drops it.
 
 ---
 
@@ -73,9 +73,9 @@ Pressing `Enter` on non-empty input goes through `_handle_submit`, which asks th
 5. **Replace or Insert** — `replace_content` or `insert_content` updates the buffer, adjusting all subsequent block positions via `Range:translate`.
 6. **Auto-save** — `buf:save()` is called immediately. Every accepted submit writes to disk, a newline after every line, the last one included.
 
-`Ctrl+Enter` inserts the new block(s) before the selection rather than replacing it. Text typed on a blank line (an `Empty` block) replaces that line, and the selection moves to the block after the new text, so typing goes on below it.
+Without a replacement target the new block(s) are inserted before the browsing position, or appended at the end position, and the position ends on the block after them, so typing goes on below. An empty draft inserts one empty line. `Shift+Insert` submits the same way and keeps the draft in the input.
 
-`Ctrl+Shift+F` in navigation (`format_file`) formats the whole file with the same `format` function at the window's width. Every run of blank lines in the file becomes one: the one place the editor changes blank lines outside a block, because the user asked. When `format` hands the text back as it was, the editor refuses with a message and the file stays. The selection stays on the statement the active line was on; from a blank line or a comment it moves to the statement below. The REPL's `tidy(name)` and `util/compyfmt.lua --fix` format a file the same way at a Compy's width (`src/conf/display.lua`) and write the same bytes an accept would. compyfmt reports the gates and the lints (`src/model/lang/lua/lint.lua`); without `--fix` it changes nothing and also names each file formatting would change.
+`Ctrl+Shift+F` in the browsing state (`format_file`) formats the whole file with the same `format` function at the window's width. Every run of blank lines in the file becomes one: the one place the editor changes blank lines outside a block, because the user asked. When `format` hands the text back as it was, the editor refuses with a message and the file stays. The selection stays on the statement the active line was on; from a blank line or a comment it moves to the statement below. The REPL's `tidy(name)` and `util/compyfmt.lua --fix` format a file the same way at a Compy's width (`src/conf/display.lua`) and write the same bytes an accept would. compyfmt reports the gates and the lints (`src/model/lang/lua/lint.lua`); without `--fix` it changes nothing and also names each file formatting would change.
 
 ---
 
@@ -84,11 +84,11 @@ Pressing `Enter` on non-empty input goes through `_handle_submit`, which asks th
 A block with more source lines than the editor's size limit is a **monster block**. These can exist in files written outside the editor or imported. The editor handles them without data loss:
 
 - **Viewing** — monster blocks are displayed in the buffer normally; content beyond the visible window is scrolled.
-- **Loading** — pressing Escape loads the full block into the input model, even though only `input_max` (14) lines are visible in the input strip at once. The rest is reachable by scrolling the input.
+- **Loading** — `F2` on a monster block is refused with a notice that names the limit. `Ctrl+Delete` cuts the block out of the file into the input model for repair, even though only `input_max` (14) lines are visible in the input strip at once. The rest is reachable by scrolling the input.
 - **Visibility tolerance** — the submit handler uses `bufv:is_selection_visible(true)` (the oversize-tolerant variant) when checking whether to proceed. A monster block whose start line is at the top of the visible range is considered "visible enough" to edit, even though it extends beyond the bottom.
 - **Submitting** — the submitted content is chunked. If all resulting chunks are within the size limit, they replace the monster block (effectively splitting it). If any chunk is still oversized, that chunk is rejected and the cursor moves to its first line (`reject_oversized`).
 
-The practical editing pattern: load the monster block, edit it into valid code that chunks into conforming-size pieces, submit. Multiple resulting chunks each become their own block in the buffer, separated by the blank lines typed between them and no others (step 1 of the submit pipeline).
+The practical editing pattern: cut the monster block, edit it into valid code that chunks into conforming-size pieces, submit. Multiple resulting chunks each become their own block in the buffer, separated by the blank lines typed between them and no others (step 1 of the submit pipeline).
 
 Source: commit `2ff95f03b8f8` ("Split monster block"); logic in `editorController.lua:_handle_submit` and `bufferView.lua:is_selection_visible`.
 
@@ -128,15 +128,15 @@ The `WrappedText` base class (`src/util/wrapped_text.lua`) provides the three-ta
 
 ## Editor Modes
 
-The editor has three modes managed in `EditorController.mode`:
+`EditorController.mode` holds two modes:
 
-**`edit`** (default) — normal editing. Navigation, load, submit, delete all active.
-
-**`reorder`** (Ctrl+M) — block move mode. The current selection is saved as `state.moved`. Navigation moves the selection (the visual highlight) while the "picked up" block index stays in `state.moved`. Enter confirms the move: `buf:move(moved, target)` physically reorders the block in the dequeue, rechunks, and saves. Escape cancels and restores state.
+**`nav`** (default) — the browsing, inserting and replacing states described above; `_normal_mode_keys` dispatches their keys.
 
 **`search`** (Ctrl+F) — definition search. The buffer's `semantic.definitions` (all assignments found by the analyzer) are loaded into `Search`. As you type, `Search:narrow()` filters the list with a case-insensitive substring match (lowercase input = case-insensitive, mixed = case-sensitive). Enter jumps to the selected definition's block and scrolls to its first line.
 
-Transitions are one-directional: from any special mode, only a return to `edit` is allowed (no reorder→search transitions). This is enforced in `set_mode`.
+The only transitions are `nav` to `search` and back. This is enforced in `set_mode`.
+
+The whole-editor exits (`Ctrl+T`, `Ctrl+Q`, `Ctrl+Shift+R`, `Ctrl+Alt+R`, and the deprecated `Ctrl+Shift+S`) leave from the browsing state. During an edit `EditorController:refuse_to_leave` refuses them with a notice, because the input may hold the only copy of a cut block.
 
 ---
 
@@ -144,7 +144,7 @@ Transitions are one-directional: from any special mode, only a return to `edit` 
 
 `BufferModel:analyze()` runs on every `save()`. It:
 1. Rechunks the current text (to get a fresh AST)
-2. Runs `analyzer.analyze(ast)` which walks the AST and collects assignments (global/local/function/method/field) and `require()` calls with their line numbers (`src/model/lang/lua/analyze.lua`)
+2. Runs `analyzer.analyze(ast)` which walks the AST and collects assignments (global/local/function/method/field) and `require()` and `dofile()` calls with their line numbers (`src/model/lang/lua/analyze.lua`)
 3. Builds `revmap` (source line → block index) from block positions
 4. Converts the flat `SemanticInfo` into `BufferSemanticInfo` which replaces line numbers with block indices
 

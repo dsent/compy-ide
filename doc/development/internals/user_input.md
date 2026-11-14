@@ -191,7 +191,9 @@ input. This is used for parse errors, runtime errors, and validation failures.
   alone leaves it up, and a key pressed with it closes it as that key would
   (`ConsoleController:keypressed`, `:textinput`).
 - **Editor:** its own rules, in `EditorController:keypressed` and
-  `:textinput`.
+  `:textinput`. In the editor's field (`model.editing`) the widget itself
+  locks nothing: the next key or character closes the message and does its
+  usual work (editor principles, IS3.14).
 - **Drawing:** each line of a message is wrapped on its own, a tab shows as two
   spaces, and a message taller than the input area shows its first rows and
   ends in `...` (`UserInputModel:get_wrapped_error`,
@@ -244,14 +246,17 @@ unchanged; `''` when the widget is shown and empty, which is how a project tells
 (2026-09-03) there was none: the surface wrote content and never read it, so a project could not
 save what the user had typed.
 
-There are four call sites that manipulate the cursor programmatically (i.e., not as a direct
-response to a cursor-movement keypress): two in `editorController.lua` — `load_selection`
-(`:590-604`, reads/restores the cursor via the **controller** API to preserve the caret across an
-insert) and `reject_oversized` (`:628-633`, called from two live submit paths, jumps the cursor to
-a rejected block's start via **`input.model:move_cursor` directly, bypassing the controller**) —
-one in the model itself, `_apply_eval`, which seats the caret on the error position when an
-evaluation is rejected, and the project-facing `compy.input.set_cursor`/`set_text` above. Console
-and search never touch it programmatically.
+Several call sites manipulate the cursor programmatically (i.e., not as a direct
+response to a cursor-movement keypress). The editor has the most, all through
+**`input.model` directly, bypassing the controller**: `EditorController:_handle_submit`
+(`move_cursor` to the position before the failing character when a submission does not parse),
+`edit_block` (`jump_end` after a block is loaded or reloaded), and in
+`src/controller/editorReuse.lua` the undo timeline's restore of a saved draft and its cursor, the
+copy and cut of a block into the draft, and the reformat of a kept draft, which maps the cursor
+onto the formatted text (`model.lang.lua.cursor_map`). One more is in the model itself,
+`_apply_eval`, which seats the caret on the error position when an evaluation is rejected, and
+the last is the project-facing `compy.input.set_cursor`/`set_text` above. Console and search
+never touch it programmatically.
 
 **A separate population writes the cursor's fields directly**, bypassing every mover above, and a
 sweep over cursor semantics needs both lists: `_update_cursor`, `_advance_cursor` and
@@ -286,7 +291,8 @@ a session you are *not* re-activating is `compy.input.set_cursor`'s job.
 
 - **console** — Escape and Ctrl+Q reset content and keep history, Ctrl+Shift+R wipes both, and
   Ctrl+L clears the terminal only;
-- **editor** — Ctrl+W, content only, with Escape repurposed for `load_selection`;
+- **editor** — Escape during an edit (`cancel_edit`: the draft and the replacement target go),
+  and `input:clear()` whenever a file is opened, stepped back to or closed;
 - **search** — its own `clear()`, which reaches past its controller straight into
   `self.model.input:clear_input()` and skips `clear_error()`. Harmless while search has no
   evaluator, so no error can be set in the first place;
@@ -366,7 +372,7 @@ Global shortcuts are answered in `love.handlers.keypressed` before anything reac
 
 Each of these matches its modifier set **exactly** — the modifiers it names held, and no other (`decisions/input.md`, D-EXACT-RESERVE). Since a reservation is looked up by the canonical combo string built for the event, that exactness is a property of the representation: a string equality cannot tolerate an unnamed modifier. "Intercepted" describes what the gate may *claim*, not what passes through it: every keypress enters here, and one the gate does not claim is forwarded to the route unchanged, exactly as a claimed one is (the gate consumes nothing — see below).
 
-Ctrl+S in the **editor** shows both halves of that. The chord reaches the gate like any other; the gate declines it — Ctrl+Shift+S because the modifiers do not match the reservation, plain Ctrl+S because the reservation acts only while `app_state == 'running'` — and forwards it to the route, where `ConsoleController` hands it to the editor and `EditorController:_leave_keys` decides: Ctrl+Shift+S leaves the edit, and bare Ctrl+S reaches the editor and **nothing acts on it** — the upstream editor rework deleted the close and put its checkpoint on Ctrl+K, so the key is **unclaimed** rather than reserved (`../decisions/input.md`, D-EXACT-RESERVE's 2026-09-05 amendment). Deciding that inside the route is the point: it is the editor's business, and the gate has no opinion on it. None of these consume the key: it still reaches the active route afterward (§6.3 non-consuming shortcuts).
+Ctrl+S in the **editor** shows both halves of that. The chord reaches the gate like any other; the gate declines it — Ctrl+Shift+S because the modifiers do not match the reservation, plain Ctrl+S because the reservation acts only while `app_state == 'running'` — and forwards it to the route, where `ConsoleController` hands it to the editor and `EditorController:_leave_keys` decides: Ctrl+Shift+S leaves the editor from the browsing state and is refused with a notice during an edit (`refuse_to_leave`), and bare Ctrl+S reaches the editor and **nothing acts on it** — the upstream editor rework deleted the close and put its checkpoint on Ctrl+K, so the key is **unclaimed** rather than reserved (`../decisions/input.md`, D-EXACT-RESERVE's 2026-09-05 amendment). Deciding that inside the route is the point: it is the editor's business, and the gate has no opinion on it. None of these consume the key: it still reaches the active route afterward (§6.3 non-consuming shortcuts).
 
 The gateway (`love.handlers.*`) routes on the **active route** and nothing else: widget presence is not a routing condition, so the active route's controller always receives the event. The project route runs the three-consumer walk above: the project's captured `love.*` handler auto-provisions as the seeded hook (once, at activation — seen even while the widget is shown, only when the project set no explicit `hooks[event]`; an explicit hook always wins), **consuming its channel** where an explicit hook would fall through on falsey (D-HOOKS-SEEDED, *"a seeded handler consumes"*), so the widget below a captured handler receives nothing, and the widget is the terminal consumer with its hidden-check *internal* (`is_shown()` reads a strictly-internal `self.shown` flag; the widget no-ops while hidden, so a hidden widget mutates nothing without any external gate). The console route reaches its widget by a plainer path: each console channel forwards straight to `ConsoleController`, which calls its own widget instance (`consoleController.lua`, `textinput` / `keyreleased`) — it consults neither `love.state.user_input` nor the widget's shownness, because it owns that instance outright. The widget is never a routing destination of the gateway and never the active route.
 
@@ -524,14 +530,16 @@ keyboard/text — see "Mouse Input" below for the current routing and what chang
 ### Editor-specific keys
 
 See `editor.md` for full detail. Key differences from console mode:
-- No history navigation (PageUp/Down scroll the buffer instead)
-- Up/Down at input boundary moves buffer selection, not history
-- Escape loads selected block text into input
-- Ctrl+M / Ctrl+F switch modes
+- No history navigation (PageUp/Down browse ten blocks instead)
+- Up/Down browse blocks while the input is empty; with text in it they move the cursor a row, and
+  Ctrl+Up/Down browse in every state
+- F2 loads the viewed block's text into the input; Escape aborts an edit, and from the browsing
+  state steps back from the file
+- Ctrl+F switches to search mode
 
 The difference is now **one** fork, not two. The **outer** fork is the ConsoleController/
 EditorController split already covered above (console handles escape/history/Ctrl+L itself; editor
-delegates to `EditorController:keypressed`'s own `edit`/`reorder`/`search` mode dispatch instead).
+delegates to `EditorController:keypressed`'s own dispatch, by editor state and `search` mode, instead).
 
 There used to be a **second, inner** fork: the shared `UserInputController:keypressed` branched on
 `love.state.app_state == 'editor'` to decide whether to run its own Enter/Escape submit/cancel at
@@ -540,15 +548,14 @@ app-mode to change its own behaviour was an abstraction leak (the widget could n
 or migrated, without knowing it was "the editor"). It is gone; `UserInputController:keypressed` now
 runs **one uniform path** for every instance (see the shared-keypressed section below).
 
-The editor's Escape→`load_selection()` (which just repopulated the input) is no longer protected by
-a mode-gate inside the widget. Instead the editor **consumes Enter/Escape upstream**: each handled
-branch of `EditorController:_normal_mode_keys`' `submit()` (plain Enter, Ctrl+Enter) and `load()`
-(plain/Shift Escape) now calls `block_input()`, so `passthrough` is false and the shared widget never
-receives that key — its uniform `submit_flow`/`cancel_flow` simply never runs for the keys the editor
-owns. The one Enter variant the editor does *not* handle (Alt+Enter) does fall through to the widget's
-`submit_flow`, harmlessly: the editor's own input instance sets no submit callbacks, so it is a no-op
-(the same no-op console relies on). Search and reorg modes never reach `UserInputController:keypressed`
-at all (see "Search" below and reorg's own `_reorg_mode_keys`), so they need no blocking.
+The editor **consumes Enter/Escape upstream**: `EditorController:_normal_mode_keys` handles bare
+Enter (`submit()`) and bare Escape (`cancel_edit()` during an edit, `close_buffer()` from the
+browsing state) and returns before it hands the key to the widget, and it drops Ctrl+Enter and every
+other Escape the same way — the shared widget never receives those keys, so its uniform
+`submit_flow`/`cancel_flow` never runs for the keys the editor owns. Shift+Enter and Alt+Enter fall
+through to the widget, which breaks the line at the cursor
+(editor principles, IS3.15); no `submit_flow` runs for them. Search mode never reaches
+`UserInputController:keypressed` at all (see "Search" below), so it needs no blocking.
 
 Console's own always-shown instance is not blocked and does run the uniform `submit_flow`/`cancel_flow`
 on its own Enter/Escape — harmlessly, since console sets no `before_submit`/`after_submit`/
@@ -575,14 +582,14 @@ Enter and Escape are ordinary keys handled at the end of
 this same shared method, **uniformly for every instance**: `Key.is_enter(k) and not Key.shift()`
 calls `self:submit_flow()`; `k == 'escape' and not Key.ctrl()` calls
 `self:cancel_flow()` — see "Submit and cancel" below. **The guard is "Enter without
-Shift", not "bare Enter": Ctrl+Enter and Alt+Enter submit too** (only Shift+Enter is carved out, as
-the newline); likewise Escape-without-Ctrl cancels. This is a de-facto contract (D-DEFACTO-KEPT,
+Shift or Alt", not "bare Enter": Ctrl+Enter submits too** (Shift+Enter and Alt+Enter are carved out, as
+the newline, editor principles IS3.15); likewise Escape-without-Ctrl cancels. This is a de-facto contract (D-DEFACTO-KEPT,
 guard shape `return and not shift_held`), pinned by `tests/input/input_widget_callbacks_spec.lua`, the
 `the same lifecycle on every route` group.
 The widget's own
 Enter/Escape handling IS the submit/cancel mechanism; there is no route-level interception above it.
 Contexts that must NOT run the flows arrange it themselves: the editor consumes the key upstream
-(`block_input()` in its own `submit()`/`load()`); console sets no callbacks so its run is a no-op and
+(`_normal_mode_keys` returns before the widget sees it); console sets no callbacks so its run is a no-op and
 its real work is `ConsoleController:evaluate_input` afterward; the editor's real submit is
 `EditorController:_handle_submit`. No instance branches on global state to decide.
 
@@ -608,7 +615,7 @@ circumstance, even while their mode is the one actually on screen.
 and clear an error on Space-release. Checked whether the gap is currently observable: it isn't, but
 only incidentally — editor's and search's own instances have `disable_selection = true` (so the
 selection-release job is moot for them), and their error state is also clearable via **any**
-`textinput` character (`editorController.lua:291-292`, unconditional clear-on-error, same as console),
+`textinput` character (`EditorController:textinput`, unconditional clear-on-error, same as console),
 which covers Space too, since Space is itself a text-producing key. So the missing fork happens to be
 inert today, not silently broken — but it is still a real asymmetry against the otherwise-careful
 routing discipline. Carried as-is; out of this pass's scope (console/editor's own `keyreleased`
@@ -662,8 +669,8 @@ A future migration should proceed by mode, preserving the controller that owns e
    are search operations, not widget submit/cancel. A migration may use its widget for text editing,
    but must preserve that priority and the selected-definition jump. `tests/editor/editor_spec.lua`
    characterizes Ctrl+F, typing, Enter, and Escape through real editor entry points for this reason.
-3. Keep reorder as an editor-owned, widget-free mode until it has an actual text-input requirement.
-   It is not a missing widget route.
+3. Block moves are editor-owned and widget-free (Alt+Up / Alt+Down, `src/controller/editorReuse.lua`).
+   They are not a missing widget route.
 4. Do not add editor/Search `keyreleased` forwarding merely for symmetry. It is inert today; first
    identify a release-time consumer and specify its mode semantics.
 
@@ -836,8 +843,8 @@ D-EDIT-LIFECYCLE's "Withdrawn guarantee" note in `decisions/input.md`; the gatew
 remain the real, permanent escape hatch, non-overridable by any shortcut — though only for the
 chords they name exactly, per D-EXACT-RESERVE). Only once no shortcut/hook
 consumes the key does the widget's own `UserInputController:keypressed` reach its lifecycle guard
-(`Key.is_enter(k) and not Key.shift()` → submit; `k == 'escape' and not Key.ctrl()` → cancel — so
-Ctrl+Enter and Alt+Enter submit too, only Shift+Enter is the newline), and only while the widget is
+(`Key.is_enter(k)` without Shift or Alt → submit; `k == 'escape' and not Key.ctrl()` → cancel — so
+Ctrl+Enter submits too, Shift+Enter and Alt+Enter are the newline), and only while the widget is
 shown — hidden, the widget is skipped entirely by the dispatch walk.
 
 **Submit** (`UserInputController:submit_flow`):

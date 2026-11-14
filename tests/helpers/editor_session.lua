@@ -3,8 +3,9 @@ local assert = require("luassert")
 local fmt = string.format
 local textfile = require("util.textfile")
 
---- Drives the editor in tests via mocked keystrokes
---- (block navigation mode).
+--- Drives the editor in tests via mocked keystrokes: Ctrl+Up
+--- and Ctrl+Down browse (IS2.1), F2 begins a replacement
+--- (IS5.1), Enter submits the draft.
 
 --- @class EditorSession
 --- @field controller EditorController
@@ -57,22 +58,14 @@ function EditorSession:open(src, nb)
   return input, buffer
 end
 
--- moves selection to block number `n`
--- this helper is a bit of a dirty hack
--- so it only works reliably in block-level navigation mode!
--- (when editor multiline input buffer is not yet activated with <ESC>)
--- see also: https://github.com/compy-toys/compy/issues/117 (p.2)
+-- moves the browsing position to block number `n`, in any
+-- state: Ctrl+Up and Ctrl+Down browse with a draft too
 --- @param n integer
 --- @param target_content string?
 function EditorSession:select_block(n, target_content)
   local s = self.buffer.selection
   local dir = (s > n) and "up" or "down"
   local steps = math.abs(s - n)
-  if (not self.input:is_empty()) and (steps > 0) then
-    local jumpkey = dir == "up" and "home" or "end"
-    self.mock.keystroke(jumpkey, self.press)
-  end
-  --- blocks move with Ctrl (bare arrows are line-wise)
   for i = 1, steps do
     self.mock.keystroke('C-' .. dir, self.press)
   end
@@ -96,8 +89,8 @@ end
 --- @param target_content string?
 function EditorSession:select_and_open_block(n, target_content)
   self:select_block(n, target_content)
-  --- Enter on an empty input opens the block (Esc is inert)
-  self.mock.keystroke("return", self.press)
+  --- Edit makes the browsed block the replacement target
+  self.mock.keystroke("f2", self.press)
 
   assert.same(n, self.buffer.loaded, fmt("loaded block #%s", n))
   if target_content then
@@ -110,26 +103,19 @@ function EditorSession:select_and_open_block(n, target_content)
   end
 end
 
---- @param newtext string
---- Compose text as if it had been typed: the editor is
---- editing whenever the input holds anything (2.1), so
---- putting text in without the mode is not a real state
+--- Put text in the field as the draft, as if it had been
+--- typed
 --- @param newtext string
 function EditorSession:alter_input(newtext)
   local newlines = string.lines(newtext)
-  if self.controller:get_mode() == 'nav' then
-    self.controller:set_mode('edit')
-  end
   self.input:set_text(newlines)
   assert.same(newlines, self.input:get_text(), "input altered")
 end
 
 --- @param newtext string
---- @param ctrl boolean?
-function EditorSession:submit(newtext, ctrl)
+function EditorSession:submit(newtext)
   self:alter_input(newtext)
-  local keycode = ctrl and "C-return" or "return"
-  self.mock.keystroke(keycode, self.press)
+  self.mock.keystroke("return", self.press)
 end
 
 --- @param snippet string
@@ -140,6 +126,14 @@ function EditorSession:input_line_of(snippet)
     if line == first then return i end
   end
   error("snippet first line not found in input")
+end
+
+--- The cursor is where a submission left it, at the end of
+--- the draft: a size refusal keeps it (editor principles,
+--- IS3.2, IS3.9).
+function EditorSession:assert_cursor_kept()
+  local t = self.input:get_text()
+  self:assert_cursor_at(#t, string.ulen(t[#t]) + 1)
 end
 
 --- @param line integer

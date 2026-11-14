@@ -95,6 +95,8 @@
 --- @field n_lines integer
 --- @field input_more More
 --- @field custom CustomStatus?
+--- @field caps string? --- 'CAPS' while Caps Lock is on
+--- @field project string? --- the open project's name
 
 --- @class InputDTO table
 --- @field text InputText

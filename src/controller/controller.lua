@@ -588,10 +588,6 @@ Controller = {
   --- @param CC ConsoleController
   set_love_update = function(CC)
     local function update(dt)
-      -- A Space's key press and its glyph come within one
-      -- frame; a wait for the glyph still open at the next
-      -- frame waits for one that is not coming
-      CC.swallow_glyph = nil
       if love.PROFILE then
         Prof.update()
       end
@@ -1016,15 +1012,12 @@ Controller = {
     -- playback (cfg.mode == 'play') only restart/profile stay
     -- live (doc/development/decisions/input.md, D-ROUTE-OWNS) —
     -- each project/console-management one checks it and no-ops.
-    --- A whole-editor exit with a changed block open asks
-    --- the editor's own discard question first, and its
-    --- confirmation takes the exit (EditorController,
-    --- ask_to_leave)
-    --- @param exit function
-    --- @return boolean asked
-    local function asked(exit)
+    --- An exit pressed during an edit is refused with the
+    --- editor's notice (EditorController:refuse_to_leave)
+    --- @return boolean refused
+    local function refused()
       return love.state.app_state == 'editor'
-          and CC.editor:ask_to_leave(exit)
+          and CC.editor:refuse_to_leave()
     end
 
     local function reserved_quickswitch()
@@ -1036,9 +1029,11 @@ Controller = {
         local ed = love.state.editor
         if ed then CC:edit(ed.buffer.filename, ed)
         else CC:edit() end
+        if CC.editor then CC.editor:restore_timelines() end
       elseif st == 'editor'
           and CC.editor:is_normal_mode() then
-        if asked(reserved_quickswitch) then return end
+        if refused() then return end
+        CC.editor:keep_timelines()
         local ed_state = CC:finish_edit()
         love.state.editor = ed_state
         CC:run_project()
@@ -1052,7 +1047,7 @@ Controller = {
 
     local function reserved_quit()
       if playback then return end
-      if asked(reserved_quit) then return end
+      if refused() then return end
       CC:quit_project()
     end
 
@@ -1068,14 +1063,14 @@ Controller = {
 
     local function reserved_reset()
       if playback then return end
-      if asked(reserved_reset) then return end
+      if refused() then return end
       CC:reset()
     end
 
     -- Restart stays live in playback too (matches the old
     -- restart() call, made in both branches).
     local function reserved_restart()
-      if asked(reserved_restart) then return end
+      if refused() then return end
       CC:restart()
     end
 
@@ -1132,7 +1127,12 @@ Controller = {
         love.event.quit()
       end
       local reservation = RESERVED.keypressed[combo_string(k)]
-      if reservation then reservation() end
+      -- While the key card shows, the editor's keys do
+      -- nothing, Ctrl+Q included (editor spec, IS3.16).
+      local st = love.state.app_state
+      local card = (st == 'editor' or st == 'ready')
+          and require('model.editor.keyCard').held()
+      if reservation and not card then reservation() end
 
       -- This is `love.handlers.keypressed`, the raw
       -- event-pump entry; `love.keypressed` below holds the
@@ -1143,19 +1143,17 @@ Controller = {
       -- here. (Mirrors stock LÖVE's love.handlers[name] ->
       -- love[name].) See doc/development/decisions/input.md #1
       -- "route-centric routing" + #11.
+      local handled
       if love.keypressed then
-        return love.keypressed(k, sc, isr)
+        handled = love.keypressed(k, sc, isr)
       end
+      -- a refusal at the gate holds back this key press alone
+      -- (EditorController:refuse_to_leave), never a later one
+      if CC.editor then CC.editor:gate_key_done() end
+      return handled
     end
 
     handlers.textinput = function(t)
-      -- The glyph of a Space whose key press answered an
-      -- editor question (EditorController:keypressed), once
-      -- the key's work is done; it waits through other keys
-      -- and repeats, and the next glyph ends it
-      local swallow = CC.swallow_glyph
-      CC.swallow_glyph = nil
-      if swallow and swallow == t then return end
       if love.textinput then
         return love.textinput(t)
       end

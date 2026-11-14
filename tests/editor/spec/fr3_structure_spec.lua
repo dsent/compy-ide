@@ -37,18 +37,14 @@ describe("FR3 structure and position #editor #spec", function()
       assert.same(3, K.blocks())
     end)
 
-    spec_gap("FR3.1 Preserve file structure: a line two " ..
-        "statements share survives an edit elsewhere", function(
-      gap
-    )
+    spec_it("FR3.1 Preserve file structure: a line two " ..
+        "statements share survives an edit elsewhere", function()
       K.open("shared.lua")
       K.browse_to_end()
       K.type("w = 4")
       local ok = pcall(K.keys, "return")
-      gap(function()
-        assert.is_true(ok)
-        assert.is_true(parses(K.file("shared.lua")))
-      end)
+      assert.is_true(ok)
+      assert.is_true(parses(K.file("shared.lua")))
     end)
 
     spec_it("FR3.1 Preserve file structure: a text file keeps "
@@ -152,17 +148,15 @@ describe("FR3 structure and position #editor #spec", function()
       K.open()
     end)
 
-    spec_gap(
+    spec_it(
         "FR3.2 Preserve browsing position across test runs: "
-        .. "the position and the view come back", function(gap)
+        .. "the position and the view come back", function()
       K.browse_to(30)
       local rows = K.view_rows()
       K.keys("lctrl", "t")
       K.keys("lctrl", "t")
-      gap(function()
-        assert.same(30, K.position())
-        assert.same(rows, K.view_rows())
-      end)
+      assert.same(30, K.position())
+      assert.same(rows, K.view_rows())
     end)
   end)
 
@@ -172,13 +166,11 @@ describe("FR3 structure and position #editor #spec", function()
       K.open()
     end)
 
-    spec_gap("FR3.3 Open a file ready to append: typing right "
-        .. "after opening appends a block", function(gap)
+    spec_it("FR3.3 Open a file ready to append: typing right "
+        .. "after opening appends a block", function()
       K.type("z = 3")
       K.keys("return")
-      gap(function()
-        assert.same("x = 1\ny = 2\nz = 3\n", K.file())
-      end)
+      assert.same("x = 1\ny = 2\nz = 3\n", K.file())
     end)
   end)
 
@@ -194,6 +186,9 @@ describe("FR3 structure and position #editor #spec", function()
         "FR3.4 Keep the browsed block in view: every row of "
         .. "a tall block can be seen without leaving it",
         function()
+      -- reached from above, the block starts at the view's
+      -- top (IS2.2), so Down brings in the rows below
+      K.browse_to(1)
       K.browse_to(2)
       local seen = { }
       for _ = 1, 40 do
@@ -220,22 +215,20 @@ describe("FR3 structure and position #editor #spec", function()
       K.open()
     end)
 
-    spec_gap("FR3.4 Keep the browsed block in view: browsing "
+    spec_it("FR3.4 Keep the browsed block in view: browsing "
         .. "leaves the draft and its cursor as they were",
-        function(gap)
+        function()
       K.browse_to_end()
       K.type("z = 3")
       local line, col = K.cursor()
       K.keys("lctrl", "up")
       K.keys("lctrl", "up")
-      gap(function()
-        assert.same("z = 3", K.draft())
-        assert.same({
-          line,
-          col
-        }, { K.cursor() })
-        assert.same("inserting", K.state())
-      end)
+      assert.same("z = 3", K.draft())
+      assert.same({
+        line,
+        col
+      }, { K.cursor() })
+      assert.same("inserting", K.state())
     end)
   end)
 
@@ -258,32 +251,28 @@ describe("FR3 structure and position #editor #spec", function()
       assert.same("end", K.position())
     end)
 
-    spec_gap("FR3.5 Advance position for sequential entry: " ..
+    spec_it("FR3.5 Advance position for sequential entry: " ..
         "before a block, two submissions stay in typing order",
-        function(gap)
+        function()
       K.browse_to(2)
       K.type("a = 1")
       K.keys("return")
       K.type("b = 2")
       K.keys("return")
-      gap(function()
-        assert.same("x = 1\na = 1\nb = 2\ny = 2\n", K.file())
-        assert.same(4, K.position())
-      end)
+      assert.same("x = 1\na = 1\nb = 2\ny = 2\n", K.file())
+      assert.same(4, K.position())
     end)
 
-    spec_gap(
+    spec_it(
         "FR3.5 Advance position for sequential entry: after "
-        .. "a replacement, the next block", function(gap)
+        .. "a replacement, the next block", function()
       K.browse_to(1)
       K.keys("f2")
       K.keys("end")
       K.type("0")
       K.keys("return")
-      gap(function()
-        assert.same("x = 10\ny = 2\n", K.file())
-        assert.same(2, K.position())
-      end)
+      assert.same("x = 10\ny = 2\n", K.file())
+      assert.same(2, K.position())
     end)
   end)
 
@@ -311,33 +300,29 @@ describe("FR3 structure and position #editor #spec", function()
       assert.is_nil(K.highlight())
     end)
 
-    spec_gap(
+    spec_it(
         "FR3.7 No highlight means the end position: nothing "
         .. "after a text file's last line reads as a line",
-        function(gap)
+        function()
       K.open("a.txt")
-      gap(function()
-        assert.same(2, K.blocks())
-        assert.same({
-          "one",
-          "two"
-        }, K.view_rows())
-      end)
+      assert.same(2, K.blocks())
+      assert.same({
+        "one",
+        "two"
+      }, K.view_rows())
     end)
 
-    spec_gap("FR3.7 No highlight means the end position: the "
+    spec_it("FR3.7 No highlight means the end position: the "
         .. "browsed block is white while it is the target",
-        function(gap)
+        function()
       K.open()
       K.browse_to(1)
       K.keys("f2")
-      gap(function()
-        assert.same("replacing", K.state())
-        assert.same({
-          "white",
-          1
-        }, { K.highlight() })
-      end)
+      assert.same("replacing", K.state())
+      assert.same({
+        "white",
+        1
+      }, { K.highlight() })
     end)
   end)
 end)

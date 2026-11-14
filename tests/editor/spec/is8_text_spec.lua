@@ -25,13 +25,118 @@ describe("IS8 text files #editor #spec", function()
     })
   end)
 
-  spec_gap("IS8.1 Open a text or Markdown file: at the end " ..
-      "position, a block per line", function(gap)
+  spec_it("IS8.1 Open a text or Markdown file: at the end " ..
+      "position, a block per line", function()
     K.open("a.txt")
-    gap(function()
-      assert.same("end", K.position())
-      assert.same(2, K.blocks())
-    end)
+    assert.same("end", K.position())
+    assert.same(2, K.blocks())
+  end)
+
+  spec_it("IS8.1 Open a text or Markdown file: a Markdown " ..
+      "file opens at the end position, a block per line",
+      function()
+    K.open("b.md")
+    assert.same("browsing", K.state())
+    assert.same("end", K.position())
+    assert.same(2, K.blocks())
+  end)
+
+  spec_it("IS8.1 Open a text or Markdown file: an empty text "
+      .. "file opens at its end, with no block", function()
+    K.open("new.txt")
+    assert.same(0, K.blocks())
+    assert.same("end", K.position())
+    K.type("first")
+    K.keys("return")
+    assert.same("first\n", K.file("new.txt"))
+  end)
+
+  spec_it("IS8.1 Open a text or Markdown file: Edit loads a " ..
+      "line and Enter replaces it", function()
+    K.open("a.txt")
+    K.browse_to(1)
+    K.keys("f2")
+    assert.same("replacing", K.state())
+    assert.same("one", K.draft())
+    K.type("!")
+    K.keys("return")
+    assert.same("one!\ntwo\n", K.file("a.txt"))
+    assert.same("browsing", K.state())
+    assert.same(2, K.position())
+  end)
+
+  spec_it("IS8.1 Open a text or Markdown file: Escape aborts " ..
+      "a replacement and the line stays", function()
+    K.open("a.txt")
+    K.browse_to(2)
+    K.keys("f2")
+    K.type("!")
+    K.keys("escape")
+    assert.same("browsing", K.state())
+    assert.same("", K.draft())
+    assert.same(2, K.position())
+    assert.same("one\ntwo\n", K.file("a.txt"))
+  end)
+
+  spec_it("IS8.1 Open a text or Markdown file: cutting a line "
+      .. "takes it from the file into the field", function()
+    K.open("a.txt")
+    K.browse_to(1)
+    K.keys("lctrl", "delete")
+    assert.same("two\n", K.file("a.txt"))
+    assert.same("one", K.draft())
+    assert.same(1, K.blocks())
+  end)
+
+  spec_it("IS8.2 Submit text: a draft is inserted before the "
+      .. "viewed line", function()
+    K.open("a.txt")
+    K.browse_to(2)
+    K.type("middle")
+    K.keys("return")
+    assert.same("one\nmiddle\ntwo\n", K.file("a.txt"))
+    assert.same(3, K.blocks())
+    assert.same(3, K.position())
+  end)
+
+  spec_it("IS8.2 Submit text: an empty draft inserts an " ..
+      "empty line", function()
+    K.open("a.txt")
+    K.browse_to(2)
+    K.keys("return")
+    assert.same("one\n\ntwo\n", K.file("a.txt"))
+    K.browse_to_end()
+    K.keys("return")
+    assert.same("one\n\ntwo\n\n", K.file("a.txt"))
+    assert.same(4, K.blocks())
+  end)
+
+  spec_it("IS8.2 Submit text: a replacement of several lines "
+      .. "puts a block for each in the line's place", function()
+    K.open("a.txt")
+    K.browse_to(1)
+    K.keys("f2")
+    K.keys("lshift", "return")
+    K.type("more")
+    K.keys("return")
+    assert.same("one\nmore\ntwo\n", K.file("a.txt"))
+    assert.same(3, K.blocks())
+  end)
+
+  spec_it("IS8.2 Submit text: a Markdown draft is accepted as "
+      .. "written, each line a block", function()
+    K.open("b.md")
+    K.type_lines({
+      "## Sub   title",
+      "x=  = 1"
+    })
+    K.keys("return")
+    assert.same("", K.draft())
+    assert.same(
+      "# Title\nsome *em* text\n## Sub   title\nx=  = 1\n",
+      K.file("b.md")
+    )
+    assert.same(4, K.blocks())
   end)
 
   spec_it("IS8.2 Submit text: Enter accepts with no syntax " ..
@@ -58,8 +163,8 @@ describe("IS8 text files #editor #spec", function()
     assert.truthy(K.file("a.txt"):find("\nthree\nfour\n$"))
   end)
 
-  spec_gap("IS8.2 Submit text: a text file holds a block per "
-      .. "line, before and after a submission", function(gap)
+  spec_it("IS8.2 Submit text: a text file holds a block per "
+      .. "line, before and after a submission", function()
     K.open("a.txt")
     local opened = K.blocks()
     K.browse_to_end()
@@ -68,10 +173,8 @@ describe("IS8 text files #editor #spec", function()
       "four"
     })
     K.keys("return")
-    gap(function()
-      assert.same(2, opened)
-      assert.same(4, K.blocks())
-    end)
+    assert.same(2, opened)
+    assert.same(4, K.blocks())
   end)
 
   spec_it("IS8.3 Highlight Markdown: the editor field colours "
@@ -89,15 +192,13 @@ describe("IS8 text files #editor #spec", function()
     assert.is_true(txt <= 1)
   end)
 
-  spec_gap("IS8.2 Submit text: an append adds the draft's " ..
-      "lines and nothing else", function(gap)
+  spec_it("IS8.2 Submit text: an append adds the draft's " ..
+      "lines and nothing else", function()
     K.open("a.txt")
     K.browse_to_end()
     K.type("three")
     K.keys("return")
-    gap(function()
-      assert.same("one\ntwo\nthree\n", K.file("a.txt"))
-    end)
+    assert.same("one\ntwo\nthree\n", K.file("a.txt"))
   end)
 
   spec_it("IS8.2 Submit text: a line has no length limit",

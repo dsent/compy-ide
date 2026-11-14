@@ -51,38 +51,47 @@ describe("R4 orientation #editor #spec", function()
     })
   end)
 
-  spec_gap("NFR4.1 Identify the pending action: the status " ..
+  spec_it("NFR4.1 Identify the pending action: the status " ..
       "line tells browsing, inserting and replacing apart",
-      function(gap)
+      function()
     K.open()
     local b, i, r, state = words_per_state()
-    gap(function()
-      assert.same("replacing", state)
-      assert.are_not.same(b, i)
-      assert.are_not.same(i, r)
-      assert.are_not.same(b, r)
-    end)
+    assert.same("replacing", state)
+    assert.are_not.same(b, i)
+    assert.are_not.same(i, r)
+    assert.are_not.same(b, r)
   end)
 
-  spec_gap("FR4.2 Deliberate submission: browsing away from a "
-      .. "changed draft writes nothing", function(gap)
+  spec_it("FR4.2 Deliberate submission: browsing away from a "
+      .. "changed draft writes nothing", function()
     K.open()
     K.browse_to_end()
     K.type("z = 3")
     K.keys("lctrl", "up")
-    gap(function()
-      assert.same("x = 1\ny = 2\n", K.file())
-    end)
+    assert.same("x = 1\ny = 2\n", K.file())
   end)
 
   spec_it("NFR4.3 Understandable submission outcome: a refused "
       .. "submission says so and keeps the draft", function()
     K.open()
     K.browse_to_end()
-    K.type("x = ")
+    -- a failure before the draft's end (IS3.4): one at its
+    -- end continues on a new line instead (IS3.5)
+    K.type("x = = 1")
     K.keys("return")
-    assert.is_not_nil(K.message())
-    assert.same("x = ", K.draft())
+    -- a syntax failure has its own cues and no notice
+    -- (IS3.14): the text is red from the failing character,
+    -- and the cursor stands before it (IS3.4)
+    local _, red = K.field_highlight()
+    assert.same({
+      1,
+      5
+    }, red)
+    assert.same({
+      1,
+      5
+    }, { K.cursor() })
+    assert.same("x = = 1", K.draft())
     assert.same("x = 1\ny = 2\n", K.file())
   end)
 
@@ -97,9 +106,9 @@ describe("R4 orientation #editor #spec", function()
     assert.same("browsing", K.state())
   end)
 
-  spec_gap("NFR4.5 Consistent text interaction: Escape drops "
+  spec_it("NFR4.5 Consistent text interaction: Escape drops "
       .. "a draft in the console and in the editor alike",
-      function(gap)
+      function()
     K.type("x = 1")
     K.keys("escape")
     local console = K.console_draft()
@@ -107,10 +116,8 @@ describe("R4 orientation #editor #spec", function()
     K.browse_to_end()
     K.type("x = 1")
     K.keys("escape")
-    gap(function()
-      assert.same("", console)
-      assert.same("", K.draft())
-    end)
+    assert.same("", console)
+    assert.same("", K.draft())
   end)
 
   spec_it("FR4.6 Visible project and context on the status " ..
@@ -119,23 +126,19 @@ describe("R4 orientation #editor #spec", function()
     assert.truthy(K.status_text():find("main.lua", 1, true))
   end)
 
-  spec_gap("FR4.6 Visible project and context on the status "
-      .. "line: the open project's name", function(gap)
+  spec_it("FR4.6 Visible project and context on the status "
+      .. "line: the open project's name", function()
     K.open()
-    gap(function()
-      assert.truthy(K.status_text():find(K.PROJECT, 1, true))
-    end)
+    assert.truthy(K.status_text():find(K.PROJECT, 1, true))
   end)
 
-  spec_gap("FR4.6 Visible project and context on the status "
-      .. "line: the editor's state", function(gap)
+  spec_it("FR4.6 Visible project and context on the status "
+      .. "line: the editor's state", function()
     K.open()
     local b, i, r, state = words_per_state()
-    gap(function()
-      assert.same("replacing", state)
-      assert.are_not.same(i, r)
-      assert.are_not.same(b, i)
-    end)
+    assert.same("replacing", state)
+    assert.are_not.same(i, r)
+    assert.are_not.same(b, i)
   end)
 
   spec_it("FR4.7 Wrap long lines: a draft line wider than the "
@@ -150,24 +153,20 @@ describe("R4 orientation #editor #spec", function()
     assert.same(line, K.draft())
   end)
 
-  spec_gap("FR4.7 Wrap long lines: the cursor's row is shown "
-      .. "when wrapped rows outgrow the field", function(gap)
+  spec_it("FR4.7 Wrap long lines: the cursor's row is shown "
+      .. "when wrapped rows outgrow the field", function()
     K.open("a.txt")
     K.browse_to_end()
     local lines = { }
+    -- 92 characters, two rows; a line's number ends its
+    -- second row, where the cursor comes to stand
     for n = 1, 10 do
-      lines[n] = string.format("%02d", n) .. string.rep("x", 90)
+      local nn = string.format("%02d", n)
+      lines[n] = nn .. string.rep("x", 88) .. nn
     end
     K.type_lines(lines)
-    gap(function()
-      local shown = false
-      for _, r in ipairs(K.field_rows()) do
-        if r:sub(1, 2) == "10" then
-          shown = true
-        end
-      end
-      assert.is_true(shown)
-    end)
+    local rows = K.field_rows()
+    assert.same(string.rep("x", 26) .. "10", rows[#rows])
   end)
 
   spec_it("FR4.9 Keys on request: holding the help key changes "
@@ -181,19 +180,17 @@ describe("R4 orientation #editor #spec", function()
     assert.same("x = 1\ny = 2\n", K.file())
   end)
 
-  spec_gap("FR4.9 Keys on request: while the help key is held "
-      .. "the editor shows the keys", function(gap)
+  spec_it("FR4.9 Keys on request: while the help key is held "
+      .. "the editor shows the keys", function()
     K.open()
     K.hold("f1")
     local card = K.key_card()
     K.release("f1")
-    gap(function()
-      assert.is_not_nil(card)
-      -- the browsing state's keys first: Edit among them
-      assert.truthy(
-        table.concat(card, "\n"):find("F2", 1, true)
-      )
-      assert.is_nil(K.key_card())
-    end)
+    assert.is_not_nil(card)
+    -- the browsing state's keys first: Edit among them
+    assert.truthy(
+      table.concat(card, "\n"):find("F2", 1, true)
+    )
+    assert.is_nil(K.key_card())
   end)
 end)

@@ -235,12 +235,18 @@ local function req_extractor(node)
       local lhs = node[1]
       local rhs = node[2]
 
-      if tag == 'Call'
-          and lhs.tag == 'Id' and lhs[1] == 'require'
+      local fn = tag == 'Call' and lhs.tag == 'Id' and lhs[1]
+      --- a name written out; dofile's is the file itself
+      if (fn == 'require' or fn == 'dofile')
+          and type(rhs) == 'table' and rhs.tag == 'String'
       then
         local val = rhs[1]
         local li  = get_line_number(rhs)
-        return { { line = li, name = val } }
+        return { {
+          line = li,
+          name = val,
+          file = fn == 'dofile' or nil,
+        } }
       end
     end
   end

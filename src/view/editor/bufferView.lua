@@ -86,30 +86,6 @@ function BufferView:open(buffer)
   self:_update_visible(ir)
 end
 
---- @private
---- @return integer[][]
---- @return boolean loaded_is_sel
-function BufferView:_get_wrapped_selection()
-  local sel = self.buffer:get_selection()
-  local cont = self.content
-  local ret = {}
-  if self.content_type == 'lua'
-  then
-    --- @type Range?
-    local br = cont:get_block_pos(sel)
-    if br then
-      for _, l in ipairs(br:enumerate()) do
-        table.insert(ret, self.content.wrap_forward[l])
-      end
-    end
-  else
-    ret[1] = self.content.wrap_forward[sel]
-  end
-
-  local ls = self.buffer:loaded_is_sel(false)
-  return ret, ls
-end
-
 --- @return BufferState
 function BufferView:get_state()
   local buf = self.buffer
@@ -154,11 +130,7 @@ function BufferView:refresh(moved)
     end
   end
 
-  local clen = self.content:get_content_length()
-  local off = self.content.offset
-  local si = 1 + off
-  local ei = math.min(self.LINES, clen + 1) + off
-  self:_update_visible(Range(si, ei))
+  self:_show_from(1 + self.content.offset)
 end
 
 -------------------
@@ -217,59 +189,141 @@ function BufferView:scroll_to_line(ln)
   self:scroll_to(wl[1] - 1)
 end
 
---- @param tolerate_oversize boolean?
---- @return boolean
---- @return VerticalDir?
---- @return number? diff
-function BufferView:is_selection_visible(tolerate_oversize)
-  local sel = self.buffer:get_selection()
-
-  local s_w
-  if self.content_type == 'lua'
-  then
-    s_w = self.content:get_block_app_pos(sel):enumerate()
-  else
-    s_w = self.content.wrap_forward[sel]
+--- The view's rows of block `b`, wrapped rows included;
+--- none for the end position, which has no row of its own
+--- @param b integer
+--- @return integer[]
+function BufferView:_block_rows(b)
+  local cont = self.content
+  local out = {}
+  local lines = { b }
+  if self.content_type == 'lua' then
+    local known = 0 < b and b <= #(cont.v_blocks)
+    local pos = known and cont:get_block_pos(b)
+    lines = pos and pos:enumerate() or {}
+  elseif b < 1 or cont:get_text_length() < 1
+      or self.buffer:get_content_length() < b then
+    lines = {}
   end
-
-  local sel_s = s_w[1]
-  local sel_e = s_w[#s_w]
-  local r = self.content:get_range()
-  if r:inc(sel_s) and r:inc(sel_e) then return true end
-
-  -- handle monster blocks
-  if tolerate_oversize then
-    if (sel_s == r.start) and (sel_e > r.fin) then
-      return true
+  for _, l in ipairs(lines) do
+    for _, r in ipairs(cont.wrap_forward[l] or {}) do
+      out[#out + 1] = r
     end
   end
-
-  local dir = (function()
-    if r.start > sel_s then return 'up' end
-    if r.fin < sel_e then return 'down' end
-  end)()
-  local d = (function()
-    if dir == 'up' then
-      return r.start - sel_s
-    elseif dir == 'down' then
-      --- TODO: smooothen around the end
-      local off = self.LINES - 1
-      -- local er = self:_get_end_range()
-      -- if er:inc(sel_e) then
-      --   off = 0 -- self.SCROLL_BY
-      -- end
-      return sel_s - r.fin + off
-    end
-  end)()
-
-  return false, dir, d
+  return out
 end
 
-function BufferView:follow_selection()
-  local v, dir, d = self:is_selection_visible()
-  if not v then
-    if dir and d then self:scroll(dir, d) end
+--- First and last view row of the browsing position; at the
+--- end position the first lies past the last
+--- @private
+--- @return integer first
+--- @return integer last
+function BufferView:_browsed_rows()
+  local rows = self:_block_rows(self.buffer:get_selection())
+  local total = self.content:get_text_length()
+  if #rows == 0 then
+    return total + 1, total
   end
+  return rows[1], rows[#rows]
+end
+
+--- The rows the document view has: the field's rows above
+--- its first cover the view's last ones
+--- @return integer
+function BufferView:get_height()
+  return math.max(1, self.LINES - (self.covered or 0))
+end
+
+--- @param n integer --- view rows the editor field covers
+function BufferView:set_covered(n)
+  local covered = math.max(0, n or 0)
+  if covered == (self.covered or 0) then return end
+  self.covered = covered
+  if self.content then self:follow_selection() end
+end
+
+--- @private
+--- @param top integer --- the view's first row
+function BufferView:_show_from(top)
+  local total = self.content:get_text_length()
+  local h = self:get_height()
+  local first = math.max(1, math.min(top, total - h + 1))
+  local last = math.min(first + h - 1, total + 1)
+  self.content:set_range(Range(first, last))
+  self.content.offset = first - 1
+end
+
+--- The view's first row once it shows rows `s` to `e` of
+--- `total`: a block that fits gets a row of context on each
+--- side where there is room; a taller one keeps the view
+--- inside its rows, so it shows from its first row when the
+--- view was above it and from its last when it was below.
+--- @param top integer
+--- @param total integer
+--- @param s integer
+--- @param e integer
+--- @param h integer
+--- @return integer
+local function settle(top, total, s, e, h)
+  local n = e - s + 1
+  if h < n then
+    return math.max(s, math.min(top, e - h + 1))
+  end
+  local margin = (2 < h and n + 2 <= h) and 1 or 0
+  local from = math.max(1, s - margin)
+  local to = math.min(total, e + margin)
+  if from < top then
+    return from
+  end
+  if top + h - 1 < to then
+    return math.min(to - h + 1, from)
+  end
+  return top
+end
+
+--- @param tolerate_oversize boolean?
+--- @return boolean
+function BufferView:is_selection_visible(tolerate_oversize)
+  local s, e = self:_browsed_rows()
+  local r = self.content:get_range()
+  if e < s then
+    return r:inc(e) or e == 0
+  end
+  if r:inc(s) and r:inc(e) then return true end
+  -- a block taller than the view, shown from its first row
+  return (tolerate_oversize and s == r.start and r.fin < e)
+      or false
+end
+
+--- Show the browsing position: the browsed block with its
+--- context, or the end of the file at the end position
+function BufferView:follow_selection()
+  local s, e = self:_browsed_rows()
+  local total = self.content:get_text_length()
+  local top = self.content:get_range().start
+  self:_show_from(settle(top, total, s, e, self:get_height()))
+end
+
+--- While a row of the browsed block is hidden beyond the
+--- view's edge in `dir`, scroll one row that way; the
+--- browsing position stays
+--- @param dir VerticalDir
+--- @return boolean scrolled
+function BufferView:scroll_block(dir)
+  local s, e = self:_browsed_rows()
+  if e < s then return false end
+  self:follow_selection()
+  local top = self.content:get_range().start
+  local bottom = top + self:get_height() - 1
+  if dir == 'down' and bottom < e then
+    self:_show_from(top + 1)
+    return true
+  end
+  if dir == 'up' and s < top then
+    self:_show_from(top - 1)
+    return true
+  end
+  return false
 end
 
 --- Source line at a vertical pixel position, if any
@@ -331,48 +385,37 @@ function BufferView:draw(special)
   end
 
   local draw_highlight = function()
-    local ws, ls = self:_get_wrapped_selection()
-
-    local highlight_line = function(ln)
-      if not ln then return end
-      if special then
-        gfx.setColor(colors.highlight_special)
-      else
-        if ls then
-          gfx.setColor(colors.highlight_loaded)
-        else
-          gfx.setColor(colors.highlight)
-        end
-      end
-      local l_y = (ln - 1) * fh
-      gfx.rectangle('fill', 0, l_y, width, fh)
-    end
-
     local off = self.content.offset
-    for _, w in ipairs(ws) do
-      for _, v in ipairs(w) do
-        if self.content.range:inc(v) then
-          if (not self.cfg.show_append_hl)
-              and (v == self.content:get_content_length() + 1)
-          then
-            --- skip hl
-          else
-            highlight_line(v - off)
-          end
+    local range = self.content.range
+
+    --- @param rows integer[]
+    --- @param color RGB
+    --- @param inset number
+    local fill = function(rows, color, inset)
+      gfx.setColor(color)
+      for _, v in ipairs(rows) do
+        if range:inc(v) then
+          local l_y = (v - off - 1) * fh
+          gfx.rectangle('fill', inset, l_y,
+            width - 2 * inset, fh)
         end
       end
     end
 
-    --- the active line, a shade brighter inside the block
-    local al = self.buffer:get_active_line()
-    local wl = self.content.wrap_forward[al]
-    if wl then
-      gfx.setColor(Color.with_alpha(colors.fg, .125))
-      for _, v in ipairs(wl) do
-        if self.content.range:inc(v) then
-          local l_y = (v - off - 1) * fh
-          gfx.rectangle('fill', 0, l_y, width, fh)
-        end
+    --- white on the browsed block; yellow, which stays, on
+    --- the replacement target, inside the white where the
+    --- two are one block
+    local sel = self.buffer:get_selection()
+    local target = self.buffer.loaded
+    local browsed = self:_block_rows(sel)
+    if special then
+      fill(browsed, colors.highlight_special, 0)
+    else
+      fill(browsed, colors.highlight, 0)
+      if target then
+        local inset = target == sel and fw / 2 or 0
+        fill(self:_block_rows(target),
+          colors.highlight_loaded, inset)
       end
     end
   end

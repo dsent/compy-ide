@@ -5,6 +5,10 @@ require("util.debug")
 require("util.view")
 
 
+--- The rows a notice may take under the draft (IS3.14): one,
+--- or up to three when it is wider than the field
+local NOTICE_ROWS = 3
+
 --- @param cfg ViewConfig
 --- @param ctrl UserInputController
 local new = function(cfg, ctrl)
@@ -12,12 +16,14 @@ local new = function(cfg, ctrl)
   local w = gfx.getWidth()
   --- max lines + statusline
   local h = cfg.input_max * cfg.fh + cfg.fh
+  --- and a notice's rows under the draft's
+  local canvas_h = h + NOTICE_ROWS * cfg.fh
   return {
     cfg = cfg,
     controller = ctrl,
     statusline = Statusline(cfg),
     start_h = h,
-    canvas = gfx.newCanvas(w, h),
+    canvas = gfx.newCanvas(w, canvas_h),
   }
 end
 
@@ -37,34 +43,43 @@ local get_colors = function(cf_colors)
   end
 end
 
---- The Overflow
---- When the cursor is on the last character of the line
---- we display it at the start of the next line as that's
---- where newly added text will appear
---- However, when the line also happens to be wrap-length,
---- there either is no next line yet, or it would look the
---- same as if it was at the start of the next.
---- Hence, the overflow phantom line.
---- @param w integer
---- @param text string[]
---- @param cursor Cursor
-local calc_overflow = function(w, text, cursor)
-  local cl, cc = cursor.l, cursor.c
-  local acc = cc - 1
-  --- overflow binary and actual height (in lines)
-  local overflow = 0
-  local of_h = 0
-  local curline = text[cl]
-  local clen = string.ulen(curline)
-  local q, rem = math.modf(acc / w)
-  local ofpos = rem == 0 and acc == clen and clen > 0
-  if ofpos
-      and string.is_non_empty_string_array(text)
-  then
-    overflow = 1
-    of_h = q
+--- The rows the field takes for `input`, the statusline
+--- apart: the draft's rows up to the field's display limit
+--- (IS3.13), or the rows of an error shown in its place
+--- @param input InputDTO
+--- @return integer
+function UserInputView:get_rows(input)
+  local max = self.cfg.input_max
+  local err = input.wrapped_error or {}
+  local draft = self:_draft_rows(input)
+  if string.is_non_empty_string_array(err) then
+    if self:_shows_notice() then
+      return draft + math.min(#err, NOTICE_ROWS)
+    end
+    return math.min(#err, max)
   end
-  return overflow, of_h, ofpos
+  return draft
+end
+
+--- Whether the message shown is a notice (IS3.14): it goes
+--- under the draft's rows, where an error takes their place
+--- @private
+--- @return boolean
+function UserInputView:_shows_notice()
+  local e = self.controller.model.error
+  return type(e) == 'table' and e.notice == true
+end
+
+--- The draft's rows in the field, up to its display limit
+--- (IS3.13). A line's end is on its last row, also when the
+--- row is full, as the model has it.
+--- @private
+--- @param input InputDTO
+--- @return integer
+function UserInputView:_draft_rows(input)
+  local vc = input.visible
+  local cap = vc.size_max or self.cfg.input_max
+  return math.max(1, math.min(vc:get_content_length(), cap))
 end
 
 --- @param input InputDTO
@@ -90,39 +105,44 @@ function UserInputView:render_input(input, status, time)
 
   local text = input.text
   local vc = input.visible
-  local inLines = math.min(
-    vc:get_content_length(),
-    cfg.input_max)
+  local inLines = self:_draft_rows(input)
 
-  local overflow, of_h, ofpos = calc_overflow(
-    w, text, cursorInfo.cursor)
+  --- the field's row of the draft's wrapped row `r`
+  local function field_row(r)
+    return r - vc.offset
+  end
 
-  local inHeight = (inLines + overflow) * fh
+  local inHeight = inLines * fh
   local apparentHeight = inHeight
 
   local wrap_forward = vc.wrap_forward
 
 
   local vpH = gfx.getHeight()
-  self.start_h = vpH - (inLines + overflow + 1) * fh
+  self.start_h = vpH - (inLines + 1) * fh
 
   local function drawCursor()
-    local y_offset = math.floor(acc / w)
-    local yi = y_offset + 1
-    local acl = (wrap_forward[cl] or { 1 })[yi] or 1
-    local vcl = acl - vc.offset + of_h
+    --- the line's end is on its last row, also when that row
+    --- is full: the cursor then stands past the last column
+    local rows = wrap_forward[cl] or { 1 }
+    local yi = math.min(math.floor(acc / w) + 1, #rows)
+    local vcl = field_row(rows[yi] or 1)
 
     if vcl < 1 then return end
 
     local ch = vcl * fh
-    local x_offset = math.fmod(acc, w)
+    local x_offset = acc - (yi - 1) * w
     local x = (x_offset - .5) * fw
 
     gfx.push('all')
     gfx.setColor(cf_colors.input.cursor)
     gfx.print('|', x, ch)
+    --- at either edge of the field half the bar is cut off:
+    --- a second one stands inside it
     if x_offset == 0 then
       gfx.print('|', x + 4, ch)
+    elseif x_offset >= w then
+      gfx.print('|', x - 4, ch)
     end
     gfx.pop()
   end
@@ -162,7 +182,8 @@ function UserInputView:render_input(input, status, time)
         return
       end
 
-      for c = 1, tl do
+      local row = field_row(ln)
+      for c = 1, row < 1 and 0 or tl do
         local char = string.usub(s, c, c)
         local color = colors.fg
 
@@ -178,8 +199,14 @@ function UserInputView:render_input(input, status, time)
             color = Color[ci] or colors.fg
           end
         end
-        if el and ln > el or
-            (ln == el and (ec and c > ec or ec == 1)) then
+        --- IS3.4: red from the failing character on, in the
+        --- draft's own lines and columns; a wrapped row is no
+        --- line
+        local at_l = tlc and tlc.l or ln
+        local at_c = tlc and tlc.c or c
+        --- a draft that is only unfinished has none (IS3.5)
+        if el and not perr.at_end and (at_l > el
+              or (at_l == el and ec and at_c >= ec)) then
           color = cf_colors.input.error
         end
         local selected = (function()
@@ -203,7 +230,7 @@ function UserInputView:render_input(input, status, time)
             end
           end
         end)()
-        local dy = (l) * fh
+        local dy = row * fh
         local dx = (c - 1) * fw
         ViewUtils.write_token(dy, dx,
           char, color, colors.bg, selected)
@@ -214,7 +241,10 @@ function UserInputView:render_input(input, status, time)
     gfx.push('all')
     gfx.setColor(colors.fg)
     for l, str in ipairs(visible) do
-      ViewUtils.write_line(l, str, fh, 0, self.cfg)
+      local row = field_row(l + vc.offset)
+      if 0 < row then
+        ViewUtils.write_line(row, str, fh, 0, self.cfg)
+      end
     end
     gfx.pop()
   end
@@ -225,7 +255,8 @@ function UserInputView:render_input(input, status, time)
 end
 
 --- @param err_text string[]
-function UserInputView:render_error(err_text)
+--- @param status Status?
+function UserInputView:render_error(err_text, status)
   local colors = self.cfg.colors
   local fh = self.cfg.fh
   local vpH = gfx.getHeight()
@@ -253,6 +284,14 @@ function UserInputView:render_error(err_text)
       apparentHeight * fh)
   end
 
+  --- the status line stays while a message shows (FR4.6)
+  if status then
+    gfx.push('all')
+    gfx.setFont(self.cfg.font)
+    self.statusline:draw(status, 0)
+    gfx.pop()
+  end
+
   gfx.push('all')
   drawBackground()
 
@@ -275,6 +314,30 @@ function UserInputView:render_error(err_text)
   gfx.pop()
 end
 
+--- A notice under the draft's rows (IS3.14): it blocks no
+--- input, so the draft stays shown above it. Call after
+--- render_input, which places the field.
+--- @param err_text string[]
+function UserInputView:render_notice(err_text)
+  local colors = self.cfg.colors
+  local fh = self.cfg.fh
+  local rows = math.min(#err_text, NOTICE_ROWS)
+  local draft_rows = (gfx.getHeight() - self.start_h) / fh - 1
+  local top = (draft_rows + 1) * fh
+  self.start_h = self.start_h - rows * fh
+
+  gfx.push('all')
+  gfx.setFont(self.cfg.font)
+  gfx.setColor(colors.input.error_bg)
+  gfx.rectangle("fill", 0, top,
+    self.cfg.drawableWidth, rows * fh)
+  gfx.setColor(colors.input.error)
+  for l = 1, rows do
+    gfx.print(err_text[l], 0, top + (l - 1) * fh)
+  end
+  gfx.pop()
+end
+
 --- @param input InputDTO
 --- @param status Status
 function UserInputView:render(input, status, time)
@@ -287,10 +350,12 @@ function UserInputView:render(input, status, time)
   self.canvas:renderTo(function()
     gfx.clear(0, 0, 0, 1)
     gfx.push('all')
-    if isError then
-      self:render_error(err_text)
+    local notice = isError and self:_shows_notice()
+    if isError and not notice then
+      self:render_error(err_text, status)
     else
       self:render_input(input, status, time)
+      if notice then self:render_notice(err_text) end
     end
     gfx.pop()
   end)

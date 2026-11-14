@@ -50,9 +50,53 @@ Project-author guide: `doc/input_api.md`.
 - **`singleclick` / `doubleclick` are repositioned** as input channels
   (`compy.input.hooks.singleclick` / `.doubleclick`, replacing the preceding
   `compy.singleclick` / `compy.doubleclick` for the uniformity). 
+- **The file editor works in three states and asks no questions.** With an empty field
+  you browse the file block by block; text you type is inserted before the highlighted
+  block, or at the end of the file, on Enter; F2 loads the highlighted block into the
+  field, and Enter then replaces it. The status line names the state, and holding F1
+  shows the keys it admits. `doc/EDITOR.md` has the key table.
+- **A file opens at its end, ready to append.** An empty or new file starts with no
+  line at all, and a new file is created by the first text you submit.
+- **Escape is the one way back.** It dismisses a notice, drops the text in the field
+  or the replacement, and with an empty field steps back from the file: to the file
+  you came from with Ctrl+J, at the place you left it, or to the console.
+- **Refusals are one-line notices over the field.** A notice says what was refused and
+  what would work, and the next key dismisses it. A failed save names the file and the
+  reason and keeps your text in the field.
+- **Leaving waits for the edit to end.** Ctrl+T, Ctrl+Q, Ctrl+Shift+R, Ctrl+Alt+R and
+  the deprecated Ctrl+Shift+S are refused with a notice while there is text in the
+  field or a block is being replaced; submit it or drop it first. Ctrl+J is refused the
+  same way.
+- **Blocks are reused through the field.** Ctrl+Insert copies the highlighted block
+  into the field, Ctrl+Delete cuts it there, Shift+Insert submits and keeps the text,
+  and Alt+Up / Alt+Down move the block. Ctrl+Z and Ctrl+Y undo and redo both typing and
+  changes to the file.
+- **Text and Markdown files hold one block per line.** A line is accepted as written,
+  with no syntax check and no formatting, and nothing is added after the last line. A
+  file whose name ends in neither `.lua`, `.txt` nor `.md` opens as plain text.
+- **Ctrl+J follows `dofile("name.lua")` as well as `require`.** A file that is missing,
+  already open, unreadable or not UTF-8 text is refused with a notice, and `edit()` on
+  an unreadable or non-UTF-8 file says so in the console and opens nothing.
+- **Two statements sharing a line are one block.** Editing elsewhere in such a file no
+  longer breaks it.
+- **A file with Windows line ends (CRLF) keeps them.** Its lines are shown and edited
+  without the carriage return, and every line is written back with CRLF.
+- **A Lua file with a syntax error opens, so you can fix it.** Each of its lines is a
+  block until the file is valid Lua again: you can add text, and Ctrl+Delete cuts a
+  broken line into the field to repair it. F2 on such a line is refused with a notice.
+- Ctrl+Up / Ctrl+Down browse blocks in every state, PageUp / PageDown browse ten
+  blocks, and Ctrl+K in the field deletes to the end of the line.
 
 ### Removed
 
+- **The editor's navigation, editing and block-reorder modes**, with their keys: Enter
+  no longer opens a block (F2 does), Ctrl+Enter and Ctrl+Shift+Enter no longer open
+  an empty block, Ctrl+M no longer starts a move (Alt+Up / Alt+Down move a block), and
+  Shift+Esc no longer leaves or discards (Escape does).
+- **The editor's questions.** Nothing asks "discard the changes?" or about an unsaved
+  file any more; see *Changed* for the notices that replace them.
+- A draft is no longer carried along when Ctrl+J opens another file: Ctrl+J waits for
+  the edit to end.
 - **Polling user input is gone entirely.** The idiom of reading input by checking a
   global every frame is removed; use the new event-driven, asynchronous API, which
   shows/hides and manages the input widget through its own calls and callbacks.

@@ -52,46 +52,40 @@ describe("FR1 and FR2 #editor #spec", function()
       assert.same("inserting", K.state())
     end)
 
-    spec_gap("FR1.2 Resolve each edit: no second edit begins "
-        .. "while one is open", function(gap)
+    spec_it("FR1.2 Resolve each edit: no second edit begins "
+        .. "while one is open", function()
       open_file()
       K.browse_to_end()
       K.type("a = 1")
       local browsed = pcall(K.browse_to, 1)
       K.keys("f2")
-      gap(function()
-        assert.is_true(browsed)
-        assert.same("inserting", K.state())
-        assert.same("a = 1", K.draft())
-        assert.is_nil(K.target())
-      end)
+      assert.is_true(browsed)
+      assert.same("inserting", K.state())
+      assert.same("a = 1", K.draft())
+      assert.is_nil(K.target())
     end)
 
-    spec_gap(
+    spec_it(
         "FR1.3 Keep the replacement target: browsing leaves "
-        .. "the target, changed draft or not", function(gap)
+        .. "the target, changed draft or not", function()
       open_file()
       edit(1)
       local browsed = pcall(K.browse_to, 3)
       local unchanged = K.target()
       K.type("0")
       pcall(K.browse_to, 2)
-      gap(function()
-        assert.is_true(browsed)
-        assert.same(1, unchanged)
-        assert.same(1, K.target())
-        assert.same(FILE, K.file())
-      end)
+      assert.is_true(browsed)
+      assert.same(1, unchanged)
+      assert.same(1, K.target())
+      assert.same(FILE, K.file())
     end)
 
-    spec_gap("FR1.4 Explicit replacement entry: typing on a "
-        .. "block never makes it the target", function(gap)
+    spec_it("FR1.4 Explicit replacement entry: typing on a "
+        .. "block never makes it the target", function()
       open_file()
       K.browse_to(2)
       K.type("a")
-      gap(function()
-        assert.is_nil(K.target())
-      end)
+      assert.is_nil(K.target())
     end)
 
     spec_it("FR1.4 Explicit replacement entry: browsing never "
@@ -104,31 +98,28 @@ describe("FR1 and FR2 #editor #spec", function()
       assert.same("browsing", K.state())
     end)
 
-    spec_gap("FR1.5 Cursor at the end of loaded text: after "
-        .. "Edit", function(gap)
+    spec_it("FR1.5 Cursor at the end of loaded text: after "
+        .. "Edit", function()
       open_file("if a then\n  b = 1\nend\n")
       edit(1)
-      gap(function()
-        assert.same("replacing", K.state())
-        assert.same({
-          3,
-          2
-        }, { K.cursor() })
-      end)
+      assert.same("replacing", K.state())
+      -- after the last character of "end", the third line
+      assert.same({
+        3,
+        4
+      }, { K.cursor() })
     end)
 
-    spec_gap("FR1.5 Cursor at the end of loaded text: after a "
-        .. "cut", function(gap)
+    spec_it("FR1.5 Cursor at the end of loaded text: after a "
+        .. "cut", function()
       open_file()
       K.browse_to(2)
       K.keys("lctrl", "delete")
-      gap(function()
-        assert.same("y = 2", K.draft())
-        assert.same({
-          1,
-          6
-        }, { K.cursor() })
-      end)
+      assert.same("y = 2", K.draft())
+      assert.same({
+        1,
+        6
+      }, { K.cursor() })
     end)
 
     spec_it(
@@ -145,32 +136,28 @@ describe("FR1 and FR2 #editor #spec", function()
       assert.same(FILE .. "a = 1\nb = 2\n", K.file())
     end)
 
-    spec_gap("FR1.7 Explicit block removal: Backspace, Delete "
-        .. "and Ctrl+K never touch the file", function(gap)
+    spec_it("FR1.7 Explicit block removal: Backspace, Delete "
+        .. "and Ctrl+K never touch the file", function()
       open_file()
       K.browse_to(2)
       K.keys("backspace")
       K.keys("delete")
       K.keys("lctrl", "k")
-      gap(function()
-        assert.same(FILE, K.file())
-        assert.same(3, K.blocks())
-      end)
+      assert.same(FILE, K.file())
+      assert.same(3, K.blocks())
     end)
 
-    spec_gap(
+    spec_it(
         "FR1.8 Reuse a block in the draft: Ctrl+Ins copies " ..
-        "the browsed block in at the cursor", function(gap)
+        "the browsed block in at the cursor", function()
       open_file()
       K.browse_to_end()
       K.type("a = 1")
       local browsed = pcall(K.browse_to, 1)
       K.keys("lctrl", "insert")
-      gap(function()
-        assert.is_true(browsed)
-        assert.same("a = 1\nx = 1", K.draft())
-        assert.same(FILE, K.file())
-      end)
+      assert.is_true(browsed)
+      assert.same("a = 1\nx = 1", K.draft())
+      assert.same(FILE, K.file())
     end)
 
     spec_it("FR1.9 Break a line on request: Shift+Enter, no "
@@ -183,17 +170,15 @@ describe("FR1 and FR2 #editor #spec", function()
       assert.same(FILE, K.file())
     end)
 
-    spec_gap("FR1.9 Break a line on request: right after a " ..
-        "refused submission too", function(gap)
+    spec_it("FR1.9 Break a line on request: right after a " ..
+        "refused submission too", function()
       open_file()
       K.browse_to_end()
       K.type("a = = 1")
       K.keys("return")
       K.keys("lctrl", "end")
       K.keys("lshift", "return")
-      gap(function()
-        assert.same("a = = 1\n", K.draft())
-      end)
+      assert.same("a = = 1\n", K.draft())
     end)
   end)
 
@@ -202,16 +187,14 @@ describe("FR1 and FR2 #editor #spec", function()
       open_file()
     end)
 
-    spec_gap("FR2.1 Quickly abort an edit: one Escape, no " ..
-        "question, the file untouched", function(gap)
+    spec_it("FR2.1 Quickly abort an edit: one Escape, no " ..
+        "question, the file untouched", function()
       edit(2)
       K.type("0")
       K.keys("escape")
-      gap(function()
-        assert.same("browsing", K.state())
-        assert.same("", K.draft())
-        assert.same(FILE, K.file())
-      end)
+      assert.same("browsing", K.state())
+      assert.same("", K.draft())
+      assert.same(FILE, K.file())
     end)
 
     spec_it("FR2.2 Leave an edit by submitting: a valid draft "
@@ -233,16 +216,14 @@ describe("FR1 and FR2 #editor #spec", function()
       assert.same("", K.draft())
     end)
 
-    spec_gap(
+    spec_it(
         "FR2.3 Leave an edit by aborting: Escape leaves an " ..
-        "invalid draft too", function(gap)
+        "invalid draft too", function()
       K.browse_to_end()
       K.type("a = = 1")
       K.keys("escape")
-      gap(function()
-        assert.same("browsing", K.state())
-        assert.same(FILE, K.file())
-      end)
+      assert.same("browsing", K.state())
+      assert.same(FILE, K.file())
     end)
 
     spec_it("FR2.4 Valid submissions only: an invalid draft is "
@@ -254,62 +235,54 @@ describe("FR1 and FR2 #editor #spec", function()
       assert.same(FILE, K.file())
     end)
 
-    spec_gap(
+    spec_it(
         "FR2.5 Locate syntax failures or continue on Enter: "
-        .. "the cursor stops before the failure", function(gap)
+        .. "the cursor stops before the failure", function()
       K.browse_to_end()
       K.type("a = = 1")
       K.keys("return")
-      gap(function()
-        assert.same({
-          1,
-          5
-        }, { K.cursor() })
-      end)
+      assert.same({
+        1,
+        5
+      }, { K.cursor() })
     end)
 
-    spec_gap(
+    spec_it(
         "FR2.5 Locate syntax failures or continue on Enter: "
-        .. "an incomplete draft gets a new line", function(gap)
+        .. "an incomplete draft gets a new line", function()
       K.browse_to_end()
       K.type("if a then")
       K.keys("return")
-      gap(function()
-        assert.same("if a then\n", K.draft())
-        assert.same({
-          2,
-          1
-        }, { K.cursor() })
-      end)
+      assert.same("if a then\n", K.draft())
+      assert.same({
+        2,
+        1
+      }, { K.cursor() })
     end)
 
-    spec_gap(
+    spec_it(
         "FR2.6 Preserve state on refused actions: a refused "
-        .. "Edit changes nothing", function(gap)
+        .. "Edit changes nothing", function()
       K.browse_to_end()
       K.type("abc")
       K.keys("left")
       local browsed = pcall(K.browse_to, 1)
       K.keys("f2")
-      gap(function()
-        assert.is_true(browsed)
-        assert.same("abc", K.draft())
-        assert.same({
-          1,
-          3
-        }, { K.cursor() })
-        assert.same(1, K.position())
-        assert.is_nil(K.target())
-      end)
+      assert.is_true(browsed)
+      assert.same("abc", K.draft())
+      assert.same({
+        1,
+        3
+      }, { K.cursor() })
+      assert.same(1, K.position())
+      assert.is_nil(K.target())
     end)
 
-    spec_gap("FR2.7 Step back from a file with Escape: no " ..
-        "question, the project still open", function(gap)
+    spec_it("FR2.7 Step back from a file with Escape: no " ..
+        "question, the project still open", function()
       K.keys("escape")
-      gap(function()
-        assert.same("ready", K.app_state())
-        assert.same(K.PROJECT, K.cc.model.projects.current.name)
-      end)
+      assert.same("ready", K.app_state())
+      assert.same(K.PROJECT, K.cc.model.projects.current.name)
     end)
 
     spec_it(
@@ -332,17 +305,15 @@ describe("FR1 and FR2 #editor #spec", function()
       assert.same(FILE, K.file())
     end)
 
-    spec_gap(
+    spec_it(
         "FR2.8 Take back an accepted change: a move, in one "
-        .. "press", function(gap)
+        .. "press", function()
       K.browse_to(2)
       K.keys("lalt", "up")
       local moved = K.file()
       K.keys("lctrl", "z")
-      gap(function()
-        assert.same("y = 2\nx = 1\nz = 3\n", moved)
-        assert.same(FILE, K.file())
-      end)
+      assert.same("y = 2\nx = 1\nz = 3\n", moved)
+      assert.same(FILE, K.file())
     end)
 
     spec_it("FR2.8 Take back an accepted change: a new change "
@@ -350,29 +321,31 @@ describe("FR1 and FR2 #editor #spec", function()
       K.browse_to_end()
       K.type("a = 1")
       K.keys("return")
+      local accepted = K.file()
       K.keys("lctrl", "z")
+      local undone = K.file()
       K.browse_to_end()
       K.type("b = 2")
       K.keys("return")
       K.keys("lctrl", "y")
+      assert.same(FILE .. "a = 1\n", accepted)
+      assert.same(FILE, undone)
       assert.same(FILE .. "b = 2\n", K.file())
     end)
 
-    spec_gap("FR2.8 Take back an accepted change: an abort is "
-        .. "taken back as an abort", function(gap)
+    spec_it("FR2.8 Take back an accepted change: an abort is "
+        .. "taken back as an abort", function()
       K.browse_to_end()
       K.type("a = 1")
       K.keys("escape")
       K.keys("lctrl", "z")
-      gap(function()
-        assert.same("a = 1", K.draft())
-        assert.same(FILE, K.file())
-      end)
+      assert.same("a = 1", K.draft())
+      assert.same(FILE, K.file())
     end)
 
-    spec_gap(
+    spec_it(
         "FR2.8 Take back an accepted change: one action per "
-        .. "key press, not per key repeat", function(gap)
+        .. "key press, not per key repeat", function()
       K.browse_to_end()
       K.type("a = 1")
       K.keys("return")
@@ -383,9 +356,7 @@ describe("FR1 and FR2 #editor #spec", function()
       K.repeat_key("z")
       K.release("z")
       K.release("lctrl")
-      gap(function()
-        assert.same(FILE .. "a = 1\n", K.file())
-      end)
+      assert.same(FILE .. "a = 1\n", K.file())
     end)
   end)
 end)

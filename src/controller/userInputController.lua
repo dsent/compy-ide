@@ -641,7 +641,14 @@ function UserInputController:keypressed(k, sc, isr)
   -- only sees the raw key.)
   -- doc/development/internals/user_input.md, "Error state":
   -- locked-on-reject unlocks on Enter/Space/arrows.
-  if input:has_error() then
+  -- The editor's field shows a notice without blocking input:
+  -- the next key dismisses it and does its work (IS3.14).
+  -- A modifier or a lock on its own leaves it showing.
+  local lone = Key.is_mod(k) or k == 'capslock'
+      or k == 'numlock' or k == 'scrolllock'
+  if input:has_error() and input.editing then
+    if not lone then input:clear_error() end
+  elseif input:has_error() then
     if Key.is_enter(k)
         or k == "up" or k == "down"
         or k == "left" or k == "right"
@@ -690,7 +697,7 @@ function UserInputController:keypressed(k, sc, isr)
     if k == "backspace" then
       --- word-wise deletion is the editor's 2.7; the
       --- plain widget keeps the plain backspace
-      if Key.ctrl() and editing then
+      if (Key.ctrl() or Key.alt()) and editing then
         input:backspace_word()
       else
         input:backspace()
@@ -708,6 +715,10 @@ function UserInputController:keypressed(k, sc, isr)
       if k == "w" and editing then
         --- readline's synonym, per the editor spec 2.7
         input:backspace_word()
+      end
+      if k == "k" and editing and not Key.shift() then
+        --- IS3.12: to the end of the line, the break kept
+        input:kill_to_line_end()
       end
     end
   end
@@ -738,11 +749,20 @@ function UserInputController:keypressed(k, sc, isr)
     if k == "right" and input:is_at_limit('right', 'line') then
       emit_limit('right', horizontal_limit_scope('right'))
     end
+    --- IS3.8: with Ctrl the cursor moves by word
     if k == "left" then
-      input:cursor_left()
+      if Key.ctrl() then
+        input:cursor_word_left()
+      else
+        input:cursor_left()
+      end
     end
     if k == "right" then
-      input:cursor_right()
+      if Key.ctrl() then
+        input:cursor_word_right()
+      else
+        input:cursor_right()
+      end
     end
 
     --- spec 2.7: bare Home/End are line-scoped; the
@@ -762,8 +782,9 @@ function UserInputController:keypressed(k, sc, isr)
       end
     end
   end
+  --- IS3.15: Shift+Enter and Alt+Enter each break the line
   local function newline()
-    if Key.shift() then
+    if Key.shift() or Key.alt() then
       if Key.is_enter(k) then
         input:line_feed()
       end
@@ -822,7 +843,7 @@ function UserInputController:keypressed(k, sc, isr)
   -- (newline() above); Ctrl+Escape is not a cancel.
   -- Editor/console callers that must not run these consume the
   -- key upstream (editor) or set no callbacks (console no-op).
-  if Key.is_enter(k) and not Key.shift() then
+  if Key.is_enter(k) and not Key.shift() and not Key.alt() then
     self:submit_flow()
   elseif k == 'escape' and not Key.ctrl() then
     self:cancel_flow()
@@ -842,7 +863,9 @@ function UserInputController:textinput(t)
   end
   self:update_view()
   if self.model:has_error() then
-    return
+    if not self.model.editing then return end
+    --- the editor's notice blocks no input (IS3.14)
+    self.model:clear_error()
   end
   self.model:add_text(t)
   self:update_view()

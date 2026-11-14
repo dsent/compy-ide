@@ -1,0 +1,102 @@
+local KeyCard = require("model.editor.keyCard")
+
+--- the Compy's screen: 17 rows over the status line, 64 wide
+local ROWS, WIDTH = 17, 64
+
+local function group(state, empty)
+  local now, other, to = { }, { }, nil
+  for _, c in ipairs(KeyCard.cells(state, empty)) do
+    if c.heading then
+      to = to and other or now
+    else
+      to[c.key] = c.what
+    end
+  end
+  return now, other
+end
+
+describe("the key card #editor", function()
+  it("lists the browsing state's keys first", function()
+    local now, other = group("browsing", true)
+    for _, k in ipairs({
+      "Enter", "F2", "Esc", "Ctrl+Up/Down", "Ctrl+Ins",
+      "Ctrl+Delete", "Alt+Up/Down", "Ctrl+Z", "Ctrl+Y", "Ctrl+J"
+    }) do
+      assert.is_string(now[k], k)
+    end
+    assert.is_string(other["Left/Right"])
+    assert.is_nil(now["Left/Right"])
+  end)
+
+  it("moves the keys a state does not admit after it",
+      function()
+    local ins = group("inserting", false)
+    local _, ins_other = group("inserting", false)
+    assert.is_nil(ins["F2"])
+    assert.is_string(ins_other["F2"])
+    assert.is_string(ins_other["Ctrl+Delete"])
+    local rep, rep_other = group("replacing", false)
+    assert.is_string(rep["F2"])
+    assert.is_string(rep_other["Alt+Up/Down"])
+  end)
+
+  it("says what a key does in the state", function()
+    local function enter(state, empty)
+      return (group(state, empty)).Enter
+    end
+    assert.same("add empty line", enter("browsing", true))
+    assert.same("same as Enter",
+      (group("browsing", true))["Shift+Ins"])
+    assert.same("insert, keep",
+      (group("inserting", false))["Shift+Ins"])
+    assert.same("insert text", enter("inserting", false))
+    assert.same("replace block", enter("replacing", false))
+    assert.same("browse blocks",
+      (group("replacing", true))["Up/Down"])
+    assert.same("row up/down",
+      (group("replacing", false))["Up/Down"])
+  end)
+
+  it("fits one screen in every state", function()
+    for _, state in ipairs({
+      "browsing", "inserting", "replacing"
+    }) do
+      local lines = KeyCard.lines(state, false, ROWS, WIDTH)
+      assert.is_true(#lines <= ROWS, state)
+      local keys = 0
+      for _, l in ipairs(lines) do
+        assert.is_true(#l <= WIDTH, l)
+      end
+      for _, c in ipairs(KeyCard.cells(state, false)) do
+        if c.key then
+          keys = keys + 1
+          local text = table.concat(lines, "\n")
+          assert.truthy(text:find(c.key .. " ", 1, true), c.key)
+          assert.truthy(text:find(c.what, 1, true), c.what)
+        end
+      end
+      assert.same(20, keys)
+    end
+  end)
+
+  it("has a card for the console that fits one screen",
+      function()
+    local cells = KeyCard.console_cells()
+    local lines = KeyCard.lines_of(cells, ROWS, WIDTH)
+    assert.is_true(#lines <= ROWS)
+    assert.same(" Keys now, console:", lines[1])
+    local text = table.concat(lines, "\n")
+    for _, c in ipairs(cells) do
+      if c.key then
+        assert.truthy(text:find(c.key .. " ", 1, true), c.key)
+        assert.truthy(text:find(c.what, 1, true), c.what)
+      end
+    end
+  end)
+
+  it("takes one column where two do not fit", function()
+    local lines = KeyCard.lines("browsing", true, 30, 40)
+    assert.same(22, #lines)
+    assert.same(" Keys now, browsing:", lines[1])
+  end)
+end)

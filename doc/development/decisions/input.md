@@ -723,8 +723,9 @@ system does* (now pinned and reviewable) from *what we choose to change* (explic
 
 **Consequence.** Doc entries and tests that record a reverse-engineered behaviour carry this rationale
 explicitly ("discovered as existing behaviour, no mandate to alter — de-facto standard per the
-implementation"). Current members include: the submit guard being *Enter-without-Shift* (so Ctrl+Enter
-and Alt+Enter submit, not only bare Enter); `SearchController:keypressed` returning a jump target up
+implementation"). Current members include: the submit guard being *Enter-without-Shift-or-Alt* (so
+Ctrl+Enter submits, not only bare Enter; Alt+Enter breaks the line, as the editor principles' IS3.15
+rules); `SearchController:keypressed` returning a jump target up
 its caller; and the input widget view's per-frame-render workaround keyed by widget identity. Each is
 individually revisable — but only by a named ruling, not by drift. See
 [`../technical_debt/input.md`](../technical_debt/input.md) for the live list.

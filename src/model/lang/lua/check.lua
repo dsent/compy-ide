@@ -96,8 +96,89 @@ function M.check(s)
   return true, errors, ast
 end
 
+--- @param l string
+--- @return boolean
+local function is_blank(l)
+  return string.match(l, '^%s*$') ~= nil
+end
+
+--- The runs of blank lines among lines `from` to `to`
+--- @param lines string[]
+--- @param from integer
+--- @param to integer
+--- @return table[] --- {at, n}: first line and length
+local function blank_runs(lines, from, to)
+  local runs, run = {}, nil
+  for i = from, to do
+    if not is_blank(lines[i]) then
+      run = nil
+    elseif run then
+      run.n = run.n + 1
+    else
+      run = { at = i, n = 1 }
+      runs[#runs + 1] = run
+    end
+  end
+  return runs
+end
+
+--- The line ranges around the statements of a text: before
+--- the first, between each two, after the last
+--- @param lines string[]
+--- @return table[]? --- {from, to}; nil when it does not parse
+local function gaps(lines)
+  local ok, ast = get_parser().parse(lines)
+  if not ok then return nil end
+  local out, last = {}, 0
+  for _, st in ipairs(ast) do
+    local li = st.lineinfo
+    if not li then return nil end
+    out[#out + 1] = { last + 1, li.first.line - 1 }
+    last = li.last.line
+  end
+  out[#out + 1] = { last + 1, #lines }
+  return out
+end
+
+--- Every empty line of a draft becomes an empty-line block
+--- (IS3.7), and the formatter leaves one of a run: the runs
+--- between statements get their lines back.
+--- @param given string[] --- the draft
+--- @param text string[] --- the draft formatted
+--- @return string[]
+local function keep_empty_lines(given, text)
+  local a, b = gaps(given), gaps(text)
+  if not a or not b or #a ~= #b then return text end
+  local add = {}
+  for i = 1, #a do
+    local ra = blank_runs(given, a[i][1], a[i][2])
+    local rb = blank_runs(text, b[i][1], b[i][2])
+    if #ra == #rb then
+      for j = 1, #ra do add[rb[j].at] = ra[j].n - rb[j].n end
+    end
+  end
+  local out = {}
+  for i, l in ipairs(text) do
+    for _ = 1, add[i] or 0 do out[#out + 1] = '' end
+    out[#out + 1] = l
+  end
+  return out
+end
+
+--- @param lines string[]
+--- @return table? --- {l, len}: the first line over the limit
+local function long_line(lines)
+  for i, l in ipairs(lines) do
+    local len = string.ulen(l) or string.len(l)
+    if len > MAX_LINE_LENGTH then return { l = i, len = len } end
+  end
+end
+
 --- @class GateVerdict
 --- @field ok boolean
+--- @field failure Error? --- the parse failure, at the failing
+--- character, or `at_end` when the draft is only unfinished
+--- @field long_line table? --- {l, len}: a line over the limit
 --- @field lines string[] --- the text as the editor writes it:
 --- formatted, or as given when it does not format
 --- @field formatted boolean
@@ -115,11 +196,16 @@ end
 --- @param lines string[]
 --- @param width integer? --- format width; a Compy's by default
 --- @param max_block integer? --- a Compy's limit by default
+--- @param keep_empty boolean? --- a draft's submission: every
+--- empty line between statements stays (IS3.7)
 --- @return GateVerdict
-function M.gate(lines, width, max_block)
+function M.gate(lines, width, max_block, keep_empty)
   width = width or display.columns
   max_block = max_block or MAX_BLOCK_LINES
   local text, formatted = format.format(lines, width)
+  if formatted and keep_empty then
+    text = keep_empty_lines(lines, text)
+  end
   local ok, errors = M.check(text)
   --- @type GateVerdict
   local verdict = {
@@ -130,6 +216,15 @@ function M.gate(lines, width, max_block)
     oversized = {},
     max_block = max_block,
   }
+  --- syntax comes before size: the line check counts
+  --- formatted lines (IS3.2), which a failed parse has none of
+  local parses, failure = get_parser().parse(lines)
+  if not parses then
+    verdict.failure = get_parser().failure(lines, failure)
+    verdict.errors = { verdict.failure }
+    return verdict
+  end
+  verdict.long_line = long_line(text)
   local parsed, blocks = get_parser().chunker(text, width, true)
   if not parsed then return verdict end
   verdict.blocks = blocks
@@ -140,6 +235,25 @@ function M.gate(lines, width, max_block)
     end
   end
   return verdict
+end
+
+--- A draft of blank lines alone is accepted as that many
+--- empty-line blocks (IS3.7; the principles name no draft
+--- without a statement, and Luditor's chunker does this). One
+--- line holding nothing is an empty draft, which is no
+--- submission of text.
+--- @param lines string[]
+--- @return Block[]? --- nil when the draft holds text
+function M.empty_blocks(lines)
+  if #lines < 2 and lines[1] == '' then return nil end
+  if #lines == 0 then return nil end
+  require('model.editor.content')
+  local blocks = {}
+  for i, l in ipairs(lines) do
+    if not is_blank(l) then return nil end
+    blocks[i] = Empty(i)
+  end
+  return blocks
 end
 
 --- Lines a block of the verdict has over the limit

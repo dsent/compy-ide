@@ -15,7 +15,7 @@ local K = { }
 K.PROJECT = "demo"
 local files, writes, restore
 -- a write fails with this reason while it is set
-local write_failure
+local write_failure, read_failure
 -- Caps Lock, a device state its key toggles
 local caps = false
 
@@ -35,6 +35,9 @@ local function path_of(_, f)
 end
 
 local function read(_, f)
+  if read_failure then
+    return false, read_failure
+  end
   return true, files[f]
 end
 
@@ -99,16 +102,6 @@ local function stub_caps()
   end
 end
 
--- each stands in for a boundary and returns what puts it back
-local STUBS = {
-  stub_fs,
-  stub_clipboard,
-  stub_run,
-  stub_caps
-}
-
---- Open the memory project; returns what puts the previous
---- project and the filesystem back.
 --- The system clipboard as a value of the test's own, which
 --- the fixture's runtime does not keep; returns what puts the
 --- runtime's back.
@@ -143,6 +136,14 @@ local function stub_run(projects)
     projects.run = run
   end
 end
+
+-- each stands in for a boundary and returns what puts it back
+local STUBS = {
+  stub_fs,
+  stub_clipboard,
+  stub_run,
+  stub_caps
+}
 
 --- Open the memory project; returns what puts the previous
 --- project, its loader, the filesystem and the clipboard back.
@@ -189,13 +190,30 @@ function K.reset(contents)
   K.cleanup()
   fresh_fixture()
   K.cc, K.ed = F.cc, nil
-  -- the editor remembers positions and state across opens;
-  -- a test starts with none
-  K.cc.editor.pos_memory = { }
+  -- the editor remembers its state across opens; a test
+  -- starts with none
   K.cc.editor.state = nil
   files = contents or { ["main.lua"] = "x = 1\n" }
   writes, write_failure, caps = { }, nil, false
-  restore = use_memory_project()
+  read_failure = nil
+  local back = use_memory_project()
+  -- what the console prints reaches its terminal, as the
+  -- running IDE wires it (model.io.redirect)
+  local plain_print = print
+  local out = K.cc.model.output
+  -- no earlier test's console text is left to read
+  out:reset()
+  _G.print = function(...)
+    local parts = { }
+    for i = 1, select("#", ...) do
+      parts[i] = tostring((select(i, ...)))
+    end
+    pcall(out.push, out, table.concat(parts, "\t"))
+  end
+  restore = function()
+    _G.print = plain_print
+    back()
+  end
 end
 
 --- A fresh console over the same memory card: the files as
@@ -234,6 +252,13 @@ end
 --- @param reason string
 function K.fail_writes(reason)
   write_failure = reason
+end
+
+--- From now on, every read fails with `reason`, as a damaged
+--- card would answer.
+--- @param reason string
+function K.fail_reads(reason)
+  read_failure = reason
 end
 
 -- keystrokes -------------------------------------------------
@@ -700,6 +725,151 @@ local function same_colour(a, b)
   return true
 end
 
+-- the whole screen ------------------------------------------
+-- The fixture's graphics stand-in skips the field's render
+-- (`mock`) and its canvases run nothing, so nothing above
+-- runs the drawing the device runs every frame. K.screen
+-- runs all of it, recording.
+
+local screen = { }
+
+local function scr_rectangle(mode, _, y, _, h)
+  if mode == "fill" and not screen.in_canvas then
+    screen.fills[#(screen.fills) + 1] = {
+      y = y,
+      h = h,
+      colour = rec.colour
+    }
+  end
+end
+
+local function scr_print(text, _, y)
+  local to = screen.in_canvas and screen.field
+       or screen.texts
+  to[#to + 1] = {
+    text = tostring(text),
+    y = y or 0,
+    colour = rec.colour
+  }
+end
+
+--- A canvas' own draw is where the field lands on the screen.
+local function scr_draw(what, _, y)
+  if what == screen.canvas then
+    screen.field_y = y
+  end
+end
+
+local function scr_render_to(_, f)
+  local was = screen.in_canvas
+  screen.in_canvas = true
+  f()
+  screen.in_canvas = was
+end
+
+local function scr_set_font(font)
+  screen.font = font
+end
+
+local function scr_get_font()
+  return screen.font or F.cfg.view.font
+end
+
+local SCREEN = {
+  mock = false,
+  setFont = scr_set_font,
+  getFont = scr_get_font,
+  setColor = rec_set_color,
+  getColor = rec_get_color,
+  rectangle = scr_rectangle,
+  print = scr_print,
+  printf = scr_print,
+  draw = scr_draw
+}
+
+--- What main.lua's configuration has and the fixture's lacks,
+--- which only drawing reads.
+local function complete_cfg()
+  local v = F.cfg.view
+  v.statusline_border = v.statusline_border or 4
+  v.drawableWidth = v.drawableWidth or v.w
+end
+
+local function draw_all()
+  -- as love.draw does through View.draw (view/view.lua),
+  -- which the fixture stubs
+  local cc = K.cc
+  cc.view:draw(cc:get_terminal(), cc:get_canvas(), nil)
+end
+
+--- Draw the whole screen as love.draw does, through the real
+--- draw functions, with recording calls in place of
+--- love.graphics'. A draw error is raised.
+--- @return { fills: table[], texts: table[], field: table[],
+---   field_rows: integer? }  the filled rectangles and the
+---   texts drawn on the screen, the texts drawn in the input
+---   field with its status line, and the rows the field takes
+---   under its status line
+function K.screen()
+  complete_cfg()
+  local lg = love.graphics
+  screen = {
+    fills = { },
+    texts = { },
+    field = { },
+    canvas = lg.newCanvas()
+  }
+  local saved = swap_in(lg, SCREEN)
+  local mt = getmetatable(lg)
+  -- a call the recording has no use for does nothing
+  setmetatable(lg, {
+    __index = function()
+      return no_op
+    end
+  })
+  rawset(screen.canvas, "renderTo", scr_render_to)
+  local ok, e = xpcall(draw_all, debug.traceback)
+  rawset(screen.canvas, "renderTo", nil)
+  setmetatable(lg, mt)
+  for name in pairs(SCREEN) do
+    lg[name] = saved[name]
+  end
+  assert(ok, e)
+  if screen.field_y then
+    local fh = F.cfg.view.fh
+    local below = lg.getHeight() - screen.field_y
+    screen.field_rows = math.floor(below / fh + 0.5) - 1
+  end
+  return screen
+end
+
+--- The rows of the screen filled in `colour`, each once.
+--- @param s table  what K.screen returned
+--- @param name "highlight"|"highlight_loaded"
+--- @return integer
+function K.screen_rows(s, name)
+  local colour = F.cfg.view.colors.editor[name]
+  local seen, n = { }, 0
+  for _, f in ipairs(s.fills) do
+    local hit = same_colour(f.colour, colour)
+    if hit and not seen[f.y] then
+      seen[f.y], n = true, n + 1
+    end
+  end
+  return n
+end
+
+--- The texts of a recorded list, in the order drawn, joined.
+--- @param list table[]
+--- @return string
+function K.screen_text(list)
+  local out = { }
+  for i, t in ipairs(list) do
+    out[i] = t.text
+  end
+  return table.concat(out)
+end
+
 local function kind_of(colour, colours)
   if same_colour(colour, colours.highlight) then
     return "white"
@@ -847,11 +1017,9 @@ function K.field_highlight()
 end
 
 --- The key card shown while the help key is held (FR4.9): its
---- lines, or nil while none shows. The editor draws no card
---- yet, so this reads nil until it does; the card's own
---- model is read here once it exists.
+--- lines, or nil while none shows.
 function K.key_card()
-  return nil
+  return K.ed and K.ed:key_card() or K.cc:key_card()
 end
 
 --- Everything the status line shows, as one string.
