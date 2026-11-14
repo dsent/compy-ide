@@ -209,9 +209,9 @@ local function terminal_update(terminal, dt)
             end
             terminal.dirty = true
         elseif char_or_command.type == "hide_cursor" then
-            terminal.show_cursor = false
+            terminal.cursor_visible = false
         elseif char_or_command.type == "show_cursor" then
-            terminal.show_cursor = true
+            terminal.cursor_visible = true
         elseif char_or_command.type == "cursor_color" then
             terminal.cursor_color[1] = char_or_command.red
             terminal.cursor_color[2] = char_or_command.blue
@@ -340,7 +340,7 @@ local function terminal_draw(terminal)
     end
 
     love.graphics.draw(terminal.canvas)
-    if terminal.show_cursor then
+    if terminal.cursor_visible then
         love.graphics.setFont(terminal.font)
         if love.timer.getTime() % 1 > 0.5 then
             love.graphics.print("_",
@@ -403,7 +403,7 @@ end
 --- @field width integer
 --- @field height integer
 --- @field update function
---- @field show_cursor boolean
+--- @field cursor_visible boolean
 --- @field cursor_x integer
 --- @field cursor_y integer
 --- @field saved_cursor_x integer
@@ -436,7 +436,7 @@ local function terminal(self, width, height,
         height = math.floor(num_rows),
         font = font,
 
-        show_cursor = true,
+        cursor_visible = true,
         cursor_x = 1,
         cursor_y = 1,
         saved_cursor_x = 1,

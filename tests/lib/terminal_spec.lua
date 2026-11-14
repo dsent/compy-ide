@@ -418,3 +418,19 @@ describe("terminal cursor moves", function()
       assert.equal("ok", row(t, 1))
     end)
 end)
+--- show_cursor() and hide_cursor() set whether the cursor shows,
+--- as often as they are called
+describe("terminal cursor showing", function()
+  it("is shown and hidden again and again", function()
+    local t = new_term()
+    local seen = {}
+    for _, step in ipairs({ "hide_cursor", "show_cursor",
+      "hide_cursor", "show_cursor", "show_cursor" }) do
+      local ok, err = pcall(function() t[step](t) end)
+      assert.is_true(ok, step .. ": " .. tostring(err))
+      t:update(1000)
+      table.insert(seen, t.cursor_visible)
+    end
+    assert.same({ false, true, false, true, true }, seen)
+  end)
+end)

@@ -61,7 +61,7 @@ local function terminal_draw(terminal, canvas, overlay)
   end
 
 
-  if terminal.show_cursor then
+  if terminal.cursor_visible then
     gfx.setFont(terminal.font)
     if love.timer.getTime() % 1 > 0.5 then
       gfx.print("_",
