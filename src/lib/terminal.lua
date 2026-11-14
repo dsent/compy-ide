@@ -200,8 +200,11 @@ local function terminal_update(terminal, dt)
             terminal.cursor_x = char_or_command.x
             terminal.cursor_y = char_or_command.y
         elseif char_or_command.type == "reverse" then
-            terminal.cursor_reversed = (char_or_command.value ~= nil) and
-                char_or_command.value or not terminal.cursor_reversed
+            if char_or_command.value == nil then
+                terminal.cursor_reversed = not terminal.cursor_reversed
+            else
+                terminal.cursor_reversed = char_or_command.value
+            end
         elseif char_or_command.type == "save" then
             terminal.saved_cursor_x = terminal.cursor_x
             terminal.saved_cursor_y = terminal.cursor_y

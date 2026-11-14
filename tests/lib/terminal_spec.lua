@@ -182,3 +182,24 @@ describe("terminal scrolling on a frame of its own", function()
     end
   end)
 end)
+
+--- reverse_cursor(true) reverses, (false) does not, and with
+--- no value it changes over
+describe("terminal reverse", function()
+  it("is set by a value and changed over without one", function()
+    local t = new_term()
+    local seen = {}
+    for _, v in ipairs({ true, false, false, "none", "none", true,
+      true }) do
+      if v == "none" then
+        t:reverse_cursor()
+      else
+        t:reverse_cursor(v)
+      end
+      t:update(1000)
+      table.insert(seen, t.cursor_reversed)
+    end
+    assert.same({ true, false, false, true, false, true, true },
+      seen)
+  end)
+end)
