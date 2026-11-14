@@ -112,23 +112,62 @@ The editor is checked against its spec, the editor principles (`docs/editor-prin
 
 ## Harmony scenarios — the real IDE, driven by keys
 
-`love src harmony` starts the IDE with its storage in a fresh `/tmp/compy-harmony-*` directory and
-runs the scenarios under `src/harmony/scenarios/`, a file at a time in name order. A scenario types
-text and presses keys into the running IDE (`h.love_text`, `h.love_key`; a chord such as `C-q`
-holds its modifiers until `h.release_keys`), takes screenshots into the directory's
-`screenshots/<file>/`, and checks with `assert`: the IDE's state (`love.state.app_state`) and, in
-`editor.lua`, the file the editor saved. Each scenario's name goes to standard output as it starts.
-The run ends with `harmony: N scenarios passed` and exit status 0, or at the first failed check or
-error with `harmony: FAILED in <scenario>`, the message and exit status 1. With no display, run it
-under Xvfb (`Xvfb :n -screen 0 1024x600x24`, `DISPLAY=:n`); a full run takes under two minutes.
+`love src harmony` starts the IDE with its storage in a fresh `/tmp/compy-harmony-*` directory,
+whose path it prints as `harmony: storage <path>`, and runs the scenarios under
+`src/harmony/scenarios/`, a file at a time in name order. A scenario types text and presses keys
+into the running IDE (`h.love_text`, `h.love_key`; a chord such as `C-q` holds its modifiers until
+`h.release_keys`; `h.hold` and `h.let_go` keep a key such as F1 held, and `h.key_repeat` sends a
+held key's repeat as LÖVE does, its `isrepeat` true), takes screenshots into the
+directory's `screenshots/<file>/`, and checks with `assert`. Each scenario's name goes to standard
+output as it starts. The run ends with `harmony: N scenarios passed` and exit status 0, or at the
+first failed check or error with `harmony: FAILED in <scenario>`, the message and exit status 1.
+With no display, run it with `SDL_VIDEODRIVER=offscreen`, or under Xvfb
+(`Xvfb :n -screen 0 1024x600x24`, `DISPLAY=:n`); a full run takes about two and a half minutes.
 
-`editor.lua` drives the file editor with the keys its key card lists
-(`src/model/editor/keyCard.lua`), one scenario per user-level task: open and leave a file
-(`open-close`), add blocks and copy one (`add`), replace a block with
-F2 and run the change with Ctrl+T (`change`), move a block and undo the move (`move`), cut a block
-and reopen the file from the console's history (`delete`), scroll the view and keep a loaded block
-(`scroll`), and follow a `require` with Ctrl+J (`follow`). The examples run later, so a scenario
-that edits the turtle example works on a clone or undoes its change and checks that it did.
+Two helper modules serve the scenarios. `src/harmony/drive.lua` types: a key or chord with its
+modifiers let go (`D.key`), text (`D.type`), a line and Enter (`D.enter`), a screenshot
+(`D.shot`), F1 held around a check (`D.with_card`), a key held for its press and repeats
+(`D.held`), a project's file opened in the editor with
+fixture files written first (`D.open`), and Escape back to the console (`D.leave`).
+`src/harmony/probe.lua` reads, in the specification's terms: the editor's state, browsing
+position, replacement target, draft, cursor and message (`P.state`, `P.position`, `P.target`,
+`P.draft`, `P.cursor`, `P.message`, `P.message_kind`), the console's field and text, whether a
+key card shows (`P.card`), a project's file on storage (`P.stored`), and the strings drawn on
+screen over a few frames (`P.drawn`, `P.shows`). It writes fixtures straight to storage
+(`P.put`) and changes nothing else.
+
+`editor.lua` drives the file editor one scenario per user-level task: open and leave a file
+(`open-close`), add blocks and copy one (`add`), replace a block with F2 and run the change with
+Ctrl+T (`change`), move a block and undo the move (`move`), cut a block and reopen the file from
+the console's history (`delete`), scroll the view and keep a loaded block (`scroll`), and follow a
+`require` with Ctrl+J (`follow`). The examples run later, so a scenario that edits the turtle
+example works on a clone or undoes its change and checks that it did.
+
+The other scenario files each work on a project of their own and check the file on storage
+after every key that may write it:
+
+- `editor_writes.lua`: every key that writes a file, with its undo and redo: Enter while
+  inserting, browsing and replacing; Shift+Ins; cut; move; Ctrl+Shift+F; and the submissions
+  that are refused and leave the file as it was (a syntax error, a line over 64 characters, a
+  block over 14 lines, a file changed on storage since the editor read it).
+- `editor_states.lua`: F2 on an ordinary block (load, reload, switch, refusals), on blocks over
+  the limits and on a line of a file that does not parse; Escape in each state; browsing with a
+  draft; a draft continued by Enter; a syntax error and the key that dismisses it; the cursor
+  keys, Ctrl+K and Ctrl+Ins.
+- `editor_run.lua`: Ctrl+T and Ctrl+Q refused during an edit; Ctrl+T there and back with the
+  position and the undo timeline kept; Ctrl+Q from the editor, a program and the console; a
+  program that opens a file with `edit()`.
+- `editor_text.lua`: plain text and Markdown files, and a file created by its first submission.
+- `keycard.lua`: the key card while F1 is held, in each editor state and in the console, the
+  keys it suspends, none over a running program, and the console's over a paused one.
+- `editor_files.lua`: CRLF and CR line ends, read as lines and written as LF by the first
+  submission; a `#!` first line opened, kept, and refused below the first line.
+- `held_keys.lua`: held keys in the editor, the console and a program's input field: Enter
+  submits once, Escape drops once, Down and Backspace repeat.
+- `clipboard.lua`: Ctrl+V, Ctrl+C and Ctrl+X change neither the field nor the system clipboard,
+  in the editor and the console.
+- `console.lua`: lines run by Enter, broken by Shift+Enter and Alt+Enter, run and kept by
+  Shift+Ins, and the history.
 
 ## Manual smoke — what no suite here can reach
 

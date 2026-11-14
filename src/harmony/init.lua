@@ -261,6 +261,10 @@ local function utils()
   --- @field love_text function
   --- @field screenshot function
   --- @field release_keys function
+  --- @field release_mods function
+  --- @field hold function
+  --- @field key_repeat function
+  --- @field let_go function
   --- @field shortcuts table
   return {
     patch_isDown = function()
@@ -319,6 +323,31 @@ local function utils()
     end,
 
     release_keys = release_keys,
+    --- let go of the modifiers alone: a key held with hold
+    --- stays held
+    release_mods = function()
+      for _, m in pairs(mods) do held[m] = false end
+    end,
+
+    --- press `key` and keep it held: isDown answers true for
+    --- it until let_go, and no release is sent, as a hand that
+    --- holds F1
+    --- @param key string
+    hold = function(key)
+      held[key] = true
+      love_event('keypressed', key, key, false)
+    end,
+    --- a held key's repeat, as LÖVE sends it while the key
+    --- stays down: the key, its scancode, and isrepeat true
+    --- @param key string
+    key_repeat = function(key)
+      love_event('keypressed', key, key, true)
+    end,
+    --- @param key string
+    let_go = function(key)
+      held[key] = false
+      love_event('keyreleased', key, key)
+    end,
 
     shortcuts = shortcuts,
 
@@ -463,6 +492,9 @@ function Harmony.screenshot(tag)
 end
 
 function Harmony.run()
+  --- the run's storage and screenshots, so that a caller
+  --- finds its own run's among others under /tmp
+  report('storage ' .. tostring(Harmony.tmpdir))
   timer:after(.1, function()
     Harmony.runner.load_scenarios()
     Harmony.runner.run_scenarios()
