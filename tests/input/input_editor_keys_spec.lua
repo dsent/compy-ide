@@ -57,10 +57,10 @@ describe('editor key contract #input', function()
   before_each(function()
     F.reset()
     love.state.app_state = 'editor'
-    -- Entering reorder or search saves the clipboard state
-    -- (EditorController:set_mode -> save_state), and the
-    -- input fixture's love has no `system` — the same stub
-    -- editor_spec.lua sets per case.
+    -- A run from the editor keeps the clipboard
+    -- (EditorController:hide), and the input fixture's love
+    -- has no `system` — the same stub editor_spec.lua sets per
+    -- case.
     love.system = {
       getClipboardText = function() return '' end,
       setClipboardText = function() end,
@@ -98,24 +98,25 @@ describe('editor key contract #input', function()
   end)
 
   describe('the whole-editor exits', function()
-    -- D-EDITOR-KEYS statement 6. Both leave the editor
-    -- through ConsoleController:finish_edit, which stores
-    -- the clipboard and drops the buffers with no acceptance
-    -- step. Both ask the rework's discard question first
-    -- when an open block holds a change
-    -- (EditorController:ask_to_leave).
-    local left, ran, orig_finish, orig_run
+    -- D-EDITOR-KEYS statement 6. Ctrl+Shift+S leaves the
+    -- editor through ConsoleController:finish_edit, which
+    -- drops the buffers with no acceptance step; Ctrl+T steps
+    -- aside for the run through hide_editor, which keeps them.
+    local left, ran, orig_finish, orig_hide, orig_run
 
     before_each(function()
       left, ran = false, false
       orig_finish = F.cc.finish_edit
+      orig_hide = F.cc.hide_editor
       orig_run = F.cc.run_project
       F.cc.finish_edit = function() left = true end
+      F.cc.hide_editor = function() left = true end
       F.cc.run_project = function() ran = true end
     end)
 
     after_each(function()
       F.cc.finish_edit = orig_finish
+      F.cc.hide_editor = orig_hide
       F.cc.run_project = orig_run
     end)
 
@@ -282,11 +283,11 @@ describe('editor key contract #input', function()
   describe('the project boundary', function()
     -- The editor's buffers belong to the project they were
     -- opened in. The gate's shortcuts reach the console
-    -- before the editor sees the key, so they must close it
-    -- themselves, or its buffers outlive the run they start.
-    -- Ctrl+Q leaves the editor for the console and keeps the
-    -- project open; Ctrl+Shift+R is dropped (the reserved map
-    -- of 2026-11-14).
+    -- before the editor sees the key. Ctrl+Q leaves the
+    -- editor for the console and keeps the project open; a
+    -- run (Ctrl+Alt+R) keeps the buffers for Ctrl+T, and
+    -- closing the project drops them; Ctrl+Shift+R is dropped
+    -- (the reserved map of 2026-11-14).
     local stubbed = { 'close_project', 'run_project' }
     local orig = {}
 
@@ -303,18 +304,13 @@ describe('editor key contract #input', function()
       mock.release_keys()
     end)
 
-    local chords = {
-      ['Ctrl+Q']       = { 'lctrl', 'q' },
-      ['Ctrl+Alt+R']   = { 'lctrl', 'lalt', 'r' },
-    }
-    for name, keys in pairs(chords) do
-      it(name .. ' closes the editor', function()
-        for _, k in ipairs(keys) do F.session.press(k) end
+    it('Ctrl+Q closes the editor', function()
+      F.session.press('lctrl')
+      F.session.press('q')
 
-        assert.is_not.equal('editor', love.state.app_state)
-        assert.is_nil(ed:get_active_buffer())
-      end)
-    end
+      assert.is_not.equal('editor', love.state.app_state)
+      assert.is_nil(ed:get_active_buffer())
+    end)
 
     it('Ctrl+Q leaves from search for the console', function()
       F.session.press('lctrl')
@@ -355,13 +351,14 @@ describe('editor key contract #input', function()
       F.session.press('lalt')
       F.session.press('r')
 
-      assert.same('main.lua', love.state.editor.buffer.filename)
+      assert.is_not.equal('editor', love.state.app_state)
+      assert.same('main.lua', ed:get_active_buffer().name)
     end)
 
     it('closing a project forgets the quick switch', function()
-      love.state.editor = ed:get_state()
       F.cc:_close_project()
-      assert.is_nil(love.state.editor)
+      assert.is_not.equal('editor', love.state.app_state)
+      assert.is_nil(ed:get_active_buffer())
     end)
 
     it('a buffer saves into its own project', function()

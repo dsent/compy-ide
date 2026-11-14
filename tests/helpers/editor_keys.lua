@@ -88,7 +88,8 @@ local function read_over(combined_read)
     if not f then
       return combined_read(path)
     end
-    if read_failure or card_out then
+    if card_out or read_failure == true or read_failure == f
+    then
       return nil
     end
     return files[f]
@@ -215,9 +216,6 @@ function K.reset(contents)
   K.cleanup()
   fresh_fixture()
   K.cc, K.ed = F.cc, nil
-  -- the editor remembers its state across opens; a test
-  -- starts with none
-  K.cc.editor.state = nil
   files = contents or { ["main.lua"] = "x = 1\n" }
   writes, write_failure, caps = { }, nil, false
   read_failure, card_out = nil, false
@@ -281,9 +279,10 @@ end
 
 --- From now on, every read of a file that is there fails, as
 --- a damaged card answers on the device: no text and no
---- reason.
-function K.fail_reads()
-  read_failure = true
+--- reason. With `name`, only that file's reads fail.
+--- @param name string?
+function K.fail_reads(name)
+  read_failure = name or true
 end
 
 --- From now on, reads succeed again.
@@ -300,6 +299,36 @@ end
 --- Put the SD card back: everything is as it was.
 function K.insert_card()
   card_out = false
+end
+
+--- From now on, project("<name>") typed in the console closes
+--- the open project and opens `name` on the same card, which
+--- holds `contents` and none of the old project's files.
+--- @param name string
+--- @param contents table<string, string>
+function K.next_project(name, contents)
+  local projects = K.cc.model.projects
+  local close, opreate = projects.close, projects.opreate
+  local function loader() end
+  function projects.close(P)
+    P.current = nil
+    return true
+  end
+  function projects.opreate(P)
+    files = contents
+    P.current = memory_project()
+    P.current.name = name
+    function P.current.get_loader()
+      return loader
+    end
+    return true
+  end
+  local back = restore
+  restore = function()
+    projects.close, projects.opreate = close, opreate
+    table.delete_by_value(package.loaders, loader)
+    back()
+  end
 end
 
 -- keystrokes -------------------------------------------------

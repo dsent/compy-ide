@@ -223,8 +223,8 @@ cd src/examples/maze && ./.compy/build /abs/path/out
 cd <repo root> && love src play /abs/path/out/maze     # and .../draw
 ```
 
-- **The exit row (E1) needs the IDE, not play mode** — under `play` the console is disabled, so
-  `Ctrl+Esc` has nothing to return to. Start with `love src`, open the project from the console.
+- **The exit row (E1) needs the IDE, not play mode** — under `play` the console is disabled, and
+  `Ctrl+Q`, which returns to it, does nothing. Start with `love src`, open the project from the console.
 - **maze's menu** offers three tracks: **1** Drive the robot (direct keys) · **2** Plan a path (tile
   buffer) · **3** All mazes (the sandbox, which is where the **command editor** levels are).
 - **draw's menu** offers Free draw and the picture tasks. **Free draw keeps its command widget shown
@@ -250,7 +250,7 @@ cd <repo root> && love src play /abs/path/out/maze     # and .../draw
 | B2 | look at the screen after B1 | **no command widget is left over the menu** |
 | B3 | immediately press a menu digit | the track starts, and **the digit does not also land in the widget** |
 | B4 | on a **direct-control** level, press `Shift+Esc` | returns to the menu, as before |
-| B5 | at the menu, press `Shift+Esc` | **nothing happens** — the menu is the top level; `Ctrl+Esc` is how you leave to the console |
+| B5 | at the menu, press `Shift+Esc` | **nothing happens** — the menu is the top level; `Ctrl+Q` is how you leave to the console |
 | B6 | type a draft, then `Shift+Esc` | you leave — the draft is not silently wiped *and then* the game left, which is what one keystroke doing both would look like |
 | B7 | in **draw**, `<` typed as a command | still exits to the draw menu. **It was deliberately kept** |
 | B8 | on an editor level, `Alt+Shift+Esc` | **[new]** also leaves for the menu |
@@ -292,7 +292,7 @@ defect against `P-17-03` §5, not a mystery.)*
 
 | | do | expect |
 |---|---|---|
-| E1 | leave with `Ctrl+Esc` (**IDE launch**) | you are back in the console |
+| E1 | leave with `Ctrl+Q` (**IDE launch**) | you are back in the console |
 | E2 | win a level, press `Tab` | the next level starts |
 | E3 | **hold** `Tab` | the level advances **once**, not repeatedly |
 | E4 | press `Shift+Tab`, then `Ctrl+Tab` | each still advances/resets as a bare Tab does — these were preserved deliberately, one registration each |
@@ -338,8 +338,8 @@ exactly this feature's work.)*
 ### How to launch
 
 - **Desktop / nodejs:** from the repo root, `love src play src/examples/balloons`.
-- **The exit row (D1) needs the IDE, not play mode** — under `play` the console is disabled, so
-  `Ctrl+Esc` has nothing to return to. Start with `love src` and open the project from the console.
+- **The exit row (D1) needs the IDE, not play mode** — under `play` the console is disabled, and
+  `Ctrl+Q`, which returns to it, does nothing. Start with `love src` and open the project from the console.
 
 **The game:** balloons rise carrying questions (*"Print missing letter in 'giraf..e':"*, *"What is
 3 + 4?:"*). You type the answer and press Enter. Three states matter: **loaded** (the splash, which
@@ -390,7 +390,7 @@ re-arm.
 
 | | do | expect |
 |---|---|---|
-| D1 | leave with `Ctrl+Esc` (**IDE launch**) | you are back in the console |
+| D1 | leave with `Ctrl+Q` (**IDE launch**) | you are back in the console |
 | D2 | type a long answer, watching each character | each appears **once** — no echo |
 
 ### What a failure here means
@@ -482,7 +482,7 @@ idiom for a project whose hooks run above the widget.
 
 | | do | expect |
 |---|---|---|
-| D1 | leave with `Ctrl+Esc` (**IDE launch**) | you are back in the console |
+| D1 | leave with `Ctrl+Q` (**IDE launch**) | you are back in the console |
 | D2 | reopen the project and press `i` | the widget is shown empty — nothing from the previous run survived |
 
 ### What a failure here means
@@ -520,7 +520,7 @@ Start `love src`, then `run("sine")` from the prompt.
 | A1 | `run("sine")` from the console prompt | the sine curve is drawn and the run returns |
 | A2 | type at the prompt | **the characters appear** — the prompt is live while the project is still open |
 | A3 | press Enter on something evaluable (`print(1 + 1)`) | it evaluates and prints, as it would with no project open |
-| A4 | `Ctrl+Esc` | back to the console with the project stopped, as before |
+| A4 | `Ctrl+Q` | back to the console with the project stopped, as before |
 
 ### What a failure here means
 

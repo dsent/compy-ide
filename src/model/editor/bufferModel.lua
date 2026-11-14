@@ -255,6 +255,7 @@ end
 --- @field active_line integer --- source line inside the selection
 --- @field loaded integer?
 --- @field key string? --- the file's identity, project and name
+--- @field input UserInputModel --- the file's own editor field
 --- @field eol string --- the file's main line ending, which a
 --- line without one of its own is written with
 --- @field ends string[] --- each line's own ending, '' for

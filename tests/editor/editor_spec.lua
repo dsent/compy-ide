@@ -913,15 +913,17 @@ describe('Editor #editor', function()
         local opened = src(code, comment)
         local accepted = src(first, code, comment, '')
 
-        it("is shown as written and accepted on its own line",
+        it("is shown on its own line and accepted so",
           function()
             local input = session:open(src(first, commented), 2)
 
             session:select_block(2, commented)
             session:select_and_open_block(2)
-            --- Edit copies the block as it is (IS5.1)
-            assert.same(string.lines(commented), input:get_text(),
-                        "the block loads as written")
+            --- Edit loads the block formatted as a submission
+            --- formats it (ruling: F2 opens a block that
+            --- breaks a limit)
+            assert.same(string.lines(opened), input:get_text(),
+                        "the block loads formatted")
 
             session:submit(opened)
             assert.same(accepted, savefile(), "one copy of the comment")

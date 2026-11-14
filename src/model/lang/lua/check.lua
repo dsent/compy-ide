@@ -166,6 +166,62 @@ local function keep_empty_lines(given, text)
 end
 
 --- @param lines string[]
+--- @return boolean --- a `#!` line opens the text
+local function shebang(lines)
+  return lines[1] ~= nil and string.match(lines[1], '^#!') ~= nil
+end
+
+--- @param lines string[]
+--- @return string[] --- the lines below an empty one
+local function below_a_line(lines)
+  local below = { '' }
+  for i, l in ipairs(lines) do below[i + 1] = l end
+  return below
+end
+
+--- A draft read as Lua reads it: a `#!` line is skipped at
+--- the top of a file alone, which a draft is not, so the
+--- draft is read below a line, where the `#!` fails. The
+--- parser the editor's field checks and colors with, so
+--- that the red text and a refused submission agree (IS3.4).
+--- @type table
+M.draft_parser = setmetatable({
+  parse = function(lines)
+    if not shebang(lines) then return get_parser().parse(lines) end
+    return get_parser().parse(below_a_line(lines))
+  end,
+  --- @param lines string[]
+  --- @param err Error --- as parse above returned it
+  --- @return Error
+  failure = function(lines, err)
+    if not shebang(lines) then
+      return get_parser().failure(lines, err)
+    end
+    local failure = get_parser().failure(below_a_line(lines), err)
+    failure.l = failure.l - 1
+    return failure
+  end,
+}, { __index = function(_, k) return get_parser()[k] end })
+
+--- The text as the editor writes it: formatted, or as given
+--- when it does not format. A draft's empty lines between
+--- statements stay when `keep_empty` asks (IS3.7). A draft
+--- that opens with `#!` does not parse, so it does not format.
+--- @param lines string[]
+--- @param width integer
+--- @param keep_empty boolean?
+--- @return string[] text
+--- @return boolean formatted
+function M.formatted(lines, width, keep_empty)
+  if shebang(lines) then return lines, false end
+  local text, formatted = format.format(lines, width)
+  if formatted and keep_empty then
+    text = keep_empty_lines(lines, text)
+  end
+  return text, formatted
+end
+
+--- @param lines string[]
 --- @return table? --- {l, len}: the first line over the limit
 local function long_line(lines)
   for i, l in ipairs(lines) do
@@ -202,29 +258,7 @@ end
 function M.gate(lines, width, max_block, keep_empty)
   width = width or display.columns
   max_block = max_block or MAX_BLOCK_LINES
-  --- a `#!` line is skipped at the top of a file alone, which
-  --- a draft is not: read below a line, as Lua reads it there,
-  --- it fails
-  if lines[1] and string.match(lines[1], '^#!') then
-    local below = { '' }
-    for i, l in ipairs(lines) do below[i + 1] = l end
-    local _, err = get_parser().parse(below)
-    local failure = get_parser().failure(below, err)
-    failure.l = failure.l - 1
-    return {
-      ok = false,
-      lines = lines,
-      formatted = false,
-      failure = failure,
-      errors = { failure },
-      oversized = {},
-      max_block = max_block,
-    }
-  end
-  local text, formatted = format.format(lines, width)
-  if formatted and keep_empty then
-    text = keep_empty_lines(lines, text)
-  end
+  local text, formatted = M.formatted(lines, width, keep_empty)
   local ok, errors = M.check(text)
   --- @type GateVerdict
   local verdict = {
@@ -237,9 +271,10 @@ function M.gate(lines, width, max_block, keep_empty)
   }
   --- syntax comes before size: the line check counts
   --- formatted lines (IS3.2), which a failed parse has none of
-  local parses, failure = get_parser().parse(lines)
+  local draft = M.draft_parser
+  local parses, failure = draft.parse(lines)
   if not parses then
-    verdict.failure = get_parser().failure(lines, failure)
+    verdict.failure = draft.failure(lines, failure)
     verdict.errors = { verdict.failure }
     return verdict
   end

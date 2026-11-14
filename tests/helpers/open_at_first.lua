@@ -15,7 +15,6 @@ function M.install()
     self:get_active_buffer():set_selection(1)
     self.view:get_current_buffer():follow_selection()
     self:update_status()
-    self:set_state()
   end
   return function()
     EditorController.open = open

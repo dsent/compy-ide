@@ -149,24 +149,23 @@ describe("text safety #editor #spec", function()
       end)
 
     -- Ruling (round 1 review, finding C-7): Edit on a block
-    -- with a line over the limit loads it; Enter formats it as
-    -- far as the formatter can, and refuses with the notice a
+    -- with a line over the limit loads it formatted as far as
+    -- the formatter can; Enter refuses with the notice a
     -- submission still over the limit
     spec_it("IS1.3 Handle size limits: Edit loads a comment with "
-        .. "a line over the limit, and Enter puts it back formatted "
-        .. "in its own place", function()
+        .. "a line over the limit formatted, and Enter puts it "
+        .. "back so in its own place", function()
         K.browse_to(1)
         K.keys("f2")
         assert.same("replacing", K.state())
-        assert.same(LONG .. "\nend ]]", K.draft())
-        K.keys("return")
-        assert.same("browsing", K.state())
-        local f = K.file()
-        assert.same("\nend ]]\na = 1\nb = 2\nc = 3\n",
-          f:sub(-#"\nend ]]\na = 1\nb = 2\nc = 3\n"))
-        for l in f:gmatch("[^\n]*") do
+        local draft = K.draft()
+        assert.are_not.same(LONG .. "\nend ]]", draft)
+        for l in draft:gmatch("[^\n]*") do
           assert.is_true(#l <= 64, l)
         end
+        K.keys("return")
+        assert.same("browsing", K.state())
+        assert.same(draft .. "\na = 1\nb = 2\nc = 3\n", K.file())
       end)
   end)
 
@@ -520,7 +519,8 @@ describe("text safety #editor #spec", function()
       assert.truthy(K.message():find("Finish the text first", 1, true))
     end)
 
-  describe("a line the formatter cannot break", function()
+  describe("a line the formatter cannot bring within the limit",
+    function()
     local NAME = "v" .. string.rep("a", 70)
     local TEXT = "x = 1\n" .. NAME .. " = 1\ny = 2\n"
 
@@ -531,11 +531,11 @@ describe("text safety #editor #spec", function()
       K.keys("f2")
     end)
 
-    spec_it("IS1.3 Handle size limits: Edit loads the block, "
-        .. "Enter refuses it with the notice, and Escape leaves "
-        .. "the file as it was", function()
+    spec_it("IS1.3 Handle size limits: Edit loads the block "
+        .. "formatted as far as it goes, Enter refuses it with the "
+        .. "notice, and Escape leaves the file as it was", function()
         assert.same("replacing", K.state())
-        assert.same(NAME .. " = 1", K.draft())
+        assert.same(NAME .. "\n    = 1", K.draft())
         K.keys("return")
         assert.same("replacing", K.state())
         assert.truthy(K.message():find("the limit is 64", 1, true))
@@ -547,7 +547,7 @@ describe("text safety #editor #spec", function()
 
     spec_it("IS1.3 Handle size limits: the block, repaired, is "
         .. "accepted in its own place", function()
-        for _ = 1, #NAME + 4 do
+        for _ = 1, #K.draft() do
           K.keys("backspace")
         end
         assert.same("", K.draft())

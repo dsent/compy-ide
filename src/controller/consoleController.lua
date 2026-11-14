@@ -2029,10 +2029,13 @@ function ConsoleController:_close_project()
   if P.current then
     self:stop_project_run()
   end
-  --- Ctrl+T's way back into the editor names a file of
-  --- this project; after the stop, which keeps it for a
-  --- restart, and after the exit hook the stop runs
-  love.state.editor = nil
+  --- the editor's files are this project's: they go with it,
+  --- after the exit hook the stop runs
+  if love.state.app_state == 'editor' then
+    self:finish_edit()
+  elseif self.editor:get_active_buffer() then
+    self.editor:close()
+  end
   destroy_input_widget()
   local open = P.current
   if open then
@@ -2085,17 +2088,12 @@ end
 
 --- Once at a time: a before_exit hook that closes or switches
 --- the project reaches here again, and returns at once.
---- The editor closes first: the gate's restart (Ctrl+Alt+R)
---- reaches here before the editor sees its key, and so does
---- a console command that closes the project; the editor's
---- buffers belong to the project they were opened in. Ctrl+T
---- keeps its way back, which closing the project then
---- forgets.
+--- The editor steps aside first, its files kept for Ctrl+T:
+--- the gate's restart (Ctrl+Alt+R) reaches here from it.
 function ConsoleController:stop_project_run()
   if self.stopping then return end
-  if love.state.app_state == 'editor'
-      and self.editor:get_active_buffer() then
-    love.state.editor = self:finish_edit()
+  if love.state.app_state == 'editor' then
+    self:hide_editor()
   end
   self.stopping = true
   local ok, err = pcall(self._stop_project_run, self)
@@ -2187,11 +2185,13 @@ function ConsoleController:reset_scratchpad()
   return self:open_project(name)
 end
 
---- @param name string
---- @param state EditorState
+--- Open a file in front of the editor's files: those a run
+--- came from (IS1.4) and the callers of a followed file
+--- (IS1.5).
+--- @param name string?
 --- @param must_exist boolean? --- a file followed to (IS1.5)
 --- is one the project holds; edit("name") creates its own
-function ConsoleController:edit(name, state, must_exist)
+function ConsoleController:edit(name, must_exist)
   if love.state.app_state == 'running' then return end
   --- a program's exit hook runs while its project closes:
   --- a file it opened then would outlive the project
@@ -2200,27 +2200,7 @@ function ConsoleController:edit(name, state, must_exist)
   local PS = self.model.projects
   local p  = PS.current
   if not p then return end
-  --- back from a test run (IS1.4): the files under the one in
-  --- front open first, as the stack held them. Each opening
-  --- writes the editor's state anew, so the front file's is
-  --- taken first.
-  if state and state.callers
-      and love.state.app_state ~= 'editor' then
-    local front = {
-      buffer = state.buffer,
-      clipboard = state.clipboard,
-    }
-    for _, c in ipairs(state.callers) do
-      self:edit(c.filename, { buffer = c })
-    end
-    state = front
-  end
-  local filename
-  -- if state and state.buffer then
-  --   filename = state.buffer.filename
-  -- else
-  filename    = name or ProjectService.MAIN
-  -- end
+  local filename = name or ProjectService.MAIN
   local fpath = p:get_path(filename)
   local ex    = FS.exists(fpath)
   --- a refusal is said where the person is: over the
@@ -2238,6 +2218,18 @@ function ConsoleController:edit(name, state, must_exist)
   if love.state.app_state == 'editor'
       and self.editor:state_name() ~= 'browsing' then
     refuse('Finish the text first: Enter keeps it, Esc drops it.')
+    return
+  end
+  --- a file is on the editor's stack once; edit() in the
+  --- console shows the files a run came from when it names
+  --- one of them
+  local open = self.editor:_find_buffer(fpath)
+  if open then
+    local hidden = love.state.app_state ~= 'editor'
+    if hidden then self:show_editor() end
+    if not hidden or open ~= self.editor:get_active_buffer() then
+      self.editor:refuse({ filename .. ' is already open.' })
+    end
     return
   end
   --- a file the editor could never save stays shut: every
@@ -2271,11 +2263,6 @@ function ConsoleController:edit(name, state, must_exist)
     })
     return
   end
-  --- a file is on the editor's stack once
-  if must_exist and self.editor:_find_buffer(fpath) then
-    self.editor:refuse({ filename .. ' is already open.' })
-    return
-  end
   --- admission (IS1.2): text that is not UTF-8 stays shut,
   --- and the caller keeps its file and state (IS1.5)
   if type(text) == 'string' and not utf8.len(text) then
@@ -2299,36 +2286,32 @@ function ConsoleController:edit(name, state, must_exist)
   local save = function(newcontent)
     return self:_writefile(filename, newcontent, p, true)
   end
-
-  --- opening writes the editor's state anew, in the same
-  --- table: what comes back is what was saved (IS1.4)
-  local saved = state and {
-    buffer = state.buffer,
-    clipboard = state.clipboard,
-  }
   self.editor:open(filename, text, save, fpath)
-  self.editor:restore_state(saved)
 end
 
---- @return EditorState?
 function ConsoleController:close_buffer()
   self.editor:close_buffer()
 end
 
---- @return EditorState?
+--- The editor steps aside for a run, its files kept as they
+--- are for the way back (IS1.4)
+function ConsoleController:hide_editor()
+  self.editor:hide()
+  love.state.app_state = love.state.prev_state
+  love.state.prev_state = nil
+end
+
+--- The editor's files again, as a run left them
+function ConsoleController:show_editor()
+  love.state.prev_state = love.state.app_state
+  love.state.app_state = 'editor'
+  self.editor:show()
+end
+
+--- Leave the editor: its files go (IS1.6)
 function ConsoleController:finish_edit()
-  self.editor:save_state()
+  self:hide_editor()
   self.editor:close()
-  local ok = true
-  local errs = {}
-  if ok then
-    love.state.app_state = love.state.prev_state
-    love.state.prev_state = nil
-  else
-    print(string.unlines(errs))
-  end
-  self.buffers = {}
-  return self.editor:get_state()
 end
 
 --- Handlers ---

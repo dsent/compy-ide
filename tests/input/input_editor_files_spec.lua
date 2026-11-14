@@ -365,7 +365,7 @@ describe('the editor across files #input', function()
 
       assert.is_true(cc:open_project('b'))
       assert.same('b', P.current.name)
-      assert.is_nil(love.state.editor)
+      assert.is_nil(ed:get_active_buffer())
     end)
   end)
 

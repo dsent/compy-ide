@@ -371,4 +371,139 @@ describe("IS4 and IS5, added #editor #spec", function()
       assert.same(FILE, K.file())
     end)
   end)
+
+  -- Ruling "F2 opens a block that breaks a limit": the block
+  -- loads formatted as far as the formatter can, as a
+  -- submission formats it; the other contributor's D26 says
+  -- the same of every block. Loading is no change the user
+  -- made to the draft.
+  describe("Edit loads a Lua block formatted", function()
+    local WIDE = "x" .. string.rep(" ", 70) .. "=1\n"
+    local LOOSE = "x=1\ny=2\n"
+
+    spec_it("IS5.1 Begin a replacement: a block over the line "
+        .. "limit loads formatted, the cursor at its end, the "
+        .. "file as it was", function()
+      open_file(WIDE)
+      edit(1)
+      assert.same("replacing", K.state())
+      assert.same("x = 1", K.draft())
+      assert.same({
+        1,
+        6
+      }, { K.cursor() })
+      assert.is_nil(K.message())
+      assert.same(WIDE, K.file())
+    end)
+
+    spec_it("IS5.1 Begin a replacement: Enter on the loaded "
+        .. "block writes it as loaded", function()
+      open_file(WIDE)
+      edit(1)
+      local loaded = K.draft()
+      K.keys("return")
+      assert.same("browsing", K.state())
+      assert.same(loaded .. "\n", K.file())
+    end)
+
+    spec_it("IS5.1 Begin a replacement: a block within the "
+        .. "limits loads formatted too", function()
+      open_file(LOOSE)
+      edit(1)
+      assert.same("x = 1", K.draft())
+      assert.same(LOOSE, K.file())
+    end)
+
+    spec_it("IS5.1 Begin a replacement: a #! line, which does "
+        .. "not format, loads as it stands", function()
+      open_file("#!/usr/bin/lua\nx=1\n")
+      edit(1)
+      assert.same("replacing", K.state())
+      assert.same("#!/usr/bin/lua", K.draft())
+    end)
+
+    spec_it("IS5.6 Switch the replacement target: a block "
+        .. "loaded formatted is unmodified, so Edit switches",
+        function()
+      open_file(LOOSE)
+      edit(1)
+      K.browse_to(2)
+      K.keys("f2")
+      assert.same(2, K.target())
+      assert.same("y = 2", K.draft())
+      assert.is_nil(K.message())
+      assert.same(LOOSE, K.file())
+    end)
+
+    spec_it("IS5.6 Switch the replacement target: Ctrl+Z "
+        .. "takes the switch back to the previous block, "
+        .. "formatted again", function()
+      open_file(LOOSE)
+      edit(1)
+      K.browse_to(2)
+      K.keys("f2")
+      K.keys("lctrl", "z")
+      assert.same(1, K.target())
+      assert.same("x = 1", K.draft())
+      K.keys("lctrl", "y")
+      assert.same(2, K.target())
+      assert.same("y = 2", K.draft())
+      assert.same(LOOSE, K.file())
+    end)
+
+    spec_it("IS5.7 Cancel an edit with Escape: a block loaded "
+        .. "formatted and untouched is dropped, the file as it "
+        .. "was", function()
+      open_file(LOOSE)
+      edit(1)
+      K.keys("escape")
+      assert.same("browsing", K.state())
+      assert.same("", K.draft())
+      assert.is_nil(K.target())
+      assert.same(LOOSE, K.file())
+    end)
+
+    spec_it("IS5.5 Restore the original draft: the reload puts "
+        .. "back the block formatted as Edit loaded it", function()
+      open_file(WIDE)
+      edit(1)
+      K.type("0")
+      K.keys("f2")
+      assert.same("x = 1", K.draft())
+      assert.same({
+        1,
+        6
+      }, { K.cursor() })
+      K.keys("lctrl", "z")
+      assert.same("x = 10", K.draft())
+      assert.same(WIDE, K.file())
+    end)
+
+    spec_it("IS6.6 Undo and redo: the formatting a load does "
+        .. "is no draft change, so Ctrl+Z takes back the Edit "
+        .. "and Ctrl+Y brings it back formatted", function()
+      open_file(LOOSE)
+      edit(1)
+      K.keys("lctrl", "z")
+      assert.same("browsing", K.state())
+      assert.same("", K.draft())
+      K.keys("lctrl", "y")
+      assert.same("replacing", K.state())
+      assert.same(1, K.target())
+      assert.same("x = 1", K.draft())
+      assert.same(LOOSE, K.file())
+    end)
+
+    spec_it("IS8.1 Open a text or Markdown file: Edit loads "
+        .. "a line of a text or Markdown file as it stands",
+        function()
+      for _, name in ipairs({ "notes.txt", "notes.md" }) do
+        K.reset({ [name] = "x=1\n" })
+        K.open(name)
+        K.browse_to(1)
+        K.keys("f2")
+        assert.same("x=1", K.draft(), name)
+      end
+    end)
+  end)
 end)

@@ -42,7 +42,6 @@ end
 --- @field search SearchController
 --- @field console ConsoleController
 --- @field view EditorView?
---- @field state EditorState?
 --- @field mode EditorMode
 EditorController = class.create(new)
 
@@ -109,34 +108,35 @@ function EditorController:init_view(v)
   self.input:init_view(self.view.input)
 end
 
---- @private
---- The field reads its draft as the file's type does
+--- A file's field reads its draft as the file's type does
 --- (IS1.2, IS3.2): the name's ending fixes the type, and any
 --- other name is plain text
 --- @param name string
---- @return table eval --- the evaluator the field now has
-function EditorController:_use_eval(name)
-  local eval = TextEval
-  if string.match(name, '%.lua$') then
-    eval = LuaEditorEval
-  elseif string.match(name, '%.md$') then
-    eval = MdEval()
-  end
-  self.input:set_eval(eval)
-  return eval
+--- @return table eval
+local function file_eval(name)
+  if string.match(name, '%.lua$') then return LuaEditorEval end
+  if string.match(name, '%.md$') then return MdEval() end
+  return TextEval
+end
+
+--- @private
+--- The field shows and edits the front file's own draft
+--- @param b BufferModel
+function EditorController:_front(b)
+  self.input.model = b.input
 end
 
 --- @param name string
 --- @param content str?
 --- @param save function
 --- @param key string? --- the file's identity, project and
---- name: a file open already comes back as its own buffer
+--- name (_find_buffer)
 function EditorController:open(name, content, save, key)
   local w = self.model.cfg.view.drawableChars
   local is_lua = string.match(name, '%.lua$')
   local is_md = string.match(name, '%.md$')
   local ch, hl, pp, tr
-  local eval = self:_use_eval(name)
+  local eval = file_eval(name)
 
   if is_lua then
     local luaEval = LuaEval()
@@ -159,43 +159,31 @@ function EditorController:open(name, content, save, key)
     hl = eval.highlighter
   end
 
-  --- one buffer per file: a second copy would save a
-  --- stale snapshot over the first one's changes
-  local b = key and self:_find_buffer(key)
-  local created = not b
-  if created then
-    b = BufferModel(name, content, save, ch, hl, pp, tr)
-    b.key = key
-    --- what the file held when it was read, missing included:
-    --- a later change from outside is told from it
-    --- (_baseline)
-    if type(content) == 'table' then
-      --- lines given, no text read: the card says what it holds
-      b.disk_seen = self:_disk_text(b)
-    else
-      self:_note_read(b, content)
-    end
+  local b = BufferModel(name, content, save, ch, hl, pp, tr)
+  b.key = key
+  --- what the file held when it was read, missing included:
+  --- a later change from outside is told from it (_baseline)
+  if type(content) == 'table' then
+    --- lines given, no text read: the card says what it holds
+    b.disk_seen = self:_disk_text(b)
+  else
+    self:_note_read(b, content)
   end
-  --- the file under it stays open, its draft's changes on its
-  --- timeline (IS1.5, IS6.6)
-  local under = self:get_active_buffer()
-  if under and under ~= b then self:timeline_park(under) end
-  --- the file comes in with an input of its own: nothing
-  --- typed, no message, no search of another file's
-  self.input:clear()
+  --- the file's own field: its draft and the draft's changes
+  --- stay with it while another file is in front (IS1.5,
+  --- IS6.6)
+  b.input = UserInputModel(self.model.cfg, eval, nil, true)
+  --- no search of another file's
   self.search:clear()
-  self:timeline_unpark(b)
   self.model.buffers:push_front(b)
+  self:_front(b)
   self.view:open(b)
   self:set_mode('nav')
   --- a file opens ready to append, at its end position
-  --- (IS1.1); a buffer open already keeps where it is
-  if created then
-    b:set_selection(b:get_content_length() + 1)
-  end
+  --- (IS1.1)
+  b:set_selection(b:get_content_length() + 1)
   self.view:get_current_buffer():follow_selection()
   self:update_status()
-  self:set_state()
   self.input:update_view()
 end
 
@@ -231,7 +219,7 @@ function EditorController:follow_require()
   if not reqsel.file and not string.match(name, '%.lua$') then
     name = string.gsub(name, '%.', '/') .. '.lua'
   end
-  self.console:edit(name, nil, true)
+  self.console:edit(name, true)
 end
 
 function EditorController:pop_buffer()
@@ -241,8 +229,7 @@ function EditorController:pop_buffer()
   local out = bs:pop_front()
   self:_let_go(out)
   local b = bs:first()
-  --- the caller's draft is read as the caller's type again
-  self:_use_eval(b.name)
+  self:_front(b)
   local bv = self.view:get_current_buffer()
   --- the caller comes back as it was left: the buffer
   --- keeps its position, and the view its rows (IS1.6) —
@@ -250,8 +237,6 @@ function EditorController:pop_buffer()
   local off = bv:get_offset()
   bv:open(b)
   bv:scroll_to(off)
-  self.input:clear()
-  self:timeline_unpark(b)
   self:update_status()
 end
 
@@ -303,7 +288,6 @@ function EditorController:set_mode(mode)
   local buf = self:get_active_buffer()
   local init_search = function()
     local db = buf.semantic
-    self:save_state()
     self.search:load(db and db.definitions or {})
   end
 
@@ -456,123 +440,35 @@ function EditorController:key_card()
   return card:lines(self:state_name(), self:_draft_is_empty())
 end
 
---- @param clipboard string
-function EditorController:set_clipboard(clipboard)
-  self.state.clipboard = clipboard
+--- A run of the project hides the editor (IS1.4): its
+--- files stay as they are, and the system clipboard is kept
+--- from the program
+function EditorController:hide()
+  self:set_mode('nav')
+  self.search:clear()
+  self.clipboard = love.system.getClipboardText()
 end
 
---- @param clipboard string?
-function EditorController:set_state(clipboard)
-  local buf = self:get_active_buffer()
-  local bid = buf:get_id()
-  local buf_view_state = self.view:get_buffer(bid):get_state()
-  --- the files under it on the stack, the bottom one first,
-  --- each as it was left: a test run comes back to them all
-  --- (IS1.4)
-  local callers = {}
-  local bs = self.model.buffers
-  for i = bs:length(), 2, -1 do
-    local v = self.view:get_buffer(bs[i]:get_id())
-    if v then callers[#callers + 1] = v:get_state() end
+--- The editor as a run left it
+function EditorController:show()
+  local clip = self.clipboard
+  if string.is_non_empty_string(clip) then
+    love.system.setClipboardText(clip)
   end
-  if self.state then
-    self.state.buffer = buf_view_state
-    self.state.callers = callers
-    self.state.moved = buf:get_selection()
-    if clipboard then self:set_clipboard(clipboard) end
-  else
-    self.state = {
-      buffer = buf_view_state,
-      callers = callers,
-      clipboard = clipboard,
-      moved = buf:get_selection()
-    }
-  end
+  self:update_status()
+  self.input:update_view()
 end
 
---- @return EditorState
-function EditorController:get_state()
-  return self.state
-end
-
-function EditorController:save_state()
-  --- TODO: multibuffer support
-  self:set_state(love.system.getClipboardText())
-end
-
---- @param state EditorState?
-function EditorController:restore_state(state)
-  --- TODO: multibuffer support
-  if state then
-    local buf = self:get_active_buffer()
-    local sel = state.buffer.selection
-    local off = state.buffer.offset
-    buf:set_selection(sel)
-    self.view:get_current_buffer():scroll_to(off)
-    local clip = state.clipboard
-    if string.is_non_empty_string(clip) then
-      love.system.setClipboardText(clip or '')
-    end
-  end
-end
-
---- The next close is for a run of the project from the
---- editor (Ctrl+T, Ctrl+Alt+R): the open files' undo
---- timelines are kept for the return
-function EditorController:keep_timelines()
-  self._keep_timelines = true
-end
-
---- Back from a run: the files opened again take their
---- timelines up where they stood, the draft's changes
---- included. A timeline whose file did not open stays kept
---- for a later return.
-function EditorController:restore_timelines()
-  local kept = self.timelines or {}
-  for _, b in ipairs(self.model.buffers) do
-    local id = b.key or b.name
-    local t = kept[id]
-    kept[id] = nil
-    --- a run that changed the file ends its timeline (IS6.6)
-    if t and t.disk_seen == b.disk_seen then
-      b.history = t.history
-      b.redo_history = t.redo_history
-      b.draft_steps = t.draft_steps
-    end
-  end
-  local front = self:get_active_buffer()
-  if front then self:timeline_unpark(front) end
-end
-
---- @return {name: string, content: string[]}[]
+--- Leave the editor: every file goes, and its timeline
+--- (IS6.6)
 function EditorController:close()
-  --- a run is no leaving of the file (IS1.4): its timeline
-  --- waits for the return; any other close ends it (IS6.6)
-  self.timelines = nil
-  if self._keep_timelines then
-    self.timelines = {}
-    local front = self:get_active_buffer()
-    if front then self:timeline_park(front) end
-    for _, b in ipairs(self.model.buffers) do
-      self.timelines[b.key or b.name] = {
-        history = b.history,
-        redo_history = b.redo_history,
-        draft_steps = b.draft_steps,
-        disk_seen = b.disk_seen,
-      }
-    end
-  end
-  self._keep_timelines = nil
-  self.input:clear()
+  self.input.model = self.model.input
   --- the gate's shortcuts close the editor in any mode,
   --- search included; the next file starts in navigation
   self.search:clear()
   self.mode = 'nav'
-  local bfs = self.model:get_buffers_content()
   self.model.buffers = Dequeue()
   self.view.buffers = {}
-  --- TODO is this needed?
-  return bfs
 end
 
 --- @return BufferModel
@@ -967,6 +863,23 @@ function EditorController:_load_target(bn, lines)
 end
 
 --- @private
+--- A block's text as Edit loads it: Lua formatted as a
+--- submission formats it, as far as the formatter can, so a
+--- line over the limit may come back within it (ruling: F2
+--- opens a block that breaks a limit); as it stands when it
+--- does not format, and in a text or Markdown file. Loading
+--- is no change to the draft (IS5.6).
+--- @param lines string[]
+--- @return string[]
+function EditorController:_as_loaded(lines)
+  if self:get_active_buffer().content_type ~= 'lua' then
+    return lines
+  end
+  return (check.formatted(lines,
+    self.model.cfg.view.drawableChars, true))
+end
+
+--- @private
 --- @return boolean --- the draft holds a change Ctrl+Z
 --- would take back: typing, a deletion, a reload (IS5.6)
 function EditorController:_draft_modified()
@@ -1000,7 +913,7 @@ function EditorController:_editable_lines(bn)
       'Block of %d lines, limit %d.'
       .. ' Ctrl+Delete cuts it to fix.', #lines, max)
   end
-  return lines
+  return self:_as_loaded(lines)
 end
 
 --- Edit: begin a replacement (IS5.1), restore the target's
@@ -1020,7 +933,8 @@ function EditorController:edit_block()
     --- unmodified draft only gets its cursor at the end
     if modified then
       self:_record_action('reload')
-      self.input.model:reformat(buf:block_lines(sel))
+      self.input.model:reformat(
+        self:_as_loaded(buf:block_lines(sel)))
     end
     self.input.model:jump_end()
     self.input:update_view()

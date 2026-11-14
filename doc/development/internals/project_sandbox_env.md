@@ -85,9 +85,10 @@ inherit the previous one's teardown.
 
 Every stop path that runs a project reaches `stop_project_run`, so the hook fires on all of them:
 `Ctrl+Q`, `Ctrl+Alt+R` and `Ctrl+T` into the editor (the gate's `RESERVED` table, `controller.lua`), and
-the `Ctrl+Esc` / `love.quit` path (`Controller.set_love_quit`, which stops the project instead of
-quitting whenever one is running or the console is still interactive). The only exit that runs no project code
-is quitting with **no** project running, where there is nothing to tear down.
+the `love.quit` path (`Controller.set_love_quit`, which stops the project instead of
+quitting whenever one is running or the console is still interactive). Two exits run no project code:
+quitting with **no** project running, where there is nothing to tear down, and `Ctrl+Esc`, which exits
+the whole IDE at once without a stop (`Application.request_application_exit`).
 
 What it is for: **project-internal** teardown — save a score, flush a memo, stop a timer. It is not a
 restore mechanism for T3 global state, which the project cannot restore reliably in any case

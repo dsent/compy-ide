@@ -1027,16 +1027,17 @@ Controller = {
       if st == 'running' or st == 'inspect'
           or st == 'ready' then
         CC:stop_project_run()
-        local ed = love.state.editor
-        if ed then CC:edit(ed.buffer.filename, ed)
-        else CC:edit() end
-        if CC.editor then CC.editor:restore_timelines() end
+        --- back to the files the run came from, as they were
+        --- (IS1.4), or the main file when there are none
+        if CC.editor and CC.editor:get_active_buffer() then
+          CC:show_editor()
+        else
+          CC:edit()
+        end
       elseif st == 'editor'
           and CC.editor:is_normal_mode() then
         if refused() then return end
-        CC.editor:keep_timelines()
-        local ed_state = CC:finish_edit()
-        love.state.editor = ed_state
+        CC:hide_editor()
         CC:run_project()
       end
     end
@@ -1068,14 +1069,11 @@ Controller = {
     end
 
     -- Restart stays live in playback too (matches the old
-    -- restart() call, made in both branches).
+    -- restart() call, made in both branches). From the
+    -- editor it is a run as Ctrl+T's: Ctrl+T comes back to
+    -- its files (IS1.4).
     local function reserved_restart()
       if refused() then return end
-      --- a run from the editor, as Ctrl+T's: Ctrl+T comes
-      --- back to its files and their timelines (IS1.4, IS6.6)
-      if love.state.app_state == 'editor' then
-        CC.editor:keep_timelines()
-      end
       CC:restart()
     end
 
@@ -1311,7 +1309,8 @@ Controller = {
 
   --- A non-blocking project is still "live" while it has an
   --- active input widget or a pointer/click handler — it keeps
-  --- the project route and Ctrl+Esc returns to the console.
+  --- the project route, and a quit (not Ctrl+Esc's, which
+  --- exits the IDE) stops it back to the console.
   user_is_interactive = function()
     return (love.state.user_input ~= nil) or user_pointer
   end,

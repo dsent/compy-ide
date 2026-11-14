@@ -4,8 +4,9 @@
 --- it once the class exists.
 ---
 --- The timeline of one open file is three stores read as one:
----  * the draft's changes, in the input model's edit history
----    (typing, deletion, a copy with Ctrl+Ins);
+---  * the draft's changes, in the edit history of the file's
+---    own field (`buf.input`): typing, deletion, a copy with
+---    Ctrl+Ins;
 ---  * `buf.history`: every accepted change to the file, put
 ---    there by `buf:push_history`, and the state steps (an
 ---    abort, the opening or switch of a replacement), which
@@ -130,7 +131,8 @@ function EditorController:_field_empty()
   self:_reuse_sync()
 end
 
---- Load block `i` into the field as the replacement of it
+--- Load block `i` into the field as the replacement of it,
+--- as Edit loads it
 --- @param i integer
 function EditorController:_field_load_target(i)
   local buf = self:get_active_buffer()
@@ -139,6 +141,7 @@ function EditorController:_field_load_target(i)
   if blank(lines) then
     self.input:clear()
   else
+    lines = self:_as_loaded(lines)
     self.input:set_text(lines)
     self.input.model:move_cursor(#lines,
       string.ulen(lines[#lines]) + 1)
@@ -244,24 +247,6 @@ function EditorController:timeline_forget(buf)
   buf.history = {}
   buf.redo_history = {}
   buf.redo_mark = nil
-  buf.draft_steps = nil
-end
-
---- The file goes from the front with no draft but its draft's
---- changes, which stay on its timeline (IS6.6): following a
---- file (IS1.5), a test run (IS1.4)
---- @param buf BufferModel
-function EditorController:timeline_park(buf)
-  buf.draft_steps = copy_list(self.input.model.edit_history.steps)
-end
-
---- The file is in front again, in an empty field: its draft's
---- changes come back, and what could be redone still can
---- @param buf BufferModel
-function EditorController:timeline_unpark(buf)
-  self.input.model.edit_history.steps = buf.draft_steps or {}
-  buf.draft_steps = nil
-  self:_timeline_mark(buf)
 end
 
 --- @private

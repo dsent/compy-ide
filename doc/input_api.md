@@ -409,8 +409,8 @@ widget is hidden. The blanket one belongs on everything else.
 A blanket guard switches your own hotkeys off for as long as the widget is
 shown. That is usually what you want, and it does not strand anyone: the
 combos the platform keeps are answered before your project sees the event, so
-`ctrl+escape` still ends the run no matter what your handler does — see
-"Combos the framework keeps".
+`ctrl+escape` still exits the IDE, and `ctrl+q` still stops the run, no matter
+what your handler does — see "Combos the framework keeps".
 
 `compy.input.set_text(text [, keep_cursor])` replaces content. `clear()`
 empties it. `get_text()` reads it back. `get_cursor()` returns `line, col`;
@@ -649,9 +649,9 @@ Vocabulary section above.
 
 When LÖVE fires an input event (a keypress, a mouse click, a touch), the
 framework first checks whether the platform has a reserved combo for it (see
-"Combos the framework keeps" below — these are things like Ctrl+Escape to
-stop the project). Platform reservations act **and pass the event on** — they
-never consume.
+"Combos the framework keeps" below — these are things like Ctrl+Q to stop
+the project and Ctrl+Escape to exit the IDE). Platform reservations act **and
+pass the event on** — they never consume.
 
 Then, while your project is running, every event walks the dispatch chain:
 
@@ -838,10 +838,10 @@ yourself.
 
 | Combo | What the platform does | When |
 |---|---|---|
-| `ctrl+escape` (on **release**) | stops the run; quits when there is nothing to go back to | always |
+| `ctrl+escape` (on **release**) | exits the whole IDE at once: the run is not stopped first, and `compy.before_exit` does not run | always |
 | `ctrl+alt+r` | restarts the project | always |
 | `ctrl+t` | switches between running and the editor | development only |
-| `ctrl+q` | stops the run and returns to the console; the project stays open | development only |
+| `ctrl+q` | stops the run and returns to the console; the project stays open. From the editor, leaves it for the console | development only |
 | `ctrl+pause` | suspends the run | development only |
 | `ctrl+alt+p` / `ctrl+alt+shift+p` | starts / stops the profiler | profiling builds |
 | `f10` | cycles the FPS overlay corner | profiling builds |
@@ -1141,8 +1141,9 @@ end
 - **Timing:** runs *before* the framework's own teardown, so `love.*` calls
   inside it are still safe.
 - **Fires on:** every framework-invoked stop of a running project —
-  `Ctrl+Esc`, quitting the project, switching away to the editor, and app
-  shutdown in play mode.
+  `Ctrl+Q`, quitting the project, switching away to the editor, and app
+  shutdown in play mode. `Ctrl+Esc` exits the IDE without a stop, and the
+  hook does not run.
 - **Does NOT fire when the project's own code raises.** A raise in top-level
   code ends the run without a stop, and a raise inside a handler suspends it
   instead; neither is a stop path. Do not rely on this hook to undo something

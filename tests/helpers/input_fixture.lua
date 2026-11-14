@@ -451,7 +451,6 @@ function F.reset()
   mock.release_keys()
   love.state.app_state          = 'ready'
   love.state.prev_state         = nil
-  love.state.editor             = nil
   -- Otherwise leaks into the next test's suspend(): a
   -- stale message from an earlier suspend_run() would set
   -- an unrelated console error (discovered via the route-

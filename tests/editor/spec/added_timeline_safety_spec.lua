@@ -82,8 +82,8 @@ describe("timeline safety #editor #spec", function()
     end)
 
     spec_it("IS1.4 Resume after running a project: a return "
-        .. "that cannot read the file keeps its timeline for the "
-        .. "next one", function()
+        .. "while the file cannot be read comes back to it, and "
+        .. "its timeline waits for the read", function()
       K.reset({ ["main.lua"] = "a = 1\n" })
       K.open()
       K.type("precious = 123")
@@ -91,10 +91,12 @@ describe("timeline safety #editor #spec", function()
       K.keys("lctrl", "t")
       K.fail_reads()
       K.keys("lctrl", "t")
-      assert.same("ready", K.app_state())
-      K.mend_reads()
-      K.keys("lctrl", "t")
+      assert.same("editor", K.app_state())
       assert.same("main.lua", K.file_name())
+      K.keys("lctrl", "z")
+      assert.same("", K.draft())
+      assert.truthy((K.message() or ""):find(UNREAD, 1, true))
+      K.mend_reads()
       K.keys("lctrl", "z")
       assert.same("precious = 123", K.draft())
     end)
@@ -333,6 +335,19 @@ describe("timeline safety #editor #spec", function()
       assert.same("x = 1\n", K.file())
       assert.same("#!/usr/bin/lua", K.draft())
       assert.same("error", K.message_kind())
+    end)
+
+    spec_it("IS3.4 Locate a syntax failure: a refused #! draft "
+        .. "is red from the failing character, the cursor before "
+        .. "it", function()
+      K.reset({ ["main.lua"] = "x = 1\n" })
+      K.open()
+      K.type("#!/usr/bin/lua")
+      local _, red = K.field_highlight()
+      K.keys("return")
+      assert.same({ 1, 2 }, red)
+      assert.same({ 1, 2 }, { K.cursor() })
+      assert.truthy(K.message():find("`!'", 1, true))
     end)
 
     spec_it("IS1.2 Admit or refuse a file: a file of a #! line "

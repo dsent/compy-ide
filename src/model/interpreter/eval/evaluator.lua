@@ -174,5 +174,10 @@ LuaEditorEval = (function()
     line_validators = check.line_validators,
     astValidators = check.ast_validators,
   }
-  return LuaEval(nil, ft)
+  --- a draft is read as the editor's submission reads it
+  local tools = {
+    parser = check.draft_parser,
+    highlighter = luaParser.highlighter,
+  }
+  return Evaluator('lua', tools, ft)
 end)()

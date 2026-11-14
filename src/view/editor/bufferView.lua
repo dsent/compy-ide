@@ -86,16 +86,6 @@ function BufferView:open(buffer)
   self:_update_visible(ir)
 end
 
---- @return BufferState
-function BufferView:get_state()
-  local buf = self.buffer
-  return {
-    filename = buf.name,
-    selection = buf.selection,
-    offset = self.content.offset,
-  }
-end
-
 --- @return integer
 function BufferView:get_max_size()
   --- the block limit is the input view height (spec: 14),
