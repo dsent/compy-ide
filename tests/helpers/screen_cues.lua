@@ -133,6 +133,38 @@ local function check(c, glyph, y, colours)
     for _, g in ipairs(got) do hit = hit or same_rgb(g, want) end
     assert.is_true(hit, "the fade's colour " .. i)
   end
+  --- the bands' opacity, one per band's top: the theme's
+  --- strength at the edge, falling band by band to near
+  --- nothing at the row's inner side
+  local alpha, tops = { }, { }
+  local from, to = math.huge, -math.huge
+  for _, f in ipairs(c.fades) do
+    local a = f.colour[4]
+    if alpha[f.y] == nil then tops[#tops + 1] = f.y end
+    assert.is_true(alpha[f.y] == nil or alpha[f.y] == a,
+      "one opacity across a band")
+    alpha[f.y] = a
+    from, to = math.min(from, f.y), math.max(to, f.y + f.h)
+  end
+  assert.is_true(math.abs(from - y) < 1e-6
+    and math.abs(to - (y + v.fh)) < 1e-6, "the bands cover the row")
+  table.sort(tops)
+  if glyph == "v" then
+    -- the bottom edge: the strongest band is the lowest
+    local r = { }
+    for i = #tops, 1, -1 do r[#r + 1] = tops[i] end
+    tops = r
+  end
+  local fade = theme().cue.fade
+  local edge, inner = alpha[tops[1]], alpha[tops[#tops]]
+  assert.is_true(fade * (1 - 1 / #tops) < edge and edge <= fade,
+    "the theme's strength at the edge: " .. edge)
+  assert.is_true(inner < fade / 8,
+    "near nothing at the inner side: " .. inner)
+  for i = 2, #tops do
+    assert.is_true(alpha[tops[i]] < alpha[tops[i - 1]],
+      "the fade weakens away from the edge")
+  end
 end
 
 

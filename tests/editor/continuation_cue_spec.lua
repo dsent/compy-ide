@@ -151,6 +151,40 @@ describe("the continuation cue #editor", function()
     end)
   end)
 
+  describe("its cost", function()
+    --- The lookups of a line's rows that a draw of the screen
+    --- makes, with block 2 browsed and cut at both edges
+    local function lookups(n)
+      K.reset({ ["big.lua"] = "a = 1\n" .. K.block(n) .. "b = 2\n" })
+      K.open("big.lua")
+      -- Home: the first block, however tall the next one
+      K.keys("home")
+      assert.same(1, K.position())
+      for _ = 1, 4 do
+        K.keys("lctrl", "down")
+      end
+      assert.same(2, K.position())
+      local c = K.ed.view:get_current_buffer().content
+      local real, count = c.wrap_forward, 0
+      c.wrap_forward = setmetatable({ }, {
+        __index = function(_, k)
+          count = count + 1
+          return real[k]
+        end,
+      })
+      local ok, e = pcall(K.screen)
+      c.wrap_forward = real
+      assert(ok, e)
+      return count
+    end
+
+    it("does not grow with the block it marks", function()
+      local small = lookups(50)
+      assert.is_true(0 < small)
+      assert.same(small, lookups(5000))
+    end)
+  end)
+
   describe("in the field", function()
     it("marks the field's top edge while draft rows lie above "
         .. "it, and its bottom edge after Ctrl+Home", function()

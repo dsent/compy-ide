@@ -929,8 +929,10 @@ end
 ---   texts drawn in the input field with its status line,
 ---   every fill and text drawn in the field in the order
 ---   drawn, and the rows the field takes under its status
----   line; each fill, frame and text has `seq`, its place in
----   the order of the whole draw
+---   line. The entries of `fills`, `frames`, `texts` and
+---   `field` have `seq`, their place in the order of the whole
+---   draw; those of `field_log` have none, the log being in
+---   the order drawn already
 function K.screen(also)
   complete_cfg()
   local lg = love.graphics

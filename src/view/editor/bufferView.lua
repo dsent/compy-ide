@@ -160,18 +160,35 @@ function BufferView:_block_rows(b)
   return out
 end
 
+--- The first and the last of the view's rows of block `b`,
+--- the ends of `_block_rows`, read from its first and last
+--- lines alone: the cost does not grow with the block. None
+--- for the end position.
+--- @param b integer?
+--- @return integer? first
+--- @return integer? last
+function BufferView:_block_span(b)
+  local cont = self.content
+  if not b or b < 1 or #(cont.v_blocks) < b then return nil end
+  local pos = cont:get_block_pos(b)
+  local a = pos and cont.wrap_forward[pos.start]
+  local z = pos and cont.wrap_forward[pos.fin]
+  if not (a and a[1] and z and z[#z]) then return nil end
+  return a[1], z[#z]
+end
+
 --- First and last view row of the browsing position; at the
 --- end position the first lies past the last
 --- @private
 --- @return integer first
 --- @return integer last
 function BufferView:_browsed_rows()
-  local rows = self:_block_rows(self.buffer:get_selection())
-  local total = self.content:get_text_length()
-  if #rows == 0 then
+  local s, e = self:_block_span(self.buffer:get_selection())
+  if not s then
+    local total = self.content:get_text_length()
     return total + 1, total
   end
-  return rows[1], rows[#rows]
+  return s, e
 end
 
 --- The rows the document view has: the field's rows above
@@ -412,22 +429,23 @@ function BufferView:draw(special, bottom)
   end
 
   local draw_highlight = function()
-    --- @param rows integer[]
+    --- the rows of a block from `s` to `e` that the view shows
+    --- @param s integer?
+    --- @param e integer?
     --- @param color RGB
     --- @param inset number
-    local fill = function(rows, color, inset)
+    local fill = function(s, e, color, inset)
+      if not s then return end
       gfx.setColor(color)
-      for _, v in ipairs(rows) do
-        if range:inc(v) then
-          local y, h = row_y(v), fh
-          if v == off + rows_n then
-            h = fh + strip
-          end
-          if v == range.start then
-            y, h = 0, h + y
-          end
-          gfx.rectangle('fill', inset, y, width - 2 * inset, h)
+      for v = math.max(s, range.start), math.min(e, range.fin) do
+        local y, h = row_y(v), fh
+        if v == off + rows_n then
+          h = fh + strip
         end
+        if v == range.start then
+          y, h = 0, h + y
+        end
+        gfx.rectangle('fill', inset, y, width - 2 * inset, h)
       end
     end
 
@@ -437,15 +455,15 @@ function BufferView:draw(special, bottom)
     --- each side of the yellow.
     local sel = self.buffer:get_selection()
     local target = self.buffer.loaded
-    local browsed = self:_block_rows(sel)
+    local bs, be = self:_block_span(sel)
     if special then
-      fill(browsed, colors.highlight_special, 0)
+      fill(bs, be, colors.highlight_special, 0)
     else
-      fill(browsed, colors.highlight, 0)
+      fill(bs, be, colors.highlight, 0)
       if target then
         local inset = target == sel and fw or 0
-        fill(self:_block_rows(target),
-          colors.highlight_loaded, inset)
+        local ts, te = self:_block_span(target)
+        fill(ts, te, colors.highlight_loaded, inset)
       end
     end
   end
@@ -552,9 +570,8 @@ function BufferView:draw(special, bottom)
     }
     local cut = { }
     local function look(b, kind)
-      local rows = b and self:_block_rows(b) or { }
-      if #rows == 0 then return end
-      local s, e = rows[1], rows[#rows]
+      local s, e = self:_block_span(b)
+      if not s then return end
       if s < range.start and range.start <= e then
         cut.top = cut.top or kind
       end
