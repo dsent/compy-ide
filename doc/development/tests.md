@@ -55,8 +55,6 @@ declaration order".
 | `ConsoleController` | Deeply coupled to LÖVE2D runtime state; exercised by harmony integration tests instead. The input contract suite now stands up a REAL instance (gfx/font stubbed) as its routing target, but only its input-routing role is exercised — its own save/restore/snapshot behaviour is not |
 | `Controller.lua` | Draw override detection. Click detection timer + handler registration are now covered by `input_shortcuts_click_spec`'s "framework click detection" and the `input_events_spec` rows |
 | `ProjectService` | File I/O, project open/create, filesystem mount |
-| `SearchController` | Editor Search is characterized through Ctrl+F, typed text, Enter jump, and Escape in `editor_spec`; it is an editor contract, not project input API |
-| `SearchModel` | Narrowing and selection scroll have no direct unit tests |
 | Drawing system | Depends on LÖVE2D graphics context |
 | Views (rendering) | Expected; view testing requires LÖVE2D |
 
@@ -126,7 +124,7 @@ under Xvfb (`Xvfb :n -screen 0 1024x600x24`, `DISPLAY=:n`); a full run takes und
 
 `editor.lua` drives the file editor with the keys its key card lists
 (`src/model/editor/keyCard.lua`), one scenario per user-level task: open and leave a file
-(`open-close`), search with Ctrl+F (`search`), add blocks and copy one (`add`), replace a block with
+(`open-close`), add blocks and copy one (`add`), replace a block with
 F2 and run the change with Ctrl+T (`change`), move a block and undo the move (`move`), cut a block
 and reopen the file from the console's history (`delete`), scroll the view and keep a loaded block
 (`scroll`), and follow a `require` with Ctrl+J (`follow`). The examples run later, so a scenario
@@ -147,7 +145,5 @@ in-repo examples as well as detached ones. Do not re-enumerate them here; a seco
 is how this paragraph went stale twice.
 
 ## Gaps — Areas Worth Filling
-
-**SearchModel** narrowing (`Search:narrow` with case-insensitive substring match) and selection scroll could be unit-tested similarly to `history_spec`.
 
 **Tag organisation** — `.busted` excludes `delay`-tagged tests by default. Tags in active use: `#parser`, `#chunk`, `#analyzer`, `#ast`, `#src`, `#editor`, `#input`, `#markdown`, `#visible`, plus `#legacy`, `#lifecycle`, `#history` and `#disputable` (across the `input_*_spec.lua` contract files; see the Input Contract Suite section above). No tests currently use the `delay` tag, so the exclude is defensive rather than active.

@@ -28,7 +28,7 @@
 -- bare-Escape row binds what happens AFTER routing, and the
 -- rest of the suite's Escape coverage drives the controller.
 -- The states the editor already claims — an error message, a
--- confirmation dialog, search — are pinned by the imported
+-- confirmation dialog — are pinned by the imported
 -- tests/editor/editor_spec.lua and are cited rather than
 -- duplicated here.
 
@@ -207,20 +207,6 @@ describe('editor key contract #input', function()
         assert.same('editor', love.state.app_state)
       end)
 
-    for _, mode in ipairs({ 'search' }) do
-      it('Ctrl+T leaves nothing from ' .. mode, function()
-        F.session.press('lctrl')
-        F.session.press('f')
-        F.session.release('f')
-        assert.same(mode, ed:get_mode())
-        F.session.press('t')
-        F.session.release('t')
-        F.session.release('lctrl')
-        assert.is_false(left)
-        assert.is_false(ran)
-      end)
-    end
-
   end)
 
   describe('leaving through the real finish_edit', function()
@@ -233,9 +219,7 @@ describe('editor key contract #input', function()
       love.state.prev_state = 'ready'
     end)
 
-    local handlers = {
-      '_normal_mode_keys', '_search_mode_keys',
-    }
+    local handlers = { '_normal_mode_keys' }
 
     after_each(function()
       F.session.release('s')
@@ -245,38 +229,22 @@ describe('editor key contract #input', function()
       love.debug = nil
     end)
 
-    --- the key that selects each mode from navigation; the
-    --- block opened for editing is unchanged, so the chord
-    --- has nothing to ask
-    local enter = {
-      search  = function()
-        F.session.press('lctrl')
-        F.session.press('f')
-        F.session.release('f')
-        F.session.release('lctrl')
-      end,
-    }
+    it('leaves to the console', function()
+      --- once the editor is closed, the chord's own key
+      --- reaches no key handler
+      local handled = false
+      for _, h in ipairs(handlers) do
+        ed[h] = function(_, k) handled = handled or k == 's' end
+      end
 
-    for _, mode in ipairs({ 'nav', 'search' }) do
-      it('leaves from ' .. mode .. ' to the console', function()
-        if enter[mode] then enter[mode]() end
-        assert.same(mode, ed:get_mode())
-        --- once the editor is closed, the chord's own key
-        --- reaches no mode handler
-        local handled = false
-        for _, h in ipairs(handlers) do
-          ed[h] = function(_, k) handled = handled or k == 's' end
-        end
+      F.session.press('lctrl')
+      F.session.press('lshift')
+      F.session.press('s')
 
-        F.session.press('lctrl')
-        F.session.press('lshift')
-        F.session.press('s')
-
-        assert.is_false(handled)
-        assert.same('ready', love.state.app_state)
-        assert.is_nil(ed:get_active_buffer())
-      end)
-    end
+      assert.is_false(handled)
+      assert.same('ready', love.state.app_state)
+      assert.is_nil(ed:get_active_buffer())
+    end)
 
   end)
 
@@ -310,18 +278,6 @@ describe('editor key contract #input', function()
 
       assert.is_not.equal('editor', love.state.app_state)
       assert.is_nil(ed:get_active_buffer())
-    end)
-
-    it('Ctrl+Q leaves from search for the console', function()
-      F.session.press('lctrl')
-      F.session.press('f')
-      F.session.release('f')
-      assert.same('search', ed:get_mode())
-      F.session.press('q')
-
-      assert.same('ready', love.state.app_state)
-      assert.is_nil(ed:get_active_buffer())
-      assert.same('nav', ed:get_mode())
     end)
 
     it('Ctrl+Q closes no project', function()

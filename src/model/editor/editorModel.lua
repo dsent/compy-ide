@@ -1,5 +1,4 @@
 require("model.editor.bufferModel")
-require("model.editor.searchModel")
 require("model.input.userInputModel")
 
 local class = require('util.class')
@@ -7,7 +6,6 @@ local class = require('util.class')
 --- @class EditorModel
 --- @field input UserInputModel
 --- @field buffers Dequeue<BufferModel>
---- @field search Search
 --- @field cfg Config
 EditorModel = class.create(function(cfg)
   return {
@@ -16,7 +14,6 @@ EditorModel = class.create(function(cfg)
     -- label stays nil and `editing` moves up one position.
     input = UserInputModel(cfg, LuaEval(), nil, true),
     buffers = Dequeue.new({}, 'BufferModel'),
-    search = Search(cfg),
     cfg = cfg,
   }
 end)

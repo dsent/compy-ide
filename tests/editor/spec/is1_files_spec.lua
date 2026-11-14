@@ -749,11 +749,13 @@ describe("IS1 files #editor #spec", function()
       assert.is_false(K.cc.run_live)
     end)
 
-    -- keys the map reserves no longer: in the editor they do
+    -- keys the map reserves no longer, and Ctrl+F, whose
+    -- search the editor no longer has: in the editor they do
     -- nothing, with or without an edit in progress
     for _, key in ipairs({
       { "Ctrl+S", { "lctrl", "s" } },
-      { "Ctrl+Shift+R", { "lctrl", "lshift", "r" } }
+      { "Ctrl+Shift+R", { "lctrl", "lshift", "r" } },
+      { "Ctrl+F", { "lctrl", "f" } },
     }) do
       spec_it("IS3.11 Preserve state on refusal: " .. key[1] ..
           " does nothing in the editor", function()

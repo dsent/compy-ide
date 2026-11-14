@@ -1,6 +1,5 @@
 require("model.interpreter.eval.evaluator")
 require("controller.userInputController")
-require("controller.searchController")
 require("view.input.customStatus")
 require("model.input.cursor")
 
@@ -18,33 +17,19 @@ local function new(M, CC)
     input = UserInputController(M.input, true, true)
         :always_shown(),
     model = M,
-    search = SearchController(
-      M.search,
-      UserInputController(M.search.input, true):always_shown()
-    ),
     console = CC,
     view = nil,
-    mode = 'nav',
     --- the keys whose press reached the editor since it came
     --- to the front, until their release
     pressed = {},
   }
 end
 
---- The editor's sub-mode. The states of an edit (browsing,
---- inserting, replacing) are no modes: the replacement target
---- and the draft tell them apart (state_name).
---- @alias EditorMode
---- | 'nav' --- the file's blocks and the editor field
---- | 'search'
-
 --- @class EditorController
 --- @field model EditorModel
 --- @field input UserInputController
---- @field search SearchController
 --- @field console ConsoleController
 --- @field view EditorView?
---- @field mode EditorMode
 --- @field pressed table<string, boolean>
 EditorController = class.create(new)
 
@@ -86,12 +71,6 @@ end
 function EditorController:refuse_to_leave(own_key)
   if not self:get_active_buffer() then return false end
   if self:state_name() == 'browsing' then return false end
-  --- search draws its own input: the notice shows in the
-  --- editor's
-  if self.mode == 'search' then
-    self:set_mode('nav')
-    self.search:clear()
-  end
   self:refuse({
     'Finish the text first: Enter keeps it, Esc drops it.'
   })
@@ -196,12 +175,9 @@ function EditorController:open(name, content, save, key)
   --- stay with it while another file is in front (IS1.5,
   --- IS6.6)
   b.input = UserInputModel(self.model.cfg, eval, nil, true)
-  --- no search of another file's
-  self.search:clear()
   self.model.buffers:push_front(b)
   self:_front(b)
   self.view:open(b)
-  self:set_mode('nav')
   --- a file opens ready to append, at its end position
   --- (IS1.1)
   b:set_selection(b:get_content_length() + 1)
@@ -293,47 +269,6 @@ function EditorController:close_buffer()
   else
     self:pop_buffer()
   end
-end
-
---- @param m EditorMode
---- @return boolean
-local function is_normal(m)
-  return m == 'nav'
-end
-
---- legal mode transitions; anything absent is rejected
-local TRANSITIONS = {
-  nav = { search = true },
-  search = { nav = true },
-}
-
---- @param mode EditorMode
-function EditorController:set_mode(mode)
-  local buf = self:get_active_buffer()
-  local init_search = function()
-    local db = buf.semantic
-    self.search:load(db and db.definitions or {})
-  end
-
-  local current = self.mode
-  if current ~= mode and TRANSITIONS[current][mode] then
-    if mode == 'search' then
-      init_search()
-    end
-    self.mode = mode
-    Log.info('-- ' .. string.upper(mode) .. ' --')
-    self:update_status()
-  end
-end
-
---- @return EditorMode
-function EditorController:get_mode()
-  return self.mode
-end
-
---- @return boolean
-function EditorController:is_normal_mode()
-  return is_normal(self.mode)
 end
 
 --- One sound for every refused action (spec 2.4.3):
@@ -472,8 +407,6 @@ end
 --- dismisses the message (IS3.14).
 function EditorController:hide()
   self.input:clear_error()
-  self:set_mode('nav')
-  self.search:clear()
   self.clipboard = love.system.getClipboardText()
 end
 
@@ -530,10 +463,6 @@ end
 --- (IS6.6)
 function EditorController:close()
   self.input.model = self.model.input
-  --- the gate's shortcuts close the editor in any mode,
-  --- search included; the next file starts in navigation
-  self.search:clear()
-  self.mode = 'nav'
   self.model.buffers = Dequeue()
   self.view.buffers = {}
 end
@@ -552,13 +481,12 @@ function EditorController:_generate_status(sel)
   local len = buffer:get_content_length() + 1
   local bufview = self.view:get_buffer(buffer:get_id())
   local cs
-  local m = self.mode
   local ct = bufview.content_type
   if ct == 'lua' then
     local range = bufview.content:get_block_app_pos(sel)
-    cs = CustomStatus(buffer.name, ct, len, sel, m, range)
+    cs = CustomStatus(buffer.name, ct, len, sel, range)
   else
-    cs = CustomStatus(buffer.name, ct, len, sel, m)
+    cs = CustomStatus(buffer.name, ct, len, sel)
   end
   --- the state and the open project, always shown (FR4.6)
   cs.state = self:state_name()
@@ -598,14 +526,10 @@ end
 function EditorController:textinput(t)
   if self:_held_back() then return end
   self.view:update_input()
-  if is_normal(self.mode) then
-    --- typing prepares a draft in the field and opens no
-    --- block (IS3.1). A chord's own glyph never comes here:
-    --- the event gate stops it (Key.chord_text)
-    self.input:textinput(t)
-  elseif self.mode == 'search' then
-    self.search:textinput(t)
-  end
+  --- typing prepares a draft in the field and opens no
+  --- block (IS3.1). A chord's own glyph never comes here:
+  --- the event gate stops it (Key.chord_text)
+  self.input:textinput(t)
 end
 
 --- @return InputDTO
@@ -871,27 +795,6 @@ function EditorController:format_file()
   self.view:refresh()
   self.view:get_current_buffer():follow_selection()
   self:update_status()
-end
-
-function EditorController:_search_mode_keys(k)
-  if k == 'escape' then
-    self:set_mode('nav')
-    self.search:clear()
-    return
-  end
-
-  self.input:update_view()
-  local jump = self.search:keypressed(k)
-  if jump then
-    local buf = self:get_active_buffer()
-    buf:set_selection(jump.block)
-    self.view:get_current_buffer():scroll_to_line(jump.line)
-    self:set_mode('nav')
-    self.search:clear()
-  elseif Key.is_enter(k) and not Key.shift() and not Key.ctrl() then
-    --- nothing found to jump to (spec 2.4.3)
-    self:refuse()
-  end
 end
 
 --- The Edit key (IS5.1)
@@ -1286,14 +1189,10 @@ function EditorController:keypressed(k, _, isrepeat)
   --- its press brings up the card (KeyCard.shows)
   if k == KeyCard.KEY then return end
   self.input:update_view()
-  local mode = self.mode
 
   if Key.ctrl() then
-    if k == "f" and not Key.shift() then
-      self:set_mode('search')
-    end
     --- formatting the whole file is a browsing command
-    if k == "f" and Key.shift() and mode == 'nav'
+    if k == "f" and Key.shift()
         and self:state_name() == 'browsing' then
       self:format_file()
       return
@@ -1301,11 +1200,7 @@ function EditorController:keypressed(k, _, isrepeat)
     if self:_leave_keys(k) then return end
   end
 
-  if mode == 'search' then
-    self:_search_mode_keys(k)
-  else
-    self:_normal_mode_keys(k)
-  end
+  self:_normal_mode_keys(k)
 
   --- Escape on the last buffer has closed the editor by
   --- now, so the buffer is asked for only on the key

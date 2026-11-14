@@ -1,8 +1,8 @@
 -- Availability: predates the Compy input API (introduced in
 -- 1.0.0-rc20260712).
 
--- The mode x channel routing grid — console, editor, editor
--- search, project run — against the rule that each event
+-- The mode x channel routing grid — console, editor, project
+-- run — against the rule that each event
 -- reaches exactly ONE route
 -- (doc/development/decisions/input.md, D-ROUTE-OWNS).
 
@@ -143,10 +143,6 @@ describe('input surface: inbound events — routing #input',
     -- mouse").
     pending('routes the pointer to the editor')
   end)
-
-  -- Editor Search is characterized with real key/text entry in
-  -- tests/editor/editor_spec.lua. It remains editor-owned
-  -- behaviour, not a project-facing input-API contract.
 
   describe('routing: project run', function()
 

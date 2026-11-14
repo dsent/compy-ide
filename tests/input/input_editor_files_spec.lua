@@ -308,18 +308,6 @@ describe('the editor across files #input', function()
   end)
 
   describe('opening another file', function()
-    it('starts its search afresh', function()
-      files['main.lua'] = 'function alpha() end\n'
-      files['b.lua'] = 'function beta() end\n'
-      open()
-      chord('lctrl', 'f')
-      F.session.type('alpha')
-      open('b.lua')
-
-      chord('lctrl', 'f')
-      assert.same('', string.unlines(ed.search.input:get_text()))
-    end)
-
     it("takes nothing of another project's same-named file",
       function()
         local six = 'a = 1\nb = 2\nc = 3\nd = 4\ne = 5\nf = 6\n'

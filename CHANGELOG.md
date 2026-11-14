@@ -135,6 +135,9 @@ Project-author guide: `doc/input_api.md`.
   Shift+Esc no longer leaves or discards (Escape does).
 - **The editor's questions.** Nothing asks "discard the changes?" or about an unsaved
   file any more; see *Changed* for the notices that replace them.
+- **The editor's search (Ctrl+F)**: Ctrl+F does nothing in the editor now. Search is
+  not in the editor's specification and needs a design of its own, which it may get
+  later.
 - A draft is no longer carried along when Ctrl+J opens another file: Ctrl+J waits for
   the edit to end.
 - **Polling user input is gone entirely.** The idiom of reading input by checking a

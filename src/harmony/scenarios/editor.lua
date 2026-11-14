@@ -119,42 +119,6 @@ local function editor()
     hm_done('edit')
   end)
 
-  -- Ctrl+F searches the file's definitions. Whether the
-  -- editor keeps it is not decided yet.
-  scenario('search', function(wait)
-    wait(.1)
-    enter(wait, 'project("turtle")')
-    enter(wait, 'edit()')
-    in_state('editor')
-    chord(wait, 'C-f')
-    shot(wait, 'symbols')
-    wait(.2)
-    press(wait, 'down', 3)
-    shot(wait, 'symbols-2')
-
-    h.love_text('draw')
-    wait(.1)
-    shot(wait, 'symbols-3')
-    wait(.4)
-    press(wait, 'backspace', 4)
-    h.love_text('tx')
-    wait(.1)
-    shot(wait, 'symbols-4')
-    wait(.2)
-    -- Enter jumps to the definition and ends the search, so
-    -- the next Escape steps back from the file; with nothing
-    -- found it would end the search alone
-    h.love_key('return')
-    wait(.2)
-    shot(wait, 'found')
-    wait(.5)
-    h.love_key('escape')
-    wait(.2)
-    in_state('ready')
-
-    hm_done()
-  end)
-
   scenario('add', function(wait)
     wait(.1)
     enter(wait, 'project("test-add")')

@@ -135,24 +135,6 @@ describe("a run and a visit #editor #spec", function()
     end)
   end)
 
-  describe("search", function()
-    spec_it("IS1.4 Resume after running a project: a run with "
-        .. "Ctrl+Alt+R from search comes back to the file, out of "
-        .. "search", function()
-      K.reset({ ["main.lua"] = "x = 1\ny = 2\n" })
-      K.open()
-      K.browse_to(2)
-      K.keys("lctrl", "f")
-      assert.same("search", K.ed:get_mode())
-      K.keys("lctrl", "lalt", "r")
-      assert.are_not.same("editor", K.app_state())
-      K.keys("lctrl", "t")
-      assert.same("editor", K.app_state())
-      assert.same("nav", K.ed:get_mode())
-      assert.same(2, K.position())
-    end)
-  end)
-
   describe("a cut", function()
     for _, ext in ipairs(TYPES) do
       spec_it("IS6.6 Undo and redo: in a ." .. ext .. " file, a "

@@ -1034,8 +1034,7 @@ Controller = {
         else
           CC:edit()
         end
-      elseif st == 'editor'
-          and CC.editor:is_normal_mode() then
+      elseif st == 'editor' then
         if refused() then return end
         CC:hide_editor()
         CC:run_project()

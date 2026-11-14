@@ -87,7 +87,6 @@
 | Checkpoint the file (asks when one exists)                        | _no key at present_                           |
 | Restore from the checkpoint (asks)                                | _no key at present_                           |
 | Follow the require or dofile of the highlighted block (empty field) | <kbd>Ctrl</kbd>+<kbd>J</kbd>                  |
-| Search definitions                                                | <kbd>Ctrl</kbd>+<kbd>F</kbd>                  |
 | Format the whole file (empty field)                               | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> |
 | Show the keys of the current state                                | hold <kbd>F1</kbd>                            |
 | Leave the editor (deprecated; empty field)                        | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> |

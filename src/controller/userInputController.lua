@@ -548,7 +548,7 @@ function UserInputController:is_shown()
 end
 
 --- Mark this widget as its host's permanent input surface —
---- the console line, the editor's input and search strips —
+--- the console line and the editor's input strip —
 --- and return self, for inline construction. A project's widget
 --- leaves shown=false and toggles it with show()/hide().
 ---

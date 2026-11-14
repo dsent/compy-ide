@@ -292,8 +292,8 @@ per-run boundary) rather than as a phase of a lifecycle.
 
 ### T-CHROME-UNRATIFIED — *"chrome"* is this feature's own word for the host surfaces, and no ledger ratifies it
 
-- **What it names:** the three permanent input surfaces a host owns — the console line, the editor's
-  input strip, the editor's search strip — as against a project's transient widget. The distinction
+- **What it names:** the two permanent input surfaces a host owns — the console line and the
+  editor's input strip — as against a project's transient widget. The distinction
   is real and ratified; the **word** is not.
 - **It is ours, and the check is the one the phase prescribes** — compare against the PR base.
   `git grep -il "chrome" $(git merge-base master HEAD) -- src/ tests/ doc/` returns exactly one
@@ -698,7 +698,7 @@ future author adding an editor branch meets the constraint at the site).
     nothing to delete, and `backspace_word()` is gated on `input.editing`, which nav is not.
 - **`always_shown` is NOT the guard for any of this, and the distinction matters because it is the
   obvious place to look** (owner's question, 2026-09-07). The editor's widget **is** `always_shown()`
-  (`editorController.lua`, with the search strip likewise), and the flag guards **`hide()` alone** —
+  (`editorController.lua`), and the flag guards **`hide()` alone** —
   `cancel_flow` does not consult `self.always`, so an Escape that reaches the widget clears whether
   or not the flag is set. **Restoring or keeping that guard would not have prevented `T-NAV-ESCAPE`**;
   what prevents it is the cancel flow ceasing to destroy unconditionally, which is `FLAGS-01` and is
@@ -2007,10 +2007,6 @@ be silently narrowed later (any change is a separate, owner-gated decision):
   Alt+Enter breaks the line, as Shift+Enter does (editor principles, IS3.15)
   (guard is `is_enter and not shift and not alt`; also consistent with
   `doc/development/decisions/input.md` D-EDIT-LIFECYCLE). Pinned for widget + console.
-- **`SearchController:keypressed` returns a jump target** (`{block, line}`) up its
-  caller on Enter — the same "keypress return carries a domain result" shape the
-  shared widget's limit-flag return was retired for (D-EDIT-CALLBACKS). Left as
-  is because `SearchController` is a different class, out of scope here.
 - **The project widget's view skips the per-frame `update_view()` workaround by
   widget *identity*** (`userInputView.lua:draw`, `self.controller ~=
   love.state.user_input_controller`) — an identity check standing in for the old
@@ -2107,9 +2103,8 @@ changes.
   `false` are both falsy. It bites the moment a device read is **compared**
   rather than tested: `Key.ctrl() == false` is `false` under harmony, and
   `Key.ctrl()` spliced as a call's last argument contributes **no argument at
-  all**. The live exposure is the second, at six call sites that pass a modifier
-  read as a trailing argument (`editorController.lua:466,470,772,776`,
-  `searchController.lua:101,105`), none of which is affected today because the
+  all**. The live exposure is the second, at four call sites that pass a modifier
+  read as a trailing argument (`editorController.lua`), none of which is affected today because the
   callee only tests the value for truthiness. The comparison form was observed
   once, in the gate's `only_mods` helper, which normalised with `not not`; that
   helper no longer exists (D-RESERVE-TABLE replaced the predicate cascade with a
@@ -2127,7 +2122,7 @@ changes.
 
 ### Console and editor route handlers bind by hand-written modifier tests
 
-- **Where:** `editorController.lua` (~33 tests), `searchController.lua` (5) and
+- **Where:** `editorController.lua` (~33 tests) and
   `consoleController.lua` (4) — `if Key.ctrl() and not Key.shift() and not
   Key.alt() and Key.is_enter(k)`, and the same shape for Escape, paste, scroll
   and the debug toggles. Six further reads are **not** this debt: `_scroll('up',
@@ -2843,8 +2838,7 @@ did not.
 - **The mechanism that DOES work already exists and is ratified.** Both `before_submit`
   (`userInputController.lua`, `submit_flow`) and `before_cancel` (`cancel_flow`) **do veto** when
   set to a function returning truthy. They are simply not defaulted, and no host sets them.
-- **Reachability:** every host-owned widget — the console's, the editor's, and the editor's search
-  strip. Not projects: a project setting no callbacks *should* get the documented clear-on-Escape,
+- **Reachability:** every host-owned widget — the console's and the editor's. Not projects: a project setting no callbacks *should* get the documented clear-on-Escape,
   and does.
 - **Provenance: ours.**
 - **This is a DEFECT, not a design question** (owner ruling, 2026-09-06). *"We already decided it
@@ -3057,8 +3051,8 @@ documentation sweep with `T-CHROME-UNRATIFIED`.
   not hold: `always_shown()` sets an instance flag only, while `show()` additionally claims
   `love.state.user_input`, the **single global handle** the draw loop paints from each frame
   (`open_widget` in `src/controller/userInputController.lua`; the draw gate is
-  `src/controller/controller.lua`). Three host surfaces are constructed at boot — the console line,
-  the editor's input strip, the editor's search strip — so each calling `show()` would overwrite
+  `src/controller/controller.lua`). Two host surfaces are constructed at boot — the console line and
+  the editor's input strip — so each calling `show()` would overwrite
   that one slot, last construction winning, and a project's widget would then find it occupied.
   **Making `show()` return `self`** was carried as an independent convenience; what it cannot do is
   replace the construction-time marker. **It is not scheduled** — it left with the sprint.

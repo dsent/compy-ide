@@ -20,9 +20,6 @@ flowchart RL
   main --> util.os
   main --> util.filesystem
   main --> util.os
-  util.scrollableContent --> util.wrapped_text
-  util.scrollableContent --> util.scrollable
-  util.scrollableContent --> util.range
   util.scrollable --> util.range
   util.scrollable --> c
   util.tree --> util.table
@@ -144,15 +141,10 @@ flowchart RL
   view.editor.bufferView --> util.scrollable
   view.editor.bufferView --> util.table
   view.editor.bufferView --> util.block
-  view.editor.search.resultsView --> c
   view.editor.editorView --> view.input.userInputView
   view.editor.editorView --> view.editor.bufferView
-  view.editor.editorView --> view.editor.search.searchView
   view.editor.editorView --> s
   view.editor.editorView --> c
-  view.editor.search.searchView --> c
-  view.editor.search.searchView --> view.editor.search.resultsView
-  view.editor.search.searchView --> view.input.userInputView
   view.canvas.canvasView --> view.canvas.bgView
   view.canvas.canvasView --> view.canvas.terminalView
   view.canvas.canvasView --> c
@@ -168,15 +160,11 @@ flowchart RL
   model.editor.bufferModel --> util.dequeue
   model.editor.bufferSemanticInfo --> util.table
   model.editor.editorModel --> model.editor.bufferModel
-  model.editor.editorModel --> model.editor.searchModel
   model.editor.editorModel --> model.input.userInputModel
   model.editor.editorModel --> c
   model.editor.content --> c
   model.editor.content --> util.dequeue
   model.editor.content --> util.range
-  model.editor.searchModel --> c
-  model.editor.searchModel --> util.table
-  model.editor.searchModel --> util.scrollableContent
   model.project.project --> util.lua
   model.project.project --> s
   model.project.project --> util.filesystem
@@ -195,10 +183,8 @@ flowchart RL
   controller.consoleController --> view.input.userInputView
   controller.consoleController --> tests.autotest
   model.input.cursor --> c
-  controller.searchController --> c
   controller.editorController --> model.interpreter.eval.evaluator
   controller.editorController --> controller.userInputController
-  controller.editorController --> controller.searchController
   controller.editorController --> view.input.customStatus
   controller.editorController --> c
   controller.userInputController --> c
@@ -231,9 +217,6 @@ flowchart BT
   debug --> s
   debug --> termcolor
   tree --> table
-  scrollableContent --> wrapped_text
-  scrollableContent --> scrollable
-  scrollableContent --> range
   scrollable --> range
   filesystem --> s
   filesystem --> os

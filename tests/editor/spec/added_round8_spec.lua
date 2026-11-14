@@ -26,19 +26,13 @@ describe("round eight #editor #spec", function()
 
   spec_it("IS1.5 Follow a file reference: a require with no "
       .. "name written out takes nothing from the other "
-      .. "references and definitions of the file", function()
+      .. "references of the file", function()
     K.reset({
       ["main.lua"] = "require()\nlocal m = require(\"mod\")\n"
           .. "function f()\nend\n",
       ["mod.lua"] = "x = 1\n",
     })
     K.open()
-    -- the definition is found by search
-    K.keys("lctrl", "f")
-    K.type("f")
-    K.keys("return")
-    assert.same(3, K.position())
-    -- and the reference is followed
     K.browse_to(2)
     K.keys("lctrl", "j")
     assert.same("mod.lua", K.file_name())

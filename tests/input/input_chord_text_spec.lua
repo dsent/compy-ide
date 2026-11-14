@@ -718,13 +718,12 @@ describe("a key pressed under AltGr makes no chord #input",
       assert.is_falsy(K.cc.run_live)
     end)
 
-    in_both_orders("in the file editor, AltGr+F types and opens "
-        .. "no search (Ctrl+F does)", function(order)
+    in_both_orders("in the file editor, AltGr+F types its "
+        .. "character", function(order)
       K.reset({ ["a.txt"] = "" })
       K.open("a.txt")
       chord(order, WINDOWS_ALTGR, "f", "[")
       assert.same("[", K.draft())
-      assert.are_not.equal("search", K.ed.mode)
     end)
 
     in_both_orders("in a project's field, AltGr+V types and "

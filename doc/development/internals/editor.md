@@ -101,7 +101,7 @@ Source: commit `2ff95f03b8f8` ("Split monster block"); logic in `editorControlle
 
 Each `Chunk` carries a `pos: Range` recording which source lines it occupies (e.g. `{3-7}` means lines 3 through 7). Since a block's lines are its source lines, `pos` and the rendered text agree, and an insertion or a replacement splices lines at `pos` (`_splice`) and re-chunks the whole file. The re-chunk may split the file anew, from lines into statements when a file that did not parse parses again, or back: so `_splice` keeps the browsing position as a source line, and leaves it on the block that now holds the line it stood on, or, that line gone, the line after the new ones. A caller that knows better sets it after: `_land` on the block after the landed lines, `move` on the moved block, an undo or a redo on the positions its step took in the text it puts back. The older `replace_content` and `insert_content` adjust `pos` by arithmetic instead; no editor path calls them.
 
-This matters because the revmap (source line → block index), used for semantic info, is rebuilt only on `analyze()`, which runs on `buf:save()`. Between saves, the revmap may be stale. In practice this is fine because semantic info is only used at search time, which always follows a save in the normal workflow.
+This matters because the revmap (source line → block index), used for semantic info, is rebuilt only on `analyze()`, which runs on `buf:save()`. Between saves, the revmap may be stale. In practice this is fine because semantic info is only read by Ctrl+J, and only in the browsing state, which an accepted change leaves saved.
 
 ---
 
@@ -129,15 +129,9 @@ The `WrappedText` base class (`src/util/wrapped_text.lua`) provides the three-ta
 
 ---
 
-## Editor Modes
+## Leaving and Hiding the Editor
 
-`EditorController.mode` holds two modes:
-
-**`nav`** (default) — the browsing, inserting and replacing states described above; `_normal_mode_keys` dispatches their keys.
-
-**`search`** (Ctrl+F) — definition search. The buffer's `semantic.definitions` (all assignments found by the analyzer) are loaded into `Search`. As you type, `Search:narrow()` filters the list with a case-insensitive substring match (lowercase input = case-insensitive, mixed = case-sensitive). Enter jumps to the selected definition's block and scrolls to its first line.
-
-The only transitions are `nav` to `search` and back. This is enforced in `set_mode`.
+The editor has no modes: the browsing, inserting and replacing states described above are all there is, and `_normal_mode_keys` dispatches their keys. It has no search; Ctrl+F does nothing in it.
 
 The whole-editor exits (`Ctrl+T`, `Ctrl+Q`, `Ctrl+Alt+R`, and the deprecated `Ctrl+Shift+S`) leave from the browsing state. `Ctrl+Q` returns to the console with every buffer closed and the project still open (`reserved_stop` in `controller.lua`, which calls `ConsoleController:finish_edit`). A run (`Ctrl+T`, `Ctrl+Alt+R`) only hides the editor (`ConsoleController:hide_editor`): every buffer stays as it is, and `Ctrl+T` shows them again (`show_editor`). Hiding dismisses the message, as the key that hides acts (`EditorController:hide`), so no message waits in a hidden file for the editor's return. No program runs or idles behind a shown editor: every way it comes to the screen (`Ctrl+T`, `edit()` from the console or from an idle program's handler) passes `ConsoleController:_enter_editor`, which stops a live program first (`_program_live`: running, paused, or idle with `run_live`), so that none of its hooks or handlers takes the editor's keys or stops, runs or closes the project during an edit. When it had to stop one it shows nothing and its caller asks again, since the program's exit hook may have changed the project. During an edit `EditorController:refuse_to_leave` refuses them with a notice, because the input may hold the only copy of a cut block.
 
@@ -147,15 +141,13 @@ The whole-editor exits (`Ctrl+T`, `Ctrl+Q`, `Ctrl+Alt+R`, and the deprecated `Ct
 
 `BufferModel:analyze()` runs on every `save()`. It:
 1. Rechunks the current text (to get a fresh AST)
-2. Runs `analyze(ast)` in `src/model/editor/luaLayer.lua`: the language layer's `analyzer.analyze` collects the assignments (global/local/function/method/field) with their line numbers (`src/model/lang/lua/analyze.lua`), and `references` the `require()` and `dofile()` calls that write a name out (IS1.5)
+2. Runs `references(ast)` in `src/model/editor/luaLayer.lua`: the `require()` and `dofile()` calls that write a name out, with their line numbers (IS1.5)
 3. Builds `revmap` (source line → block index) from block positions
-4. Converts the flat `SemanticInfo` into `BufferSemanticInfo` which replaces line numbers with block indices
+4. Converts them into `BufferSemanticInfo` (`requires`), which replaces line numbers with block indices
 
-This gives the editor two capabilities:
-- **Search** (Ctrl+F): filter and jump to definitions by name
-- **Follow require** (Ctrl+J): if the selected block contains a `require('foo')` call, open `foo.lua` as a new buffer on top of the stack
+This gives the editor **Follow require** (Ctrl+J): if the selected block contains a `require('foo')` or `dofile('foo.lua')` call, open the file as a new buffer on top of the stack. The language layer's own analyzer (`src/model/lang/lua/analyze.lua`) is not called from the editor.
 
-`analyze()` is wrapped in `pcall` — analysis failure is silent and leaves `self.semantic = nil`, disabling search and follow-require for that buffer.
+`analyze()` is wrapped in `pcall` — analysis failure is silent and leaves `self.semantic = nil`, disabling follow-require for that buffer.
 
 ---
 
@@ -177,13 +169,11 @@ Only the front buffer can be in an edit: a buffer goes below another one only by
 
 | File | Role |
 |---|---|
-| `src/controller/editorController.lua` | All input handling, mode transitions, submit pipeline |
+| `src/controller/editorController.lua` | All input handling, the states, submit pipeline |
 | `src/model/editor/bufferModel.lua` | Buffer state, block operations, loaded tracker, save, analyze |
 | `src/model/editor/content.lua` | `Chunk` and `Empty` block types |
-| `src/model/editor/editorModel.lua` | Model aggregate (input, buffers, search) |
-| `src/model/editor/bufferSemanticInfo.lua` | Converts SemanticInfo line numbers to block indices |
-| `src/model/editor/searchModel.lua` | Search state, narrowing, scroll |
-| `src/controller/searchController.lua` | Search keyboard handling |
+| `src/model/editor/editorModel.lua` | Model aggregate (input, buffers) |
+| `src/model/editor/bufferSemanticInfo.lua` | Gives the files a buffer names their block indices |
 | `src/view/editor/bufferView.lua` | Scroll, selection visibility, draw orchestration |
 | `src/view/editor/visibleContent.lua` | Scroll/wrap for plain/md |
 | `src/view/editor/visibleStructuredContent.lua` | Scroll/wrap for Lua blocks |
@@ -191,7 +181,6 @@ Only the front buffer can be in an edit: a buffer goes below another one only by
 | `src/util/wrapped_text.lua` | Core wrap tables (forward/reverse/rank) |
 | `src/model/editor/luaLayer.lua` | The editor's one way into the Lua language layer: the editor's rules on Lua text around the parser, the formatter and the gate |
 | `src/model/input/cursorMap.lua` | The cursor through a reformat of the field's text, and the text's elements |
-| `src/model/lang/lua/analyze.lua` | AST walker producing SemanticInfo |
 | `src/model/lang/lua/format.lua` | Formatting: the text as the editor writes it |
 | `src/model/lang/lua/check.lua` | Gates: line, parse and block-size rules, and `gate`, the editor's verdict |
 | `src/model/lang/lua/lint.lua` | Lints: conventions reported, never refused |

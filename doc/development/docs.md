@@ -37,7 +37,7 @@ Assessment of `doc/` relative to the codebase and the knowledge base under `doc/
 **`doc/EDITOR.md` — Keybindings table** — Several entries have drifted from the implementation:
 - `F9` listed for toggle edit/run; code and README both use `F8`
 - `Ctrl+Shift+Q` listed for quit project; code uses `Ctrl+Q`
-- Missing entries: reorder mode (`Ctrl+M`), search mode (`Ctrl+F`), follow-require (`Ctrl+O`), insert-before (`Ctrl+Enter`), copy/cut/paste shortcuts, close-buffer vs stop-editor distinction
+- Missing entries: reorder mode (`Ctrl+M`), follow-require (`Ctrl+O`), insert-before (`Ctrl+Enter`), copy/cut/paste shortcuts, close-buffer vs stop-editor distinction
 
 ---
 
@@ -47,6 +47,6 @@ Assessment of `doc/` relative to the codebase and the knowledge base under `doc/
 - **Drawing system** — pen-and-paper vs real-time draw modes. Covered by `doc/development/drawing_system.md`.
 - **Project environments** — the three Lua environments (`main_env`, `base_env`, `project_env`). Covered by `internals/console.md`.
 - **The retired `user_input` polling API** — `input_text()`, `validated_input()`, `user_input()`. **Removed in 1.0.0-rc20260712**, no shim; `internals/console.md` records what it was, and [`input_api.md`](../input_api.md) documents `compy.input`, which replaced it.
-- **Editor modes** — reorder (`Ctrl+M`) and search (`Ctrl+F`) modes not documented in `doc/`.
+- **Editor modes** — reorder (`Ctrl+M`) mode not documented in `doc/`.
 - **Harmony testing mode** — covered by `doc/development/tests.md`, "Harmony scenarios".
 - **`doc/development/editor/buffer.md`** — file exists but is empty.

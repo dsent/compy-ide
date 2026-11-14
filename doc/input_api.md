@@ -876,8 +876,8 @@ editor keeps it for itself.
 
 Ctrl+Q leaves the editor for the console, with every file you had opened in
 it, and the project stays open. Ctrl+Shift+S and Ctrl+Alt+R leave the editor
-too, and so does Ctrl+T while you browse the file; in search, Ctrl+T does
-nothing. Ctrl+Shift+R does nothing in the editor. None of the exits asks a
+too, and so does Ctrl+T while you browse the file. Ctrl+Shift+R does nothing
+in the editor. None of the exits asks a
 question. While there is text in the editor's field, or a block is
 loaded to be replaced, each is refused with a notice: submit the text with
 Enter or drop it with Escape first, and the exit works. A text whose save

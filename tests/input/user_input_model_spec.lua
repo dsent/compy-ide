@@ -32,7 +32,7 @@ describe("input model spec #input", function()
   mock.mock_love(love)
 
   describe('the plain widget stays plain', function()
-    --- the console, project inputs and search construct
+    --- the console and project inputs construct
     --- the model without the editing flag; the editor's
     --- 1.1 extras must not leak into them
     it('records no edit history', function()

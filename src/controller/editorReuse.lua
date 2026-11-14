@@ -857,7 +857,6 @@ end
 --- @return boolean handled
 function EditorController:_reuse_keys(k, isrepeat)
   if isrepeat == nil then isrepeat = self.key_repeat end
-  if self.mode ~= 'nav' then return false end
   local ctrl, shift, alt = Key.ctrl(), Key.shift(), Key.alt()
   if ctrl and not shift and not alt then
     if k == 'z' then

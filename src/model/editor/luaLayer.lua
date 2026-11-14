@@ -13,7 +13,6 @@ require('model.lang.lua.error')
 require('util.tree')
 local check = require('model.lang.lua.check')
 local format = require('model.lang.lua.format')
-local analyzer = require('model.lang.lua.analyze')
 local cursor_map = require('model.input.cursorMap')
 
 local M = {
@@ -485,16 +484,6 @@ end
 --- @return table[] --- {line, name, file}
 function M.references(ast)
   return table.flatten(Tree.preorder(ast, reference))
-end
-
---- The language layer's analysis of a parsed file, its
---- definitions, with the files it names
---- @param ast luaAST
---- @return SemanticInfo
-function M.analyze(ast)
-  local info = analyzer.analyze(ast)
-  info.requires = M.references(ast)
-  return info
 end
 
 return M

@@ -533,7 +533,7 @@ function BufferModel:analyze()
   local lines = string.lines(self:get_text_content())
   local ok, blocks, ast = self.chunker(lines)
   if not ok then return end
-  local anaok, ana = pcall(lua.analyze, ast)
+  local anaok, refs = pcall(lua.references, ast)
   if not anaok then return end
   for bi, v in ipairs(blocks) do
     if (v.pos) then
@@ -542,7 +542,7 @@ function BufferModel:analyze()
       end
     end
   end
-  self.semantic = bsi.convert(ana, self.revmap)
+  self.semantic = bsi.convert(refs, self.revmap)
 end
 
 function BufferModel:rechunk()

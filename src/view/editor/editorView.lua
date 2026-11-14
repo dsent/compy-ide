@@ -1,6 +1,5 @@
 require("view.input.userInputView")
 require("view.editor.bufferView")
-require("view.editor.search.searchView")
 require("view.editor.keyCardView")
 
 require("util.string.string")
@@ -14,7 +13,6 @@ local function new(cfg, ctrl)
     controller = ctrl,
     input = UserInputView(cfg, ctrl.input),
     buffers = {},
-    search = SearchView(cfg, ctrl.search),
     key_card = KeyCardView(cfg),
   }
   --- hook the view in the controller
@@ -26,35 +24,29 @@ end
 --- @field controller EditorController
 --- @field input UserInputView
 --- @field buffers { [string]: BufferView }
---- @field search SearchView
 EditorView = class.create(new)
 
 function EditorView:draw()
   local ctrl = self.controller
   if ctrl:key_card() then return self:draw_key_card() end
-  local mode = ctrl:get_mode()
-  if mode == 'search' then
-    self.search:draw()
-  else
-    local bv = self:get_current_buffer()
+  local bv = self:get_current_buffer()
 
-    local rows = self:fit_buffer()
-    gfx.push('all')
-    if ViewUtils.conditional_draw('show_buffer') then
-      --- the view's area ends where the status line's band
-      --- starts
-      local band = self.input:status_y(rows)
-          - self.cfg.statusline_border / 2
-      bv:draw(false, band)
-    end
-    if ViewUtils.conditional_draw('show_input') then
-      gfx.push('all')
-      self.input:draw()
-      gfx.pop()
-      self:draw_message(bv)
-    end
-    gfx.pop()
+  local rows = self:fit_buffer()
+  gfx.push('all')
+  if ViewUtils.conditional_draw('show_buffer') then
+    --- the view's area ends where the status line's band
+    --- starts
+    local band = self.input:status_y(rows)
+        - self.cfg.statusline_border / 2
+    bv:draw(false, band)
   end
+  if ViewUtils.conditional_draw('show_input') then
+    gfx.push('all')
+    self.input:draw()
+    gfx.pop()
+    self:draw_message(bv)
+  end
+  gfx.pop()
 end
 
 --- The rows a message may take: one, or up to three when it

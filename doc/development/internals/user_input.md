@@ -120,7 +120,7 @@ Shortcuts dispatch (the `compy.input.shortcuts` combo tables) does not gate on `
 
 The input is not single-line. `Shift+Enter` inserts a newline (`line_feed()`). The cursor model tracks both line and column. Lines are stored as a `Dequeue<string>` in `InputText`. The view wraps long lines at `drawableChars` width (same wrap machinery as the editor's `VisibleContent`). It draws the cursor as a block on the cell at the cursor's column, with the character under it redrawn in the text's colour so that it stays readable; past the last column of a full row, where there is no cell, it draws a bar at the field's right edge (`drawCursor` in `src/view/input/userInputView.lua`). The cursor blinks as `blink` in the view configuration says (`enable`, `period`, `duty`; `src/view/input/cursorBlink.lua`): it shows for `duty` of each `period` and is hidden for the rest, and a key press, a typed character or a click restarts the cycle and keeps it shown for one whole period. The blink's clock is the frame time `ConsoleController:pass_time` passes, so a test steps it with the fixture's frames; the raw event entries in `controller.lua` restart it. The console's and the editor's fields render every frame; a project's field renders when it changes and when its blink turns over (`UserInputView:draw`).
 
-LÖVE has no multiline-text concept of its own; it only delivers discrete `textinput`/`keypressed` events, one character or one key at a time. Assembly is entirely compy's own: `UserInputController:keypressed`'s `newline()` local (`userInputController.lua:568-574`) calls `input:line_feed()` whenever Shift+Enter is detected — **unconditionally**. There is also no separate "keystroke assembly" buffer: `textinput` mutates the model's persistent text immediately and continuously, and Enter (a `keypressed`, not a `textinput`) is a purely discrete control signal that reads whatever the *current* buffer state is (`get_text()`) at the moment it fires. Nothing replays or buffers a keystroke history to reconstruct the submitted text; the live model state *is* the submitted text. True uniformly for console, editor, and the project's input widget (all three read `get_text()` at submit time); search has no evaluator/submit concept at all — its Enter jumps to the currently-selected result, not the typed query.
+LÖVE has no multiline-text concept of its own; it only delivers discrete `textinput`/`keypressed` events, one character or one key at a time. Assembly is entirely compy's own: `UserInputController:keypressed`'s `newline()` local (`userInputController.lua:568-574`) calls `input:line_feed()` whenever Shift+Enter is detected — **unconditionally**. There is also no separate "keystroke assembly" buffer: `textinput` mutates the model's persistent text immediately and continuously, and Enter (a `keypressed`, not a `textinput`) is a purely discrete control signal that reads whatever the *current* buffer state is (`get_text()`) at the moment it fires. Nothing replays or buffers a keystroke history to reconstruct the submitted text; the live model state *is* the submitted text. True uniformly for console, editor, and the project's input widget (all three read `get_text()` at submit time).
 
 **`set_text` normalises both spellings, and the cursor is the reason.** `UserInputModel:set_text`
 accepts a string or a list of line strings, which the project-facing guide documents as one shape
@@ -174,7 +174,7 @@ The console's input view is `input_max = 14` lines high; the editor's field show
 
 ### Selection
 
-Text selection works across lines. `Shift+arrow` extends selection; releasing shift releases it. `UserInputController.disable_selection` suppresses selection, and it is a **constructor argument, set per instance**: the console's widget is the only one that leaves it unset (`consoleController.lua:44`). The editor's input and search instances (`editorController.lua:12,16`) and **the project's widget** (`consoleController.lua`, `build_input_widget` — the instance published as `love.state.user_input_controller` for the length of a run) are all constructed with it — the editor because it uses its own block-level selection model rather than character-level selection in the input.
+Text selection works across lines. `Shift+arrow` extends selection; releasing shift releases it. `UserInputController.disable_selection` suppresses selection, and it is a **constructor argument, set per instance**: the console's widget is the only one that leaves it unset (`consoleController.lua:44`). The editor's input instance (`editorController.lua`) and **the project's widget** (`consoleController.lua`, `build_input_widget` — the instance published as `love.state.user_input_controller` for the length of a run) are all constructed with it — the editor because it uses its own block-level selection model rather than character-level selection in the input.
 
 Mouse click on the input widget (translated from screen coordinates to input grid via `_translate_to_input_grid`) sets the cursor position, and drag extends selection. There is one `UserInputController` class and the project route passes the `love.state.user_input_controller` instance as its widget, so there is no project-specific translation path — but **the translation is reached only by the console's widget**, because every mouse entry point returns immediately on `disable_selection` (`userInputController.lua:772,789,803,818`) and every other instance sets it. A project's input widget therefore does not take a click to the cursor at all, and did not at this branch's base either. The coordinate translation is bottom-relative: line 0 is the bottom line of the input, which is non-obvious.
 
@@ -208,7 +208,6 @@ Each `UserInputModel` has an `Evaluator` that runs on submit:
 - **Editor input (Lua file)**: `LuaEditorEval` — same as LuaEval but adds 64-char line length validator
 - **Project widgets**: the internal plain evaluator (`Evaluator.plain`, chosen at
   construction) plus project callbacks for validation and display
-- **Search**: `nil` evaluator (search input is free text, no validation)
 
 **A project supplies functions; it never supplies the evaluator.** The two are easy
 to conflate and the distinction is enforced, not merely stated: there is no
@@ -257,8 +256,8 @@ response to a cursor-movement keypress). The editor has the most, all through
 copy and cut of a block into the draft, and the reformat of a kept draft, which maps the cursor
 onto the formatted text (`model.input.cursorMap`). One more is in the model itself,
 `_apply_eval`, which seats the caret on the error position when an evaluation is rejected, and
-the last is the project-facing `compy.input.set_cursor`/`set_text` above. Console and search
-never touch it programmatically.
+the last is the project-facing `compy.input.set_cursor`/`set_text` above. The console never
+touches it programmatically.
 
 **A separate population writes the cursor's fields directly**, bypassing every mover above, and a
 sweep over cursor semantics needs both lists: `_update_cursor`, `_advance_cursor` and
@@ -296,9 +295,6 @@ a session you are *not* re-activating is `compy.input.set_cursor`'s job.
   history, is dropped: the reserved map of 2026-11-14);
 - **editor** — Escape during an edit (`cancel_edit`: the draft and the replacement target go),
   and `input:clear()` whenever a file is opened, stepped back to or closed;
-- **search** — its own `clear()`, which reaches past its controller straight into
-  `self.model.input:clear_input()` and skips `clear_error()`. Harmless while search has no
-  evaluator, so no error can be set in the first place;
 - **a project** — no single call. `compy.input.clear()` empties content and cursor and
   `configure{ prompt = … }` sets the prompt, but nothing combines them into a session reset.
 
@@ -419,7 +415,7 @@ desktop, where it surfaces, it comes after. `Key.chord_text(t)`
 (`util/key.lua`) is the one statement of what that glyph is, and
 `love.handlers.textinput` (`controller.lua`) is the one place that asks it:
 
-- **Console route** (console, file editor, search): the text is dropped.
+- **Console route** (console, file editor): the text is dropped.
   `ConsoleController:textinput` and `EditorController:textinput` carry no
   modifier test of their own, and a message is not dismissed by it.
 - **Project route**: `ProjectInputController:chord_text` runs tiers 1 and 2
@@ -578,11 +574,10 @@ See `editor.md` for full detail. Key differences from console mode:
   Ctrl+Up/Down browse in every state
 - F2 loads the viewed block's text into the input; Escape aborts an edit, and from the browsing
   state steps back from the file
-- Ctrl+F switches to search mode
 
 The difference is now **one** fork, not two. The **outer** fork is the ConsoleController/
 EditorController split already covered above (console handles escape/history/Ctrl+L itself; editor
-delegates to `EditorController:keypressed`'s own dispatch, by editor state and `search` mode, instead).
+delegates to `EditorController:keypressed`'s own dispatch, by editor state, instead).
 
 There used to be a **second, inner** fork: the shared `UserInputController:keypressed` branched on
 `love.state.app_state == 'editor'` to decide whether to run its own Enter/Escape submit/cancel at
@@ -597,8 +592,7 @@ browsing state) and returns before it hands the key to the widget, and it drops 
 other Escape the same way — the shared widget never receives those keys, so its uniform
 `submit_flow`/`cancel_flow` never runs for the keys the editor owns. Shift+Enter and Alt+Enter fall
 through to the widget, which breaks the line at the cursor
-(editor principles, IS3.15); no `submit_flow` runs for them. Search mode never reaches
-`UserInputController:keypressed` at all (see "Search" below), so it needs no blocking.
+(editor principles, IS3.15); no `submit_flow` runs for them.
 
 Console's own always-shown instance is not blocked and does run the uniform `submit_flow`/`cancel_flow`
 on its own Enter/Escape — harmlessly, since console sets no `before_submit`/`after_submit`/
@@ -650,71 +644,37 @@ key already absent from the held set. On the
 console route the default handler forwards to a shown widget, else falls to `CC:keyreleased`
 = `ConsoleController:keyreleased` (`consoleController.lua:1203-1206`), which **unconditionally** calls
 `self.input:keyreleased(k)` — console's own instance — with **no `app_state == 'editor'` fork**.
-`EditorController` and `SearchController` do not define a `:keyreleased` method at all. Net effect:
-editor's and search's own `UserInputController` instances never receive `keyreleased`, under any
-circumstance, even while their mode is the one actually on screen.
+`EditorController` does not define a `:keyreleased` method at all. Net effect: the editor's own
+`UserInputController` instance never receives `keyreleased`, under any circumstance, even while the
+editor is on screen.
 
 `UserInputController:keyreleased` only does two things: release character-selection on Shift-release,
 and clear an error on Space-release. Checked whether the gap is currently observable: it isn't, but
-only incidentally — editor's and search's own instances have `disable_selection = true` (so the
-selection-release job is moot for them), and their error state is also clearable via **any**
+only incidentally — the editor's own instance has `disable_selection = true` (so the
+selection-release job is moot for it), and its error state is also clearable via **any**
 `textinput` character (`EditorController:textinput`, unconditional clear-on-error, same as console),
 which covers Space too, since Space is itself a text-producing key. So the missing fork happens to be
 inert today, not silently broken — but it is still a real asymmetry against the otherwise-careful
 routing discipline. Carried as-is; out of this pass's scope (console/editor's own `keyreleased`
 routing is untouched by the input API).
 
-### Search — a third widget instance, live only in editor/search mode
-
-`EditorController`'s constructor (`editorController.lua`) wraps a `SearchController`/`Search` model
-pair around a `UserInputController` instance of its own — a **third** consumer of the shared widget primitive, alongside console's and
-the editor's main input. It is live only while `app_state == 'editor'` and
-`EditorController.mode == 'search'` (Ctrl+F, see "Editor-specific keys" above), reached through
-`EditorController:_search_mode_keys` for keys and `EditorController:textinput` for characters.
-
-**It borrows the widget's model, not its behaviour.** `SearchController:keypressed` owns its key
-handling outright and never delegates to its instance's `keypressed`: it drives navigation,
-backspace/delete and Enter itself, and touches the instance only through `update_view` and
-`add_text`. Consequences, in order of how likely they are to surprise a reader:
-
-- The instance **never runs the shared submit/cancel flow**, which is why it needed no change when
-  the `app_state` fork was removed.
-- There is **no evaluator** — search input is free text — and **Enter returns the selected result**
-  (a jump target `{block, line}`) up to `_search_mode_keys` rather than submitting what was typed.
-  That is the same "keypress return carries a domain result" shape the shared widget's limit-flag
-  return was retired for (D-EDIT-CALLBACKS). It stays: `SearchController` is a different class, out
-  of the input API's scope (`technical_debt/input.md`).
-- `SearchController` defines **no `:keyreleased`** — with the missing editor fork above, this
-  instance never receives a release under any circumstance.
-- `SearchController:clear()` reaches past its own controller into `self.model.input:clear_input()`,
-  skipping the `clear_error()` that `UserInputController:clear` pairs with it. Harmless today (no
-  evaluator, so no error can be set), but a layering inconsistency against every other reset path
-  above. Its `keypressed` removers reach the same way.
-
-No design document mentions this surface; it is live code the design corpus never covered, and this
-is its first record in the permanent one.
-
 ### Future editor migration path (analysis, not scheduled)
 
 The input API **(1.0.0-rc20260712)** makes a later editor migration possible; it does not migrate
 the editor. The reusable
 seam is the three-consumer dispatch shape — shortcuts, hook, widget — over plain tables and a widget
-instance. It must not be mistaken for an instruction to share the project widget: console, editor,
-and Search keep independent text, cursor, history, and view state.
+instance. It must not be mistaken for an instruction to share the project widget: the console and
+the editor keep independent text, cursor, history, and view state.
 
-A future migration should proceed by mode, preserving the controller that owns each mode's meaning:
+A future migration should preserve the controller that owns each command's meaning:
 
 1. Keep normal editor commands upstream. Enter/Escape and Ctrl+D already demonstrate this split:
    the editor consumes its own commands, while ordinary editing can reach its widget. Introduce an
    editor-local adapter to the shared dispatch shape only after naming the editor's shortcut and hook
    tables; do not expose the project `compy.input` table to editor internals.
-2. Keep Search's controller-owned policy explicit. Its arrows, removers, Enter-to-jump, and Escape
-   are search operations, not widget submit/cancel. A migration may use its widget for text editing,
-   but must preserve that priority and the selected-definition jump. `tests/editor/editor_spec.lua`
-   characterizes Ctrl+F, typing, Enter, and Escape through real editor entry points for this reason.
-3. Block moves are editor-owned and widget-free (Alt+Up / Alt+Down, `src/controller/editorReuse.lua`).
+2. Block moves are editor-owned and widget-free (Alt+Up / Alt+Down, `src/controller/editorReuse.lua`).
    They are not a missing widget route.
-4. Do not add editor/Search `keyreleased` forwarding merely for symmetry. It is inert today; first
+3. Do not add editor `keyreleased` forwarding merely for symmetry. It is inert today; first
    identify a release-time consumer and specify its mode semantics.
 
 This is implementation-derived migration guidance, not a new project-facing input API or a scheduled
@@ -1157,6 +1117,5 @@ transition — run, stop, suspend, inspect). `projectInputController.lua` is use
 only by `controller.lua` (the single `Controller.project_input` instance) and is
 never referenced by console/editor code directly. `userInputController.lua`
 instances are constructed by `consoleController.lua` (the project's widget, at the run seam),
-`editorController.lua` (its own main input and its `search` sub-widget), and
-implicitly by console (`consoleModel`/`consoleController`) — see "Search" above
-for the third, less obvious instance.
+`editorController.lua` (its own main input), and implicitly by console
+(`consoleModel`/`consoleController`).

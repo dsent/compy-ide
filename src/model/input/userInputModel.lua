@@ -47,8 +47,8 @@ UserInputModel = class.create()
 --- @param custom_label PromptLabel?
 --- @param editing boolean? --- the editor's rich input:
 --- word deletion (2.7) and the text-level undo (1.1).
---- Off everywhere else — the console, project inputs and
---- search keep the plain widget.
+--- Off everywhere else — the console and project inputs
+--- keep the plain widget.
 function UserInputModel.new(cfg, eval, custom_label, editing)
   local self = setmetatable({
     editing = editing or false,

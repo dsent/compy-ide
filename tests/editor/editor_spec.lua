@@ -382,52 +382,6 @@ describe('Editor #editor', function()
           and wl[#wl] <= r.fin)
       end)
 
-    it('knocks when the search finds nothing', function()
-      local controller, press = wire(TU.mock_view_cfg())
-      local src = "local function findme() end"
-      local save = TU.get_save_function(src)
-      controller:open('search.lua', src .. '\n', save)
-      --- entering search saves the clipboard state
-      love.system = {
-        getClipboardText = function() return '' end,
-        setClipboardText = function() end,
-      }
-
-      mock.keystroke('C-f', press)
-      assert.same('search', controller:get_mode())
-      local before = #mock.played_sounds()
-      --- a match: quiet
-      controller:textinput('f')
-      assert.same(before, #mock.played_sounds())
-      --- no match: knock
-      controller:textinput('zzz')
-      local played = mock.played_sounds()
-      assert.is_true(#played > before)
-      assert.same('assets/sounds/knock.ogg', played[#played])
-    end)
-
-    it('knocks on Enter when the search finds nothing', function()
-      local controller, press = wire(TU.mock_view_cfg())
-      local src = "local function findme() end"
-      local save = TU.get_save_function(src)
-      controller:open('search.lua', src .. '\n', save)
-      love.system = {
-        getClipboardText = function() return '' end,
-        setClipboardText = function() end,
-      }
-
-      mock.keystroke('C-f', press)
-      controller:textinput('zzz')
-      local before = #mock.played_sounds()
-      mock.keystroke('return', press)
-
-      local played = mock.played_sounds()
-      assert.same(before + 1, #played)
-      assert.same('assets/sounds/knock.ogg', played[#played])
-      assert.same('search', controller:get_mode())
-      assert.same({ 'zzz' }, controller.search.input:get_text())
-    end)
-
     it('follows the require on Ctrl+J', function()
       require("tests.helpers.codesnippets")
       local controller, press = wire(TU.mock_view_cfg())
@@ -634,134 +588,6 @@ describe('Editor #editor', function()
         controller, press = wire(TU.mock_view_cfg())
         save, savefile = TU.get_save_function({})
         session = EditorSession(controller, press, save, mock)
-      end)
-
-      -- 'nav' is what leaving search returns to, and it is
-      -- the SAME state these cases pinned as 'edit' before
-      -- the upstream editor rework: that rework made the two
-      -- modes explicit, so 'nav' is the default (moving
-      -- between blocks) and 'edit' now means inside an open
-      -- block. `is_normal_mode()` still answers true to both.
-      describe('search mode', function()
-        before_each(function()
-          love.system = {
-            getClipboardText = function() return '' end,
-          }
-        end)
-
-        -- A typed query arrives one character at a time
-        -- (doc/development/internals/user_input.md, "Data
-        -- flow"), which is what a search box gets in practice;
-        -- handing the controller the whole string was a
-        -- shortcut the device never takes. mock.textinput with
-        -- an explicit handler is exactly that handler call, so
-        -- it buys nothing here.
-        local function type_search(text)
-          for ch in text:gmatch('.') do
-            controller:textinput(ch)
-          end
-        end
-
-        it('types a query and Enter jumps to its definition', function()
-          local alpha = mock_func_snippet('alpha')
-          local beta = mock_func_snippet('beta')
-          session:open(src(alpha, '', beta), 3)
-
-          mock.keystroke('C-f', press)
-          type_search('beta')
-          mock.keystroke('return', press)
-
-          assert.same('nav', controller:get_mode())
-          assert.same(3, session.buffer:get_selection())
-          assert.is_true(controller.search.input:is_empty())
-        end)
-
-        it('Enter jumps to a definition on the first line', function()
-          local alpha = mock_func_snippet('alpha')
-          local beta = mock_func_snippet('beta')
-          session:open(src(alpha, '', beta), 3)
-          session:select_block(3)
-
-          mock.keystroke('C-f', press)
-          type_search('alpha')
-          mock.keystroke('return', press)
-
-          assert.same('nav', controller:get_mode())
-          assert.same(1, session.buffer:get_selection())
-          local bv = controller.view:get_current_buffer()
-          assert.same(1, bv.content:get_range().start)
-        end)
-
-        it('a jump brings the definition to the top line', function()
-          local lines = {}
-          for i = 1, 40 do lines[i] = 'x' .. i .. ' = ' .. i end
-          local beta = mock_func_snippet('beta')
-          local after = {}
-          for i = 1, 40 do after[i] = 'y' .. i .. ' = ' .. i end
-          session:open((src(table.concat(lines, '\n'), '', beta,
-            table.concat(after, '\n'))))
-
-          mock.keystroke('C-f', press)
-          type_search('beta')
-          mock.keystroke('return', press)
-
-          local bv = controller.view:get_current_buffer()
-          assert.same(42, bv.content:get_range().start)
-        end)
-
-        it('search starts afresh in the next file', function()
-          local lines = {}
-          for i = 1, 9 do lines[i] = 'x' .. i .. ' = ' .. i end
-          local beta = mock_func_snippet('beta')
-          session:open((src(table.concat(lines, '\n'), beta)))
-          mock.keystroke('C-f', press)
-          type_search('be')
-          --- the editor closes with search open, as the
-          --- gate's shortcuts close it
-          controller:close()
-
-          session:open((src(mock_func_snippet('alpha'))))
-          assert.same('nav', controller:get_mode())
-          mock.keystroke('C-f', press)
-          assert.is_true(controller.search.input:is_empty())
-          mock.keystroke('return', press)
-
-          assert.same('nav', controller:get_mode())
-          assert.same(1, session.buffer:get_selection())
-        end)
-
-        it('each load replaces the results, none included', function()
-          local sm = controller.search.model
-          sm:load({ { name = 'a' }, { name = 'b' } })
-          sm:load({ { name = 'c' } })
-          assert.same(1, #sm.resultset)
-          assert.same('c', sm.resultset[1].r.name)
-          sm:load({})
-          assert.same({}, sm.resultset)
-        end)
-
-        it('a file with no definitions searches none', function()
-          controller:open('notes.txt', 'plain text\n', save)
-          controller.search.model:load({ { name = 'stale' } })
-          mock.keystroke('C-f', press)
-          assert.same('search', controller:get_mode())
-          assert.same({}, controller.search.model.resultset)
-        end)
-
-        it('Escape leaves search without moving the selection', function()
-          local alpha = mock_func_snippet('alpha')
-          local beta = mock_func_snippet('beta')
-          session:open(src(alpha, '', beta), 3)
-          session:select_block(1)
-
-          mock.keystroke('C-f', press)
-          type_search('beta')
-          mock.keystroke('escape', press)
-
-          assert.same('nav', controller:get_mode())
-          assert.same(1, session.buffer:get_selection())
-          assert.is_true(controller.search.input:is_empty())
-        end)
       end)
 
       describe("replacement with", function()
@@ -1115,7 +941,6 @@ describe('Editor #editor', function()
             }), 8)
             session:select_block(8, 'b = 2')
             mock.keystroke('C-S-f', press)
-            assert.same('nav', controller:get_mode())
             assert.same(string.unlines({
               'a = 1', '',
               'function f()', '  return 1', 'end', '',

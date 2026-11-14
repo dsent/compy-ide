@@ -214,7 +214,7 @@ end
 --- D-WIDGET-AT-BOOT as amended): a store a project leaves on it
 --- cannot reach the next project, because the object it lived
 --- on is gone.
---- The console's, editor's and search strip's widgets are
+--- The console's and the editor's widgets are
 --- unaffected: those surfaces live as long as the app does.
 --- Its own evaluator, NOT the shared `InputEvalText` instance:
 --- the evaluator resolves this widget's highlighter slot
