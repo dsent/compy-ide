@@ -132,3 +132,31 @@ describe("terminal scrolling", function()
       end)
   end
 end)
+
+--- The console draws the grid again only when it is marked
+--- (view/canvas/terminalView.lua), and output reaches the grid a
+--- few characters a frame: a newline that scrolls the grid on a
+--- frame of its own is still to be drawn.
+describe("terminal scrolling on a frame of its own", function()
+  it("marks the grid and every cell to be drawn again", function()
+    local t = new_term()
+    t:print(string.rep("x\n", t.height - 1) .. "abc")
+    t:update(1000)
+    assert.equal(t.height, t.cursor_y)
+    -- drawn: the view clears the marks
+    t.dirty = false
+    for _, row in ipairs(t.state_buffer) do
+      for _, st in ipairs(row) do st.dirty = false end
+    end
+    t:print("\n")
+    t:update(1000)
+    assert.equal("a", t.buffer[t.height - 1][1])
+    assert.is_true(t.dirty)
+    for y, row in ipairs(t.state_buffer) do
+      for x, st in ipairs(row) do
+        assert.is_true(st.dirty,
+          string.format("row %d, column %d", y, x))
+      end
+    end
+  end)
+end)

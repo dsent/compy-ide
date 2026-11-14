@@ -124,6 +124,13 @@ local function terminal_roll_up(terminal, how_many)
             terminal_update_character(terminal, x, terminal.height, ' ')
         end
     end
+    -- every row moved: all of it is to be drawn again
+    for _, states in ipairs(state_buffer) do
+        for _, state in ipairs(states) do
+            state.dirty = true
+        end
+    end
+    terminal.dirty = true
 end
 
 local function wrap_if_bottom(terminal)
