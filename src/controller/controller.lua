@@ -1331,7 +1331,8 @@ Controller = {
     --- @param dy number?
     --- @param pressure number?
     handlers.touchmoved = function(id, x, y, dx, dy, pressure)
-      if CC:card_shows() then return end
+      --- a touch begun under the card moves nothing after it
+      if held_touch[id] or CC:card_shows() then return end
       if love.touchmoved then
         return love.touchmoved(id, x, y, dx, dy, pressure)
       end

@@ -623,11 +623,12 @@ describe('input surface: widget callbacks #input', function()
       assert.is_true(F.is_widget_visible())
     end)
 
-    -- The clear is model:cancel() — remember, THEN clear — so
-    -- the submitted line reaches the input history rather than
-    -- being dropped (statement 4). It is not
+    -- A submitted line is stored when it is accepted
+    -- (submit_flow), then the clear, model:cancel(), empties
+    -- the field and stores nothing. The clear is not
     -- compy.input.clear(), which touches no history.
-    it('the clear remembers before it empties', function()
+    it('a submitted line is remembered, then the field emptied',
+      function()
       local input = F.activate_project()
       input.show({ text = 'remembered' })
       F.session.press('return')
