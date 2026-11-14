@@ -267,6 +267,13 @@ return function(lib)
   --- @param stream table
   --- @return {l: integer, c: integer, eof: boolean}?
   local failed_token = function(stream)
+    --- the parser fails with the lexer between tokens, right
+    --- after the last one it took or at the end; the lexer
+    --- fails inside a token, having read on into it
+    local last = stream.lineinfo_last_extracted
+    local between = stream.i == last.offset + 1
+        or last.offset > #stream.src
+    if not between then return nil end
     local ok, tok = pcall(stream.peek, stream)
     local li = ok and type(tok) == 'table' and tok.lineinfo
     local first = li and li.first

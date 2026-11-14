@@ -78,6 +78,23 @@ local at_end = function(lines, err)
   return err
 end
 
+--- A lexer failure the lexer names no place for, such as an
+--- escape a string may not hold: the first quoted or long
+--- string the parser does not read on its own
+--- @param lines string[]
+--- @return integer? l
+--- @return integer? c
+local failing_string = function(lines)
+  local text = table.concat(lines, '\n')
+  for _, el in ipairs(cursor_map.elements(text)) do
+    local t = el.text
+    local quoted = string.match(t, '^["\']') or string.match(t, '^%[=*%[')
+    if quoted and not get_parser().parse('local _ = ' .. t) then
+      return cursor_map.position(lines, el.s)
+    end
+  end
+end
+
 --- @param lines string[]
 --- @param tok table --- the parser's current token
 --- @param err Error
@@ -115,6 +132,13 @@ function M.failure(code, parse_err, top)
   local l = parse_err.l
   local err = Error(parse_err.msg, parse_err.c, l)
   if type(lines) ~= 'table' then return err end
+  if not l or l < 1 then
+    local fl, fc = failing_string(lines)
+    if fl then
+      err.l, err.c = fl, fc
+      return err
+    end
+  end
   --- an expression where a statement belongs fails as a
   --- whole, and the parser has read past it by then; every
   --- other failure is at the token the parser stopped at

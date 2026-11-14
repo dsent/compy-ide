@@ -2437,10 +2437,14 @@ function ConsoleController:keypressed(k, sc, isrepeat)
     --- a key repeats where its press acted: one held since
     --- the editor or a program had it does nothing here
     if isrepeat and not self.pressed[k] then return end
-    if not isrepeat then self.pressed[k] = true end
-    --- the key card suspends the console's keys (IS3.16),
-    --- and the help key's press brings it up
+    --- the help key's press brings the card up; a press the
+    --- card holds back is not the console's, so neither are
+    --- its repeats (IS3.16)
+    if k == KeyCard.KEY and not isrepeat then
+      self.pressed[k] = true
+    end
     if self:key_card() then return end
+    if not isrepeat then self.pressed[k] = true end
     if love.state.testing == 'running' then
       return
     end

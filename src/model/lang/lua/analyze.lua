@@ -238,6 +238,8 @@ local function req_extractor(node)
       if tag == 'Call'
           and lhs.tag == 'Id' and lhs[1] == 'require'
       then
+        --- only a name written out is a file to follow
+        if not rhs or rhs.tag ~= 'String' then return {} end
         local val = rhs[1]
         local li  = get_line_number(rhs)
         return { { line = li, name = val } }
