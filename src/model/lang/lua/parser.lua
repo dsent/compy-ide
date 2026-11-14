@@ -392,8 +392,8 @@ return function(lib)
   --- in order, as it is written: a block is the lines of
   --- statements and comments that share a line, so that no
   --- line boundary divides them; a blank line is an empty
-  --- block of its own; a line nothing claims (a `#` line the
-  --- parser skips) is a block of its own.
+  --- block of its own; a line nothing claims (a `#!` first
+  --- line, which the parser skips) is a block of its own.
   --- @param lines string[]
   --- @param ast luaAST
   --- @return Dequeue<Block>

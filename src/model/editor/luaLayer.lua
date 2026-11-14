@@ -2,9 +2,9 @@
 --- editor's own rules on Lua text, around the language
 --- layer's parser, formatter and gate (model.lang.lua), which
 --- decide what is Lua and what a block may hold. Here are the
---- editor's: a draft is no file's top, so a `#` line in it is
---- no Lua; a draft's empty lines stay (IS3.7); a whole file
---- keeps a `#` first line through formatting; where a failure
+--- editor's: a draft is no file's top, so a `#!` line in it
+--- is no Lua; a draft's empty lines stay (IS3.7); a whole file
+--- keeps its `#!` first line through formatting; where a failure
 --- shows (IS3.4, IS3.5); which reason a refusal names; and the
 --- files a block names (IS1.5).
 
@@ -123,10 +123,8 @@ end
 --- reads the token the parser stopped at (`err.token`).
 --- @param code str
 --- @param parse_err Error --- as parse returns it
---- @param top integer? --- the text's first line, 1 unless a
---- line is set above it
 --- @return Error --- a new one, at the boundary
-function M.failure(code, parse_err, top)
+function M.failure(code, parse_err)
   local lines = code
   if type(code) == 'string' then lines = string.lines(code) end
   local l = parse_err.l
@@ -168,7 +166,7 @@ function M.failure(code, parse_err, top)
   --- error names the last token taken before the failure,
   --- and none when the text opens with it
   local col = err.c + 1
-  local opens = l == (top or 1) and err.c == 1 and misplaced
+  local opens = l == 1 and err.c == 1 and misplaced
   if opens then col = 1 end
   --- after a comment the parser names the failing token
   --- itself, the first one past the comment
@@ -206,50 +204,35 @@ local function is_blank(l)
 end
 
 --- @param lines string[]
---- @return boolean --- the text opens with `#`, after spaces
---- alone: where the parser skips a line as a file's first
-local function at_top_hash(lines)
-  for _, l in ipairs(lines) do
-    local c = string.match(l, '^%s*(%S)')
-    if c then return c == '#' end
-  end
-  return false
-end
-
---- a statement above a draft that opens with `#`: the parser
---- skips such a line at the top of a file, which a draft is
---- not
-local ABOVE = 'do end'
-
---- @param lines string[]
---- @return string[]
-local function below_a_statement(lines)
-  local below = { ABOVE }
+--- @return string[] --- the lines below an empty one
+local function below_a_line(lines)
+  local below = { '' }
   for i, l in ipairs(lines) do below[i + 1] = l end
   return below
 end
 
 --- A draft read as Lua reads it where it lands, below the
---- file's first line: a `#` line in it is no Lua. The parser
+--- file's first line: a `#!` line, which the parser skips at
+--- a file's top, is no Lua in it. The parser
 --- the editor's field checks and colors with, so that the red
 --- text and a refused submission agree (IS3.4).
 --- @type table
 M.draft_parser = setmetatable({
   --- @param lines string[]
   parse = function(lines)
-    if type(lines) ~= 'table' or not at_top_hash(lines) then
+    if type(lines) ~= 'table' or not M.is_header(lines[1]) then
       return get_parser().parse(lines)
     end
-    return get_parser().parse(below_a_statement(lines))
+    return get_parser().parse(below_a_line(lines))
   end,
   --- @param lines string[]
   --- @param err Error --- as parse above returned it
   --- @return Error
   failure = function(lines, err)
-    if type(lines) ~= 'table' or not at_top_hash(lines) then
+    if type(lines) ~= 'table' or not M.is_header(lines[1]) then
       return M.failure(lines, err)
     end
-    local failure = M.failure(below_a_statement(lines), err, 2)
+    local failure = M.failure(below_a_line(lines), err)
     failure.l = failure.l - 1
     return failure
   end,
@@ -349,13 +332,13 @@ function M.formatted(lines, width, keep_empty)
 end
 
 --- Whether a file's first line is a header the language
---- skips: one that starts with `#`, as the parser and LuaJIT
---- skip it (a `#!` line). The one answer the editor's header
---- rules and whole-file formatting share.
+--- skips: a `#!` line, as the parser and LuaJIT skip it. The
+--- one answer the editor's header rules, whole-file
+--- formatting and the reading of a draft share.
 --- @param line string?
 --- @return boolean
 function M.is_header(line)
-  return line ~= nil and string.match(line, '^#') ~= nil
+  return line ~= nil and string.match(line, '^#!') ~= nil
 end
 
 --- A file's blocks, or a draft's (`single`), as the language

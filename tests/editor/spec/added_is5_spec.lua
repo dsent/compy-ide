@@ -421,7 +421,7 @@ describe("IS4 and IS5, added #editor #spec", function()
         edit(1)
         assert.same("browsing", K.state())
         assert.same("", K.draft())
-        assert.truthy((K.message() or ""):find("file's header", 1,
+        assert.truthy((K.message() or ""):find("#! header", 1,
           true))
         assert.same("#!/usr/bin/lua\nx=1\n", K.file())
       end)

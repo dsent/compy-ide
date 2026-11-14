@@ -69,6 +69,13 @@ describe('parse failure boundary #parser', function()
     assert.same({ 1, 1, false }, failure({ 'goto' }))
   end)
 
+  it('is the first character after spaces or empty lines',
+    function()
+      assert.same({ 1, 2, false }, failure({ ' x' }))
+      assert.same({ 2, 1, false }, failure({ '', 'hello' }))
+      assert.same({ 2, 7, false }, failure({ '', '  x = = 1' }))
+    end)
+
   it('is the end only when the text wants more', function()
     assert.same({ 1, 15, true }, failure({ 'local function' }))
     assert.same({ 1, 4, true }, failure({ 'f(1' }))
@@ -130,7 +137,7 @@ describe('the editor on Lua text #editor', function()
       assert.is_true(lua.empty_blocks({ '', ' ' })[2]:is_empty())
     end)
 
-  it('reads a # line in a draft as no Lua, wherever it is',
+  it('reads a #! line in a draft as no Lua, wherever it is',
     function()
       for _, lines in ipairs({
         { '#!/usr/bin/lua', 'a = 1' },
@@ -145,6 +152,15 @@ describe('the editor on Lua text #editor', function()
       end
       local verdict = lua.submission({ '', '#!x', 'a = 1' }, 64, 14)
       assert.same(2, verdict.failure.l)
+      verdict = lua.submission({ '#!x', 'a = 1' }, 64, 14)
+      assert.same({ 1, 2 }, { verdict.failure.l, verdict.failure.c })
+    end)
+
+  it('keeps a draft of two lines that opens with # as typed',
+    function()
+      local lines = { '#speed = 5', 'speed = 10' }
+      local verdict = lua.submission(lines, 64, 14)
+      assert.same('#speed = 5', verdict.lines[1])
     end)
 
   it('names the line over the limit and its length', function()
@@ -159,9 +175,8 @@ describe('the editor on Lua text #editor', function()
       assert.same({ '#!/usr/bin/lua', 'a = 1' },
         (lua.tidied({ '#!/usr/bin/lua', 'a=1' }, 64)))
       assert.same({ '#!x' }, (lua.tidied({ '#!x' }, 64)))
-      local out, formatted = lua.tidied({ '#!x', '#y', 'a=1' }, 64)
-      assert.is_false(formatted)
-      assert.same({ '#!x', '#y', 'a=1' }, out)
+      assert.same({ '# note', 'a=1' },
+        (lua.tidied({ '# note', 'a=1' }, 64)))
     end)
 
   it('names the files of require and dofile written out',

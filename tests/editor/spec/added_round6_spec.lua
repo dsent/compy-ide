@@ -154,7 +154,7 @@ describe("round six #editor #spec", function()
       K.browse_to(1)
       K.keys("f2")
       assert.same(2, K.target())
-      assert.truthy((K.message() or ""):find("file's header", 1,
+      assert.truthy((K.message() or ""):find("#! header", 1,
         true))
     end)
   end)

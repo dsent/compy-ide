@@ -437,7 +437,7 @@ describe("round four #editor #spec", function()
         K.keys("lctrl", "delete")
         assert.same("", K.draft())
         assert.same(original, K.file())
-        assert.truthy((K.message() or ""):find("file's header", 1,
+        assert.truthy((K.message() or ""):find("#! header", 1,
           true))
       end)
 
@@ -449,13 +449,13 @@ describe("round four #editor #spec", function()
       K.browse_to(1)
       K.keys("lalt", "down")
       assert.same(original, K.file())
-      assert.truthy((K.message() or ""):find("file's header", 1,
+      assert.truthy((K.message() or ""):find("#! header", 1,
         true))
       K.browse_to(2)
       K.keys("lalt", "up")
       assert.same(original, K.file())
       assert.same(2, K.position())
-      assert.truthy((K.message() or ""):find("file's header", 1,
+      assert.truthy((K.message() or ""):find("#! header", 1,
         true))
       -- below it, blocks move as ever
       K.browse_to(3)

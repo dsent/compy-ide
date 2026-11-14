@@ -238,29 +238,23 @@ describe("round seven #editor #spec", function()
   -- the language layer as the base reads it (the ruling that
   -- the editor rework changes nothing there)
   describe("a file's first line that Lua skips", function()
-    spec_it("IS1.2 Admit or refuse a file: a Lua file whose "
-        .. "first line starts with # is read as blocks, and that "
-        .. "line is its header", function()
-      K.reset({ ["main.lua"] = "# note\na=1\n" })
-      K.open()
-      assert.falsy(K.buffer().invalid)
-      assert.same(2, K.blocks())
-      K.browse_to(1)
-      K.keys("f2")
-      assert.is_nil(K.target())
-      assert.truthy((K.message() or ""):find("file's header", 1,
-        true))
-      K.keys("lctrl", "lshift", "f")
-      assert.same("# note\na = 1\n", K.file())
-    end)
-
     spec_it("IS1.2 Admit or refuse a file: a file of a #! line "
-        .. "alone, with no line after it, is read as a line of "
-        .. "text that does not parse", function()
-      K.reset({ ["main.lua"] = "#!/usr/bin/lua\n" })
-      K.open()
-      assert.is_true(K.buffer().invalid)
-      assert.same(1, K.blocks())
+        .. "alone, with a line end or without, is its header "
+        .. "and nothing else; formatting changes nothing, and "
+        .. "text goes after the header", function()
+      for _, text in ipairs({ "#!/usr/bin/lua\n", "#!/usr/bin/lua" }) do
+        K.reset({ ["main.lua"] = text })
+        K.open()
+        assert.falsy(K.buffer().invalid)
+        assert.same(1, K.blocks())
+        K.keys("lctrl", "lshift", "f")
+        assert.is_nil(K.message())
+        assert.same(text, K.file())
+        K.type("x = 1")
+        K.keys("return")
+        assert.same("#!/usr/bin/lua\nx = 1\n", K.file())
+        K.cleanup()
+      end
     end)
 
     spec_it("IS1.1 Open a file: an empty Lua file has no block, "
@@ -286,7 +280,7 @@ describe("round seven #editor #spec", function()
         K.keys("f2")
         assert.is_nil(K.target())
         local msg = K.message() or ""
-        assert.truthy(msg:find("file's header", 1, true))
+        assert.truthy(msg:find("#! header", 1, true))
         assert.truthy(msg:find("lines below it are edited as usual",
           1, true))
       end)

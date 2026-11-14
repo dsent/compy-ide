@@ -650,12 +650,12 @@ end
 --- The notice of an action on a Lua file's header line, or
 --- before it
 EditorController.HEADER_NOTICE = 'The first line is the'
-    .. " file's header, which Lua skips, and stays as it is."
+    .. " file's #! header and stays as it is."
     .. ' The lines below it are edited as usual.'
 
 --- @private
---- A Lua file's first line that the language skips (a `#!`
---- line; luaLayer.is_header) is its header: a block of its own (the chunker's line nothing
+--- A Lua file's `#!` first line, which the language skips
+--- (luaLayer.is_header), is its header: a block of its own (the chunker's line nothing
 --- claims), kept as it is. No action edits, cuts or moves it,
 --- or puts anything before it; each is refused with
 --- HEADER_NOTICE.
