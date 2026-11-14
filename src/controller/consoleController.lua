@@ -16,7 +16,7 @@ require("util.key")
 require("util.table")
 local TerminalTest = require("util.test_terminal")
 local KeyCard = require('model.editor.keyCard')
-local HeldKeys = require('model.input.heldKeys')
+local ConsoleKeys = require('model.input.consoleKeys')
 
 local messages = {
   file_does_not_exist = function(name)
@@ -2413,105 +2413,116 @@ function ConsoleController:textinput(t)
   end
 end
 
+--- The debug build's terminal test (Ctrl+Alt+T): it runs,
+--- and any key once it waits ends it
+function ConsoleController:_terminal_test()
+  local out = self.model.output
+  if love.state.app_state ~= 'ready' then
+    return
+  end
+  if not love.state.testing then
+    love.state.testing = 'running'
+    self.input:discard_draft()
+    TerminalTest.test(out.terminal)
+  elseif love.state.testing == 'waiting' then
+    TerminalTest.reset(out.terminal)
+    love.state.testing = false
+  end
+end
+
+--- What the console's key tables' actions do (consoleKeys.lua)
+local ACTIONS = {
+  none = function() end,
+  --- the console's text field's own key
+  field = function(cc, k) cc.input:keypressed(k) end,
+  run = function(cc)
+    if not cc.input:has_error() then cc:evaluate_input() end
+  end,
+  run_and_keep = function(cc) cc:run_and_keep() end,
+  history = function(cc, k)
+    if k == 'pageup' then
+      cc.input:history_back()
+    else
+      cc.input:history_fwd()
+    end
+  end,
+  clear_terminal = function(cc) cc.model.output:reset() end,
+  terminal_test = function(cc)
+    if love.DEBUG then cc:_terminal_test() end
+  end,
+}
+
+--- The chords that only close an error: the line under it is
+--- the one that failed, kept to be corrected
+local CLOSE_ONLY = {
+  ['return'] = true, kpenter = true,
+  ['shift+return'] = true, ['shift+kpenter'] = true,
+  ['alt+return'] = true, ['alt+kpenter'] = true,
+  ['shift+insert'] = true,
+  escape = true, up = true, down = true,
+}
+
+--- In the console a key is looked up by its full chord in the
+--- table of the console's state (consoleKeys.lua); a chord
+--- the table does not name does nothing.
 --- @param k string
 --- @param sc string? --- LÖVE's scancode, unused
 --- @param isrepeat boolean? --- the key is held
 function ConsoleController:keypressed(k, sc, isrepeat)
   local input = self.input
+  if love.state.app_state == 'editor' then
+    self.editor:keypressed(k, sc, isrepeat)
+    input:update_view()
+    return
+  end
+  local chord = Key.combo(k)
+  local state = self.run_live and 'live' or 'idle'
+  local entry = ConsoleKeys:lookup(state, chord)
+  --- a held key repeats only if its entry says so, and only
+  --- where its press acted: one held since the editor or a
+  --- program had it does nothing here
+  local repeats = entry and entry.repeats and self.pressed[k]
+  if isrepeat and not repeats then return end
+  --- the help key's press brings the card up; a press the
+  --- card holds back is not the console's, so neither are
+  --- its repeats (IS3.16)
+  if k == KeyCard.KEY then self.pressed[k] = true end
+  if self:key_card() then return end
+  self.pressed[k] = true
+  if love.state.testing == 'running' then
+    return
+  end
+  if love.state.testing == 'waiting' then
+    self:_terminal_test()
+    return
+  end
 
-  local function terminal_test()
-    local out = self.model.output
-    if love.state.app_state ~= 'ready' then
+  -- doc/development/internals/user_input.md, "Error state":
+  -- the line under the error is the one that failed, kept to
+  -- be corrected. Enter (with Shift or Alt too), Shift+Ins,
+  -- Escape, Up and Down only close the error; any other key
+  -- closes it and does its usual work. A modifier alone
+  -- leaves it up; a held Shift then anchors its selection
+  -- when the next key closes it.
+  if input:has_error() then
+    if Key.is_mod(k) then
       return
     end
-    if not love.state.testing then
-      love.state.testing = 'running'
-      input:discard_draft()
-      TerminalTest.test(out.terminal)
-    elseif love.state.testing == 'waiting' then
-      TerminalTest.reset(out.terminal)
-      love.state.testing = false
+    input:clear_error()
+    if Key.shift() then
+      input:keypressed('lshift')
+    end
+    if CLOSE_ONLY[chord] then
+      input:update_view()
+      return
     end
   end
 
-  if love.state.app_state == 'editor' then
-    self.editor:keypressed(k, sc, isrepeat)
-  else
-    --- a held key repeats only if it changes nothing beyond
-    --- the line (HeldKeys), and only where its press acted:
-    --- one held since the editor or a program had it does
-    --- nothing here
-    local repeats = self.pressed[k] and HeldKeys.console(k)
-    if isrepeat and not repeats then return end
-    --- the help key's press brings the card up; a press the
-    --- card holds back is not the console's, so neither are
-    --- its repeats (IS3.16)
-    if k == KeyCard.KEY then self.pressed[k] = true end
-    if self:key_card() then return end
-    self.pressed[k] = true
-    if love.state.testing == 'running' then
-      return
-    end
-    if love.state.testing == 'waiting' then
-      terminal_test()
-      return
-    end
-
-    -- doc/development/internals/user_input.md, "Error state":
-    -- the line under the error is the one that failed, kept to
-    -- be corrected. Enter, Escape, Up and Down only close the
-    -- error; any other key closes it and does its usual work.
-    -- A modifier alone leaves it up; a held Shift then anchors
-    -- its selection when the next key closes it.
-    local run_keep = k == 'insert' and Key.shift()
-        and not Key.ctrl() and not Key.alt()
-    if input:has_error() then
-      if Key.is_mod(k) then
-        return
-      end
-      input:clear_error()
-      if Key.shift() then
-        input:keypressed('lshift')
-      end
-      if Key.is_enter(k) or k == 'escape' or run_keep
-          or k == "up" or k == "down" then
-        return
-      end
-    end
-
-    if k == "pageup" then
-      input:history_back()
-    end
-    if k == "pagedown" then
-      input:history_fwd()
-    end
-    -- History navigation at the vertical boundary is driven by
-    -- the widget's on_limit_reached callback (set at
-    -- construction), not by keypressed's return value (retired,
-    -- doc/development/decisions/input.md, D-EDIT-CALLBACKS).
-    -- keypressed still runs for its editing side effects; its
-    -- return is unused.
+  if entry then
+    ACTIONS[entry.act](self, k)
+  elseif Key.is_mod(k) then
+    --- Shift on its own anchors a selection in the field
     input:keypressed(k)
-    --- Shift+Enter and Alt+Enter broke the line (IS3.15)
-    if Key.is_enter(k) and not Key.shift() and not Key.alt() then
-      if not input:has_error() then
-        self:evaluate_input()
-      end
-    end
-    if run_keep then self:run_and_keep() end
-
-    -- Ctrl held
-    if Key.ctrl() then
-      if k == "l" then
-        self.model.output:reset()
-      end
-      if love.DEBUG then
-        if Key.alt() and k == 't' then
-          terminal_test()
-          return
-        end
-      end
-    end
   end
   input:update_view()
 end

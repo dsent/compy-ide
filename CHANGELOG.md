@@ -130,6 +130,16 @@ Project-author guide: `doc/input_api.md`.
   repeat. A program's own input keeps its repeats.
 - **Shift+Insert in the console runs the line and keeps it in the field**, as it
   submits and keeps the text in the file editor.
+- **Every chord is a key of its own.** A key pressed with a modifier that nothing
+  binds does nothing, in the file editor, the console and a program's input field:
+  Ctrl+Enter no longer submits in the console or a program's input, Ctrl+Up and
+  Ctrl+Down no longer move or recall in the console, and Shift+Escape no longer cancels
+  a program's input. The F1 key card is drawn from the same key tables.
+- **Ctrl+Z and Ctrl+Y undo and redo the typing in every input**, the console's and a
+  program's as well as the editor's. Ctrl+Y no longer deletes the line.
+- **F1 holds back Ctrl+Q and the other reserved keys in the file editor only.** In the
+  console Ctrl+Q stops the program while the card shows, and holding F1 in your own
+  program blocks nothing.
 
 ### Removed
 
@@ -144,6 +154,8 @@ Project-author guide: `doc/input_api.md`.
 - **The editor's search (Ctrl+F)**: Ctrl+F does nothing in the editor now. Search is
   not in the editor's specification and needs a design of its own, which it may get
   later.
+- **A click on the file editor's text no longer browses to a block.** The mouse needs
+  a design of its own; it is off in the editor by default.
 - **The system clipboard in the text field**: Ctrl+C, Ctrl+X and Ctrl+V do nothing in
   the console, the file editor or a program's input, and Ctrl+Insert and Shift+Insert
   keep only the editor's own meanings; like search, it needs a design of its own.
@@ -189,7 +201,7 @@ Project-author guide: `doc/input_api.md`.
   shortcut, the card showed while the program kept them; there F1 is the program's
   now, and Ctrl+Q stops the program while F1 is held, with or without other keys
   pressed since. A card that shows stays until F1 is released, and so does the pause
-  of Ctrl+Q and the other keys.
+  of the keys it holds back.
 - **A `#!` first line is kept, and edited like any line.** Ctrl+Shift+F and `tidy()`
   keep it, F2 loads it, and a cut takes it out; a change that would leave a `#!` line
   anywhere but first, or put anything above it, is refused, since Lua could not run

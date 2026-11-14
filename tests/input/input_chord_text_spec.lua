@@ -111,9 +111,10 @@ describe("a chord's own glyph is no text #input", function()
       assert.same("abc", K.console_draft())
     end)
 
+    -- Ctrl+Z undoes the typing (D-UNDO-KEYS), and adds no z
     in_both_orders("Ctrl+Z types no z", function(order)
       chord(order, { "lctrl" }, "z", "z")
-      assert.same("abc", K.console_draft())
+      assert.same("", K.console_draft())
     end)
 
     in_both_orders("the right Ctrl is a Ctrl too", function(

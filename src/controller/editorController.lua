@@ -6,7 +6,7 @@ require("model.input.cursor")
 local class = require('util.class')
 local lua = require('model.editor.luaLayer')
 local KeyCard = require('model.editor.keyCard')
-local HeldKeys = require('model.input.heldKeys')
+local EditorKeys = require('model.editor.editorKeys')
 
 --- A write refused because the file changed outside the
 --- editor (_refuse_stale), and a file that changed while
@@ -40,7 +40,6 @@ end
 --- @field pressed table<string, boolean>
 EditorController = class.create(new)
 
---- @private
 --- DEPRECATED (owner ruling, 2026-09-06). Ctrl+Shift+S
 --- leaves the editor and stays bound, but Escape is the
 --- supported way out (IS1.6) and this chord is on its way to
@@ -52,17 +51,10 @@ EditorController = class.create(new)
 --- binds only what competes with a running project
 --- (D-EXACT-RESERVE, "Scope"), and nothing runs while the
 --- editor owns the route.
---- @param k string
---- @return boolean handled --- the editor is closed, so the
---- key must reach no mode handler after it
-function EditorController:_leave_keys(k)
-  if k == "s" and Key.shift() and not Key.alt() then
-    if not self:refuse_to_leave(true) then
-      self.console:finish_edit()
-    end
-    return true
+function EditorController:leave()
+  if not self:refuse_to_leave(true) then
+    self.console:finish_edit()
   end
-  return false
 end
 
 --- A whole-editor exit (Ctrl+Shift+S here; Ctrl+T, Ctrl+Q
@@ -398,12 +390,20 @@ function EditorController:_draft_is_empty()
   return t == nil or t == ''
 end
 
+--- Whether the editor is in front and its key card shows:
+--- every key is suspended then, the reserved chords too
+--- (IS3.16)
+--- @return boolean
+function EditorController:card_shows()
+  return love.state.app_state == 'editor'
+      and KeyCard.shows(self.pressed)
+end
+
 --- The key card's lines while the help key is held (FR4.9),
 --- nil otherwise.
 --- @return string[]?
 function EditorController:key_card()
-  if love.state.app_state ~= 'editor' then return nil end
-  if not KeyCard.shows(self.pressed) then return nil end
+  if not self:card_shows() then return nil end
   local card = self.view.key_card
   return card:lines(self:state_name(), self:_draft_is_empty())
 end
@@ -640,26 +640,15 @@ function EditorController:_handle_submit(go)
   return true
 end
 
---- A click on a block browses to it, as the browse keys do:
---- the draft and the replacement target stay (IS2.3)
+--- A click goes to the field alone: a click on a block no
+--- longer browses to it (PR #28, D-MOUSE-BROWSE: the mouse
+--- needs a design of its own)
 --- @param x number
 --- @param y number
 --- @param btn integer
 --- @param touch boolean?
 --- @param presses integer? --- 2 on a double click
 function EditorController:mousepressed(x, y, btn, touch, presses)
-  if btn == 1 then
-    local bv = self.view:get_current_buffer()
-    local ln = bv:line_at(y)
-    local buf = self:get_active_buffer()
-    local bi = ln and buf:block_at_line(ln)
-    if bi then
-      buf:set_selection(bi)
-      bv:follow_selection()
-      self:update_status()
-      return
-    end
-  end
   self.input:mousepressed(x, y, btn, touch, presses)
 end
 
@@ -770,8 +759,6 @@ function EditorController:format_file()
   self:update_status()
 end
 
---- The Edit key (IS5.1)
-local EDIT_KEY = 'f2'
 --- blocks a page key browses
 local PAGE_BLOCKS = 10
 
@@ -1037,24 +1024,6 @@ function EditorController:submit()
   end)
 end
 
---- @private
---- @param k string
---- @return boolean handled --- a browsing key
-function EditorController:_browse_keys(k)
-  if Key.alt() or Key.shift() then return false end
-  local vertical = k == 'up' or k == 'down'
-  if vertical and (Key.ctrl() or self:_draft_is_empty()) then
-    self:_browse(k)
-    return true
-  end
-  if Key.ctrl() then return false end
-  if k == 'pageup' or k == 'pagedown' then
-    self:_browse(k == 'pageup' and 'up' or 'down', PAGE_BLOCKS)
-    return true
-  end
-  return false
-end
-
 --- Alt with a page or edge key moves the document view and
 --- nothing else: the browsing position, the draft and the
 --- replacement target stay. Alt+Left and Alt+Right page too:
@@ -1068,97 +1037,79 @@ local PEEKS = {
   ['end'] = { 'down', true },
 }
 
---- @private
---- @param k string
---- @return boolean handled --- a peek key
-function EditorController:_peek_keys(k)
-  local peek = PEEKS[k]
-  local alt_alone = Key.alt() and not Key.ctrl()
-      and not Key.shift()
-  if not (peek and alt_alone) then return false end
-  self.view:get_current_buffer():scroll(peek[1], nil, peek[2])
-  self:update_status()
-  return true
-end
-
---- @private
---- The keys of the browsing, inserting and replacing states
---- @param k string
---- @param isrepeat boolean?
-function EditorController:_normal_mode_keys(k, isrepeat)
-  local bare = not Key.ctrl() and not Key.alt()
-      and not Key.shift()
-  if self:_reuse_keys(k, isrepeat) then return end
-  if Key.is_enter(k) then
-    if bare then
-      self:submit()
-      return
-    end
-    --- Shift+Enter and Alt+Enter break a line in the field
-    --- (IS3.15); no other Enter reaches the widget's submit
-    if Key.ctrl() then return end
-  end
-  if bare and k == 'escape' then
-    if self:state_name() == 'browsing' then
+--- What the key tables' actions do (editorKeys.lua), each
+--- called with the controller, the key and whether it is a
+--- repeat
+local ACTIONS = {
+  none = function() end,
+  --- the shared text field's own key
+  field = function(ec, k) ec.input:keypressed(k) end,
+  submit = function(ec) ec:submit() end,
+  submit_and_retain = function(ec) ec:submit_and_retain() end,
+  edit_block = function(ec) ec:edit_block() end,
+  escape = function(ec)
+    if ec:state_name() == 'browsing' then
       --- stepping back from a file (IS1.6)
-      self:close_buffer()
+      ec:close_buffer()
     else
-      self:cancel_edit()
+      ec:cancel_edit()
     end
-    return
-  end
-  --- no other Escape reaches the widget's cancel
-  if k == 'escape' then return end
-  if bare and k == EDIT_KEY then
-    self:edit_block()
-    return
-  end
-  if self:_browse_keys(k) then return end
-  if self:_peek_keys(k) then return end
-  if Key.ctrl() and not Key.alt() and k == 'j' then
-    self:follow_require()
-    return
-  end
-  self.input:keypressed(k)
-end
+  end,
+  browse = function(ec, k) ec:_browse(k) end,
+  --- browsing with an empty draft (IS2.1), a row in one
+  vertical = function(ec, k)
+    if ec:_draft_is_empty() then
+      ec:_browse(k)
+    else
+      ec.input:keypressed(k)
+    end
+  end,
+  page = function(ec, k)
+    ec:_browse(k == 'pageup' and 'up' or 'down', PAGE_BLOCKS)
+  end,
+  peek = function(ec, k)
+    local peek = PEEKS[k]
+    ec.view:get_current_buffer():scroll(peek[1], nil, peek[2])
+    ec:update_status()
+  end,
+  copy_block = function(ec) ec:copy_block() end,
+  cut_block = function(ec, _, rep) ec:cut_block(rep) end,
+  move_block = function(ec, k) ec:move_block(k) end,
+  undo = function(ec, _, rep) ec:timeline_undo(rep) end,
+  redo = function(ec, _, rep) ec:timeline_redo(rep) end,
+  follow_require = function(ec) ec:follow_require() end,
+  format_file = function(ec) ec:format_file() end,
+  leave = function(ec) ec:leave() end,
+  --- with love.debug: the view drawn anew, and with Ctrl the
+  --- file split anew
+  debug_refresh = function(ec)
+    if not love.debug then return end
+    local buf = ec:get_active_buffer()
+    local bufview = ec.view:get_buffer(buf:get_id())
+    if Key.ctrl() then buf:rechunk() end
+    bufview:refresh()
+  end,
+}
 
+--- A key is looked up by its full chord in the table of the
+--- state in front (editorKeys.lua); a chord the table does
+--- not name does nothing.
 --- @param k string
 --- @param _ string? --- LÖVE's scancode, unused
 --- @param isrepeat boolean? --- the key is held
 function EditorController:keypressed(k, _, isrepeat)
-  --- a held key repeats only if it changes nothing beyond
-  --- the draft and the view (HeldKeys), and only where its
-  --- press acted: one held since before the editor came to
-  --- the front, a program's, does nothing in it
-  local repeats = self.pressed[k] and HeldKeys.editor(k)
+  local entry = EditorKeys:lookup(self:state_name(),
+    Key.combo(k))
+  --- a held key repeats only if its entry says so, and only
+  --- where its press acted: one held since before the editor
+  --- came to the front, a program's, does nothing in it
+  local repeats = entry and entry.repeats and self.pressed[k]
   if isrepeat and not repeats then return end
   if self:_held_back(k) then return end
   self.pressed[k] = true
-  --- its press brings up the card (KeyCard.shows)
-  if k == KeyCard.KEY then return end
+  if not entry then return end
   self.input:update_view()
-
-  if Key.ctrl() then
-    --- formatting the whole file is a browsing command
-    if k == "f" and Key.shift()
-        and self:state_name() == 'browsing' then
-      self:format_file()
-      return
-    end
-    if self:_leave_keys(k) then return end
-  end
-
-  self:_normal_mode_keys(k, isrepeat)
-
-  --- Escape on the last buffer has closed the editor by
-  --- now, so the buffer is asked for only on the key
-  --- that uses it
-  if love.debug and k == 'f5' then
-    local buf = self:get_active_buffer()
-    local bufview = self.view:get_buffer(buf:get_id())
-    if Key.ctrl() then buf:rechunk() end
-    bufview:refresh()
-  end
+  ACTIONS[entry.act](self, k, isrepeat)
 end
 
 require("controller.editorReuse")

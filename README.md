@@ -46,7 +46,7 @@ a project must be selected first.
 | Jump to the start of the row (a long line takes several rows)     | <kbd>Home</kbd>                               |
 | Jump to the end of the row                                        | <kbd>End</kbd>                                |
 | Insert newline                                                    | <kbd>Shift</kbd>+<kbd>Enter ⏎</kbd>           |
-| Delete current line                                               | <kbd>Ctrl</kbd>+<kbd>Y</kbd>                  |
+| Undo / redo the typing                                            | <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> |
 | Select text                                                       | <kbd>Shift</kbd>+<kbd>⇦</kbd>/<kbd>⇨</kbd>/<kbd>⇧</kbd>/<kbd>⇩</kbd> |
 | Evaluate input                                                    | <kbd>Enter ⏎</kbd>                            |
 | Evaluate input and keep it in the field                           | <kbd>Shift</kbd>+<kbd>Insert</kbd>            |
@@ -80,6 +80,11 @@ a project must be selected first.
 | Format the whole file (empty field)                               | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> |
 | Show the keys of the current state                                | hold <kbd>F1</kbd>                            |
 | Leave the editor (deprecated; empty field)                        | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> |
+
+Each combination is a key of its own: a key pressed with a modifier the
+table does not name does nothing. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> is not
+<kbd>Enter</kbd>, and <kbd>Ctrl</kbd>+<kbd>⇧</kbd> in the console is not
+<kbd>⇧</kbd>.
 
 ## Projects
 

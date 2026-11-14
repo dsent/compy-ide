@@ -1483,16 +1483,12 @@ describe('input surface: widget callbacks #input', function()
 
     -- ---- 8. how wide "Enter" is -----------------------------
 
-    -- Submit triggers on any Enter that is not Shift+Enter, so
-    -- Ctrl+Enter and Alt+Enter submit as well; only the newline
-    -- is carved out (doc/development/decisions/input.md,
-    -- D-EDIT-LIFECYCLE and D-DEFACTO-KEPT; mechanism in
-    -- doc/development/internals/user_input.md). It is
-    -- longstanding behaviour the input API kept, pinned here so
-    -- the breadth is not narrowed to bare Enter by accident —
-    -- narrowing it is a deliberate spec change, not a tidy-up.
-    describe('every non-Shift Enter submits', function()
-        it('input widget: Ctrl+Enter submits', function()
+    -- Only a bare Enter submits: every chord is its own key,
+    -- and nothing binds Ctrl+Enter (the maintainer's ruling of
+    -- November 14, 2026, which narrowed D-DEFACTO-KEPT's
+    -- breadth on purpose; doc/development/decisions/input.md)
+    describe('only a bare Enter submits', function()
+        it('input widget: Ctrl+Enter does nothing', function()
           local input = F.activate_project()
           local got
           input.show({
@@ -1500,7 +1496,8 @@ describe('input surface: widget callbacks #input', function()
             on_text_entered = function(t) got = t end,
           })
           mock.keystroke('C-return', F.session.press)
-          assert.equal('hi', got)
+          assert.is_nil(got)
+          assert.equal('hi', input.get_text())
         end)
 
         -- the editor principles' IS3.15 took Alt+Enter out of
@@ -1517,7 +1514,7 @@ describe('input surface: widget callbacks #input', function()
           assert.equal('hi\n', input.get_text())
         end)
 
-        it('console: Ctrl+Enter evaluates', function()
+        it('console: Ctrl+Enter does not evaluate', function()
           local calls = 0
           local orig = F.cc.evaluate_input
           F.cc.evaluate_input = function(self, ...)
@@ -1528,7 +1525,7 @@ describe('input surface: widget callbacks #input', function()
           F.console:add_text('x')
           mock.keystroke('C-return', F.session.press)
 
-          assert.equal(1, calls)
+          assert.equal(0, calls)
           F.cc.evaluate_input = orig
         end)
       end)

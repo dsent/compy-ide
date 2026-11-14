@@ -45,10 +45,10 @@ UserInputModel = class.create()
 --- @param cfg Config
 --- @param eval Evaluator
 --- @param custom_label PromptLabel?
---- @param editing boolean? --- the editor's rich input:
---- word deletion (2.7) and the text-level undo (1.1).
---- Off everywhere else — the console and project inputs
---- keep the plain widget.
+--- @param editing boolean? --- the editor's rich input: word
+--- deletion (2.7) and the field's height. Off everywhere
+--- else — the console and project inputs keep the plain
+--- widget. The draft's undo is every field's (D-UNDO-KEYS).
 function UserInputModel.new(cfg, eval, custom_label, editing)
   local self = setmetatable({
     editing = editing or false,
@@ -136,7 +136,6 @@ end
 --- @param kind string
 --- @param boundary boolean?
 function UserInputModel:_record_edit(kind, boundary)
-  if not self.editing then return end
   self.edit_history:record(
     self:_edit_snapshot(), kind, boundary or false)
 end
@@ -144,7 +143,6 @@ end
 --- @private
 --- Remember where the mutation left the cursor
 function UserInputModel:_note_edit()
-  if not self.editing then return end
   local cl, cc = self:get_cursor_pos()
   self.edit_history:note_cursor(cl, cc)
 end
@@ -354,19 +352,6 @@ end
 function UserInputModel:_drop_text_line(ln)
   self:get_text():remove(ln)
   self:text_change()
-end
-
---- @param ln integer?
-function UserInputModel:delete_line(ln)
-  self:_record_edit('remove_line', true)
-  local n = self:get_n_text_lines()
-  if n == 1 then
-    self:clear_input()
-  else
-    local l = ln or self:get_cursor_y()
-    self:_drop_text_line(l)
-  end
-  self:_note_edit()
 end
 
 --- @param text string

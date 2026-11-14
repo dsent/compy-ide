@@ -32,6 +32,17 @@
     moved since; any other text is inserted as new blocks.
 - The editor asks no questions. A refused action shows a notice
   and changes nothing.
+- Each combination is a key of its own: a key pressed with a
+  modifier the table below does not name does nothing.
+  <kbd>Ctrl</kbd>+<kbd>Enter</kbd> is not <kbd>Enter</kbd>.
+- While <kbd>F1</kbd> is held, the editor's keys do nothing,
+  <kbd>Ctrl</kbd>+<kbd>Q</kbd> and the other reserved keys
+  included; only <kbd>Ctrl</kbd>+<kbd>Esc</kbd> acts. In the
+  console the card holds back the console's own keys alone, and
+  in your program F1 holds back nothing.
+- A click on the file no longer browses to a block. The mouse
+  is off in the editor by default (`mouse_enabled`), and needs a
+  design of its own.
 - Held down, a key repeats only if it writes nothing and changes
   no state: typing, moving the cursor, browsing and scrolling,
   deleting in the field, <kbd>Shift</kbd>+<kbd>Enter</kbd>, and
@@ -66,7 +77,7 @@
 | Jump to the start of the row (a long line takes several rows)     | <kbd>Home</kbd>                               |
 | Jump to the end of the row                                        | <kbd>End</kbd>                                |
 | Insert newline                                                    | <kbd>Shift</kbd>+<kbd>Enter ⏎</kbd>           |
-| Delete current line                                               | <kbd>Ctrl</kbd>+<kbd>Y</kbd>                  |
+| Undo / redo the typing                                            | <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> |
 | Select text                                                       | <kbd>Shift</kbd>+<kbd>⇦</kbd>/<kbd>⇨</kbd>/<kbd>⇧</kbd>/<kbd>⇩</kbd> |
 | Evaluate input                                                    | <kbd>Enter ⏎</kbd>                            |
 | Evaluate input and keep it in the field                           | <kbd>Shift</kbd>+<kbd>Insert</kbd>            |

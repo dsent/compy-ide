@@ -204,29 +204,29 @@ describe('editor key contract #input', function()
   describe('leaving through the real finish_edit', function()
     -- The stubbed exits above keep the buffers, so they never
     -- saw what the key does after they are gone: the chord's
-    -- own 's' went on to the mode's handler, which asked the
-    -- emptied editor for its buffer and raised
+    -- own 's' once went on to the mode's handler, which asked
+    -- the emptied editor for its buffer and raised
     -- (editorView.lua, get_current_buffer).
     before_each(function()
       love.state.prev_state = 'ready'
     end)
 
-    local handlers = { '_normal_mode_keys' }
-
     after_each(function()
       F.session.release('s')
       F.session.release('lshift')
       F.session.release('lctrl')
-      for _, h in ipairs(handlers) do ed[h] = nil end
+      ed.input.keypressed = nil
       love.debug = nil
     end)
 
     it('leaves to the console', function()
       --- once the editor is closed, the chord's own key
-      --- reaches no key handler
+      --- reaches no key handler: not the editor's field
       local handled = false
-      for _, h in ipairs(handlers) do
-        ed[h] = function(_, k) handled = handled or k == 's' end
+      local field = ed.input.keypressed
+      ed.input.keypressed = function(self, k, ...)
+        handled = handled or k == 's'
+        return field(self, k, ...)
       end
 
       F.session.press('lctrl')

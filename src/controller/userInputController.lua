@@ -589,6 +589,148 @@ end
 --  keyboard  --
 ----------------
 
+--- The field's keys, each chord by its full name (Key.combo):
+--- a chord the table does not name does nothing in the field,
+--- whatever its key does with other modifiers. Each action
+--- takes the controller, its model and the key.
+--- `editing`: in the file editor's field alone; `duplicate`:
+--- where the owner allows it (allow_duplicate_line).
+
+--- Navigation-boundary output (doc/development/decisions/
+--- input.md, D-EDIT-CALLBACKS): a hit limit is signalled only
+--- through on_limit_reached
+--- @param self UserInputController
+local function emit_limit(self, dir, scope)
+  local cb = self.callbacks.on_limit_reached
+  if cb then cb(dir, scope) end
+end
+
+--- @param input UserInputModel
+local function horizontal_limit_scope(input, dir)
+  if input:get_n_text_lines() == 1 then return 'input' end
+  if input:is_at_limit(dir, 'input') then return 'input' end
+  return 'line'
+end
+
+--- Left or Right, a character or (`word`) a word
+local function horizontal(word)
+  return function(self, input, k)
+    if input:is_at_limit(k, 'line') then
+      emit_limit(self, k, horizontal_limit_scope(input, k))
+    end
+    if k == 'left' then
+      if word then input:cursor_word_left()
+      else input:cursor_left() end
+    else
+      if word then input:cursor_word_right()
+      else input:cursor_right() end
+    end
+  end
+end
+
+--- Home and End are line-scoped; with Ctrl (`whole`) they
+--- jump over the whole text (spec 2.7)
+local function edge(whole)
+  return function(_, input, k)
+    if k == 'home' then
+      if whole then input:jump_home()
+      else input:jump_line_start() end
+    else
+      if whole then input:jump_end()
+      else input:jump_line_end() end
+    end
+  end
+end
+
+local function vertical(self, input, k)
+  if input:cursor_vertical_move(k) then
+    emit_limit(self, k, 'input')
+  end
+end
+
+local ACT = {
+  char = horizontal(false),
+  word = horizontal(true),
+  edge = edge(false),
+  whole = edge(true),
+  vertical = vertical,
+  --- the cursor's line moves past its neighbor
+  move_line = function(_, input, k) input:move_line(k) end,
+  backspace = function(_, input) input:backspace() end,
+  delete = function(_, input) input:delete() end,
+  --- word-wise deletion, Ctrl+W as in readline (spec 2.7)
+  backspace_word = function(_, im) im:backspace_word() end,
+  --- IS3.12: to the end of the line, the break kept
+  kill = function(_, input) input:kill_to_line_end() end,
+  duplicate = function(_, input) input:duplicate_line() end,
+  --- IS3.15: Shift+Enter and Alt+Enter each break the line
+  line_feed = function(_, input) input:line_feed() end,
+  --- the widget's own submit and cancel (D-EDIT-LIFECYCLE),
+  --- out through callbacks. A held Enter submits once: its
+  --- repeats reach no callback (API2.2).
+  submit = function(self, _, _, isr)
+    if not isr then self:submit_flow() end
+  end,
+  cancel = function(self) self:cancel_flow() end,
+  --- the draft's own undo and redo (D-UNDO-KEYS)
+  undo = function(_, input) input:undo_edit() end,
+  redo = function(_, input) input:redo_edit() end,
+}
+
+--- chord -> { action, only where (editing|duplicate) }
+local FIELD_KEYS = { }
+local function bind(chords, act, only)
+  for _, c in ipairs(chords) do
+    FIELD_KEYS[c] = { act = ACT[act], only = only }
+  end
+end
+--- Shift with a move extends a selection where the field has
+--- one, and moves the cursor where it has none
+bind({ 'left', 'right', 'shift+left', 'shift+right' }, 'char')
+bind({ 'ctrl+left', 'ctrl+right',
+  'ctrl+shift+left', 'ctrl+shift+right' }, 'word')
+bind({ 'home', 'end', 'shift+home', 'shift+end' }, 'edge')
+bind({ 'ctrl+home', 'ctrl+end',
+  'ctrl+shift+home', 'ctrl+shift+end' }, 'whole')
+bind({ 'up', 'down', 'shift+up', 'shift+down' }, 'vertical')
+--- with Shift too in the file editor, whose Alt+Up moves a
+--- block
+bind({ 'alt+up', 'alt+down', 'alt+shift+up', 'alt+shift+down' },
+  'move_line')
+--- with Shift still held from a capital or a selection
+bind({ 'backspace', 'shift+backspace' }, 'backspace')
+bind({ 'delete', 'shift+delete' }, 'delete')
+bind({ 'ctrl+backspace', 'alt+backspace', 'ctrl+w' },
+  'backspace_word', 'editing')
+bind({ 'ctrl+k' }, 'kill', 'editing')
+bind({ 'ctrl+d' }, 'duplicate', 'duplicate')
+bind({ 'shift+return', 'alt+return',
+  'shift+kpenter', 'alt+kpenter' }, 'line_feed')
+bind({ 'return', 'kpenter' }, 'submit')
+bind({ 'escape' }, 'cancel')
+bind({ 'ctrl+z' }, 'undo')
+bind({ 'ctrl+y' }, 'redo')
+
+--- Whether the field acts on a chord (Key.combo's name)
+--- @param chord string
+--- @return boolean
+function UserInputController:names(chord)
+  local e = FIELD_KEYS[chord]
+  if not e then return false end
+  if e.only == 'editing' then return self.model.editing end
+  if e.only == 'duplicate' then
+    return self.allow_duplicate_line == true
+  end
+  return true
+end
+
+--- The keys an error unlocks the field with
+--- (doc/development/internals/user_input.md, "Error state")
+local UNLOCKS = {
+  ['return'] = true, kpenter = true, up = true, down = true,
+  left = true, right = true, space = true,
+}
+
 --- LÖVE's own argument list, like every other consumer on the
 --- chain (doc/development/decisions/input.md, D-LOVE-ARGS).
 --- The scancode is unread; a repeat edits as its press does,
@@ -598,8 +740,7 @@ end
 --- @param isr boolean?  key repeat
 -- No return value: the old limit-flag return channel is
 -- retired (D-EDIT-CALLBACKS) — on_limit_reached is the sole
--- notification path now (see "emit_limit" below).
--- Its editing logic reads modifiers via Key.* (love.keyboard).
+-- notification path now.
 function UserInputController:keypressed(k, sc, isr)
   if not self.shown then
     if love.DEBUG then Log.debug('input: hidden no-op') end
@@ -607,9 +748,7 @@ function UserInputController:keypressed(k, sc, isr)
   end
   -- Defensive render-on-entry: guarantees the view catches up
   -- to the model even if a prior branch returned without
-  -- re-rendering. Mutating branches below re-render at their
-  -- end, so this is belt-and-suspenders, not the primary
-  -- update.
+  -- re-rendering.
   self:update_view()
   -- _G.web: web/love.js build flag. On web, space may not emit
   -- textinput, so synthesise it here.
@@ -619,27 +758,8 @@ function UserInputController:keypressed(k, sc, isr)
     self:textinput(' ')
   end
   local input = self.model
+  local chord = Key.combo(k)
 
-  -- Navigation-boundary output
-  -- (doc/development/decisions/input.md,
-  -- D-EDIT-CALLBACKS): the widget signals a hit limit ONLY
-  -- through on_limit_reached —
-  -- the keypressed return value no longer carries a limit flag
-  -- (retired; console reads history via its own
-  -- on_limit_reached callback).
-  local function emit_limit(dir, scope)
-    local cb = self.callbacks.on_limit_reached
-    if cb then cb(dir, scope) end
-  end
-
-  local function horizontal_limit_scope(dir)
-    if input:get_n_text_lines() == 1 then return 'input' end
-    if input:is_at_limit(dir, 'input') then return 'input' end
-    return 'line'
-  end
-
-  -- (combo serialisation lives in controller.lua; this handler
-  -- only sees the raw key.)
   -- doc/development/internals/user_input.md, "Error state":
   -- locked-on-reject unlocks on Enter/Space/arrows.
   -- The editor's field shows a notice without blocking input:
@@ -651,148 +771,22 @@ function UserInputController:keypressed(k, sc, isr)
   if input:has_error() and input.editing then
     if not lone then input:clear_error() end
   elseif input:has_error() then
-    if Key.is_enter(k)
-        or k == "up" or k == "down"
-        or k == "left" or k == "right"
-        or k == "space"
-    then
-      input:clear_error()
-    end
+    if UNLOCKS[chord] then input:clear_error() end
     return
   end
 
-  -- action categories
-  local function removers()
-    local editing = input.editing
-    if k == "backspace" then
-      --- word-wise deletion is the editor's 2.7; the
-      --- plain widget keeps the plain backspace
-      if (Key.ctrl() or Key.alt()) and editing then
-        input:backspace_word()
-      else
-        input:backspace()
-      end
-    end
-    if k == "delete" then
-      input:delete()
-    end
-    if Key.ctrl() then
-      --- the plain widget's delete-line; the editor's Ctrl+Y is
-      --- redo alone, with Shift or Alt too (D-UNDO-KEYS)
-      if k == "y" and not editing then
-        input:delete_line()
-      end
-      if k == "w" and editing then
-        --- readline's synonym, per the editor spec 2.7
-        input:backspace_word()
-      end
-      if k == "k" and editing and not Key.shift() then
-        --- IS3.12: to the end of the line, the break kept
-        input:kill_to_line_end()
-      end
-    end
+  local bound = self:names(chord)
+  if bound then
+    FIELD_KEYS[chord].act(self, input, k, isr)
   end
-  local function vertical()
-    if Key.alt() and (k == "up" or k == "down") then
-      --- the cursor's line moves past its neighbor
-      input:move_line(k)
-      return
-    end
-    if k == "up" then
-      if input:cursor_vertical_move('up') then
-        emit_limit('up', 'input')
-      end
-    end
-    if k == "down" then
-      if input:cursor_vertical_move('down') then
-        emit_limit('down', 'input')
-      end
-    end
-  end
-  local function horizontal()
-    if k == "left" and input:is_at_limit('left', 'line') then
-      emit_limit('left', horizontal_limit_scope('left'))
-    end
-    if k == "right" and input:is_at_limit('right', 'line') then
-      emit_limit('right', horizontal_limit_scope('right'))
-    end
-    --- IS3.8: with Ctrl the cursor moves by word
-    if k == "left" then
-      if Key.ctrl() then
-        input:cursor_word_left()
-      else
-        input:cursor_left()
-      end
-    end
-    if k == "right" then
-      if Key.ctrl() then
-        input:cursor_word_right()
-      else
-        input:cursor_right()
-      end
-    end
-
-    --- spec 2.7: bare Home/End are line-scoped; the
-    --- jump over the whole block is Ctrl+Home/End
-    if k == "home" then
-      if Key.ctrl() then
-        input:jump_home()
-      else
-        input:jump_line_start()
-      end
-    end
-    if k == "end" then
-      if Key.ctrl() then
-        input:jump_end()
-      else
-        input:jump_line_end()
-      end
-    end
-  end
-  --- IS3.15: Shift+Enter and Alt+Enter each break the line
-  local function newline()
-    if Key.shift() or Key.alt() then
-      if Key.is_enter(k) then
-        input:line_feed()
-      end
-    end
-  end
-  local function modify()
-    if Key.ctrl() then
-      if k == 'd' then
-        input:duplicate_line()
-      end
-    end
-  end
-  local function selection()
-    local en = not self.disable_selection
-    if en and Key.shift() then
+  --- a selection follows Shift, whatever the key: held, it
+  --- anchors (on Shift's own press too); let go, it stops
+  if Key.shift() then
+    if not self.disable_selection then
       input:hold_selection(false)
     end
-    if not Key.shift() then
-      input:release_selection()
-    end
-  end
-
-  removers()
-  vertical()
-  horizontal()
-  newline()
-  if self.allow_duplicate_line then modify() end
-  selection()
-
-  -- The widget's own submit/cancel flow (D-EDIT-LIFECYCLE): plain
-  -- Enter submits, plain Escape cancels — ordinary widget
-  -- behaviour, out through callbacks. Shift+Enter is a newline
-  -- (newline() above); Ctrl+Escape is not a cancel.
-  -- Editor/console callers that must not run these consume the
-  -- key upstream (editor) or set no callbacks (console no-op).
-  -- A held Enter submits once: its repeats reach no callback
-  -- (API2.2).
-  if Key.is_enter(k) and not Key.shift() and not Key.alt() then
-    if not isr then self:submit_flow() end
-  elseif k == 'escape' and not Key.ctrl() then
-    self:cancel_flow()
+  else
+    input:release_selection()
   end
 
   self:update_view()

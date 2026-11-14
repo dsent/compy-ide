@@ -8,6 +8,7 @@ local K = require("tests.helpers.editor_keys")
 local F = require("tests.helpers.input_fixture")
 local marks = require("tests.helpers.spec_marks")
 local spec_it = marks.spec_it
+local spec_deviation = marks.spec_deviation
 
 --- a program that takes the bare help key, as a shortcut
 local F1_SHORTCUT = [[
@@ -68,10 +69,13 @@ describe("round seven #editor #spec", function()
         assert.is_false(K.cc.run_live)
       end)
 
-      spec_it("IS3.16 Show the key card: the console's card "
-          .. "for a bare F1 stays when Ctrl is pressed over a "
-          .. "program with a Ctrl shortcut, and Ctrl+Q waits "
-          .. "for F1's release", function()
+      -- the console's card suspends no reserved chord
+      spec_deviation("IS3.16 Show the key card: the console's "
+          .. "card for a bare F1 stays when Ctrl is pressed over "
+          .. "a program with a Ctrl shortcut, and Ctrl+Q stops "
+          .. "the program under it",
+          "rulings.md: The key card suspends reserved chords in "
+          .. "the editor only", function()
         K.reset({ ["main.lua"] = CTRL_CLASS })
         K.open()
         K.keys("lctrl", "t")
@@ -82,11 +86,9 @@ describe("round seven #editor #spec", function()
         assert.is_not_nil(K.key_card())
         K.keys("q")
         K.release("lctrl")
-        assert.is_true(K.cc.run_live)
+        assert.is_false(K.cc.run_live)
         K.release("f1")
         assert.is_nil(K.key_card())
-        K.keys("lctrl", "q")
-        assert.is_false(K.cc.run_live)
       end)
 
       spec_it("IS3.16 Show the key card: F1 that a program took "

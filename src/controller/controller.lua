@@ -445,13 +445,7 @@ local MOD_HELD = {
 --- @param k string            triggering key (raw LÖVE name)
 --- @return string             canonical combo string
 local function combo_string(k)
-  local combo = ''
-  for _, m in ipairs(COMBO_MODS) do
-    if MOD_HELD[m[3]]() then
-      combo = combo .. m[3] .. '+'
-    end
-  end
-  return combo .. k:lower()
+  return Key.combo(k)
 end
 
 --- Is any modifier held? The cheap pre-check the triggerless
@@ -1130,13 +1124,15 @@ Controller = {
         love.event.quit()
       end
       local reservation = RESERVED.keypressed[combo_string(k)]
-      -- While the key card shows, the editor's keys do
-      -- nothing, Ctrl+Q included (editor spec, IS3.16); over a
-      -- program that took the help key there is no card
-      -- (KeyCard.shows). A reservation acts on its key's press,
-      -- not on its repeats: a held Ctrl+T does not flip between
-      -- the run and the editor.
-      if reservation and not isr and not CC:card_shows() then
+      -- While the file editor's key card shows, its keys do
+      -- nothing, Ctrl+Q included (editor spec, IS3.16). The
+      -- console's card and a program's help suspend no
+      -- reserved chord (the maintainer's ruling of November
+      -- 14, 2026). A reservation acts on its key's press, not
+      -- on its repeats: a held Ctrl+T does not flip between the
+      -- run and the editor.
+      local held_back = CC.editor and CC.editor:card_shows()
+      if reservation and not isr and not held_back then
         reservation()
       end
 

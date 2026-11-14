@@ -29,6 +29,7 @@ local function getMockConf(w, l)
       lines = l or 16,
       input_max = 14,
       fh = 32,
+      lh = 1,
     },
   }
 end

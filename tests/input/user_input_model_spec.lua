@@ -31,16 +31,28 @@ describe("input model spec #input", function()
   }
   mock.mock_love(love)
 
-  describe('the plain widget stays plain', function()
-    --- the console and project inputs construct
-    --- the model without the editing flag; the editor's
-    --- 1.1 extras must not leak into them
-    it('records no edit history', function()
+  describe('the draft history', function()
+    --- every field keeps its draft's undo (D-UNDO-KEYS), the
+    --- console's and a project's too
+    it('is recorded without the editing flag', function()
       local model = UserInputModel(mockConf, luaEval)
       model:add_text('one two three')
       model:add_text(' four')
-      assert.same({}, model.edit_history.steps)
+      assert.is_true(#model.edit_history.steps > 0)
+      assert.is_true(model:undo_edit())
+      assert.same({ 'one two three' }, model:get_text())
     end)
+
+    it('is wiped when the text is cleared or replaced',
+      function()
+        local model = UserInputModel(mockConf, luaEval)
+        model:add_text('one')
+        model:set_text('two')
+        assert.same({}, model.edit_history.steps)
+        model:add_text(' three')
+        model:clear_input()
+        assert.same({}, model.edit_history.steps)
+      end)
 
     it('records with the editing flag on', function()
       local model = UserInputModel(

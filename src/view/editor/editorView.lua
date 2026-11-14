@@ -104,9 +104,8 @@ function EditorView:draw_message(bv)
   local top = bottom - #rows * fh
   --- from the top of the view's row the band reaches into,
   --- so that no row of the view shows cut
-  local pitch, origin = bv:row_height(), bv:top()
-  local from = origin
-      + math.floor((top - origin) / pitch) * pitch
+  local pitch = bv:row_height()
+  local from = math.floor(top / pitch) * pitch
 
   gfx.push('all')
   gfx.setFont(cf.font)

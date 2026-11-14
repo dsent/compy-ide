@@ -215,10 +215,9 @@ describe("status line, notice and key card drawn #editor",
       local top = s.field_y - fh()
       assert.same(s.field_y, fill.y + fill.h)
       assert.is_true(fill.y <= top)
-      local bv = K.ed.view:get_current_buffer()
-      local pitch = bv:row_height()
+      local pitch = K.ed.view:get_current_buffer():row_height()
       assert.is_true(top - fill.y < pitch)
-      assert.same(0, (fill.y - bv:top()) % pitch)
+      assert.same(0, fill.y % pitch)
     end)
 
     it("shows three rows of a longer one, the last cut",

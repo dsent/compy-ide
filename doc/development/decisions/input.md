@@ -725,7 +725,8 @@ system does* (now pinned and reviewable) from *what we choose to change* (explic
 explicitly ("discovered as existing behaviour, no mandate to alter — de-facto standard per the
 implementation"). Current members include: the submit guard being *Enter-without-Shift-or-Alt* (so
 Ctrl+Enter submits, not only bare Enter; Alt+Enter breaks the line, as the editor principles' IS3.15
-rules); `SearchController:keypressed` returning a jump target up
+rules — **ended 2026-11-14** by the maintainer's ruling that every chord is its own key: only a bare
+Enter submits, and Ctrl+Enter does nothing); `SearchController:keypressed` returning a jump target up
 its caller; and the input widget view's per-frame-render workaround keyed by widget identity. Each is
 individually revisable — but only by a named ruling, not by drift. See
 [`../technical_debt/input.md`](../technical_debt/input.md) for the live list.

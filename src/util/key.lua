@@ -229,7 +229,24 @@ local function chord_text(_)
   return ctrl() or alt()
 end
 
+--- A key event's chord, by its canonical name: the held
+--- modifiers in precedence order (ctrl, alt, shift), folded
+--- to their generic names, then the key, lower-cased: 'up',
+--- 'ctrl+up', 'alt+shift+f4' (doc/development/decisions/
+--- input.md, D-COMBO-TABLES). A modifier asked about on its
+--- own press names itself too: 'shift+lshift'.
+--- @param k string --- the raw LÖVE key name
+--- @return string
+local function combo(k)
+  local s = ''
+  if ctrl() then s = 'ctrl+' end
+  if alt() then s = s .. 'alt+' end
+  if shift() then s = s .. 'shift+' end
+  return s .. k:lower()
+end
+
 Key = {
+  combo       = combo,
   mod_triples = mod_triples,
   chord_text  = chord_text,
   normalize_combo = normalize_combo,

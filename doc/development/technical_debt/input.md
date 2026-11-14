@@ -627,6 +627,10 @@ future author adding an editor branch meets the constraint at the site).
 
 ### T-EDITOR-SEAM-DEFAULT-OPEN — our widget acts on every editor key the editor does not block, and the block list is theirs
 
+- **Resolved 2026-11-14.** The editor looks each chord up in its state's table
+  (`src/model/editor/editorKeys.lua`) and hands the widget only the chords an entry gives it
+  (`act = 'field'`); a chord no entry names reaches nothing. The widget matches chords exactly too.
+  The text below is the record of the open seam.
 - **Where:** `src/controller/editorController.lua`, `_normal_mode_keys` — `passthrough` initialises
   to **`true`** and `block_input()` clears it; the tail reads `if passthrough then
   input:keypressed(k) end`. So `src/controller/userInputController.lua`'s `keypressed` runs on the

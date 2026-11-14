@@ -305,16 +305,21 @@ describe('Editor #editor', function()
       local press = function(k) con:keypressed(k) end
 
       model:add_text('one two')
+      --- the word deletions are the editor's alone, and a
+      --- chord the field does not name does nothing
       mock.keystroke('C-backspace', press)
-      --- plain backspace, one character, not a word
-      assert.same({ 'one tw' }, model:get_text():items())
-
+      assert.same({ 'one two' }, model:get_text():items())
       mock.keystroke('C-w', press)
-      assert.same({ 'one tw' }, model:get_text():items())
+      assert.same({ 'one two' }, model:get_text():items())
 
+      --- Ctrl+Y is redo, with nothing to redo, and no longer
+      --- deletes the line; Ctrl+Z undoes (D-UNDO-KEYS)
       mock.keystroke('C-y', press)
-      --- delete-line is still the console's Ctrl+Y
+      assert.same({ 'one two' }, model:get_text():items())
+      mock.keystroke('C-z', press)
       assert.same({ '' }, model:get_text():items())
+      mock.keystroke('C-y', press)
+      assert.same({ 'one two' }, model:get_text():items())
     end)
 
     it('Ctrl+W and Ctrl+Backspace eat a word', function()
@@ -405,9 +410,9 @@ describe('Editor #editor', function()
 
     --- the REPL's tidy(name): the editor's formatting, at a
     --- Compy's width, on a project file
-    describe('mouse', function()
+    describe('blocks by line', function()
       require("tests.helpers.codesnippets")
-      local controller, buffer, inter
+      local controller, buffer
       local f1, f2
 
       before_each(function()
@@ -418,7 +423,6 @@ describe('Editor #editor', function()
         local save = TU.get_save_function(text)
         controller:open('mouse.lua', text, save)
         buffer = controller:get_active_buffer()
-        inter = controller.input
       end)
 
       it('maps lines to their blocks', function()
@@ -428,14 +432,6 @@ describe('Editor #editor', function()
         assert.is_nil(buffer:block_at_line(99))
       end)
 
-      it('a click browses to the block and opens none', function()
-        buffer:set_selection(3)
-        controller:mousepressed(0, 0, 1, false, 2)
-        assert.same(1, buffer:get_selection())
-        assert.is_nil(buffer.loaded)
-        assert.is_true(inter:is_empty())
-        assert.same('browsing', controller:state_name())
-      end)
     end)
 
     describe('checkpoints', function()

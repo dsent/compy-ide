@@ -112,7 +112,7 @@ The "keypressed = control channel, textinput = character channel" split used thr
 
 Every channel carries LÖVE's own argument list end to end, unchanged. LÖVE calls `love.handlers.keypressed` with `(key, scancode, isrepeat)`; the gateway keeps all three, and the project route forwards all three to every consumer — shortcut, hook and widget alike. A handler written as `love.keypressed(key, scancode, isrepeat)` therefore behaves identically once it is seeded as a hook, which is the point (D-LOVE-ARGS).
 
-The console/editor route passes all three to `CC:keypressed` and from there to `EditorController:keypressed`; neither reads `scancode`. `isrepeat` tells them a key's press from its repeats. Each acts on a repeat only for a key that writes nothing to a file and changes no state (`model/input/heldKeys.lua`: moving the cursor, browsing, editing the draft; Enter, Escape and the commands act once per press), and only where the press reached it: each records the keys whose press reached it, which the key card also follows. The route has no widget step to thread them to — see "Keyboard Handling".
+The console/editor route passes all three to `CC:keypressed` and from there to `EditorController:keypressed`; neither reads `scancode`. `isrepeat` tells them a key's press from its repeats. Each acts on a repeat only for a key whose table entry repeats (`model/editor/editorKeys.lua`, `model/input/consoleKeys.lua`: a key that writes nothing to a file and changes no state, such as moving the cursor, browsing, editing the draft; Enter, Escape and the commands act once per press), and only where the press reached it: each records the keys whose press reached it, which the key card also follows. The route has no widget step to thread them to — see "Keyboard Handling".
 
 Shortcuts dispatch (the `compy.input.shortcuts` combo tables) does not gate on `isrepeat` — see "Key state" below.
 
@@ -586,48 +586,46 @@ app-mode to change its own behaviour was an abstraction leak (the widget could n
 or migrated, without knowing it was "the editor"). It is gone; `UserInputController:keypressed` now
 runs **one uniform path** for every instance (see the shared-keypressed section below).
 
-The editor **consumes Enter/Escape upstream**: `EditorController:_normal_mode_keys` handles bare
-Enter (`submit()`) and bare Escape (`cancel_edit()` during an edit, `close_buffer()` from the
-browsing state) and returns before it hands the key to the widget, and it drops Ctrl+Enter and every
-other Escape the same way — the shared widget never receives those keys, so its uniform
-`submit_flow`/`cancel_flow` never runs for the keys the editor owns. Shift+Enter and Alt+Enter fall
-through to the widget, which breaks the line at the cursor
-(editor principles, IS3.15); no `submit_flow` runs for them.
-
-Console's own always-shown instance is not blocked and does run the uniform `submit_flow`/`cancel_flow`
-on its own Enter/Escape — harmlessly, since console sets no `before_submit`/`after_submit`/
-`before_cancel`/`after_cancel` callbacks, so they are no-ops alongside console's own `evaluate_input`/
-history handling. The project widget runs the flows for real (that IS its submit/cancel). So the
-per-context behaviour that the old `app_state` fork encoded is now expressed honestly: the editor
-consumes upstream, console/project set (or don't set) callbacks — no instance interrogates global state.
+**Every chord is its own key** (the maintainer's ruling of 2026-11-14). The editor and the console
+look a key up by its full chord (`Key.combo`: `'up'`, `'ctrl+up'`, `'alt+shift+up'`) in the table of
+the state in front: the editor's in `model/editor/editorKeys.lua` (browsing, inserting, replacing),
+the console's in `model/input/consoleKeys.lua` (no program, a program live), both built by
+`model/input/keymap.lua`. A chord the table does not name does nothing. An entry holds its action,
+whether it repeats while held, and the words the key card shows for it; the card
+(`model/editor/keyCard.lua`) is drawn from the same tables. An entry whose action is `field` hands
+the key to the shared widget; the rest are the surface's own (`ACTIONS` in each controller). So the
+editor consumes Enter and Escape itself (`submit()`; `cancel_edit()` or `close_buffer()`), and the
+widget's `submit_flow`/`cancel_flow` never run for them; the console runs Enter as
+`evaluate_input` and hands Escape to the widget, whose `clear_on_cancel` clears and remembers the line.
+The project widget runs the flows for real (that IS its submit/cancel).
 
 ### UserInputController keypressed (shared)
 
-`UserInputController:keypressed` handles the low-level input operations that apply regardless of which route is driving it (console, editor, or the project widget): removers (backspace, delete, and Ctrl+Y delete line outside the editor, whose Ctrl+Y is redo alone), vertical cursor movement, horizontal movement (Left/Right, Home/End, Alt+Home/End for line vs field boundaries), Shift+Enter newline (unconditional — see "Multiline input" above), Ctrl+D duplicate line, selection management. It has no clipboard keys. It never inserts literal characters — see "Text Input Widget" above for why `keypressed` and `textinput` divide the work this way.
+`UserInputController:keypressed` looks the key's chord up in the widget's own table (`FIELD_KEYS`)
+and does nothing for a chord it does not name, whichever route drives it (console, editor, or the
+project widget): moves (Left/Right, Ctrl+Left/Right by word, Home/End by row, Ctrl+Home/End over the
+text, Up/Down, each with Shift too, which extends a selection where the widget has one), Alt+Up/Down
+(and Alt+Shift+Up/Down) moving the cursor's line, Backspace and Delete (with Shift too), Shift+Enter
+and Alt+Enter breaking the line, Ctrl+Z and Ctrl+Y undoing and redoing the draft (D-UNDO-KEYS, every
+instance), bare Enter submitting and bare Escape cancelling. Ctrl+Backspace, Alt+Backspace, Ctrl+W
+and Ctrl+K act only in the editor's field (`editing`), and Ctrl+D only where the owner sets
+`allow_duplicate_line` (a constructor parameter,
+`UserInputController(model, disable_selection, allow_duplicate_line)`, set only by the editor). It
+has no clipboard keys and never inserts literal characters — see "Text Input Widget" above for why
+`keypressed` and `textinput` divide the work this way. Ahead of the table run the error lock and the
+web build's space; after it, for every key, the selection follows Shift.
 
-The body is a **single uniform sequence** (no `love.state.app_state` branch since 2026-07-21):
-`removers → vertical → horizontal → newline → (modify if enabled) → selection`, then
-the lifecycle keys. **`modify` (Ctrl+D duplicate-line) is gated on a per-instance
-`allow_duplicate_line` flag**, a constructor parameter
-(`UserInputController(model, disable_selection, allow_duplicate_line)`),
-set only by the editor's main input; console and the project widget leave it off. This is the honest
-replacement for the old "editor branch runs `modify`" gate — a widget capability the owner enables at
-construction, like `disable_selection`, not something the widget reads from global mode. (A future
-combo-table owned by the widget would supersede the one-off flag — see `technical_debt/input.md`.)
-
-Enter and Escape are ordinary keys handled at the end of
-this same shared method, **uniformly for every instance**: `Key.is_enter(k) and not Key.shift()`
-calls `self:submit_flow()`; `k == 'escape' and not Key.ctrl()` calls
-`self:cancel_flow()` — see "Submit and cancel" below. **The guard is "Enter without
-Shift or Alt", not "bare Enter": Ctrl+Enter submits too** (Shift+Enter and Alt+Enter are carved out, as
-the newline, editor principles IS3.15); likewise Escape-without-Ctrl cancels. This is a de-facto contract (D-DEFACTO-KEPT,
-guard shape `return and not shift_held`), pinned by `tests/input/input_widget_callbacks_spec.lua`, the
+Enter and Escape are ordinary entries of that table, **uniformly for every instance**: bare Enter
+calls `self:submit_flow()` (once per press: a repeat submits nothing, API2.2), bare Escape
+`self:cancel_flow()` — see "Submit and cancel" below. Ctrl+Enter, Shift+Escape and every other
+chord on those keys do nothing (the ruling of 2026-11-14, which ended D-DEFACTO-KEPT's
+"Enter-without-Shift-or-Alt" guard), pinned by `tests/input/input_widget_callbacks_spec.lua`, the
 `the same lifecycle on every route` group.
 The widget's own
 Enter/Escape handling IS the submit/cancel mechanism; there is no route-level interception above it.
 Contexts that must NOT run the flows arrange it themselves: the editor consumes the key upstream
-(`_normal_mode_keys` returns before the widget sees it); console sets no callbacks so its run is a no-op and
-its real work is `ConsoleController:evaluate_input` afterward; the editor's real submit is
+(its table binds them to its own actions); console binds Enter to `ConsoleController:evaluate_input`
+and never hands it to the widget; the editor's real submit is
 `EditorController:_handle_submit`. No instance branches on global state to decide.
 
 ### Key release
@@ -845,10 +843,10 @@ wins over the widget's default, same as any other combo (**withdrawn guarantee**
 D-EDIT-LIFECYCLE's "Withdrawn guarantee" note in `decisions/input.md`; the gateway's power keys, Ctrl+Q etc.,
 remain the real, permanent escape hatch, non-overridable by any shortcut — though only for the
 chords they name exactly, per D-EXACT-RESERVE). Only once no shortcut/hook
-consumes the key does the widget's own `UserInputController:keypressed` reach its lifecycle guard
-(`Key.is_enter(k)` without Shift or Alt → submit; `k == 'escape' and not Key.ctrl()` → cancel — so
-Ctrl+Enter submits too, Shift+Enter and Alt+Enter are the newline), and only while the widget is
-shown — hidden, the widget is skipped entirely by the dispatch walk.
+consumes the key does the widget's own `UserInputController:keypressed` reach its table (bare Enter →
+submit, bare Escape → cancel; Shift+Enter and Alt+Enter are the newline, and every other chord on
+those keys does nothing), and only while the widget is shown — hidden, the widget is skipped entirely
+by the dispatch walk.
 
 **Submit** (`UserInputController:submit_flow`):
 

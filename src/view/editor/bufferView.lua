@@ -306,10 +306,7 @@ end
 --- @param y number
 --- @return integer? ln
 function BufferView:line_at(y)
-  --- the space above the first row is that row's
-  local pitch = self:row_height()
-  local row = math.floor((y - self:top()) / pitch) + 1
-  row = math.max(1, row)
+  local row = math.max(1, math.floor(y / self:row_height()) + 1)
   local wrapped = self.content.offset + row
   if not self.content.range:inc(wrapped) then
     return nil
@@ -337,22 +334,14 @@ end
 ---  draw  ---
 --------------
 
---- The height of one row of the view, in pixels: the field's,
---- so that the rows of the view and of the field sit on one
---- grid and a row the field takes from the view is one of its
---- own.
+--- The height of one row of the view, in pixels: the
+--- console's, the font's height at the configured line
+--- height, so that the view's rows are where the console's
+--- output rows are and 16 of them fill the space above the
+--- status line.
 --- @return number
 function BufferView:row_height()
-  return self.cfg.fh
-end
-
---- Where the view's first row starts, in pixels, as last
---- drawn on the screen: its rows end where the status line's
---- band starts, and what they leave of the area lies above
---- the first.
---- @return number
-function BufferView:top()
-  return self.drawn_top or 0
+  return self.cfg.fh * self.cfg.lh
 end
 
 --- @param special boolean
@@ -372,16 +361,19 @@ function BufferView:draw(special, bottom)
   local range = vc.range
   local off = vc.offset
   local rows_n = self:get_height()
-  --- The view draws whole rows only, the last one against the
-  --- status line, on the field's grid; the space the rows
-  --- leave above the first is that row's, highlight and all.
-  local top = bottom and bottom - rows_n * fh or 0
-  if bottom then self.drawn_top = top end
+  --- The view draws whole rows only, from the screen's top.
+  --- What its rows leave above the status line is the last
+  --- row's: its background and highlight run on to the line.
+  local edge = rows_n * fh
+  local strip = 0
+  if bottom then
+    strip = math.max(0, bottom - edge)
+  end
 
   --- @param v integer --- a wrapped row of the content
   --- @return number
   local function row_y(v)
-    return top + (v - off - 1) * fh
+    return (v - off - 1) * fh
   end
 
   local draw_background = function()
@@ -391,7 +383,11 @@ function BufferView:draw(special, bottom)
     gfx.setColor(Color.with_alpha(colors.fg, .0625))
     local n = math.min(#content_text, rows_n)
     if 0 < n then
-      gfx.rectangle("fill", 0, 0, width, top + n * fh)
+      local bh = n * fh
+      if n == rows_n then
+        bh = bh + strip
+      end
+      gfx.rectangle("fill", 0, 0, width, bh)
     end
     gfx.pop()
   end
@@ -404,12 +400,12 @@ function BufferView:draw(special, bottom)
       gfx.setColor(color)
       for _, v in ipairs(rows) do
         if range:inc(v) then
-          local y = row_y(v)
           local h = fh
-          if v == range.start then
-            y, h = 0, y + fh
+          if v == off + rows_n then
+            h = fh + strip
           end
-          gfx.rectangle('fill', inset, y, width - 2 * inset, h)
+          gfx.rectangle('fill', inset, row_y(v),
+            width - 2 * inset, h)
         end
       end
     end
@@ -479,7 +475,7 @@ function BufferView:draw(special, bottom)
         --- phantom text
         gfx.setColor(Color.with_alpha(colors.fg, 0.3))
         local text = string.unlines(content_text)
-        gfx.print(text, 0, top)
+        gfx.print(text)
       end
     elseif self.content_type == 'md' then
       draw_rows(content_text, self.hl,

@@ -1,12 +1,12 @@
 local class = require('util.class')
 
---- The text-level undo of the open block (1.1). Born when
---- the block opens, dies when it closes; never touches the
---- file. Snapshots are taken before a mutation; consecutive
---- same-kind edits at the expected cursor coalesce into one
---- step, so undo removes a typed word, not a letter. No step
---- is dropped: every change to a draft stays undoable while
---- its file is open (IS6.6).
+--- A field's undo of its draft, in every input context
+--- (D-UNDO-KEYS): clearing or replacing the text wipes it, and
+--- it never touches a file. Snapshots are taken before a
+--- mutation; consecutive same-kind edits at the expected
+--- cursor coalesce into one step, so undo removes a typed
+--- word, not a letter. No step is dropped: every change to a
+--- draft stays undoable while its file is open (IS6.6).
 --- @class EditHistory
 --- @field steps table[] --- snapshots {text, cursor}
 --- @field redo_steps table[]

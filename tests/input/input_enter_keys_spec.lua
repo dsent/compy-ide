@@ -1,9 +1,10 @@
 -- The four Enter keys in each text-entry context: the console,
 -- the file editor and a program's input field. Shift+Enter
 -- and Alt+Enter break the line and submit nothing (the editor
--- principles' IS3.15); a bare Enter submits. Ctrl+Enter is
--- pinned as it is built: it submits in the console and in a
--- program's field, and does nothing in the file editor.
+-- principles' IS3.15); a bare Enter submits. Ctrl+Enter does
+-- nothing anywhere: every chord is its own key, and nothing
+-- binds this one (the maintainer's ruling of November 14,
+-- 2026).
 
 local K = require("tests.helpers.editor_keys")
 local F = require("tests.helpers.input_fixture")
@@ -49,10 +50,10 @@ describe("the Enter keys in each context #input", function()
       assert.same(line .. "\n", K.console_draft())
     end)
 
-    it("Ctrl+Enter runs the line", function()
+    it("Ctrl+Enter does nothing", function()
       K.keys("lctrl", "return")
-      assert.is_true(ran())
-      assert.same("", K.console_draft())
+      assert.is_false(ran())
+      assert.same(line, K.console_draft())
     end)
   end)
 
@@ -129,9 +130,10 @@ describe("the Enter keys in each context #input", function()
       assert.same("hi\n", field())
     end)
 
-    it("Ctrl+Enter submits the text", function()
+    it("Ctrl+Enter does nothing", function()
       K.keys("lctrl", "return")
-      assert.same("hi", got)
+      assert.is_nil(got)
+      assert.same("hi", field())
     end)
   end)
 end)

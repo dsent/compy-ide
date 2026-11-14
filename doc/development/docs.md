@@ -37,7 +37,7 @@ Assessment of `doc/` relative to the codebase and the knowledge base under `doc/
 **`doc/EDITOR.md` — Keybindings table** — Several entries have drifted from the implementation:
 - `F9` listed for toggle edit/run; code and README both use `F8`
 - `Ctrl+Shift+Q` listed for quit project; code uses `Ctrl+Q`
-- Missing entries: reorder mode (`Ctrl+M`), follow-require (`Ctrl+O`), insert-before (`Ctrl+Enter`), close-buffer vs stop-editor distinction
+- Missing entries: reorder mode (`Ctrl+M`), follow-require (`Ctrl+O`), close-buffer vs stop-editor distinction
 
 ---
 

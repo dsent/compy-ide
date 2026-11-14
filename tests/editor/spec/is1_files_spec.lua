@@ -5,6 +5,7 @@
 local K = require("tests.helpers.editor_keys")
 local marks = require("tests.helpers.spec_marks")
 local spec_it, spec_gap = marks.spec_it, marks.spec_gap
+local spec_deviation = marks.spec_deviation
 
 local tall = K.block
 
@@ -691,11 +692,12 @@ describe("IS1 files #editor #spec", function()
 
     -- A program that finished its code idles behind the
     -- console, not stopped; Ctrl+Q stops it.
-    spec_it("IS3.16 Show the key card: the console's card " ..
-        "lists Ctrl+Q as exit program, among the keys now " ..
+    spec_deviation("IS3.16 Show the key card: the console's " ..
+        "card lists Ctrl+Q as exit program, among the keys now " ..
         "while a program is not stopped and after them with " ..
-        "none, and the key is suspended while the card shows",
-        function()
+        "none, and the key acts while the card shows",
+        "rulings.md: The key card suspends reserved chords in " ..
+        "the editor only", function()
       K.reset({ ["main.lua"] = "x = 1\n" })
       assert.same({ "other", "exit program" },
         { card_ctrl_q() })
@@ -708,8 +710,6 @@ describe("IS1 files #editor #spec", function()
       K.hold("f1")
       K.keys("lctrl", "q")
       K.release("f1")
-      assert.is_true(K.cc.run_live)
-      K.keys("lctrl", "q")
       assert.is_false(K.cc.run_live)
       assert.same("ready", K.app_state())
       assert.same(K.PROJECT, K.cc.model.projects.current.name)
@@ -719,10 +719,11 @@ describe("IS1 files #editor #spec", function()
 
     -- A program paused by an error hands the console over; its
     -- card shows there, and Ctrl+Q exits the program.
-    spec_it("IS3.16 Show the key card: while a program is " ..
-        "paused, the console's card lists Ctrl+Q among the " ..
-        "keys now, and the key is suspended while the card " ..
-        "shows", function()
+    spec_deviation("IS3.16 Show the key card: while a program " ..
+        "is paused, the console's card lists Ctrl+Q among the " ..
+        "keys now, and the key acts while the card shows",
+        "rulings.md: The key card suspends reserved chords in " ..
+        "the editor only", function()
       K.reset({
         ["main.lua"] = "function love.update() error('x') end\n"
       })
@@ -739,8 +740,6 @@ describe("IS1 files #editor #spec", function()
       K.hold("f1")
       K.keys("lctrl", "q")
       K.release("f1")
-      assert.same("inspect", K.app_state())
-      K.keys("lctrl", "q")
       assert.same("ready", K.app_state())
       assert.is_false(K.cc.run_live)
     end)
