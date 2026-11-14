@@ -776,6 +776,7 @@ function EditorController:format_file()
     --- formats it again. A failed save leaves the file as it
     --- was (FS.replace), and so the buffer goes back
     buf:restore(snap)
+    buf:set_selection(sel_before)
     buf:analyze()
     self.view:refresh()
     return self:refuse({

@@ -2197,8 +2197,10 @@ end
 --- is one the project holds; edit("name") creates its own
 function ConsoleController:edit(name, must_exist)
   if love.state.app_state == 'running' then return end
-  --- a program's exit hook runs while its project closes:
-  --- a file it opened then would outlive the project
+  --- a program's exit hook runs while it stops: showing the
+  --- editor stops a live program first (_enter_editor), and
+  --- this stop, already under way, returns at once, so a
+  --- file asked for then would be asked for without end
   if self.stopping then return end
 
   local PS = self.model.projects

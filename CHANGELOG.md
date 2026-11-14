@@ -104,6 +104,8 @@ Project-author guide: `doc/input_api.md`.
   a syntax error, or Lua the editor does not read, such as `goto`. Each of its lines
   is a block until the editor can read the file: you can add text, and Ctrl+Delete
   cuts a line into the field to repair it. F2 on such a line is refused with a notice.
+  Once the file parses, its blocks are statements again, and the browsing position
+  stays on the one that holds the line it was on.
 - **An SD card that cannot be read refuses the key, and forgets nothing.** Enter, a
   cut, a move, Ctrl+Z and Ctrl+Y say the file could not be read; the same key works
   once it can. With the card out, `edit()` and Ctrl+J say the file could not be read

@@ -16,7 +16,7 @@ This distinction pervades the entire editor stack. Understanding it is the prere
 
 ## Content Types and Buffer Initialization
 
-`EditorController:open()` (`src/controller/editorController.lua:48`) determines content type from the file extension and wires up the right tools:
+`EditorController:open()` (`src/controller/editorController.lua`) determines content type from the file extension and wires up the right tools:
 
 | Extension | Content type | Tools |
 |---|---|---|
@@ -76,8 +76,8 @@ Pressing `Enter` on non-empty input goes through `_handle_submit`, which asks th
 2. **Line and parse rules** — `check.check` runs on the formatted text: line length (the Compy's 64 columns), then a parse. The input shows the formatted text, and a refusal moves the cursor to the error. A long line the formatter wraps is no refusal.
 3. **Chunk and measure** — the formatted text is chunked into the blocks that will be stored, and a block longer than `max_block` (the input's height, `input_max` = 14) makes the verdict name that block and how many lines it has too many. The editor refuses it with a message after its own visibility checks, and moves the cursor to the block's first line.
 4. **No blank line of the editor's own** — nothing adds an `Empty` beyond what step 1 keeps. Blank lines outside the accepted block stay as they are: the chunker makes one `Empty` per blank line, so re-chunking the whole file after the write keeps every run.
-5. **Replace or Insert** — `replace_content` or `insert_content` updates the buffer, adjusting all subsequent block positions via `Range:translate`.
-6. **Auto-save** — `buf:save()` is called immediately. Every accepted submit writes to disk, a newline after every line, the last one included.
+5. **Replace or Insert** — `_land` puts the formatted lines in the target's place (`replace_lines`) or before the browsing position (`insert_lines`): a splice of the file's lines, after which the whole file is chunked again (see Block Position Tracking).
+6. **Auto-save** — `buf:save()` is called immediately. Every accepted submit writes to disk, each line with its ending (see Line endings above), the last one included.
 
 Without a replacement target the new block(s) are inserted before the browsing position, or appended at the end position, and the position ends on the block after them, so typing goes on below. An empty draft inserts one empty line. `Shift+Insert` submits the same way and keeps the draft in the input.
 
@@ -102,7 +102,7 @@ Source: commit `2ff95f03b8f8` ("Split monster block"); logic in `editorControlle
 
 ## Block Position Tracking
 
-Each `Chunk` carries a `pos: Range` recording which source lines it occupies (e.g. `{3-7}` means lines 3 through 7). Since a block's lines are its source lines, `pos` and the rendered text agree, and an insertion or a replacement splices lines at `pos` (`_splice`) and re-chunks the whole file. The older `replace_content` and `insert_content` adjust `pos` by arithmetic instead; no editor path calls them.
+Each `Chunk` carries a `pos: Range` recording which source lines it occupies (e.g. `{3-7}` means lines 3 through 7). Since a block's lines are its source lines, `pos` and the rendered text agree, and an insertion or a replacement splices lines at `pos` (`_splice`) and re-chunks the whole file. The re-chunk may split the file anew, from lines into statements when a file that did not parse parses again, or back: so `_splice` keeps the browsing position as a source line, and leaves it on the block that now holds the line it stood on, or, that line gone, the line after the new ones. A caller that knows better sets it after: `_land` on the block after the landed lines, `move` on the moved block, an undo or a redo on the positions its step took in the text it puts back. The older `replace_content` and `insert_content` adjust `pos` by arithmetic instead; no editor path calls them.
 
 This matters because the revmap (source line → block index), used for semantic info, is rebuilt only on `analyze()`, which runs on `buf:save()`. Between saves, the revmap may be stale. In practice this is fine because semantic info is only used at search time, which always follows a save in the normal workflow.
 
@@ -156,7 +156,7 @@ The whole-editor exits (`Ctrl+T`, `Ctrl+Q`, `Ctrl+Alt+R`, and the deprecated `Ct
 
 This gives the editor two capabilities:
 - **Search** (Ctrl+F): filter and jump to definitions by name
-- **Follow require** (Ctrl+O): if the selected block contains a `require('foo')` call, open `foo.lua` as a new buffer on top of the stack
+- **Follow require** (Ctrl+J): if the selected block contains a `require('foo')` call, open `foo.lua` as a new buffer on top of the stack
 
 `analyze()` is wrapped in `pcall` — analysis failure is silent and leaves `self.semantic = nil`, disabling search and follow-require for that buffer.
 
@@ -168,9 +168,11 @@ This gives the editor two capabilities:
 
 Opening a file (`EditorController:open`) pushes a new buffer to the front and tells the view to create a new `BufferView` for it. Escape in the browsing state (`close_buffer`) pops the front buffer and activates the next one. If only one buffer remains, it closes the editor entirely and returns to the console.
 
-Ctrl+J (`follow_require`) calls `self.console:edit(name)` which triggers a full new `open` call, pushing another buffer. This creates a chain: file A → file B → file C, navigable back with Escape, one file at a time; Ctrl+Q leaves the whole chain for the console. A run of the project from the editor (Ctrl+T, or Ctrl+Alt+R, whose way back is Ctrl+T) keeps the chain in memory, untouched, and nothing is read again on the way back: what storage holds by then is checked at the next key that needs it (`_baseline`), as for a file changed while the editor shows it. `edit()` in the console while the editor is hidden opens its file in front of that chain, or shows the chain when the file is on it. Each buffer owns its field (`BufferModel.input`, a `UserInputModel`): its draft, cursor and the draft's undo steps; the editor's field shows the front buffer's (`EditorController:_front`), so a file that goes from the front keeps them with nothing copied. Neither following a file nor a run is leaving it (IS6.6, which names Escape, IS1.6). Leaving is Escape on the file, Ctrl+Q and Ctrl+Shift+S, and a project closed or switched (`_close_project`): the buffers go, and their timelines.
+Ctrl+J (`follow_require`) calls `self.console:edit(name, true)`, which opens the file only when the project holds it, through a full new `open` call that pushes another buffer. This creates a chain: file A → file B → file C, navigable back with Escape, one file at a time; Ctrl+Q leaves the whole chain for the console. A run of the project from the editor (Ctrl+T, or Ctrl+Alt+R, whose way back is Ctrl+T) keeps the chain in memory, untouched, and nothing is read again on the way back: what storage holds by then is checked at the next key that needs it (`_baseline`), as for a file changed while the editor shows it. `edit()` in the console while the editor is hidden opens its file in front of that chain, or shows the chain when the file is on it. Each buffer owns its field (`BufferModel.input`, a `UserInputModel`): its draft, cursor and the draft's undo steps; the editor's field shows the front buffer's (`EditorController:_front`), so a file that goes from the front keeps them with nothing copied. Neither following a file nor a run is leaving it (IS6.6, which names Escape, IS1.6). Leaving is Escape on the file, Ctrl+Q and Ctrl+Shift+S, and a project closed or switched (`_close_project`): the buffers go, and their timelines.
 
-The buffer ID ensures the view can retrieve the right `BufferView` even after the model stack changes order. `EditorView.buffers` is never pruned during a session — views for closed buffers remain in the table but are unreachable via the controller once the model buffer is popped.
+The buffer ID ensures the view can retrieve the right `BufferView` even after the model stack changes order. A buffer popped from the stack takes its view with it (`EditorController:_let_go`), and leaving the editor (`EditorController:close`) empties both tables; while the editor is hidden for a run, both stay.
+
+Only the front buffer can be in an edit: a buffer goes below another one only by Ctrl+J or by `edit()`, and both are refused during an edit, as is every key that hides or leaves the editor (`refuse_to_leave`); a hidden editor is one left from the browsing state. The guards that refuse leaving therefore ask the front buffer alone.
 
 ---
 

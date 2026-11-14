@@ -372,6 +372,11 @@ end
 --- without their endings take, at either edge of the lines
 --- they replace, the ending of a line they are the same as;
 --- the others have none of their own.
+--- The re-chunk may split the file anew: a file that starts
+--- or stops parsing turns from lines into statements or
+--- back. So the browsing position is kept as a line, not a
+--- block number: it ends on the block that holds the line it
+--- stood on, or, that line gone, the line after the new ones.
 --- @param start integer
 --- @param n_out integer --- lines to remove
 --- @param lines_in string[]
@@ -380,6 +385,12 @@ function BufferModel:_splice(start, n_out, lines_in, ends_in)
   local lines = self:snapshot().lines
   local ends = self.ends
   local n_in = #lines_in
+  local function carry(ln)
+    if ln < start then return ln end
+    if ln >= start + n_out then return ln - n_out + n_in end
+    return start + n_in
+  end
+  local at = carry((self:_span_of(self.selection)))
   if not ends_in then
     ends_in = no_ends(n_in)
     local head = 0
@@ -409,6 +420,7 @@ function BufferModel:_splice(start, n_out, lines_in, ends_in)
   else
     self.content = Dequeue(lines)
   end
+  self:set_selection(self:_position_of_line(at))
 end
 
 --- Replace the whole text and re-chunk it
@@ -924,7 +936,8 @@ function BufferModel:insert_content(t, lbn)
 end
 
 --- Block `i` goes to place `npos`, its lines with their
---- endings
+--- endings, and the browsing position with it: on the block
+--- that holds its first line once the file is split anew
 --- @param i integer
 --- @param npos integer
 function BufferModel:move(i, npos)
@@ -946,6 +959,7 @@ function BufferModel:move(i, npos)
   end
   self:replace_text(lines, ends)
   self:_text_change()
+  self:set_selection(self:_position_of_line(at))
 end
 
 --------------------------

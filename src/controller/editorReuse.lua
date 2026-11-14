@@ -428,10 +428,13 @@ function EditorController:_replay_file(step, forward)
   local found = self:_field_snapshot()
   --- the action undone just before this one
   local later = buf.redo_history[#buf.redo_history]
+  local sel = buf:get_selection()
   if forward then buf:redo() else buf:undo() end
   if not self:save(buf) then
-    --- the file is as it was (FS.replace): so is the buffer
+    --- the file is as it was (FS.replace): so is the buffer,
+    --- and the position
     if forward then buf:undo() else buf:redo() end
+    buf:set_selection(sel)
     buf:analyze()
     self.view:refresh()
     self:refuse({ self:_unsaved_notice(
@@ -440,8 +443,9 @@ function EditorController:_replay_file(step, forward)
   end
   local last = buf:get_content_length() + 1
   if forward then
-    local pos = step.pos_done or step.sel_after
-    buf:set_selection(math.min(pos, last))
+    --- the step's positions are block numbers of the text
+    --- they were taken in, which the replay puts back
+    buf:set_selection(math.min(step.sel_after, last))
     if step.field then
       self:_field_restore(step.field)
     else
@@ -670,9 +674,8 @@ function EditorController:cut_block(isrepeat)
     return self:_reuse_put_back(back,
       self:_unsaved_notice('Nothing cut.'))
   end
-  --- the next block took the cut one's number; past the last
-  --- block it is the end position
-  buf:set_selection(sel)
+  --- the position is on the block that holds the line after
+  --- the cut one, or at the end (BufferModel:_splice)
   if blank(lines) then
     --- the field stays empty; what was typed and deleted
     --- there before is no longer a change to undo
@@ -688,7 +691,6 @@ function EditorController:cut_block(isrepeat)
   self:timeline_record(before, sel, {
     kind = 'cut',
     pos_undone = sel + 1,
-    pos_done = sel,
     field = self:_field_snapshot(),
     field_before = field_before,
   })
@@ -725,11 +727,9 @@ function EditorController:move_block(dir)
     return self:_reuse_put_back(back,
       self:_unsaved_notice('Nothing moved.'))
   end
-  buf:set_selection(to)
   self:timeline_record(before, i, {
     kind = 'move',
     pos_undone = i,
-    pos_done = to,
   })
   self:_reuse_show()
 end

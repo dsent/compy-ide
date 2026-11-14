@@ -3,7 +3,9 @@
 -- that outlives its key, the cursor of a retained draft,
 -- pasted line breaks, a card taken out before a file opens,
 -- keys that change nothing, the draft's own steps, a `#!`
--- line put back, and guards no test held. Keys only, through
+-- line put back, guards no test held, the files below the
+-- front one, and the browsing position kept by line when a
+-- file is split anew. Keys only, through
 -- tests/helpers/editor_keys.lua.
 
 local K = require("tests.helpers.editor_keys")
@@ -43,6 +45,25 @@ compy.input.hooks.keypressed = function(k)
   if k == 'f7' then run_project(); return true end
 end
 ]]
+
+--- a program that idles with a hook, and whose exit hook
+--- opens a file, then writes one
+local EDITS_ON_EXIT = [[
+compy.input.hooks.keypressed = function() end
+compy.before_exit = function()
+  edit('notes.txt')
+  writefile('done.txt', 'yes')
+end
+]]
+
+--- the names of the files on the editor's stack, front first
+local function stack()
+  local out = {}
+  for _, b in ipairs(K.cc.editor.model.buffers) do
+    out[#out + 1] = b.name
+  end
+  return out
+end
 
 --- the program's own global, as its code left it
 local function program_global(name)
@@ -479,6 +500,30 @@ describe("round four #editor #spec", function()
   end)
 
   describe("guards", function()
+    --- the key, and the files on the stack after it: Ctrl+T
+    --- opens the main file when the editor holds none
+    for label, case in pairs({
+      ["Ctrl+Q"] = { { "lctrl", "q" }, {} },
+      ["Ctrl+T"] = { { "lctrl", "t" }, { "main.lua" } },
+    }) do
+      spec_it("IS3.11 Preserve state on refusal: edit() in an "
+          .. "idle program's exit hook, as " .. label
+          .. " stops it, opens nothing and gives the hook back "
+          .. "its turn", function()
+          K.reset({
+            ["main.lua"] = EDITS_ON_EXIT,
+            ["notes.txt"] = "a\n",
+          })
+          K.type("run()")
+          K.keys("return")
+          assert.is_true(K.cc.run_live)
+          K.keys(unpack(case[1]))
+          assert.is_false(K.cc.run_live)
+          assert.same("yes", K.file("done.txt"))
+          assert.same(case[2], stack())
+        end)
+    end
+
     spec_it("IS6.6 Undo and redo: after a write that landed "
         .. "between two changes from outside, Ctrl+Z writes "
         .. "nothing over the second", function()
@@ -557,5 +602,241 @@ describe("round four #editor #spec", function()
         K.keys("return")
         assert.same(original .. "e = 5\n", K.file())
       end)
+  end)
+
+  describe("files below the front one", function()
+    local WORK = "require('other')\na = 1\nb = 2\n"
+
+    --- an edit in progress in work.lua, the position on its
+    --- require line: the keys, and the draft it leaves
+    local EDITS = {
+      draft = function()
+        K.browse_to(1)
+        K.type("z = 3")
+        return "z = 3"
+      end,
+      replacement = function()
+        K.browse_to(2)
+        K.keys("f2")
+        K.browse_to(1)
+        return "a = 1"
+      end,
+      ["cut block"] = function()
+        K.browse_to(3)
+        K.keys("lctrl", "delete")
+        K.browse_to(1)
+        return "b = 2"
+      end,
+    }
+
+    --- each way out of the file, then edit() of another one
+    --- in the console, wherever the key left the person
+    local LEAVES = {
+      ["Ctrl+J"] = { "lctrl", "j" },
+      ["Ctrl+T"] = { "lctrl", "t" },
+      ["Ctrl+Alt+R"] = { "lctrl", "lalt", "r" },
+      ["Ctrl+Q"] = { "lctrl", "q" },
+      ["Ctrl+Shift+S"] = { "lctrl", "lshift", "s" },
+    }
+
+    for edit, start in pairs(EDITS) do
+      for leave, keys in pairs(LEAVES) do
+        spec_it("FR1.2 Resolve each edit: with a " .. edit
+            .. " in the field, " .. leave
+            .. " and edit() put no file in front of it",
+          function()
+            K.reset({ ["main.lua"] = "", ["work.lua"] = WORK,
+              ["other.lua"] = "o = 1\n" })
+            K.open("work.lua")
+            local draft = start()
+            local state = K.state()
+            K.keys(unpack(keys))
+            if K.app_state() ~= "editor" then
+              K.type('edit("other.lua")')
+              K.keys("return")
+            end
+            assert.same("editor", K.app_state())
+            assert.same({ "work.lua" }, stack())
+            assert.same(draft, K.draft())
+            assert.same(state, K.state())
+          end)
+      end
+    end
+
+    spec_it("IS1.5 Follow a file reference: the file Ctrl+J "
+        .. "leaves is in the browsing state below the one it "
+        .. "opens", function()
+      K.reset({ ["main.lua"] = "", ["work.lua"] = WORK,
+        ["other.lua"] = "o = 1\n" })
+      K.open("work.lua")
+      K.browse_to(1)
+      K.keys("lctrl", "j")
+      assert.same({ "other.lua", "work.lua" }, stack())
+      local below = K.cc.editor.model.buffers[2]
+      assert.is_nil(below.loaded)
+      local text = below.input:get_text()
+      assert.same("", table.concat(text, "\n"))
+    end)
+  end)
+
+  describe("the browsing position, kept by line", function()
+    --- the first line of the block at the browsing position
+    local function viewed()
+      local lines = K.buffer():block_lines(K.position())
+      return lines and lines[1]
+    end
+
+    --- six functions of five lines, a blank line after each;
+    --- the third line of function `bad` does not parse
+    local function functions(bad)
+      local t = {}
+      for i = 1, 6 do
+        t[#t + 1] = "function f" .. i .. "()"
+        t[#t + 1] = "  local a = " .. i
+        t[#t + 1] = i == bad and "  local b = = a"
+            or "  local b = a"
+        t[#t + 1] = "  return a + b"
+        t[#t + 1] = "end"
+        t[#t + 1] = ""
+      end
+      return table.concat(t, "\n") .. "\n"
+    end
+
+    --- the draft `  local b = = a` repaired: one `=` less
+    local function repair()
+      K.keys("left")
+      K.keys("backspace")
+      K.keys("backspace")
+      assert.same("  local b = a", K.draft())
+    end
+
+    for bad, label in pairs({ [2] = "early", [5] = "late" }) do
+      spec_it("IS6.2 Cut a block: a cut that lets a file parse "
+          .. "again leaves the position on the block that "
+          .. "holds the line after the cut one, in a function "
+          .. label .. " in the file", function()
+        local original = functions(bad)
+        K.reset({ ["main.lua"] = original })
+        K.open()
+        assert.same(36, K.blocks())
+        local line = (bad - 1) * 6 + 3
+        K.browse_to(line)
+        K.keys("lctrl", "delete")
+        assert.same("  local b = = a", K.draft())
+        assert.same(12, K.blocks())
+        local block = (bad - 1) * 2 + 1
+        assert.same(block, K.position())
+        assert.same("function f" .. bad .. "()", viewed())
+        repair()
+        K.keys("return")
+        local fixed = original:gsub(
+          "(function f" .. bad .. "%(%)\n  local a = %d\n)"
+          .. "  local b = = a\n", "local b = a\n%1")
+        assert.same(fixed, K.file())
+        assert.same(block + 1, K.position())
+      end)
+    end
+
+    local TOP = "x = 1\nfunction f()\n  return x\nend\n"
+        .. "y = = 2\nfunction g()\n  return y\nend\n"
+
+    spec_it("IS6.3 Restore a cut block: a line that did not "
+        .. "parse, cut and repaired, goes back with Enter "
+        .. "where it was cut", function()
+      K.reset({ ["main.lua"] = TOP })
+      K.open()
+      assert.same(8, K.blocks())
+      K.browse_to(5)
+      K.keys("lctrl", "delete")
+      assert.same(3, K.blocks())
+      assert.same(3, K.position())
+      assert.same("function g()", viewed())
+      K.keys("left")
+      K.keys("left")
+      K.keys("backspace")
+      K.keys("backspace")
+      assert.same("y = 2", K.draft())
+      K.keys("return")
+      assert.same(TOP:gsub("= = 2", "= 2"), K.file())
+    end)
+
+    spec_it("IS6.6 Undo and redo: undo and redo across the cut "
+        .. "that lets a file parse keep the position on the "
+        .. "line after the cut one", function()
+      K.reset({ ["main.lua"] = TOP })
+      K.open()
+      K.browse_to(5)
+      K.keys("lctrl", "delete")
+      assert.same("function g()", viewed())
+      K.keys("lctrl", "z")
+      assert.same(TOP, K.file())
+      assert.same(8, K.blocks())
+      assert.same(6, K.position())
+      assert.same("function g()", viewed())
+      K.keys("lctrl", "y")
+      assert.same(3, K.blocks())
+      assert.same("y = = 2", K.draft())
+      assert.same(3, K.position())
+      assert.same("function g()", viewed())
+    end)
+
+    spec_it("IS6.5 Move a block: a move that lets a file parse "
+        .. "leaves the position on the block that holds the "
+        .. "moved line, after undo and redo too", function()
+      local original = "x = 0\nend\nfunction f()\n  x = 1\n"
+      K.reset({ ["main.lua"] = original })
+      K.open()
+      assert.same(4, K.blocks())
+      K.browse_to(2)
+      K.keys("lalt", "down")
+      local moved = "x = 0\nfunction f()\nend\n  x = 1\n"
+      assert.same(moved, K.file())
+      assert.same(3, K.blocks())
+      assert.same(2, K.position())
+      assert.same({ "function f()", "end" },
+        K.buffer():block_lines(2))
+      K.keys("lctrl", "z")
+      assert.same(original, K.file())
+      assert.same(2, K.position())
+      assert.same("end", viewed())
+      K.keys("lctrl", "y")
+      assert.same(3, K.blocks())
+      assert.same(2, K.position())
+      assert.same("function f()", viewed())
+    end)
+
+    spec_it("IS3.11 Preserve state on refusal: Ctrl+Z refused "
+        .. "for a failed write leaves the position on the "
+        .. "block it was on", function()
+      K.reset({ ["main.lua"] = "x = 1\ny = 2\n" })
+      K.open()
+      K.browse_to(1)
+      K.keys("f2")
+      K.keys("backspace")
+      K.type("5")
+      K.keys("return")
+      assert.same("x = 5\ny = 2\n", K.file())
+      K.browse_to(1)
+      K.fail_writes("card full")
+      K.keys("lctrl", "z")
+      assert.same("x = 5\ny = 2\n", K.file())
+      assert.same(1, K.position())
+      K.fail_writes(nil)
+      K.keys("lctrl", "z")
+      assert.same("x = 1\ny = 2\n", K.file())
+    end)
+
+    spec_it("IS3.11 Preserve state on refusal: Ctrl+Shift+F "
+        .. "refused for a failed write leaves the position on "
+        .. "the block it was on", function()
+      local original = "x   =   1\ny = 2\n"
+      K.reset({ ["main.lua"] = original })
+      K.open()
+      K.browse_to(1)
+      K.fail_writes("card full")
+      K.keys("lctrl", "lshift", "f")
+      assert.same(original, K.file())
+      assert.same(1, K.position())
+    end)
   end)
 end)
