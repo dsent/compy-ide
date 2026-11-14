@@ -23,6 +23,16 @@ local function utf8_sub(s, i, j)
     return string.sub(s, i, j)
 end
 
+-- A cursor position on the grid, as a classic terminal takes a
+-- move: a whole number, outside the grid the nearest edge, and
+-- one that is no number (NaN) the first cell.
+local function on_grid(v, last)
+    v = math.floor(v)
+    if v ~= v or v < 1 then return 1 end
+    if v > last then return last end
+    return v
+end
+
 local function terminal_update_character(terminal, x, y, new_char)
     -- a cell outside the grid is no cell: what lands there is lost
     if not (x >= 1 and x <= terminal.width
@@ -203,8 +213,8 @@ local function terminal_update(terminal, dt)
             terminal.cursor_backcolor[3] = char_or_command.green
             terminal.cursor_backcolor[4] = char_or_command.alpha
         elseif char_or_command.type == "move" then
-            terminal.cursor_x = char_or_command.x
-            terminal.cursor_y = char_or_command.y
+            terminal.cursor_x = on_grid(char_or_command.x, terminal.width)
+            terminal.cursor_y = on_grid(char_or_command.y, terminal.height)
         elseif char_or_command.type == "reverse" then
             if char_or_command.value == nil then
                 terminal.cursor_reversed = not terminal.cursor_reversed

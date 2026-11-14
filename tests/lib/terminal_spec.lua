@@ -278,47 +278,12 @@ describe("terminal outside the grid", function()
       assert.equal("│", t.buffer[16][19])
     end)
 
-  it("drops a print below the grid; the next lands at the bottom",
-    function()
-      local t = new_term()
-      t:move_to(1, 30)
-      t:print("hi\n")
-      t:print("next\n")
-      t:update(1000)
-      assert.equal(t.height, t.cursor_y)
-      assert.equal("next", row(t, t.height - 1))
-      for y = 1, t.height do
-        assert.falsy(row(t, y):find("h", 1, true), "row " .. y)
-      end
-    end)
-
-  it("drops a print at 0, 0; the next lands on the first row",
-    function()
-      local t = new_term()
-      t:move_to(0, 0)
-      t:print("hi\n")
-      t:print("next\n")
-      t:update(1000)
-      assert.equal("next", row(t, 1))
-      assert.equal("", row(t, 2))
-    end)
-
-  it("drops a print at a column that is not a number", function()
-    local t = new_term()
-    t:move_to(0 / 0, 1)
-    t:print("hi\n")
-    t:print("next\n")
-    t:update(1000)
-    assert.equal("", row(t, 1))
-    assert.equal("next", row(t, 2))
-  end)
-
-  --- more rolls than rows leave the same blank grid, so a
-  --- cursor however far below takes a grid's worth at most
-  it("scrolls a grid's worth at most from far below", function()
+  --- more rolls than rows leave the same blank grid, so no
+  --- row the cursor is on asks for more than a grid's worth
+  it("scrolls a grid's worth at most, whatever the row", function()
     local t = full()
-    t:move_to(1, math.huge)
-    t:print("hi\n")
+    t.cursor_y = math.huge
+    t:print("\n")
     --- a count hook fires only in code LuaJIT runs uncompiled,
     --- and in LuaJIT it holds for every coroutine until cleared
     if jit then jit.off() end
@@ -332,4 +297,79 @@ describe("terminal outside the grid", function()
       assert.equal("", row(t, y), "row " .. y)
     end
   end)
+end)
+
+
+--- A cursor moved off the grid goes to the nearest edge, as a
+--- classic terminal takes it, and what is printed next lands
+--- there.
+describe("terminal cursor moves", function()
+  local function row(t, y)
+    return (table.concat(t.buffer[y]):gsub("%s+$", ""))
+  end
+
+  local nan, huge = 0 / 0, math.huge
+  local CASES = {
+    { 1, 30, 1, 20 },
+    { 0, 0, 1, 1 },
+    { 30, 1, 20, 1 },
+    { -5, -5, 1, 1 },
+    { 2.7, 3.2, 2, 3 },
+    --- the last cell's character wraps the grid up a row
+    { huge, huge, 20, 20, 19 },
+    { -huge, -huge, 1, 1 },
+    { nan, nan, 1, 1 },
+    { nan, 5, 1, 5 },
+    { 5, nan, 5, 1 },
+  }
+
+  for _, c in ipairs(CASES) do
+    it(string.format("takes %s, %s to %d, %d", tostring(c[1]),
+      tostring(c[2]), c[3], c[4]), function()
+        local t = new_term()
+        t:move_to(c[1], c[2])
+        t:update(1000)
+        assert.same({ c[3], c[4] }, { t.cursor_x, t.cursor_y })
+        t:print("h")
+        t:update(1000)
+        assert.equal("h", t.buffer[c[5] or c[4]][c[3]])
+      end)
+  end
+
+  it("prints on the bottom row from below, scrolling once",
+    function()
+      for _, y in ipairs({ 30, math.huge }) do
+        local t = new_term()
+        for i = 1, t.height - 1 do t:print("r" .. i .. "\n") end
+        t:move_to(1, y)
+        t:print("hi\n")
+        t:update(1000)
+        assert.equal("r2", row(t, 1), "y " .. y)
+        assert.equal("hi", row(t, t.height - 1), "y " .. y)
+        assert.equal("", row(t, t.height), "y " .. y)
+        assert.equal(t.height, t.cursor_y)
+      end
+    end)
+
+  it("prints at the last column and wraps from the right",
+    function()
+      local t = new_term()
+      t:move_to(30, 1)
+      t:print("ab")
+      t:update(1000)
+      assert.equal("a", t.buffer[1][t.width])
+      assert.equal("b", t.buffer[2][1])
+    end)
+
+  --- a position that is no number at all is the program's own
+  --- error, raised where it asks, and the terminal goes on
+  it("refuses no position or a word, in the asking call",
+    function()
+      local t = new_term()
+      assert.has_error(function() t:move_to() end)
+      assert.has_error(function() t:move_to("a", 1) end)
+      t:print("ok")
+      t:update(1000)
+      assert.equal("ok", row(t, 1))
+    end)
 end)
