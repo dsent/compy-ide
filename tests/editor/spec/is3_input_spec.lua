@@ -581,6 +581,152 @@ describe("IS3 input #editor #spec", function()
       assert.same("x = 1\ny = 2\n", K.file())
     end)
 
+    spec_it("IS3.14 Explain a refusal: a typed letter "
+        .. "dismisses the notice and is typed", function()
+      at_end()
+      K.keys("lctrl", "delete")
+      local notice = K.message()
+      K.type("z")
+      assert.is_not_nil(notice)
+      assert.is_nil(K.message())
+      assert.same("z", K.draft())
+      assert.same("x = 1\ny = 2\n", K.file())
+    end)
+
+    spec_it("IS3.14 Explain a refusal: a letter whose text "
+        .. "arrives before its key press is typed once",
+        function()
+      at_end()
+      K.keys("lctrl", "delete")
+      local notice = K.message()
+      K.type_text_first("z")
+      assert.is_not_nil(notice)
+      assert.is_nil(K.message())
+      assert.same("z", K.draft())
+      -- and with Shift held
+      K.keys("lctrl", "delete")
+      local again = K.message()
+      K.type_text_first("Q")
+      assert.is_not_nil(again)
+      assert.is_nil(K.message())
+      assert.same("zQ", K.draft())
+    end)
+
+    spec_it("IS3.14 Explain a refusal: text that arrives "
+        .. "with Ctrl held types nothing and leaves the notice",
+        function()
+      at_end()
+      K.keys("lctrl", "delete")
+      local notice = K.message()
+      -- a glyph with no key of its own: it is sent as text
+      K.hold("lctrl")
+      K.type("é")
+      K.release("lctrl")
+      assert.is_not_nil(notice)
+      assert.same(notice, K.message())
+      assert.same("", K.draft())
+    end)
+
+    spec_it("IS3.14 Explain a refusal: a syntax failure's "
+        .. "message goes at the next key too, which acts",
+        function()
+      at_end()
+      K.type("x = = 1")
+      K.keys("return")
+      local message = K.message()
+      K.keys("delete")
+      assert.is_not_nil(message)
+      assert.is_nil(K.message())
+      -- the cursor stood before the failing `=`
+      assert.same("x =  1", K.draft())
+    end)
+
+    -- Each refusal during an edit names the two ways to end
+    -- it, in the reference editor's words for the case.
+    local ADDS = "Finish the text first: Enter adds it, " ..
+        "Esc drops it."
+    local KEEPS = "Finish the text first: Enter keeps it, " ..
+        "Esc drops it."
+    local EDITING = "Finish editing first: Enter keeps it, " ..
+        "Esc drops it."
+    local ALREADY = "Already editing a block: Enter keeps it, "
+        .. "Esc drops it."
+
+    --- an insertion: a draft with the highlight on block 1
+    local function inserting()
+      K.reset({ ["main.lua"] = "x = 1\ny = 2\n" })
+      K.open()
+      K.browse_to(1)
+      K.type("z")
+    end
+
+    --- a replacement of block 1, the draft modified
+    local function replacing()
+      K.reset({ ["main.lua"] = "x = 1\ny = 2\n" })
+      K.open()
+      K.browse_to(1)
+      K.keys("f2")
+      K.type("0")
+    end
+
+    spec_it("IS3.14 Explain a refusal: Edit and a cut during "
+        .. "an insertion say that Enter adds the text",
+        function()
+      inserting()
+      K.keys("f2")
+      local edit = K.message()
+      K.keys("lctrl", "delete")
+      assert.same(ADDS, edit)
+      assert.same(ADDS, K.message())
+      assert.same("inserting", K.state())
+      assert.same("z", K.draft())
+    end)
+
+    spec_it("IS3.14 Explain a refusal: a cut and a move "
+        .. "during a replacement say to finish editing",
+        function()
+      replacing()
+      K.keys("lctrl", "delete")
+      local cut = K.message()
+      K.keys("lalt", "down")
+      assert.same(EDITING, cut)
+      assert.same(EDITING, K.message())
+      assert.same("replacing", K.state())
+      assert.same("x = 10", K.draft())
+      assert.same("x = 1\ny = 2\n", K.file())
+    end)
+
+    spec_it("IS3.14 Explain a refusal: Edit on another block "
+        .. "with the draft modified says a block is being "
+        .. "edited", function()
+      replacing()
+      K.browse_to(2)
+      K.keys("f2")
+      assert.same(ALREADY, K.message())
+      assert.same(1, K.target())
+      assert.same("x = 10", K.draft())
+    end)
+
+    spec_it("IS3.14 Explain a refusal: following a reference "
+        .. "and leaving during an edit say that Enter keeps "
+        .. "the text", function()
+      inserting()
+      K.keys("lctrl", "j")
+      local follow = K.message()
+      K.keys("lctrl", "lshift", "s")
+      local leave = K.message()
+      K.keys("lctrl", "q")
+      assert.same(KEEPS, follow)
+      assert.same(KEEPS, leave)
+      assert.same(KEEPS, K.message())
+      assert.same("editor", K.app_state())
+      assert.same("z", K.draft())
+      replacing()
+      K.keys("lctrl", "j")
+      assert.same(KEEPS, K.message())
+      assert.same("x = 10", K.draft())
+    end)
+
     spec_it("IS3.14 Explain a refusal: a modifier or a lock "
         .. "on its own leaves the notice showing", function()
       K.reset({ ["main.lua"] = "x = 1\ny = 2\n" })
@@ -590,7 +736,7 @@ describe("IS3 input #editor #spec", function()
       local notice = K.message()
       for _, k in ipairs({
         "lshift", "rshift", "lctrl", "lalt", "ralt",
-        "capslock", "f1"
+        "lgui", "rgui", "capslock", "f1"
       }) do
         K.keys(k)
         assert.same(notice, K.message(), k)

@@ -44,7 +44,7 @@ The workflow is:
 
 Text typed without a target is inserted: `Enter` puts it before the block at the browsing position, or at the end of the file from the end position. `Esc` aborts an edit (the draft and the target are dropped), and from the browsing state steps back from the file. `Ctrl+Insert` copies the viewed block into the input, `Ctrl+Delete` cuts it there, and `Alt+Up`/`Alt+Down` move it (`src/controller/editorReuse.lua`).
 
-A refused action never asks a question: `EditorController:refuse(msg)` knocks and shows a one-line notice over the input, which the next key press dismisses. `F1`, while held, shows the keys the current state admits (`src/model/editor/keyCard.lua`).
+A refused action never asks a question: `EditorController:refuse(msg)` knocks and shows a notice, wrapped between words, in a band directly above the status line (`EditorView:draw_message`). The band covers the document view's last rows; the status line, the input and the view stay where they are. A syntax failure's message shows the same way. The next key press dismisses the message and does its ordinary work, `Esc` included; a modifier or a lock key alone leaves it showing. `F1`, while held, shows the keys the current state admits (`src/model/editor/keyCard.lua`).
 
 The `LuaEditorEval` evaluator (`src/model/interpreter/eval/evaluator.lua:168`) is set on the editor input for Lua files. It adds a 64-character line length validator — the same limit as the code conventions — enforced live as you type.
 

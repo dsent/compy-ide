@@ -5,10 +5,6 @@ require("util.debug")
 require("util.view")
 
 
---- The rows a notice may take under the draft (IS3.14): one,
---- or up to three when it is wider than the field
-local NOTICE_ROWS = 3
-
 --- @param cfg ViewConfig
 --- @param ctrl UserInputController
 local new = function(cfg, ctrl)
@@ -16,14 +12,12 @@ local new = function(cfg, ctrl)
   local w = gfx.getWidth()
   --- max lines + statusline
   local h = cfg.input_max * cfg.fh + cfg.fh
-  --- and a notice's rows under the draft's
-  local canvas_h = h + NOTICE_ROWS * cfg.fh
   return {
     cfg = cfg,
     controller = ctrl,
     statusline = Statusline(cfg),
     start_h = h,
-    canvas = gfx.newCanvas(w, canvas_h),
+    canvas = gfx.newCanvas(w, h),
   }
 end
 
@@ -52,22 +46,22 @@ function UserInputView:get_rows(input)
   local max = self.cfg.input_max
   local err = input.wrapped_error or {}
   local draft = self:_draft_rows(input)
+  if self:_message_elsewhere() then return draft end
   if string.is_non_empty_string_array(err) then
-    if self:_shows_notice() then
-      return draft + math.min(#err, NOTICE_ROWS)
-    end
     return math.min(#err, max)
   end
   return draft
 end
 
---- Whether the message shown is a notice (IS3.14): it goes
---- under the draft's rows, where an error takes their place
+--- Whether a message leaves this field as it is: the file
+--- editor shows its messages over the document view, above
+--- the status line, and neither the field nor the status
+--- line moves for one (IS3.14). The console and a project's
+--- input show an error in the field's place.
 --- @private
 --- @return boolean
-function UserInputView:_shows_notice()
-  local e = self.controller.model.error
-  return type(e) == 'table' and e.notice == true
+function UserInputView:_message_elsewhere()
+  return self.controller.model.editing == true
 end
 
 --- The draft's rows in the field, up to its display limit
@@ -296,44 +290,9 @@ function UserInputView:render_error(err_text, status)
   drawBackground()
 
   gfx.setColor(colors.input.error)
-  if self.controller.model.editing then
-    --- the refusal frame is the editor's 2.4.3; the
-    --- console and project inputs keep their plain
-    --- error text
-    gfx.rectangle("line",
-      1,
-      fh + 1,
-      drawableWidth - 2,
-      apparentHeight * fh - 2)
-  end
-
   for l, str in ipairs(err_text) do
     local breaks = 0 -- starting height is already calculated
     ViewUtils.write_line(l, str, start_y, breaks, self.cfg)
-  end
-  gfx.pop()
-end
-
---- A notice under the draft's rows (IS3.14): it blocks no
---- input, so the draft stays shown above it. Call after
---- render_input, which places the field.
---- @param err_text string[]
-function UserInputView:render_notice(err_text)
-  local colors = self.cfg.colors
-  local fh = self.cfg.fh
-  local rows = math.min(#err_text, NOTICE_ROWS)
-  local draft_rows = (gfx.getHeight() - self.start_h) / fh - 1
-  local top = (draft_rows + 1) * fh
-  self.start_h = self.start_h - rows * fh
-
-  gfx.push('all')
-  gfx.setFont(self.cfg.font)
-  gfx.setColor(colors.input.error_bg)
-  gfx.rectangle("fill", 0, top,
-    self.cfg.drawableWidth, rows * fh)
-  gfx.setColor(colors.input.error)
-  for l = 1, rows do
-    gfx.print(err_text[l], 0, top + (l - 1) * fh)
   end
   gfx.pop()
 end
@@ -350,12 +309,10 @@ function UserInputView:render(input, status, time)
   self.canvas:renderTo(function()
     gfx.clear(0, 0, 0, 1)
     gfx.push('all')
-    local notice = isError and self:_shows_notice()
-    if isError and not notice then
+    if isError and not self:_message_elsewhere() then
       self:render_error(err_text, status)
     else
       self:render_input(input, status, time)
-      if notice then self:render_notice(err_text) end
     end
     gfx.pop()
   end)

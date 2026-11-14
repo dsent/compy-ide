@@ -79,9 +79,13 @@ describe("R4 orientation #editor #spec", function()
     -- end continues on a new line instead (IS3.5)
     K.type("x = = 1")
     K.keys("return")
-    -- a syntax failure has its own cues and no notice
-    -- (IS3.14): the text is red from the failing character,
-    -- and the cursor stands before it (IS3.4)
+    -- the parser's message says so, in the message band
+    local message = K.message()
+    assert.is_not_nil(message)
+    assert.truthy(message:find("expression", 1, true))
+    -- and the failure has its own cues: the text is red from
+    -- the failing character, and the cursor stands before it
+    -- (IS3.4)
     local _, red = K.field_highlight()
     assert.same({
       1,

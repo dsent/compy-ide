@@ -59,7 +59,7 @@
 | Replace the loaded block with the field's text                    | <kbd>Enter ⏎</kbd>                            |
 | Insert or replace, and keep the text in the field                 | <kbd>Shift</kbd>+<kbd>Insert</kbd>            |
 | Break a line in the field                                         | <kbd>Shift</kbd>+<kbd>Enter ⏎</kbd> / <kbd>Alt</kbd>+<kbd>Enter ⏎</kbd> |
-| Dismiss a notice; drop the field's text or the replacement; step back from the file (empty field) | <kbd>Esc</kbd>                                |
+| Drop the field's text or the replacement; step back from the file (empty field) | <kbd>Esc</kbd>                                |
 | Copy the highlighted block into the field                         | <kbd>Ctrl</kbd>+<kbd>Insert</kbd>             |
 | Cut the highlighted block into the field (empty field)            | <kbd>Ctrl</kbd>+<kbd>Delete</kbd> / <kbd>Shift</kbd>+<kbd>Delete</kbd> |
 | Move the highlighted block up / down                              | <kbd>Alt</kbd>+<kbd>⇧</kbd>/<kbd>Alt</kbd>+<kbd>⇩</kbd> |
@@ -108,9 +108,11 @@ text that is not valid Lua is not accepted. In a text or
 Markdown file every line is a block, and a line is accepted as
 written.
 
-When the editor cannot do what a key asks, it shows a one-line
-notice over the field that says why and what would work. The
-next key dismisses it. The editor asks no questions.
+When the editor cannot do what a key asks, it shows a notice
+just above the status line that says why and what would work.
+A text that is not valid Lua gets the parser's message there.
+The next key dismisses the message and does its usual work. The
+editor asks no questions.
 
 Happy with the modifications now, we can leave the editor by
 pressing <kbd>Esc</kbd> with an empty field.

@@ -360,6 +360,8 @@ local LOCKS = {
   capslock = true,
   numlock = true,
   scrolllock = true,
+  lgui = true,
+  rgui = true,
   [KeyCard.KEY] = true,
 }
 
@@ -370,10 +372,11 @@ local function lone_key(k)
 end
 
 --- Whether a key press is held back from the editor's keys:
---- every key while the key card shows (IS3.16), and the
---- Escape that dismisses a notice (IS5.7). Any other key
---- but a modifier dismisses the notice and then acts
---- (IS3.14).
+--- every key while the key card shows (IS3.16), and a gate
+--- chord's own key. A message is a hint that blocks nothing
+--- (IS3.14): any other key dismisses it here and then does
+--- its ordinary work, Escape included, which aborts the edit
+--- or steps back from the file in the same press.
 --- @param k string? --- nil for typed text
 --- @return boolean
 function EditorController:_held_back(k)
@@ -384,14 +387,15 @@ function EditorController:_held_back(k)
     self._gate_key = nil
     return true
   end
-  local e = self.input.model.error
-  local notice = type(e) == 'table' and e.notice
-  --- a modifier or a lock on its own leaves it showing
-  if not notice or (k and lone_key(k)) then
-    return false
+  --- a modifier or a lock on its own leaves it showing, and
+  --- so does the glyph a modifier chord leaks on the device
+  --- (compy-input-quirks, quirk 3), which types nothing
+  local leaked = not k and (Key.ctrl() or Key.alt())
+  local lone = k and lone_key(k)
+  if self.input:has_error() and not lone and not leaked then
+    self.input:clear_error()
   end
-  self.input:clear_error()
-  return k == 'escape'
+  return false
 end
 
 --- The editor's state, as the status line and the key card
@@ -591,9 +595,8 @@ function EditorController:textinput(t)
       --- composes real input
       return
     end
-    --- a message blocks no input (IS3.14); typing prepares
-    --- a draft in the field and opens no block (IS3.1)
-    input:clear_error()
+    --- typing prepares a draft in the field and opens no
+    --- block (IS3.1)
     self.input:textinput(t)
   elseif self.mode == 'search' then
     self.search:textinput(t)
@@ -688,9 +691,9 @@ function EditorController:_handle_submit(go)
       end
       if failure then
         --- IS3.4: the cursor goes before the failing character,
-        --- where the red text starts; a syntax failure shows no
-        --- notice (IS3.14)
-        self:refuse()
+        --- where the red text starts, and the parser's message
+        --- shows (NFR4.3)
+        self:refuse({ tostring(failure) })
         inter.model:move_cursor(failure.l, failure.c or 1)
         inter:update_view()
         return false
@@ -966,7 +969,7 @@ function EditorController:edit_block()
   local target = buf.loaded
   if not target and not self:_draft_is_empty() then
     return self:refuse({
-      'Finish the text first: Enter keeps it, Esc drops it.'
+      'Finish the text first: Enter adds it, Esc drops it.'
     })
   end
   local modified = target and self:_draft_modified()
@@ -1210,13 +1213,6 @@ function EditorController:keypressed(k, _, isrepeat)
   self.key_repeat = isrepeat or false
   if self:_held_back(k) then return end
   self.input:update_view()
-  --- a message blocks no input: the next key dismisses it
-  --- and acts, and Escape only dismisses it (IS5.7)
-  if self.input:has_error() and is_normal(self.mode)
-      and not lone_key(k) then
-    self.input:clear_error()
-    if k == 'escape' then return end
-  end
   local mode = self.mode
 
   if Key.ctrl() then

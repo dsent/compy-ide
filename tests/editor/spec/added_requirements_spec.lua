@@ -214,17 +214,18 @@ describe("requirements, added #editor #spec", function()
         K.state(),
         K.draft(),
         K.file(),
-        K.message() or "none"
+        K.message() ~= nil
       }
-      -- a syntax failure shows no notice (IS3.14), and one
-      -- Escape aborts (IS5.7)
+      -- the parser's message shows (NFR4.3); it blocks
+      -- nothing, and one Escape aborts (IS5.7)
       K.keys("escape")
       assert.same({
         "inserting",
         "a = = 1",
         FILE,
-        "none"
+        true
       }, refused)
+      assert.is_nil(K.message())
       assert.same("browsing", K.state())
       assert.same("editor", K.app_state())
       assert.same(FILE, K.file())
@@ -241,18 +242,19 @@ describe("requirements, added #editor #spec", function()
         K.target(),
         K.draft(),
         K.file(),
-        K.message() or "none"
+        K.message() ~= nil
       }
-      -- a syntax failure shows no notice (IS3.14), and one
-      -- Escape aborts (IS5.7)
+      -- the parser's message shows (NFR4.3); it blocks
+      -- nothing, and one Escape aborts (IS5.7)
       K.keys("escape")
       assert.same({
         "replacing",
         2,
         "y = 2 = 3",
         FILE,
-        "none"
+        true
       }, refused)
+      assert.is_nil(K.message())
       assert.same("browsing", K.state())
       assert.is_nil(K.target())
       assert.same("editor", K.app_state())

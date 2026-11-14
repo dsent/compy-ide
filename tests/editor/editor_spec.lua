@@ -1161,10 +1161,11 @@ describe('Editor #editor', function()
               buffer:get_text_content())
             assert.is_true(controller.input:has_error())
 
-            --- storage back: trying again formats and saves
+            --- storage back: trying again formats and saves;
+            --- the chord's key dismisses the notice and acts
             failing = false
-            mock.keystroke('escape', press)
             mock.keystroke('C-S-f', press)
+            assert.is_false(controller.input:has_error())
             assert.same('a = 1\n', disk)
           end)
 

@@ -8,13 +8,49 @@ local function field(s)
   return K.screen_text(s.field)
 end
 
---- The y of the first text drawn in the field that is `text`.
-local function y_of(s, text)
-  for _, t in ipairs(s.field) do
-    if t.text == text then
-      return t.y
-    end
+--- a row's height in the field and in the band
+local function fh()
+  return K.ed.view.cfg.fh
+end
+
+--- Texts as what was drawn where: each text and its y.
+local function placed(list)
+  local out = { }
+  for i, t in ipairs(list) do
+    out[i] = {
+      t.text,
+      t.y
+    }
   end
+  return out
+end
+
+--- The band's rows on the screen `s`: the editor draws them
+--- last, one text per row of the message shown.
+local function band(s)
+  local rows = K.ed.view:message_rows() or { }
+  local out = { }
+  for i = 1, #rows do
+    out[i] = s.texts[#s.texts - #rows + i]
+    assert(out[i] and out[i].text == rows[i],
+      "the band's rows are drawn last")
+  end
+  return out
+end
+
+--- What the screen `s` shows under the band: the texts and
+--- the fills drawn before the band's own, and the band's
+--- fill.
+local function under_band(s)
+  local n = #band(s)
+  local texts, fills = { }, { }
+  for i = 1, #s.texts - n do
+    texts[i] = s.texts[i]
+  end
+  for i = 1, #s.fills - 1 do
+    fills[i] = s.fills[i]
+  end
+  return texts, fills, s.fills[#s.fills]
 end
 
 --- The field's text drawn in the error colour, under its
@@ -69,49 +105,112 @@ describe("status line, notice and key card drawn #editor",
     assert.is_nil(field(K.screen()):find("CAPS", 1, true))
   end)
 
-  it("a notice shows under the draft, which stays", function()
-    K.browse_to(1)
-    K.type("r")
-    -- Edit during an insertion is refused
-    K.keys("f2")
-    local rows = K.ed.input:get_wrapped_error()
-    local s = K.screen()
-    assert.is_truthy(K.message())
-    assert.same("r", K.draft())
-    assert.same(1 + #rows, s.field_rows)
-    assert.truthy(field(s):find("inserting", 1, true))
-    assert.is_nil(field(s):find("Errors:", 1, true))
-    local draft_y, notice_y = y_of(s, "r"), y_of(s, rows[1])
-    assert.is_number(draft_y)
-    assert.is_number(notice_y)
-    assert.is_true(draft_y < notice_y)
-    -- the next key dismisses it, and the field is one row
-    K.keys("right")
-    assert.is_nil(K.message())
-    assert.same(1, K.screen().field_rows)
-  end)
-
-  it("a notice wider than the field wraps between words",
+  describe("a message, in the band above the status line",
       function()
-    local words = string.rep("seven77 ", 12) .. "end."
-    K.ed:notice(words)
-    local rows = K.ed.input:get_wrapped_error()
-    assert.same(2, #rows)
-    assert.same(words, table.concat(rows, " "))
-    for _, r in ipairs(rows) do
-      assert.is_true(#r <= 64, r)
-    end
-    assert.same(3, K.screen().field_rows)
-  end)
+    it("leaves the status line, the field and the view where "
+        .. "they were", function()
+      K.browse_to(1)
+      K.type("r")
+      local before = K.screen()
+      -- Edit during an insertion is refused
+      K.keys("f2")
+      local after = K.screen()
+      assert.is_truthy(K.message())
+      assert.same("r", K.draft())
+      assert.same(1, #band(after))
+      -- the status line and the field: the same rows, and
+      -- the same drawn in them
+      assert.same(before.field_y, after.field_y)
+      assert.same(before.field_rows, after.field_rows)
+      assert.same(placed(before.field), placed(after.field))
+      -- the view: every text and every fill where it was,
+      -- the band's own drawn over them
+      local texts, fills = under_band(after)
+      assert.same(placed(before.texts), placed(texts))
+      assert.same(before.fills, fills)
+      -- the next key dismisses it, and nothing else moves
+      K.keys("right")
+      local gone = K.screen()
+      assert.is_nil(K.message())
+      assert.same(placed(before.texts), placed(gone.texts))
+      assert.same(before.fills, gone.fills)
+      assert.same(before.field_y, gone.field_y)
+    end)
 
-  it("a refused Edit at the end position shows one plain row",
-      function()
-    K.browse_to_end()
-    K.keys("f2")
-    local rows = K.ed.input:get_wrapped_error()
-    assert.same(1, #rows)
-    assert.same(K.message(), rows[1])
-    assert.same(2, K.screen().field_rows)
+    it("has its rows directly above the status line", function()
+      K.browse_to_end()
+      -- no block at the end position: Edit is refused
+      K.keys("f2")
+      local s = K.screen()
+      local rows = band(s)
+      assert.same(1, #rows)
+      assert.same(K.message(), rows[1].text)
+      assert.same(s.field_y - fh(), rows[1].y)
+      local drawn = K.screen_text(s.texts)
+      assert.is_nil(drawn:find("Errors:", 1, true))
+      assert.is_nil(field(s):find(rows[1].text, 1, true))
+      assert.same(1, s.field_rows)
+    end)
+
+    it("wraps between words onto a second row above the "
+        .. "first", function()
+      local words = string.rep("seven77 ", 12) .. "end."
+      local plain = K.screen()
+      K.ed:notice(words)
+      local s = K.screen()
+      local rows = band(s)
+      assert.same(2, #rows)
+      assert.same(words, rows[1].text .. " " .. rows[2].text)
+      for _, r in ipairs(rows) do
+        assert.is_true(#r.text <= 64, r.text)
+      end
+      assert.same(s.field_y - 2 * fh(), rows[1].y)
+      assert.same(s.field_y - fh(), rows[2].y)
+      assert.same(plain.field_y, s.field_y)
+      assert.same(plain.field_rows, s.field_rows)
+    end)
+
+    it("is filled from the top of the view's row it reaches "
+        .. "into, down to the status line", function()
+      K.ed:notice("A notice.")
+      local s = K.screen()
+      local _, _, fill = under_band(s)
+      local top = s.field_y - fh()
+      assert.same(s.field_y, fill.y + fill.h)
+      assert.is_true(fill.y <= top)
+      local pitch = K.ed.view:get_current_buffer():row_height()
+      assert.is_true(top - fill.y < pitch)
+      assert.same(0, fill.y % pitch)
+    end)
+
+    it("shows three rows of a longer one, the last cut",
+        function()
+      K.ed:notice(string.rep("seven77 ", 40))
+      local rows = band(K.screen())
+      assert.same(3, #rows)
+      assert.same("…", rows[3].text:sub(-#"…"))
+      assert.same(1, K.screen().field_rows)
+    end)
+
+    it("shows the parser's message after a syntax failure, "
+        .. "the draft red from the failure on", function()
+      K.browse_to_end()
+      K.type("x = = 1")
+      local before = K.screen()
+      K.keys("return")
+      local s = K.screen()
+      local rows = band(s)
+      assert.is_true(0 < #rows)
+      assert.same(K.message(), K.screen_text(rows, " "))
+      assert.truthy(K.message():find("expression", 1, true))
+      assert.same(s.field_y - #rows * fh(), rows[1].y)
+      assert.same("= 1", red(s))
+      assert.same(before.field_y, s.field_y)
+      assert.same(before.field_rows, s.field_rows)
+      local texts, fills = under_band(s)
+      assert.same(placed(before.texts), placed(texts))
+      assert.same(before.fills, fills)
+    end)
   end)
 
   it("the project's name is whole where it fits", function()

@@ -129,11 +129,13 @@ describe('editor key contract #input', function()
       for i = #mods, 1, -1 do F.session.release(mods[i]) end
     end
 
-    --- Escape twice: the notice goes, then the edit
+    --- one Escape: the refusal's notice goes and the edit
+    --- with it
     local function abort_edit()
       chord({}, 'escape')
-      chord({}, 'escape')
+      assert.is_false(ed.input:has_error())
       assert.same('browsing', ed:state_name())
+      assert.same('editor', love.state.app_state)
     end
 
     it('Ctrl+Shift+S is refused during an edit, then leaves',
@@ -173,20 +175,20 @@ describe('editor key contract #input', function()
       end)
 
     -- The refusal holds back the chord's own key press and
-    -- no later one: Escape dismisses the notice at its first
-    -- press and aborts at its second (IS5.7).
+    -- no later one: the Escape after it dismisses the notice
+    -- and aborts the edit in the same press (IS5.7).
     it('a refused Ctrl+T swallows no later key', function()
       open_dirty_block()
 
       chord({ 'lctrl' }, 't')
       assert.is_true(ed.input:has_error())
       assert.is_nil(ed._gate_key)
+      assert.same('replacing', ed:state_name())
 
       chord({}, 'escape')
       assert.is_false(ed.input:has_error())
-      assert.same('replacing', ed:state_name())
-      chord({}, 'escape')
       assert.same('browsing', ed:state_name())
+      assert.same('editor', love.state.app_state)
     end)
 
     it('nor when the chord\'s key never reaches the editor',
@@ -200,8 +202,8 @@ describe('editor key contract #input', function()
 
         chord({}, 'escape')
         assert.is_false(ed.input:has_error())
-        chord({}, 'escape')
         assert.same('browsing', ed:state_name())
+        assert.same('editor', love.state.app_state)
       end)
 
     for _, mode in ipairs({ 'search' }) do

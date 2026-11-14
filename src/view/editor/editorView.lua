@@ -47,9 +47,67 @@ function EditorView:draw()
       gfx.push('all')
       self.input:draw()
       gfx.pop()
+      self:draw_message(bv)
     end
     gfx.pop()
   end
+end
+
+--- The rows a message may take: one, or up to three when it
+--- is wider than the screen
+local MESSAGE_ROWS = 3
+
+--- The rows of the message shown, nil when none shows; one
+--- longer than the band ends in an ellipsis.
+--- @return string[]?
+function EditorView:message_rows()
+  local all = self.controller.input:get_wrapped_error()
+  if not all or #all == 0 then return nil end
+  local rows = { }
+  for i = 1, math.min(#all, MESSAGE_ROWS) do
+    rows[i] = all[i]
+  end
+  if #all > MESSAGE_ROWS then
+    local w = self.cfg.drawableChars
+    local last = string.usub(rows[MESSAGE_ROWS], 1, w - 1)
+    rows[MESSAGE_ROWS] = last .. '…'
+  end
+  return rows
+end
+
+--- A message, a notice or an error's, in the band directly
+--- above the status line, over the document view's last rows
+--- (IS3.14). It is a hint that blocks nothing: neither the
+--- status line nor the field moves for it, and the view
+--- neither scrolls nor resizes; the rows under it are hidden
+--- until the next key. Call after the field's draw, which
+--- places the status line.
+--- @param bv BufferView
+function EditorView:draw_message(bv)
+  local rows = self:message_rows()
+  if not rows then return end
+  local cf = self.cfg
+  local colors = cf.colors.input
+  local fh = cf.fh
+  local width = gfx.getWidth()
+  local bottom = self.input.start_h - cf.statusline_border / 2
+  local top = bottom - #rows * fh
+  --- from the top of the view's row the band reaches into,
+  --- so that no row of the view shows cut
+  local pitch = bv:row_height()
+  local from = math.floor(top / pitch) * pitch
+
+  gfx.push('all')
+  gfx.setFont(cf.font)
+  gfx.setColor(colors.error_bg)
+  gfx.rectangle('fill', 0, from, width, bottom - from)
+  gfx.setColor(colors.error)
+  gfx.rectangle('line', 1, from + 1,
+    width - 2, bottom - from - 2)
+  for i, row in ipairs(rows) do
+    gfx.print(row, 0, top + (i - 1) * fh)
+  end
+  gfx.pop()
 end
 
 --- The key card over the document view and the field, the

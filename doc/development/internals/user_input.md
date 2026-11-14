@@ -190,10 +190,12 @@ input. This is used for parse errors, runtime errors, and validation failures.
   closes it and does its usual work, so nothing typed is lost. A modifier
   alone leaves it up, and a key pressed with it closes it as that key would
   (`ConsoleController:keypressed`, `:textinput`).
-- **Editor:** its own rules, in `EditorController:keypressed` and
-  `:textinput`. In the editor's field (`model.editing`) the widget itself
-  locks nothing: the next key or character closes the message and does its
-  usual work (editor principles, IS3.14).
+- **Editor:** its own rules, in `EditorController:_held_back`. In the
+  editor's field (`model.editing`) the widget itself locks nothing: the next
+  key or character closes the message and does its usual work, Escape
+  included (editor principles, IS3.14). The message is drawn over the
+  document view, directly above the status line (`EditorView:draw_message`),
+  and the field stays as it is.
 - **Drawing:** each line of a message is wrapped on its own, a tab shows as two
   spaces, and a message taller than the input area shows its first rows and
   ends in `...` (`UserInputModel:get_wrapped_error`,

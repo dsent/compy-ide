@@ -19,9 +19,9 @@
 local STATE_STEP = { abort = true, open = true, switch = true }
 
 local NOTICE = {
-  cut_inserting = 'Finish the text first: Enter keeps it,'
+  cut_inserting = 'Finish the text first: Enter adds it,'
       .. ' Esc drops it.',
-  replacing = 'Finish the text first: Enter keeps it,'
+  replacing = 'Finish editing first: Enter keeps it,'
       .. ' Esc drops it.',
   cut_end = 'End of file: no block to cut here.'
       .. ' Move up onto one.',

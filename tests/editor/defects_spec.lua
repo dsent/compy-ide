@@ -270,7 +270,7 @@ describe("editor defects #editor", function()
     K.open()
     K.type("y = 2")
     K.keys("return")
-    K.keys("escape")
+    -- one Escape: the notice goes and the edit with it
     K.keys("escape")
     assert.same("browsing", K.state())
     K.keys("lctrl", "z")

@@ -857,8 +857,8 @@ editor keeps it for itself.
 Ctrl+Shift+S, Ctrl+Q, Ctrl+Shift+R and Ctrl+Alt+R leave the editor too, and so
 does Ctrl+T while you browse the file; in search, Ctrl+T does nothing. None of
 them asks a question. While there is text in the editor's field, or a block is
-loaded to be replaced, each is refused with a one-line notice: submit the text
-with Enter or drop it with Escape first, and the exit works. A text whose save
+loaded to be replaced, each is refused with a notice: submit the text with
+Enter or drop it with Escape first, and the exit works. A text whose save
 failed stays in the field, so it holds the exit back the same way. Ctrl+Esc
 exits the IDE from anywhere and does not ask.
 

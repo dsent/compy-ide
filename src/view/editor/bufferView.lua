@@ -359,13 +359,19 @@ end
 ---  draw  ---
 --------------
 
+--- The height of one row of the view, in pixels.
+--- @return number
+function BufferView:row_height()
+  return self.cfg.fh * 1.032 -- magic constant
+end
+
 --- @param special boolean
 function BufferView:draw(special)
   local gfx = love.graphics
   local cf_colors = self.cfg.colors
   local colors = cf_colors.editor
   local font = self.cfg.font
-  local fh = self.cfg.fh * 1.032 -- magic constant
+  local fh = self:row_height()
   local fw = self.cfg.fw
   local vc = self.content
   --- @type VisibleContent|VisibleStructuredContent

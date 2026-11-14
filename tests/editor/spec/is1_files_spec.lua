@@ -598,10 +598,10 @@ describe("IS1 files #editor #spec", function()
       K.type("w = 4")
       K.keys("lctrl", "lshift", "s")
       assert.same("editor", K.app_state())
-      -- the notice, then the edit
-      K.keys("escape")
+      -- one Escape: the notice goes and the edit with it
       K.keys("escape")
       assert.same("browsing", K.state())
+      assert.same("editor", K.app_state())
       K.keys("lctrl", "lshift", "s")
       assert.same("ready", K.app_state())
     end)

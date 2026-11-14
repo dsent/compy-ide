@@ -122,9 +122,13 @@ describe('the editor across files #input', function()
         assert.same(1, ed:get_active_buffer().loaded)
         assert.same({ 'x = 1', 'y = 1' },
           ed:get_active_buffer():get_text_content())
-        --- Escape takes the notice first (IS5.7)
-        chord('escape')
         assert.same('x = 99', field())
+        --- the notice blocks nothing: a key that changes no
+        --- text dismisses it, and the edit goes on
+        chord('left')
+        assert.is_false(ed.input:has_error())
+        assert.same('x = 99', field())
+        assert.same(1, ed:get_active_buffer().loaded)
       end)
 
     it('keeps an insertion in the field', function()
@@ -135,7 +139,9 @@ describe('the editor across files #input', function()
       assert.is_true(ed.input:has_error())
       assert.same({ 'x = 1', 'y = 1' },
         ed:get_active_buffer():get_text_content())
-      chord('escape')
+      assert.same('newvalue = 99', field())
+      chord('left')
+      assert.is_false(ed.input:has_error())
       assert.same('newvalue = 99', field())
     end)
 
@@ -164,16 +170,19 @@ describe('the editor across files #input', function()
           open()
           draft('x = 99')
           chord('return')
-          chord('escape')
+          --- the failed write's notice goes at the next key
+          chord('left')
           chord(unpack(c[2]))
           assert.same({}, took)
           assert.is_true(ed.input:has_error())
           assert.same('x = 99', field())
 
-          --- the notice, then the edit
+          --- one Escape: the notice goes and the edit with it
           chord('escape')
-          chord('escape')
+          assert.is_false(ed.input:has_error())
           assert.same('', field())
+          assert.same('browsing', ed:state_name())
+          assert.same('editor', love.state.app_state)
           chord(unpack(c[2]))
           assert.same({ c[3] }, took)
         end)
@@ -183,9 +192,10 @@ describe('the editor across files #input', function()
       open()
       draft('x = 99')
       chord('return')
-      --- the notice, the edit, the file
+      --- the notice and the edit, then the file
       chord('escape')
-      chord('escape')
+      assert.same('editor', love.state.app_state)
+      assert.same('', field())
       chord('escape')
       assert.same('ready', love.state.app_state)
     end)
@@ -196,8 +206,8 @@ describe('the editor across files #input', function()
         open()
         chord('lctrl', 'lshift', 'f')
         assert.is_true(ed.input:has_error())
-        chord('escape')
 
+        --- the notice blocks no exit
         chord('lctrl', 'q')
         assert.same({ 'quit_project' }, took)
       end)

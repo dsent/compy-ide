@@ -204,10 +204,13 @@ describe("render smoke #editor", function()
     assert.is_truthy(message)
     -- the draft stays, shown formatted (IS3.2)
     assert.truthy(K.draft():find(name, 1, true))
-    -- the notice's first words, and the status line with it
-    assert.is_true(in_field(s, message:sub(1, 12)))
+    -- the notice's first words over the view, and the field
+    -- with its status line and the draft as they were
+    local over = K.screen_text(s.texts)
+    assert.is_true(over:find(message:sub(1, 12), 1, true) ~= nil)
     assert.is_true(in_field(s, "main.lua"))
-    -- the next key dismisses it, and the draft is drawn again
+    assert.is_true(in_field(s, name:sub(1, 12)))
+    -- the next key dismisses it, and the draft stays drawn
     K.keys("left")
     s = K.screen()
     assert.is_nil(K.message())

@@ -264,36 +264,28 @@ describe("IS4 and IS5, added #editor #spec", function()
       assert.same(FILE, K.file())
     end)
 
+    -- A message is a hint that blocks nothing (the
+    -- maintainer's ruling on IS3.14 and IS5.7): the Escape
+    -- that dismisses it does its ordinary work in the same
+    -- press.
     spec_it("IS5.7 Cancel an edit with Escape: while a notice "
-        .. "shows, Escape dismisses it and keeps the edit",
-        function()
+        .. "shows, one Escape dismisses it and aborts a "
+        .. "replacement", function()
       edit(1)
       K.type("0")
       local browsed = pcall(K.browse_to, 3)
       K.keys("f2")
-      local refused = K.message()
+      local refused = {
+        K.message() or "none",
+        K.state(),
+        K.draft()
+      }
       K.keys("escape")
       assert.is_true(browsed)
-      assert.is_not_nil(refused)
+      assert.are_not.same("none", refused[1])
+      assert.same("replacing", refused[2])
+      assert.same("x = 10", refused[3])
       assert.is_nil(K.message())
-      assert.same("replacing", K.state())
-      assert.same(1, K.target())
-      assert.same("x = 10", K.draft())
-      assert.same(FILE, K.file())
-    end)
-
-    spec_it(
-        "IS5.7 Cancel an edit with Escape: after the notice "
-        .. "is dismissed, the next Escape aborts", function()
-      edit(1)
-      K.type("0")
-      local browsed = pcall(K.browse_to, 3)
-      K.keys("f2")
-      K.keys("escape")
-      local kept = K.state()
-      K.keys("escape")
-      assert.is_true(browsed)
-      assert.same("replacing", kept)
       assert.same("browsing", K.state())
       assert.is_nil(K.target())
       assert.same("", K.draft())
@@ -301,27 +293,40 @@ describe("IS4 and IS5, added #editor #spec", function()
       assert.same(FILE, K.file())
     end)
 
+    spec_it(
+        "IS5.7 Cancel an edit with Escape: with a notice "
+        .. "showing in the browsing state, one Escape steps "
+        .. "back from the file", function()
+      K.browse_to_end()
+      -- no block at the end position: Edit is refused
+      K.keys("f2")
+      local refused = {
+        K.message() or "none",
+        K.state(),
+        K.app_state()
+      }
+      K.keys("escape")
+      assert.are_not.same("none", refused[1])
+      assert.same("browsing", refused[2])
+      assert.same("editor", refused[3])
+      assert.same("ready", K.app_state())
+      assert.same(FILE, K.file())
+    end)
+
     spec_it("IS5.7 Cancel an edit with Escape: after a size "
-        .. "refusal, Escape dismisses its notice first",
-        function()
+        .. "refusal, one Escape dismisses its notice and "
+        .. "aborts the insertion", function()
       K.browse_to_end()
       K.type_lines(K.block_lines(15))
       K.keys("return")
-      local refused = K.message()
-      local kept = K.draft()
-      K.keys("escape")
-      local dismissed = {
-        K.state(),
-        K.draft(),
-        K.message() or "none"
+      local refused = {
+        K.message() or "none",
+        K.state()
       }
       K.keys("escape")
-      assert.is_not_nil(refused)
-      assert.same({
-        "inserting",
-        kept,
-        "none"
-      }, dismissed)
+      assert.are_not.same("none", refused[1])
+      assert.same("inserting", refused[2])
+      assert.is_nil(K.message())
       assert.same("browsing", K.state())
       assert.same("", K.draft())
       assert.same("editor", K.app_state())
@@ -329,7 +334,7 @@ describe("IS4 and IS5, added #editor #spec", function()
     end)
 
     spec_it("IS5.7 Cancel an edit with Escape: after a syntax "
-        .. "failure, which shows no notice, one Escape aborts",
+        .. "failure, whose message shows, one Escape aborts",
         function()
       K.browse_to_end()
       K.type("a = = 1")
@@ -337,14 +342,15 @@ describe("IS4 and IS5, added #editor #spec", function()
       local refused = {
         K.state(),
         K.draft(),
-        K.message() or "none"
+        K.message() ~= nil
       }
       K.keys("escape")
       assert.same({
         "inserting",
         "a = = 1",
-        "none"
+        true
       }, refused)
+      assert.is_nil(K.message())
       assert.same("browsing", K.state())
       assert.same("", K.draft())
       assert.is_nil(K.target())

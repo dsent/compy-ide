@@ -428,6 +428,22 @@ function K.type(text)
   end
 end
 
+--- Type the letter or digit `ch` as the device may send it:
+--- its text first, then its key press (K.type and K.keys send
+--- the key press first).
+function K.type_text_first(ch)
+  local ks = assert(keys_for(ch), "a letter or a digit")
+  for i = 1, #ks - 1 do
+    F.session.press(ks[i])
+  end
+  F.session.type(ch)
+  F.session.press(ks[#ks])
+  for i = #ks, 1, -1 do
+    F.session.release(ks[i])
+  end
+  K.frame()
+end
+
 -- read-only accessors ----------------------------------------
 -- In the spec's terms, so that a test reads as its item does.
 
@@ -861,13 +877,14 @@ end
 
 --- The texts of a recorded list, in the order drawn, joined.
 --- @param list table[]
+--- @param sep string?  between the texts; none when omitted
 --- @return string
-function K.screen_text(list)
+function K.screen_text(list, sep)
   local out = { }
   for i, t in ipairs(list) do
     out[i] = t.text
   end
-  return table.concat(out)
+  return table.concat(out, sep)
 end
 
 local function kind_of(colour, colours)

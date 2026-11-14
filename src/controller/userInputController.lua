@@ -646,6 +646,7 @@ function UserInputController:keypressed(k, sc, isr)
   -- A modifier or a lock on its own leaves it showing.
   local lone = Key.is_mod(k) or k == 'capslock'
       or k == 'numlock' or k == 'scrolllock'
+      or k == 'lgui' or k == 'rgui'
   if input:has_error() and input.editing then
     if not lone then input:clear_error() end
   elseif input:has_error() then
