@@ -436,6 +436,27 @@ function BufferModel:restore(state)
   self:replace_text(state.lines, state.ends)
 end
 
+--- what a file read anew replaces (reload)
+local READ_FIELDS = {
+  'content', 'invalid', 'eol', 'ends', 'stored', 'revmap',
+  'semantic',
+}
+
+--- Take the file's text anew, as storage holds it, read as
+--- an opening reads it; its timeline goes. The browsing
+--- position is the caller's to set.
+--- @param content string? --- nil: the file is missing
+function BufferModel:reload(content)
+  local fresh = BufferModel(self.name, content, self.save_file,
+    self.chunker, self.highlighter, self.printer, self.truncer)
+  for _, k in ipairs(READ_FIELDS) do
+    self[k] = fresh[k]
+  end
+  self.history = {}
+  self.redo_history = {}
+  self:_text_change()
+end
+
 --- @return table? --- the applied step, nil when empty
 function BufferModel:undo()
   local n = #self.history

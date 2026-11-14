@@ -110,6 +110,12 @@ Project-author guide: `doc/input_api.md`.
   cut, a move, Ctrl+Z and Ctrl+Y say the file could not be read; the same key works
   once it can. With the card out, `edit()` and Ctrl+J say the file could not be read
   and open nothing.
+- **A run keeps the editor's files, and `edit()` starts afresh.** Ctrl+T back from
+  a run shows every file as you left it, with its place and undo history. A file
+  that the run or a console command such as `tidy()` changed meanwhile shows what
+  the SD card holds, and its undo history starts again; so does a file you step back
+  to with Escape. `edit("name")` in the console closes the files a run came from and
+  opens the file alone, at its end.
 - **The file editor shows no program behind it.** `edit()` in the console while a
   finished program still holds its handlers, or from such a program's own handler,
   stops the program first, as Ctrl+T does: its keys, hooks and calls no longer reach

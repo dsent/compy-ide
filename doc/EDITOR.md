@@ -5,15 +5,21 @@
 - The contents only change on either <kbd>Enter</kbd> or
   combinations of at least two keys (such as
   <kbd>Ctrl</kbd>+<kbd>Delete</kbd>).
-- The editor shows a file as it last read or wrote it, and writes
-  nothing over a change made outside it: a file a program or a
-  computer changed meanwhile, a run of your project included, keeps
-  showing the text it had until you open it again, and the next
-  <kbd>Enter</kbd>, cut, move, <kbd>Ctrl</kbd>+<kbd>Z</kbd> or
+- The editor shows a file as the SD card holds it, and writes
+  nothing over a change made outside it. A file that a run of your
+  project or a console command such as `tidy()` changed while the
+  editor was away comes back with its new text when you return with
+  <kbd>Ctrl</kbd>+<kbd>T</kbd>, and its undo history starts again;
+  so does a file you return to with <kbd>Escape</kbd>. A file
+  changed while the editor shows it keeps the text it had, and the
+  next <kbd>Enter</kbd>, cut, move, <kbd>Ctrl</kbd>+<kbd>Z</kbd> or
   <kbd>Ctrl</kbd>+<kbd>Y</kbd> says it changed and saves nothing.
-  To see what the SD card holds, leave the editor
+  To see what the SD card holds then, leave the editor
   (<kbd>Ctrl</kbd>+<kbd>Q</kbd>) and open the file again with
   `edit()`.
+- `edit()` in the console starts the editor afresh: the files a
+  run came from close, and the file opens alone, at its end.
+  <kbd>Ctrl</kbd>+<kbd>T</kbd> is the way back to them.
 - The contents are always validated, changes cannot be persisted
   unless syntactically valid.
 - Editor contents should only change when it's the user's

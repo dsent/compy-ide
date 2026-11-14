@@ -237,6 +237,7 @@ function EditorController:pop_buffer()
   local off = bv:get_offset()
   bv:open(b)
   bv:scroll_to(off)
+  self:_take_outside_change()
   self:update_status()
 end
 
@@ -451,14 +452,51 @@ function EditorController:hide()
   self.clipboard = love.system.getClipboardText()
 end
 
---- The editor as a run left it
+--- The editor as a run left it, its front file as storage
+--- holds it (IS1.4)
 function EditorController:show()
   local clip = self.clipboard
   if string.is_non_empty_string(clip) then
     love.system.setClipboardText(clip)
   end
+  self:_take_outside_change()
   self:update_status()
   self.input:update_view()
+end
+
+--- @private
+--- The front file, come to the front in the browsing state
+--- (shown after a run, or stepped back to with Escape), shows
+--- the text storage holds (_baseline). Changed from outside,
+--- it is read anew and its timeline goes (IS6.6); the
+--- browsing position keeps its block number while the file
+--- has that block, else it goes to the end position. When it
+--- cannot be read, nothing changes: the next key that needs
+--- storage says so (_refuse_unread).
+function EditorController:_take_outside_change()
+  local buf = self:get_active_buffer()
+  if not buf or self:_baseline(buf) ~= 'changed' then return end
+  local text = self:_disk_text(buf)
+  --- an edit in progress would go with the old text: none
+  --- reaches here, since a file is left only in the browsing
+  --- state (refuse_to_leave, follow_require). Text that is
+  --- not UTF-8 is not admitted (IS1.2). Either way the file
+  --- stays as it was, and the notice says it changed.
+  if self:state_name() ~= 'browsing'
+      or (type(text) == 'string' and not utf8.len(text)) then
+    self:notice({ self:_outside_notice() })
+    return
+  end
+  local last = buf:get_content_length()
+  local sel = buf:get_selection()
+  buf:reload(text or nil)
+  self:_note_read(buf, text or nil)
+  buf.outdated = nil
+  self:timeline_forget(buf)
+  self.input.model.edit_history:reset()
+  if sel > last then sel = buf:get_content_length() + 1 end
+  buf:set_selection(sel)
+  self:_reuse_show()
 end
 
 --- Leave the editor: every file goes, and its timeline
@@ -989,20 +1027,22 @@ function EditorController:_refuse_stale(buf, undone)
     self:_refuse_unread(buf, undone)
     return true
   end
-  --- reopening is leaving, which drops the field: with text
-  --- there, possibly a cut block's only copy, the notice says so
-  if self:state_name() == 'browsing' then
-    self:refuse({
-      'The file changed outside the editor.'
-      .. ' Reopen it to go on.'
-    })
-  else
-    self:refuse({
-      'The file changed outside the editor, so nothing is'
-      .. ' saved. Reopening it drops the text in the field.'
-    })
-  end
+  self:refuse({ self:_outside_notice() })
   return true
+end
+
+--- @private
+--- What a file changed from outside means for the state:
+--- reopening is leaving, which drops the field, and with text
+--- there, possibly a cut block's only copy, the notice says so
+--- @return string
+function EditorController:_outside_notice()
+  if self:state_name() == 'browsing' then
+    return 'The file changed outside the editor.'
+        .. ' Reopen it to go on.'
+  end
+  return 'The file changed outside the editor, so nothing is'
+      .. ' saved. Reopening it drops the text in the field.'
 end
 
 --- @private

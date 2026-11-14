@@ -168,24 +168,19 @@ describe("round four #editor #spec", function()
     }
     for run, keys in pairs(RUNS) do
       spec_it("IS3.14 Explain a refusal: a notice shown before "
-          .. run .. " is gone when its file comes back from "
-          .. "another", function()
-        K.reset({
-          ["main.lua"] = "x = 1\n",
-          ["notes.txt"] = "hello\n",
-        })
-        K.open()
-        K.keys("f2")
-        assert.truthy(K.message())
-        K.keys(unpack(keys))
-        assert.are_not.same("editor", K.app_state())
-        K.open("notes.txt")
-        assert.same("notes.txt", K.file_name())
-        assert.is_nil(K.message())
-        K.keys("escape")
-        assert.same("main.lua", K.file_name())
-        assert.is_nil(K.message())
-      end)
+          .. run .. " is gone when Ctrl+T brings its file back",
+        function()
+          K.reset({ ["main.lua"] = "x = 1\n" })
+          K.open()
+          K.keys("f2")
+          assert.truthy(K.message())
+          K.keys(unpack(keys))
+          assert.are_not.same("editor", K.app_state())
+          K.keys("lctrl", "t")
+          assert.same("editor", K.app_state())
+          assert.same("main.lua", K.file_name())
+          assert.is_nil(K.message())
+        end)
     end
   end)
 

@@ -2189,9 +2189,12 @@ function ConsoleController:reset_scratchpad()
   return self:open_project(name)
 end
 
---- Open a file in front of the editor's files: those a run
---- came from (IS1.4) and the callers of a followed file
---- (IS1.5).
+--- Open a file. From the console (edit("name"), or Ctrl+T
+--- with no file to go back to) it starts the editor anew,
+--- the file alone on its stack (IS1.1): the files a run came
+--- from go, as leaving the editor takes them (IS1.6), and
+--- Ctrl+T alone goes back to them (IS1.4). From the editor
+--- (Ctrl+J) it opens in front of its caller (IS1.5).
 --- @param name string?
 --- @param must_exist boolean? --- a file followed to (IS1.5)
 --- is one the project holds; edit("name") creates its own
@@ -2226,20 +2229,10 @@ function ConsoleController:edit(name, must_exist)
     refuse('Finish the text first: Enter keeps it, Esc drops it.')
     return
   end
-  --- a file is on the editor's stack once; edit() in the
-  --- console shows the files a run came from when it names
-  --- one of them
-  local open = self.editor:_find_buffer(fpath)
-  if open then
-    local hidden = love.state.app_state ~= 'editor'
-    --- a program stopped first may have changed the project
-    --- and its files: the request is read again
-    if hidden and not self:show_editor() then
-      return self:edit(name, must_exist)
-    end
-    if not hidden or open ~= self.editor:get_active_buffer() then
-      self.editor:refuse({ filename .. ' is already open.' })
-    end
+  local from_console = love.state.app_state ~= 'editor'
+  --- a file is on the editor's stack once
+  if not from_console and self.editor:_find_buffer(fpath) then
+    self.editor:refuse({ filename .. ' is already open.' })
     return
   end
   --- a file the editor could never save stays shut: every
@@ -2291,6 +2284,11 @@ function ConsoleController:edit(name, must_exist)
 
   if not self:_enter_editor() then
     return self:edit(name, must_exist)
+  end
+  --- a hidden editor holds no edit in progress: a run is
+  --- refused during one (refuse_to_leave)
+  if from_console then
+    self.editor:close()
   end
   --- Editor accept path: a save is durable before the
   --- editor reports acceptance (spec 2.6), so a force-stop
