@@ -457,15 +457,16 @@ end
 --- Dispose of the content a verb finished with, then take the
 --- widget down — both only if this instance seats the cell
 --- (doc/development/decisions/input.md, D-LIFECYCLE-FLAGS).
---- The clear is model:cancel(): remember, THEN clear, so an
---- abandoned line reaches the input history before it is
---- emptied (statement 4). It is not compy.input.clear(), which
---- touches no history.
+--- The clear is model:cancel(): a submitted line reaches the
+--- input history before it is emptied, and a cancelled one,
+--- which never ran, does not (the classic shell's history).
+--- It is not compy.input.clear(), which touches no history.
 --- @param self UserInputController
 --- @param clear boolean?
 --- @param hide boolean?
-local function dispose(self, clear, hide)
-  if clear then self.model:cancel() end
+--- @param ran boolean? the verb is a submission
+local function dispose(self, clear, hide, ran)
+  if clear then self.model:cancel(ran) end
   if hide then self:hide() end
 end
 
@@ -503,7 +504,7 @@ function UserInputController:submit_flow()
     return
   end
   local text = string.unlines(lines)
-  dispose(self, self.clear_on_submit, self.hide_on_submit)
+  dispose(self, self.clear_on_submit, self.hide_on_submit, true)
   run_callback(self, 'on_text_entered', text)
   run_callback(self, 'after_submit', text)
 end

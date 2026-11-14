@@ -54,17 +54,18 @@ function ConsoleController.new(M, main_ctrl)
   pre_env.font = config.view.font
   local IC = UserInputController(M.input)
     :always_shown()
-    -- Escape clears the console line and remembers it, exactly
-    -- as it always has -- now because this instance asks for
-    -- it rather than because the widget destroys
+    -- Escape clears the console line, because this instance
+    -- asks for it rather than because the widget destroys
     -- unconditionally (doc/development/decisions/input.md,
-    -- D-LIFECYCLE-FLAGS, statement 3).
+    -- D-LIFECYCLE-FLAGS, statement 3). The line never ran, so
+    -- the history does not keep it.
     :seat_lifecycle({ clear_on_cancel = true })
   -- Console history navigation: at the vertical boundary the
   -- widget fires on_limit_reached; the console maps up/down to
   -- history back/forward (doc/development/decisions/input.md,
   -- D-EDIT-CALLBACKS), retiring the old keypressed
-  -- return-value channel.
+  -- return-value channel. The walk is the classic shell's
+  -- (model/input/history.lua).
   IC.callbacks.on_limit_reached = function(dir)
     if dir == 'up' then IC:history_back() end
     if dir == 'down' then IC:history_fwd() end

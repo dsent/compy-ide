@@ -290,7 +290,8 @@ a session you are *not* re-activating is `compy.input.set_cursor`'s job.
 
 "Reset the widget" is four bespoke, mutually inconsistent mechanisms, not one shared primitive:
 
-- **console** — Escape resets content and keeps history, and Ctrl+L clears the terminal only
+- **console** — Escape empties the line, which the history does not keep (it holds only lines
+  that ran), and Ctrl+L clears the terminal only
   (Ctrl+Q no longer resets the console's content, and Ctrl+Shift+R, which wiped content and
   history, is dropped: the reserved map of 2026-11-14);
 - **editor** — Escape during an edit (`cancel_edit`: the draft and the replacement target go),
@@ -326,7 +327,8 @@ love.handlers.keypressed (k, scancode, isrepeat)
       │    → else ConsoleController:keypressed
       │        → if editor state: EditorController:keypressed
       │        → else: console key handling
-      │          → history navigation (PageUp/Down)
+      │          → history navigation (Up/Down at the
+      │            field's first/last row)
       │          → UserInputController:keypressed
       │          → Enter → ConsoleController:evaluate_input
       └─ project run: ProjectInputController — the free function
@@ -524,8 +526,15 @@ binding to apply, deliberately not a rule the tier enforces.
 
 ### Console-specific keys
 
-- **PageUp/PageDown**: history back/forward
-- **Up/Down at input boundary**: also triggers history navigation (handled as a "limit reached" return from `UserInputController:keypressed`)
+- **PageUp/PageDown**: page the output; they recall nothing
+- **Up/Down at input boundary**: history navigation, through the widget's `on_limit_reached`
+  (below). The walk is the classic shell's (`model/input/history.lua`): the entries are the lines
+  that ran, and walking never changes one. Up from the line being typed keeps it in a slot below
+  the newest entry, and Down past the newest brings it back; Down on it does nothing. An edit to a
+  recalled line is kept for that entry while the walk moves away and back. Enter stores the shown
+  line as a new entry, and Enter or a cleared field (Escape, a successful run) ends the walk and
+  forgets the kept line and every edit. A recalled line shows with the cursor at its end. An empty
+  or blank line is no entry; a line equal to the newest is stored again.
 - **Enter** (no shift): submit → `evaluate_input()`
 - **Ctrl+L**: clear terminal output
 - **Shift+Enter**: insert newline in input (multiline expression)
@@ -596,7 +605,8 @@ whether it repeats while held, and the words the key card shows for it; the card
 the key to the shared widget; the rest are the surface's own (`ACTIONS` in each controller). So the
 editor consumes Enter and Escape itself (`submit()`; `cancel_edit()` or `close_buffer()`), and the
 widget's `submit_flow`/`cancel_flow` never run for them; the console runs Enter as
-`evaluate_input` and hands Escape to the widget, whose `clear_on_cancel` clears and remembers the line.
+`evaluate_input` and hands Escape to the widget, whose `clear_on_cancel` clears the line without
+storing it: the history holds only lines that ran.
 The project widget runs the flows for real (that IS its submit/cancel).
 
 ### UserInputController keypressed (shared)

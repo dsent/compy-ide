@@ -654,11 +654,11 @@ function UserInputModel:_remember()
   end
 end
 
+--- A recalled line shows with the cursor at its end (FR1.5)
 function UserInputModel:history_back()
   if self:keep_history() then
     local t = self:get_text()
     local ok, hist = self.history:history_back(t)
-    -- TODO: remember cursor pos?
     if ok then
       self:set_text(hist)
       self:jump_end()
@@ -666,16 +666,15 @@ function UserInputModel:history_back()
   end
 end
 
+--- Past the newest entry is the line typed, and Down on it
+--- does nothing
 function UserInputModel:history_fwd()
   if self:keep_history() then
     local t = self:get_text()
     local ok, hist = self.history:history_fwd(t)
-    -- TODO: remember cursor pos?
     if ok then
       self:set_text(hist)
       self:jump_end()
-    else
-      self:clear_input()
     end
   end
 end
@@ -1197,8 +1196,11 @@ function UserInputModel:evaluate()
   return self:handle(true)
 end
 
-function UserInputModel:cancel()
-  self:handle(false)
+--- Clear the field. Only a line that `ran` goes to the
+--- history: one dropped never ran.
+--- @param ran boolean?
+function UserInputModel:cancel(ran)
+  if ran then self:_remember() end
   self:reset()
 end
 

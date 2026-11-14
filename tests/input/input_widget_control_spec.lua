@@ -79,9 +79,9 @@ describe('input surface: widget control #input', function()
       function()
         local input = F.compy_input()
         input.show({ text = 'one' })
-        F.session.press('return')
-        input.show({ text = 'two', force = true })
-        F.session.press('return')
+        -- a walk needs entries: only lines that ran are ones
+        F.widget.model.history:remember({ 'one' })
+        F.widget.model.history:remember({ 'two' })
         F.widget:history_back()
         local walked = F.widget.model.history.index
         assert.is_not_nil(walked)

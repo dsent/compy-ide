@@ -127,6 +127,43 @@ local function console()
     hm_done()
   end)
 
+  -- The walk is the classic shell's: the line being typed
+  -- waits below the newest line and comes back on Down, an
+  -- edit to a recalled line stays until Enter, and the history
+  -- holds only the lines that ran
+  scenario('history-walk', function(wait)
+    D.key(wait, 'escape')
+    D.enter(wait, 'print("old " .. 1)')
+    D.type(wait, 'draft')
+    D.shot(wait, 'walk-1-draft')
+    D.key(wait, 'up')
+    D.eq(P.console_draft(), 'print("old " .. 1)', 'Up, the last line')
+    D.key(wait, 'backspace')
+    D.key(wait, 'backspace')
+    D.type(wait, '2)')
+    D.eq(P.console_draft(), 'print("old " .. 2)', 'edited')
+    D.shot(wait, 'walk-2-edited')
+    D.key(wait, 'down')
+    D.eq(P.console_draft(), 'draft', 'Down, the draft back')
+    D.shot(wait, 'walk-3-draft-back')
+    D.key(wait, 'down')
+    D.eq(P.console_draft(), 'draft', 'Down on the draft, no change')
+    D.key(wait, 'up')
+    D.eq(P.console_draft(), 'print("old " .. 2)', 'Up, the edit kept')
+    D.shot(wait, 'walk-4-edit-kept')
+    D.key(wait, 'return')
+    assert(string.find(P.console_text(), 'old 2', 1, true),
+      'the edited line did not run')
+    D.key(wait, 'up')
+    D.eq(P.console_draft(), 'print("old " .. 2)', 'Up, the edit that ran')
+    D.shot(wait, 'walk-5-ran')
+    D.key(wait, 'up')
+    D.eq(P.console_draft(), 'print("old " .. 1)', 'Up, the original')
+    D.shot(wait, 'walk-6-original')
+    D.key(wait, 'escape')
+    hm_done()
+  end)
+
   -- Shift+Ins does nothing in the console (the maintainer's
   -- ruling of November 14, 2026), though the spec's
   -- *submission* names it there

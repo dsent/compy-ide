@@ -5,8 +5,16 @@ require('util.debug')
 
 local DEFAULT_LIMIT = 1000
 
+--- The classic shell's history: each entry is a line that
+--- ran, and walking through the entries never changes one.
+--- During a walk the line being typed waits below the
+--- newest entry (`line_typed`), and an edit to a shown entry
+--- waits beside it (`edits`); a line run or a field cleared
+--- ends the walk and forgets both.
 --- @class History: Dequeue<string[]>
---- @field index integer
+--- @field index integer? the entry shown; nil on the line typed
+--- @field line_typed string[]? the line typed, while an entry shows
+--- @field edits table<integer, string[]> entries edited in a walk
 --- @field limit integer entry cap, 0 for unlimited
 History = class.create()
 
@@ -14,6 +22,7 @@ History = class.create()
 function History.new(limit)
   local self = Dequeue.typed('string[]')
   self.limit = limit or DEFAULT_LIMIT
+  self.edits = {}
 
   setmetatable(self, {
     __index = function(t, k)
@@ -24,24 +33,26 @@ function History.new(limit)
   return self
 end
 
+--- A plain copy of a field's lines, which the field goes on
+--- editing in place
+--- @param lines string[]?
+--- @return string[]
+local function copy(lines)
+  local t = {}
+  for i, l in ipairs(lines or { '' }) do t[i] = l end
+  return t
+end
+
+--- Store a line that ran, which ends the walk; an empty one
+--- is not stored
 --- @param input string[]?
 --- @return boolean
 function History:remember(input)
+  self:reset_index()
   if string.is_non_empty_string_array(input) then
-    if not self.index then
-      self:append(input)
-      self:_trim()
-      return true
-    else
-      local entry = self:get(self.index)
-      local new = input or {}
-      local hist = string.unlines(entry)
-      local new_s = string.unlines(new)
-      if hist ~= new_s then
-        self:append(input)
-        self:_trim()
-      end
-    end
+    self:append(copy(input))
+    self:_trim()
+    return true
   end
   return false
 end
@@ -52,60 +63,62 @@ function History:_trim()
   if self.limit == 0 then return end
   while #self > self.limit do
     self:pop_front()
-    if self.index then
-      self.index = self.index - 1
-      if self.index < 1 then
-        self:reset_index()
-      end
-    end
   end
 end
 
+--- End the walk: back on the line typed, every edit forgotten
 function History:reset_index()
   self.index = nil
+  self.line_typed = nil
+  self.edits = {}
 end
 
---- @param current string[]?
+--- Keep the text shown where the walk is, before it moves
+--- @private
+--- @param current string[]? nil: no text to keep
+function History:_keep(current)
+  if not current then return end
+  if self.index then
+    self.edits[self.index] = copy(current)
+  else
+    self.line_typed = copy(current)
+  end
+end
+
+--- @private
+--- @param i integer
+--- @return string[]
+function History:_shown(i)
+  return copy(self.edits[i] or self[i])
+end
+
+--- One entry back: the text to show, or false at the oldest
+--- @param current string[]? the field's text now
 --- @return boolean
 --- @return string[]?
 function History:history_back(current)
-  local r = self:remember(current)
-  local hi = self.index
-  if hi and hi > 0 then
-    local prev = self[hi - 1]
-    if prev then
-      if string.is_non_empty_string_array(current) then
-        self[hi] = current
-      end
-      self.index = hi - 1
-      return true, prev
-    end
-    return false
-  else
-    local off = 0
-    if r then off = 1 end
-    self.index = self:get_last_index() - off
-    local prev = self[self.index] or { '' }
-    return true, prev
-  end
+  local at = self.index or #self + 1
+  if at <= 1 then return false end
+  self:_keep(current)
+  self.index = at - 1
+  return true, self:_shown(self.index)
 end
 
---- @param current string[]?
+--- One entry forward, past the newest to the line typed: the
+--- text to show, or false on the line typed
+--- @param current string[]? the field's text now
 --- @return boolean
 --- @return string[]?
 function History:history_fwd(current)
-  if self.index then
-    local hi = self.index
-    local next = self[hi + 1]
-    if string.is_non_empty_string_array(current) then
-      self[hi] = current
-    end
-    if next then
-      self.index = hi + 1
-      return true, next
-    end
+  if not self.index then return false end
+  self:_keep(current)
+  local at = self.index + 1
+  if self[at] then
+    self.index = at
+    return true, self:_shown(at)
   end
-  return false
+  self.index = nil
+  return true, copy(self.line_typed)
 end
 
 --- @protected

@@ -39,12 +39,12 @@ local DEFS = {
   --- IS3.6
   with(both('run', 'run the line'),
     { chords = { 'return', 'kpenter' }, card = 'Enter' }),
-  --- the field's Escape, which clears the line and remembers
-  --- it (its clear_on_cancel)
+  --- the field's Escape, which clears the line (its
+  --- clear_on_cancel)
   with(both('field', 'clear the line'),
     { chords = { 'escape' }, card = 'Esc' }),
-  --- the field's Up and Down, which recall the history at the
-  --- first and last row (IS7.8)
+  --- the field's Up and Down, which walk the history at the
+  --- first and last row (IS7.8, as the classic shell's)
   with(both('field', 'earlier/later'),
     { chords = { 'up', 'down' }, card = 'Up/Down',
       repeats = true }),

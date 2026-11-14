@@ -2312,6 +2312,9 @@ combinations are **four independent, project-owned boolean settings**:
    **It is NOT `compy.input.clear()`**: that call is `clear_input` + `clear_error` and does **not**
    touch history. Two operations, one English word, and the surface keeps both — so any prose
    naming a flag must say which.
+   *(Amended 2026-11-14, the maintainer's ruling that the console's history is the classic
+   shell's: it holds only lines that ran. The submit verb's clear still remembers; the cancel
+   verb's clear no longer does — `model:cancel(ran)` remembers only when `ran`.)*
 5. **`auto_hide` is superseded by `hide_on_submit`** — and as built, the old name is gone
    entirely; the paragraph below records the reasoning that got there. *Both names are accepted for one release, the
    alias resolving to the flag, and **when both are given the explicit `hide_on_submit` wins.**
@@ -2461,8 +2464,9 @@ additive is worth one more setting.
    always sees empty. That contract is what the ruled default removes, and the criterion is kept
    rather than deleted because the console still holds the preserved half. Read as written, it would
    have pinned exactly the behaviour the release retires.)*
-5. **The console's Escape is unchanged** — remember-then-clear, now because `clear_on_cancel` is
-   seated on its instance rather than because the widget destroys unconditionally.
+5. **The console's Escape is unchanged** — it clears, now because `clear_on_cancel` is seated on
+   its instance rather than because the widget destroys unconditionally. *(Since 2026-11-14 it no
+   longer remembers the line it clears: statement 4's amendment.)*
 6. **The project surface's documented behaviour CHANGES, and the second branch of this criterion is
    the live one** (owner, 2026-09-07): the change is recorded in `../../input_api.md` **and**
    `../../../CHANGELOG.md`, with a justification-table row, for **both** verbs — submit now clears,
