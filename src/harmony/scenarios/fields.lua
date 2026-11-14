@@ -3,7 +3,8 @@ local D = require('harmony.drive')
 
 --- One text field, the same everywhere (the ruling of November
 --- 14, 2026): the file editor's, the console's and a running
---- program's field take the same field keys, a click places
+--- program's field take the same field keys and the same word
+--- deletions, a click places
 --- the text cursor, Shift with an arrow selects nothing, and
 --- a chord nothing binds does nothing, Ctrl+Enter first.
 
@@ -57,6 +58,38 @@ local function field_keys(wait, which)
   D.eq(text(), 'one\nfour', 'Ctrl+Y redoes it in ' .. which)
 end
 
+--- The word deletions, in field `which`, starting empty:
+--- Ctrl+Backspace, Alt+Backspace and Ctrl+W remove exactly
+--- what Ctrl+Left moves over (IS3.8, the ruling on word
+--- deletion), the non-word characters before the cursor, then
+--- the word; at the start of a line, the line break alone.
+--- `clear` empties the field again.
+--- @param wait function
+--- @param which 'editor'|'console'|'program'
+--- @param clear function
+local function word_keys(wait, which, clear)
+  local cases = {
+    { 'q = 9', 'q = ' },
+    { 'f(x)', 'f(' },
+    { 'a.b', 'a.' },
+  }
+  for _, k in ipairs({ 'C-backspace', 'A-backspace', 'C-w' }) do
+    for _, c in ipairs(cases) do
+      D.type(wait, c[1])
+      D.key(wait, k)
+      D.eq(P.text(which), c[2], k .. ' after ' .. c[1] .. ' in ' .. which)
+      clear()
+    end
+    D.type(wait, 'ab')
+    D.key(wait, 'S-return')
+    D.type(wait, 'cd')
+    D.key(wait, 'home')
+    D.key(wait, k)
+    D.eq(P.text(which), 'abcd', k .. ' at a line\'s start in ' .. which)
+    clear()
+  end
+end
+
 --- Chords nothing binds in a field, and Shift with the arrows:
 --- the draft and the cursor stay
 --- @param wait function
@@ -92,6 +125,7 @@ scenario('editor', function(wait)
   D.open(wait, PROJECT, f, { [f] = text })
   field_keys(wait, 'editor')
   D.key(wait, 'escape')
+  word_keys(wait, 'editor', function() D.key(wait, 'escape') end)
   -- browsing: chords nothing binds change nothing at all
   for _, k in ipairs({ 'C-return', 'C-a', 'S-up', 'A-left',
     'A-pageup', 'A-end', 'C-S-s', 'S-f2' }) do
@@ -125,6 +159,7 @@ scenario('console', function(wait)
   D.key(wait, 'escape')
   field_keys(wait, 'console')
   D.key(wait, 'escape')
+  word_keys(wait, 'console', function() D.key(wait, 'escape') end)
   local out = P.console_text()
   D.type(wait, 'print("chord")')
   D.key(wait, 'left')
@@ -153,6 +188,15 @@ scenario('program', function(wait)
   D.key(wait, 'delete')
   D.key(wait, 'C-k')
   D.eq(P.text('program'), '', 'the field emptied')
+  -- Escape does not empty a program's field: its draft goes
+  -- with Ctrl+Home, Ctrl+K, Delete and Ctrl+K
+  word_keys(wait, 'program', function()
+    D.key(wait, 'C-home')
+    D.key(wait, 'C-k')
+    D.key(wait, 'delete')
+    D.key(wait, 'C-k')
+  end)
+  D.eq(P.text('program'), '', 'the field emptied again')
   D.type(wait, 'hello')
   D.key(wait, 'left')
   unbound(wait, 'program', FIELD_CHORDS)

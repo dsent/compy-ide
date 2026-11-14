@@ -177,7 +177,8 @@ after every key that may write it:
   to a file that cannot be opened, an empty file, a block taller than the view scrolled a row at
   a time, and PgUp and PgDn paging by the view. `editor_states.lua` also keeps the cursor
   through formatting (`cursor-format`).
-- `fields.lua`: the editor's, the console's and a program's field take the same field keys, a
+- `fields.lua`: the editor's, the console's and a program's field take the same field keys and
+  the same word deletions (what Ctrl+Left moves over), a
   click places the cursor and a click on the document view browses nothing, Shift with the
   arrows selects nothing, and chords nothing binds, Ctrl+Enter first, do nothing.
 - `editor_rulings.lua`: a run of empty lines lands as one in Lua and stays in text; a refused
@@ -188,8 +189,6 @@ after every key that may write it:
 - `colors.lua`: the highlights, the strips of a block both browsed and loaded, a syntax error's
   red and the band's, the notice's orange, a Markdown heading, the block cursor, and the status
   line's pixel rows with a field of one row and of eight, which it prints as `LAYOUT` lines.
-- `zz_findings.lua`: checks of behaviour found wrong and not yet fixed, run last so that the
-  rest of the run has passed when one fails.
 
 ## Manual smoke — what no suite here can reach
 
