@@ -427,30 +427,40 @@ describe("round four #editor #spec", function()
   end)
 
   describe("a #! first line", function()
-    spec_it("IS6.2 Cut a block: a cut #! first line goes back "
-        .. "with Enter", function()
-      local original = "#!/usr/bin/lua\nx = 1\n"
+    spec_it("IS6.2 Cut a block: Ctrl+Delete on a #! first line "
+        .. "is refused with a notice, and the line stays",
+      function()
+        local original = "#!/usr/bin/lua\nx = 1\n"
+        K.reset({ ["main.lua"] = original })
+        K.open()
+        K.browse_to(1)
+        K.keys("lctrl", "delete")
+        assert.same("", K.draft())
+        assert.same(original, K.file())
+        assert.truthy((K.message() or ""):find("#! header", 1,
+          true))
+      end)
+
+    spec_it("IS6.5 Move a block: a #! first line does not move, "
+        .. "and no block moves above it", function()
+      local original = "#!/usr/bin/lua\nx = 1\ny = 2\n"
       K.reset({ ["main.lua"] = original })
       K.open()
       K.browse_to(1)
-      K.keys("lctrl", "delete")
-      assert.same("#!/usr/bin/lua", K.draft())
-      assert.same("x = 1\n", K.file())
-      K.keys("return")
+      K.keys("lalt", "down")
       assert.same(original, K.file())
-      assert.same("", K.draft())
-    end)
-
-    spec_it("IS5.3 Submit a replacement: the #! first line "
-        .. "edited and submitted stays", function()
-      K.reset({ ["main.lua"] = "#!/usr/bin/lua\nx = 1\n" })
-      K.open()
-      K.browse_to(1)
-      K.keys("f2")
-      K.type("jit")
-      K.keys("return")
-      assert.same("#!/usr/bin/luajit\nx = 1\n", K.file())
-      assert.same("browsing", K.state())
+      assert.truthy((K.message() or ""):find("#! header", 1,
+        true))
+      K.browse_to(2)
+      K.keys("lalt", "up")
+      assert.same(original, K.file())
+      assert.same(2, K.position())
+      assert.truthy((K.message() or ""):find("#! header", 1,
+        true))
+      -- below it, blocks move as ever
+      K.browse_to(3)
+      K.keys("lalt", "up")
+      assert.same("#!/usr/bin/lua\ny = 2\nx = 1\n", K.file())
     end)
 
     spec_it("IS3.4 Locate a syntax failure: a #! draft below the "

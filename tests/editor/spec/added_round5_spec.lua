@@ -232,51 +232,39 @@ describe("round five #editor #spec", function()
       return at
     end
 
-    spec_it("IS3.4 Locate a syntax failure: the file's own #! "
-        .. "first line loaded with F2 is not red, and Enter "
-        .. "keeps it", function()
-      local original = "#!/usr/bin/lua\nx = 1\n"
-      K.reset({ ["main.lua"] = original })
+    spec_it("IS3.4 Locate a syntax failure: a #! line typed "
+        .. "into an empty file, Lua below it, is red and refused "
+        .. "as a syntax failure", function()
+      K.reset({ ["main.lua"] = "" })
       K.open()
-      K.browse_to(1)
-      K.keys("f2")
-      assert.same("#!/usr/bin/lua", K.draft())
-      assert.is_nil(red())
+      K.type("#!/usr/bin/lua")
+      K.keys("lshift", "return")
+      K.type("x=1")
+      assert.same({ 1, 2 }, red())
+      K.keys("lshift", "insert")
+      assert.same("", K.file())
+      assert.same("#!/usr/bin/lua\nx=1", K.draft())
+      assert.same("error", K.message_kind())
+      assert.same({ 1, 2 }, { K.cursor() })
       K.keys("return")
-      assert.same(original, K.file())
-      assert.same("browsing", K.state())
+      assert.same("", K.file())
+      assert.same("error", K.message_kind())
     end)
 
-    spec_it("IS3.4 Locate a syntax failure: a #! line typed "
-        .. "into an empty file is not red, and Enter takes it",
-      function()
-        K.reset({ ["main.lua"] = "" })
-        K.open()
-        K.type("#!/usr/bin/lua")
-        assert.is_nil(red())
-        K.keys("return")
-        assert.same("#!/usr/bin/lua\n", K.file())
-      end)
-
     spec_it("IS3.4 Locate a syntax failure: a #! draft is red "
-        .. "below the first line and not above it, as Enter "
-        .. "refuses and takes it", function()
+        .. "wherever the browsing position is, and Enter refuses "
+        .. "it on the first block too", function()
       K.reset({ ["main.lua"] = "x = 1\n" })
       K.open()
       K.type("#!/usr/bin/lua")
-      assert.is_not_nil(red())
+      assert.same({ 1, 2 }, red())
       K.browse_to(1)
-      assert.is_nil(red())
-      K.keys("lctrl", "down")
-      assert.same("end", K.position())
-      assert.is_not_nil(red())
+      assert.same({ 1, 2 }, red())
       K.keys("return")
       assert.same("x = 1\n", K.file())
+      assert.same("#!/usr/bin/lua", K.draft())
       assert.same("error", K.message_kind())
-      K.browse_to(1)
-      assert.is_nil(red())
-      K.keys("return")
-      assert.same("#!/usr/bin/lua\nx = 1\n", K.file())
+      assert.same({ 1, 2 }, { K.cursor() })
     end)
 
     spec_it("IS3.3 Check Lua submission: a draft refused for a "
@@ -545,19 +533,6 @@ describe("round five #editor #spec", function()
         K.browse_to(1)
         K.keys("lctrl", "j")
         assert.same("lib.lua", K.file_name())
-      end)
-
-    spec_it("IS5.3 Submit a replacement: a #! first line is "
-        .. "replaced in place while the position is elsewhere",
-      function()
-        K.reset({ ["main.lua"] = "#!/usr/bin/lua\nx = 1\ny = 2\n" })
-        K.open()
-        K.browse_to(1)
-        K.keys("f2")
-        K.browse_to(3)
-        K.type("jit")
-        K.keys("return")
-        assert.same("#!/usr/bin/luajit\nx = 1\ny = 2\n", K.file())
       end)
   end)
 end)

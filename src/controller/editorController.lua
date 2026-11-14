@@ -26,6 +26,8 @@ local function new(M, CC)
     console = CC,
     view = nil,
     mode = 'nav',
+    --- the keys pressed since the editor came to the front
+    pressed = {},
   }
 end
 
@@ -43,6 +45,7 @@ end
 --- @field console ConsoleController
 --- @field view EditorView?
 --- @field mode EditorMode
+--- @field pressed table<string, boolean>
 EditorController = class.create(new)
 
 --- @private
@@ -107,6 +110,7 @@ end
 --- and leaves the notice the editor came with (IS3.14).
 function EditorController:came_forward()
   if self._in_key then self._gate_key = true end
+  self.pressed = {}
 end
 
 --- The gate has passed its chord's key on: whether or not
@@ -182,20 +186,6 @@ function EditorController:open(name, content, save, key)
     b.disk_seen = self:_disk_text(b)
   else
     self:_note_read(b, content)
-  end
-  if is_lua then
-    --- the field reads the draft as its submission will,
-    --- where it lands now (check.gate), so that the red text
-    --- and the verdict agree (IS3.4)
-    eval = Evaluator('lua', {
-      parser = check.placed_parser(function()
-        return self:_lands_at_head(b)
-      end),
-      highlighter = eval.highlighter,
-    }, {
-      line_validators = eval.line_validators,
-      astValidators = eval.astValidators,
-    })
   end
   --- the file's own field: its draft and the draft's changes
   --- stay with it while another file is in front (IS1.5,
@@ -421,7 +411,7 @@ end
 --- @param k string? --- nil for typed text
 --- @return boolean
 function EditorController:_held_back(k)
-  if KeyCard.held() then return true end
+  if KeyCard.shows() then return true end
   --- a gate chord's own key reaches the editor after the
   --- gate refused the exit, or the key the editor came to
   --- the front on (came_forward): it must not dismiss the
@@ -466,7 +456,7 @@ end
 --- @return string[]?
 function EditorController:key_card()
   if love.state.app_state ~= 'editor' then return nil end
-  if not KeyCard.held() then return nil end
+  if not KeyCard.shows() then return nil end
   local card = self.view.key_card
   return card:lines(self:state_name(), self:_draft_is_empty())
 end
@@ -652,14 +642,25 @@ end
 ---  keyboard handlers  ---
 ---------------------------
 
+--- The notice of an action on a Lua file's `#!` first line,
+--- or before it
+EditorController.HEADER_NOTICE = 'The first line is the'
+    .. " file's #! header and stays as it is."
+
 --- @private
---- A draft lands as the file's first lines in the target's
---- place there, or before the first block: a `#!` line is
---- Lua's at the top of a file alone
+--- A Lua file's first line that starts with `#!` is its
+--- header: a block of its own (the chunker's line nothing
+--- claims), kept as it is. No action edits, cuts or moves it,
+--- or puts anything before it; each is refused with
+--- HEADER_NOTICE.
 --- @param buf BufferModel
---- @return boolean
-function EditorController:_lands_at_head(buf)
-  return (buf.loaded or buf:get_selection()) == 1
+--- @param i integer --- the block acted on, or before which
+--- something lands
+--- @return boolean --- block `i` is the header
+function EditorController:_is_header(buf, i)
+  if i ~= 1 or buf.content_type ~= 'lua' then return false end
+  local first = buf:block_lines(1) or {}
+  return string.match(first[1] or '', '^#!') ~= nil
 end
 
 --- @private
@@ -692,7 +693,7 @@ function EditorController:_handle_submit(go)
     else
       local verdict = check.gate(raw,
         self.model.cfg.view.drawableChars, self:_size_limit(),
-        true, self:_lands_at_head(buf))
+        true)
       --- an accepted draft goes as its formatted blocks; one
       --- that fails to land (a write refused) stays as typed
       if #verdict.errors == 0 then
@@ -982,6 +983,9 @@ function EditorController:_editable_lines(bn)
     return nil, 'End of file: no block to edit here.'
         .. ' Move up onto one.'
   end
+  if self:_is_header(buf, bn) then
+    return nil, EditorController.HEADER_NOTICE
+  end
   local lines = buf:block_lines(bn)
   if not lines then
     return nil, 'An empty line has nothing to edit.'
@@ -1106,6 +1110,10 @@ function EditorController:_land(lines, kind, n)
   local sel = buf:get_selection()
   local count = buf:get_content_length() - (target and 1 or 0)
   local before = buf:snapshot()
+  if not target and self:_is_header(buf, sel) then
+    self:refuse({ EditorController.HEADER_NOTICE })
+    return false
+  end
   if self:_refuse_stale(buf, 'saved') then return false end
   local whole = self:_reads_whole()
   --- the buffer goes back to what the file holds, and the
@@ -1279,7 +1287,11 @@ end
 function EditorController:keypressed(k, _, isrepeat)
   --- the undo timeline stops a held key at a boundary
   self.key_repeat = isrepeat or false
+  --- a key repeats where its press acted: one held since
+  --- before the editor came to the front does nothing in it
+  if isrepeat and not self.pressed[k] then return end
   if self:_held_back(k) then return end
+  if not isrepeat then self.pressed[k] = true end
   self.input:update_view()
   local mode = self.mode
 

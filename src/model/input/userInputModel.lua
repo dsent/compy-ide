@@ -665,11 +665,7 @@ function UserInputModel:highlight()
     -- hl stays indexable even with no highlighter (parser but
     -- no colouring): the view indexes highlight.hl
     -- unconditionally.
-    self._memo.highlight = {
-      hl = hl or {},
-      parse_err = parse_err,
-      context = p.context and p.context(),
-    }
+    self._memo.highlight = { hl = hl or {}, parse_err = parse_err }
   else
     if ev.highlighter then
       -- same invariant as the parser branch above: a
@@ -683,12 +679,7 @@ function UserInputModel:highlight()
 end
 
 function UserInputModel:get_highlight()
-  local memo = self._memo.highlight
-  --- a parser that reads the text by its context (where an
-  --- editor's draft lands) reads it anew when that changed
-  local p = self.evaluator and self.evaluator.parser
-  if not memo
-      or p and p.context and p.context() ~= memo.context then
+  if not self._memo.highlight then
     self:highlight()
   end
   return self._memo.highlight

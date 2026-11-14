@@ -416,10 +416,12 @@ function EditorController:_timeline_ready(buf, forward)
     self:_refuse_unread(buf, forward and 'redone' or 'undone')
     return false
   end
-  --- the actions after the change undo again: changes to
-  --- the draft and aborts, none of which writes, since every
-  --- write is refused until the file is opened again (the
-  --- baseline stays) or a write lands (_note_saved)
+  --- the actions after the change was first seen undo
+  --- again: changes to the draft and aborts made since then
+  --- (those before it end here with the rest), none of which
+  --- writes, since every write is refused until the file is
+  --- opened again (the baseline stays) or a write lands
+  --- (_note_saved)
   if buf.outdated then return true end
   self:_outdate(buf)
   return false
@@ -674,6 +676,9 @@ function EditorController:cut_block(isrepeat)
     if isrepeat then return end
     return self:refuse({ NOTICE.cut_end })
   end
+  if self:_is_header(buf, sel) then
+    return self:refuse({ self.HEADER_NOTICE })
+  end
   if self:_refuse_stale(buf, 'cut') then return end
   local lines = block_lines(buf, sel)
   local before = buf:snapshot()
@@ -730,6 +735,10 @@ function EditorController:move_block(dir)
     return self:refuse({ NOTICE.move_end })
   end
   local to = dir == 'up' and i - 1 or i + 1
+  --- the header neither moves nor has a block put above it
+  if self:_is_header(buf, i) or self:_is_header(buf, to) then
+    return self:refuse({ self.HEADER_NOTICE })
+  end
   --- toward the edge, nothing changes
   if to < 1 or to > n then return end
   if self:_refuse_stale(buf, 'moved') then return end

@@ -347,9 +347,11 @@ end
 
 --- Format a project file the way the editor's Ctrl+Shift+F
 --- formats it, at a Compy's width: the REPL's `tidy(name)`.
---- A `#!` first line stays, and every line keeps its own
---- line ending where it stays, the file's main one where it
---- changed (BufferModel). It writes only when the text
+--- A `#!` first line stays. A line outside the change keeps
+--- its ending, and so does one inside it that is paired with
+--- the line it replaces (BufferModel's carry_ends, which
+--- looks eight lines ahead); every other line takes the
+--- file's main ending. It writes only when the text
 --- changes, and says why when it leaves the file alone.
 --- @param name string
 --- @return boolean tidy --- the file is formatted now

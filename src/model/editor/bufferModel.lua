@@ -164,7 +164,9 @@ local LOOKAHEAD = 8
 --- lines they replace, in the same order, take their endings:
 --- formatting leaves most lines as they are. The pairing goes
 --- in one pass: a line that differs is skipped on the side
---- where the other turns up soonest.
+--- where the other turns up soonest, within LOOKAHEAD lines.
+--- A line it does not pair keeps no ending of its own and is
+--- written with the main one, even where it is unchanged.
 --- @param old string[]
 --- @param old_ends string[]
 --- @param j integer --- the first old line between the edges

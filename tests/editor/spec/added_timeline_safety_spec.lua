@@ -350,14 +350,18 @@ describe("timeline safety #editor #spec", function()
       assert.truthy(K.message():find("`!'", 1, true))
     end)
 
+    -- a guard: the file read so before
     spec_it("IS1.2 Admit or refuse a file: a file of a #! line "
-        .. "alone is read as blocks", function()
-      K.reset({ ["main.lua"] = "#!/usr/bin/lua\n" })
-      K.open()
-      K.browse_to(1)
-      K.keys("f2")
-      assert.same("replacing", K.state())
-    end)
+        .. "alone is read as a block, and text goes after it",
+      function()
+        K.reset({ ["main.lua"] = "#!/usr/bin/lua\n" })
+        K.open()
+        assert.same(1, K.blocks())
+        assert.falsy(K.buffer().invalid)
+        K.type("x = 1")
+        K.keys("return")
+        assert.same("#!/usr/bin/lua\nx = 1\n", K.file())
+      end)
 
     spec_it("FR3.1 Preserve file structure: formatting the "
         .. "whole file keeps a #! first line as it is", function()
@@ -367,20 +371,29 @@ describe("timeline safety #editor #spec", function()
       assert.same("#!/usr/bin/lua\nx = 1\n", K.file())
     end)
 
-    spec_it("FR3.1 Preserve file structure: a draft does not go "
-        .. "above a #! first line, and the notice gives no reason "
-        .. "that is not the cause", function()
+    spec_it("FR3.1 Preserve file structure: nothing goes above "
+        .. "a #! first line, and the notice says why", function()
       local text = "#!/usr/bin/lua\nx = 1\n"
       K.reset({ ["main.lua"] = text })
       K.open()
       K.browse_to(1)
+      -- an empty line, with Enter and with Shift+Ins
+      K.keys("return")
+      K.keys("lshift", "insert")
+      assert.same(text, K.file())
       K.type("y = 2")
       K.keys("return")
       assert.same(text, K.file())
       assert.same("y = 2", K.draft())
-      local msg = K.message() or ""
-      assert.truthy(msg:find("could not run the file", 1, true))
-      assert.falsy(msg:find("return or break", 1, true))
+      assert.truthy((K.message() or ""):find("#! header", 1,
+        true))
+      K.keys("lshift", "insert")
+      assert.same(text, K.file())
+      assert.same("y = 2", K.draft())
+      -- one block down it goes in
+      K.browse_to(2)
+      K.keys("return")
+      assert.same("#!/usr/bin/lua\ny = 2\nx = 1\n", K.file())
     end)
   end)
 
