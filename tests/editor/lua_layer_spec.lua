@@ -94,28 +94,29 @@ end)
 
 --- The editor's rules around the language layer's verdict
 describe('the editor on Lua text #editor', function()
-  --- editor principles, IS3.7: every empty line of a draft
-  --- becomes an empty-line block, the trailing ones too
-  it('keeps every empty line of a draft as a block', function()
-    local function kinds_of(lines)
-      local verdict = lua.submission(lines, 64, 14)
-      local kinds = {}
-      for _, b in ipairs(verdict.blocks) do
-        table.insert(kinds, b:is_empty() and 'empty' or 'code')
+  --- the formatter decides a draft's empty lines (the ruling
+  --- "The formatter decides a draft's empty lines"): one of a
+  --- run, at a draft's start and end too
+  it('takes the empty lines of a draft as the gate leaves them',
+    function()
+      local function kinds_of(lines)
+        local verdict = lua.submission(lines, 64, 14)
+        local kinds = {}
+        for _, b in ipairs(verdict.blocks) do
+          table.insert(kinds, b:is_empty() and 'empty' or 'code')
+        end
+        return kinds, verdict.lines
       end
-      return kinds, verdict.lines
-    end
-    assert.same({ 'code', 'empty' }, (kinds_of({ 'a = 1', '' })))
-    assert.same({ 'code', 'empty', 'empty' },
-      (kinds_of({ 'a = 1', '', '' })))
-    local kinds, lines = kinds_of({ 'a = 1', '', '', '' })
-    assert.same({ 'code', 'empty', 'empty', 'empty' }, kinds)
-    assert.same({ 'a = 1', '', '', '' }, lines)
-    assert.same({ 'empty', 'empty', 'code' },
-      (kinds_of({ '', '', 'a = 1' })))
-    assert.same({ 'code', 'empty', 'empty', 'code' },
-      (kinds_of({ 'a = 1', '', '', 'b = 2' })))
-  end)
+      assert.same({ 'code', 'empty' }, (kinds_of({ 'a = 1', '' })))
+      local kinds, lines = kinds_of({ 'a = 1', '', '', '' })
+      assert.same({ 'code', 'empty' }, kinds)
+      assert.same({ 'a = 1', '' }, lines)
+      assert.same({ 'empty', 'code' },
+        (kinds_of({ '', '', 'a = 1' })))
+      assert.same({ 'code', 'empty', 'code' },
+        (kinds_of({ 'a = 1', '', '', 'b = 2' })))
+      assert.same({ 'empty' }, (kinds_of({ '', '', '' })))
+    end)
 
   it('measures the blocks of a draft with its empty lines',
     function()
@@ -126,15 +127,6 @@ describe('the editor on Lua text #editor', function()
       assert.is_false(verdict.ok)
       local big = verdict.blocks[verdict.oversized[1]]
       assert.same(15, big.pos:len())
-    end)
-
-  it('takes a draft of blank lines for empty-line blocks',
-    function()
-      assert.is_nil(lua.empty_blocks({ '' }))
-      assert.is_nil(lua.empty_blocks({ 'a = 1', '' }))
-      assert.same(2, #lua.empty_blocks({ '', '' }))
-      assert.same(1, #lua.empty_blocks({ '  ' }))
-      assert.is_true(lua.empty_blocks({ '', ' ' })[2]:is_empty())
     end)
 
   it('keeps a draft of two lines that opens with # as typed',

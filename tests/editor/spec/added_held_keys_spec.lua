@@ -8,6 +8,7 @@
 local K = require("tests.helpers.editor_keys")
 local marks = require("tests.helpers.spec_marks")
 local spec_it = marks.spec_it
+local spec_deviation = marks.spec_deviation
 
 --- Press `k` with `mods` held, send `n` repeats of it, and
 --- let everything go.
@@ -220,26 +221,21 @@ describe("held keys #editor #spec", function()
         assert.same("x = = 1", K.console_draft())
       end)
 
-    spec_it("IS6.4 Submit and retain the field: Shift+Ins in the "
-        .. "console runs the line once and keeps it", function()
-      K.reset()
-      K.type("kept = (kept or 0) + 1")
-      held({ "lshift" }, "insert")
-      assert.same(1, K.cc:get_project_env().kept)
-      assert.same("kept = (kept or 0) + 1", K.console_draft())
-      assert.is_false(K.cc.input:has_error())
-    end)
-
-    spec_it("IS6.4 Submit and retain the field: Shift+Ins in the "
-        .. "console keeps the cursor where it was", function()
-      K.reset()
-      K.type("at = 1")
-      K.keys("left")
-      K.keys("lshift", "insert")
-      assert.same(1, K.cc:get_project_env().at)
-      local l, c = K.cc.input:get_cursor_pos()
-      assert.same({ 1, 6 }, { l, c })
-    end)
+    -- the spec's *submission* names Shift+Ins in the console
+    spec_deviation("IS6.4 Submit and retain the field: Shift+Ins "
+        .. "in the console, pressed or held, does nothing",
+      "the maintainer's ruling of November 14, 2026: Shift+Ins "
+        .. "does nothing in the console", function()
+        K.reset()
+        K.type("kept = (kept or 0) + 1")
+        K.keys("left")
+        held({ "lshift" }, "insert")
+        assert.is_nil(K.cc:get_project_env().kept)
+        assert.same("kept = (kept or 0) + 1", K.console_draft())
+        local l, c = K.cc.input:get_cursor_pos()
+        assert.same({ 1, 22 }, { l, c })
+        assert.is_false(K.cc.input:has_error())
+      end)
 
     spec_it("IS3.6 Execute console input: Ctrl+Ins does nothing "
         .. "in the console", function()

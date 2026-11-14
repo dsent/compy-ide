@@ -89,6 +89,10 @@ Project-author guide: `doc/input_api.md`.
   into the field, Ctrl+Delete cuts it there, Shift+Insert submits and keeps the text,
   and Alt+Up / Alt+Down move the block. Ctrl+Z and Ctrl+Y undo and redo both typing and
   changes to the file.
+- **A run of empty lines in Lua text is kept as one.** The formatter decides a Lua
+  draft's empty lines, at its start, between statements and at its end, and the editor
+  puts none back; Enter on an empty field still adds one empty line at a time. Text and
+  Markdown files keep every empty line as typed.
 - **Text and Markdown files hold one block per line.** A line is accepted as written,
   with no syntax check and no formatting, and nothing is added after the last line. A
   file whose name ends in neither `.lua`, `.txt` nor `.md` opens as plain text.
@@ -128,8 +132,6 @@ Project-author guide: `doc/input_api.md`.
   Escape, F2, Shift+Insert, Ctrl+Insert, Alt+Up and Alt+Down, Ctrl+J, Ctrl+Shift+F and
   the other commands act once per press: a held Enter adds one empty line, not one per
   repeat. A program's own input keeps its repeats.
-- **Shift+Insert in the console runs the line and keeps it in the field**, as it
-  submits and keeps the text in the file editor.
 - **Every chord is a key of its own.** A key pressed with a modifier that nothing
   binds does nothing, in the file editor, the console and a program's input field:
   Ctrl+Enter no longer submits in the console or a program's input, Ctrl+Up and

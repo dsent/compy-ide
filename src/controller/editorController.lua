@@ -585,59 +585,48 @@ function EditorController:_handle_submit(go)
 
   local buf = self:get_active_buffer()
   local ct = buf.content_type
-  if ct == 'lua' then
-    --- IS3.7: empty lines alone become empty-line blocks
-    local empties = lua.empty_blocks(raw)
-    if empties then
-      return go(empties)
-    elseif not string.is_non_empty_string_array(raw) then
-      local sel = buf:get_selection()
-      local block = buf:get_content():get(sel)
-      if not block then return true end
-    else
-      local verdict = lua.submission(raw,
-        self.model.cfg.view.drawableChars, self:_size_limit())
-      --- an accepted draft goes as its formatted blocks; one
-      --- that fails to land (a write refused) stays as typed
-      if #verdict.errors == 0 then
-        return go(verdict.blocks, verdict)
-      end
-      local failure = verdict.failure
-      if failure and failure.at_end then
-        --- IS3.5: a draft that is only unfinished goes on, on
-        --- a new line at its end
-        inter.model:continue_line()
-        inter:update_view()
-        return false
-      end
-      if failure then
-        --- IS3.4: the cursor goes before the failing character,
-        --- where the red text starts, and the parser's message
-        --- shows (NFR4.3)
-        self:refuse({ tostring(failure) }, 'error')
-        inter.model:move_cursor(failure.l, failure.c or 1)
-        inter:update_view()
-        return false
-      end
-      --- a draft refused for a line's length is shown
-      --- formatted, as one undoable change to it, the cursor
-      --- where it stood (IS3.2, IS3.9)
-      if verdict.formatted then
-        inter.model:reformat(verdict.lines)
-      end
-      local long = verdict.long_line
-      self:refuse(long and { string.format(
-        'Line %d has %d characters, the limit is %d.'
-        .. ' Shorten or break it, then press Enter',
-        long.l, long.len, lua.max_line_length
-      ) } or verdict.errors)
-      inter:update_view()
-      return false
-    end
-  else
-    return go(raw)
+  if ct ~= 'lua' then return go(raw) end
+  --- the gate decides what the draft becomes, its empty
+  --- lines included (the ruling "The formatter decides a
+  --- draft's empty lines")
+  local verdict = lua.submission(raw,
+    self.model.cfg.view.drawableChars, self:_size_limit())
+  --- an accepted draft goes as its formatted blocks; one
+  --- that fails to land (a write refused) stays as typed
+  if #verdict.errors == 0 then
+    return go(verdict.blocks, verdict)
   end
-  return true
+  local failure = verdict.failure
+  if failure and failure.at_end then
+    --- IS3.5: a draft that is only unfinished goes on, on
+    --- a new line at its end
+    inter.model:continue_line()
+    inter:update_view()
+    return false
+  end
+  if failure then
+    --- IS3.4: the cursor goes before the failing character,
+    --- where the red text starts, and the parser's message
+    --- shows (NFR4.3)
+    self:refuse({ tostring(failure) }, 'error')
+    inter.model:move_cursor(failure.l, failure.c or 1)
+    inter:update_view()
+    return false
+  end
+  --- a draft refused for a line's length is shown
+  --- formatted, as one undoable change to it, the cursor
+  --- where it stood (IS3.2, IS3.9)
+  if verdict.formatted then
+    inter.model:reformat(verdict.lines)
+  end
+  local long = verdict.long_line
+  self:refuse(long and { string.format(
+    'Line %d has %d characters, the limit is %d.'
+    .. ' Shorten or break it, then press Enter',
+    long.l, long.len, lua.max_line_length
+  ) } or verdict.errors)
+  inter:update_view()
+  return false
 end
 
 --- A click goes to the field alone: a click on a block no
@@ -815,8 +804,7 @@ function EditorController:_as_loaded(lines)
   if self:get_active_buffer().content_type ~= 'lua' then
     return lines
   end
-  return (lua.formatted(lines,
-    self.model.cfg.view.drawableChars, true))
+  return (lua.format(lines, self.model.cfg.view.drawableChars))
 end
 
 --- @private
@@ -1003,8 +991,6 @@ end
 --- @return string[]? lines --- the lines the file took
 function EditorController:submit()
   local buf = self:get_active_buffer()
-  --- a draft of empty lines alone is not empty: each of its
-  --- lines becomes an empty-line block (IS3.7)
   local is_lua = buf.content_type == 'lua'
   local draft = self.input:get_text()
   --- one line of spaces alone is an empty Lua draft too

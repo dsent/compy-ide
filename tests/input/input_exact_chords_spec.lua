@@ -235,8 +235,8 @@ describe("every chord is its own key #input", function()
         "shift+insert", "ctrl+insert", "alt+up", "alt+down",
         "ctrl+shift+f", "ctrl+shift+s", "ctrl+j", "ctrl+q", "f1",
         "f5" } },
-      { ConsoleKeys, { "return", "escape", "shift+insert",
-        "ctrl+l", "ctrl+q", "f1" } },
+      { ConsoleKeys, { "return", "escape", "ctrl+l", "ctrl+q",
+        "f1" } },
     }
     local REPEATS = {
       { EditorKeys, { "shift+return", "alt+return", "up",

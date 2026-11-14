@@ -81,15 +81,6 @@ local function file_blocks(chunker, lines)
   return out, true
 end
 
---- A text's lines: LF, CRLF and a lone CR each end a line,
---- and the line end after the last line is no line of its
---- own
---- @param text string
---- @return string[]
-local function file_lines(text)
-  return textfile.lines((text:gsub('\r\n?', '\n')))
-end
-
 --- Todo: convert to class, store revmap
 --- @alias Content Dequeue<string>|Dequeue<Block>
 
@@ -111,14 +102,15 @@ local function new(
     truncer)
   local _content, sel, ct, semantic
   local invalid = false
-  --- lines are held without their line ends; the first save
-  --- writes the file with LF ends (textfile.text). `stored`
+  --- lines are held without their line ends (textfile.lines
+  --- reads LF, CRLF and a lone CR); the first save writes the
+  --- file with LF ends (textfile.text). `stored`
   --- is the text as read, which tells whether the file on
   --- storage is still the one the editor read
   local stored, lines
   if type(content) == 'string' then
     stored = content
-    lines = file_lines(content)
+    lines = textfile.lines(content)
   else
     lines = type(content) == 'table' and string.lines(content)
         or textfile.lines(content)

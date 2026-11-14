@@ -49,7 +49,6 @@ a project must be selected first.
 | Undo / redo the typing                                            | <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> |
 | Select text                                                       | <kbd>Shift</kbd>+<kbd>⇦</kbd>/<kbd>⇨</kbd>/<kbd>⇧</kbd>/<kbd>⇩</kbd> |
 | Evaluate input                                                    | <kbd>Enter ⏎</kbd>                            |
-| Evaluate input and keep it in the field                           | <kbd>Shift</kbd>+<kbd>Insert</kbd>            |
 | **Editor**                                                        |                                               |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; _same as Input in the field, except for:_ |                                               |
 | No text selection: Shift with an arrow moves the cursor           | <kbd>Shift</kbd>+<kbd>⇦</kbd>/<kbd>⇨</kbd>/<kbd>⇧</kbd>/<kbd>⇩</kbd> |

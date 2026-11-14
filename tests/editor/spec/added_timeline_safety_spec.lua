@@ -9,6 +9,7 @@
 local K = require("tests.helpers.editor_keys")
 local marks = require("tests.helpers.spec_marks")
 local spec_it = marks.spec_it
+local spec_deviation = marks.spec_deviation
 
 local UNREAD = "Could not read"
 local BOM = "\239\187\191"
@@ -151,18 +152,19 @@ describe("timeline safety #editor #spec", function()
   end)
 
   describe("the retained draft", function()
-    spec_it("IS6.4 Submit and retain the field: the draft kept "
-        .. "is the accepted text, empty lines included, through "
-        .. "undo and redo", function()
+    spec_deviation("IS6.4 Submit and retain the field: the draft "
+        .. "kept is the accepted text, the run of empty lines the "
+        .. "formatter leaves one, through undo and redo",
+        "rulings.md: The formatter decides a draft's empty lines", function()
       K.reset({ ["main.lua"] = "" })
       K.open()
       K.type_lines({ "a=1", "", "", "b=2" })
       K.keys("lshift", "insert")
-      assert.same("a = 1\n\n\nb = 2\n", K.file())
-      assert.same("a = 1\n\n\nb = 2", K.draft())
+      assert.same("a = 1\n\nb = 2\n", K.file())
+      assert.same("a = 1\n\nb = 2", K.draft())
       K.keys("lctrl", "z")
       K.keys("lctrl", "y")
-      assert.same("a = 1\n\n\nb = 2", K.draft())
+      assert.same("a = 1\n\nb = 2", K.draft())
     end)
   end)
 

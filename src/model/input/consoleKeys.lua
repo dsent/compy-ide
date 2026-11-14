@@ -4,6 +4,8 @@
 --- which stops it, among the keys now. A chord neither binds
 --- does nothing: Ctrl with Enter is not Enter, Ctrl with Up
 --- is not Up (the maintainer's ruling of November 14, 2026).
+--- Shift+Ins, the file editor's submit-and-keep, does nothing
+--- here (his ruling of the same day).
 ---
 --- An action names ConsoleController's (`ACTIONS` in
 --- consoleController.lua); 'field' hands the key to the
@@ -34,10 +36,6 @@ local DEFS = {
   --- IS3.6
   with(both('run', 'run the line'),
     { chords = { 'return', 'kpenter' }, card = 'Enter' }),
-  --- a submission that retains the draft (the spec's
-  --- *submission*)
-  with(both('run_and_keep', 'run it, keep it'),
-    { chords = { 'shift+insert' }, card = 'Shift+Ins' }),
   --- IS3.15
   with(both('field', 'break the line'),
     { chords = { 'shift+return', 'alt+return', 'shift+kpenter',

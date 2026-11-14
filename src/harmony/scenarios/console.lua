@@ -127,17 +127,18 @@ local function console()
     hm_done()
   end)
 
-  -- Shift+Ins runs the line and keeps it in the field (IS6.4,
-  -- the definition of a submission)
+  -- Shift+Ins does nothing in the console (the maintainer's
+  -- ruling of November 14, 2026), though the spec's
+  -- *submission* names it there
   scenario('run-keep', function(wait)
     D.key(wait, 'escape')
     D.type(wait, 'print("kept " .. 5 * 5)')
     D.key(wait, 'S-insert')
     D.shot(wait, 'kept')
-    assert(string.find(P.console_text(), 'kept 25', 1, true),
-      'Shift+Ins did not run the line')
+    assert(not string.find(P.console_text(), 'kept 25', 1, true),
+      'Shift+Ins ran the line')
     D.eq(P.console_draft(), 'print("kept " .. 5 * 5)',
-      'Shift+Ins keeps the line')
+      'Shift+Ins leaves the line')
     D.key(wait, 'escape')
     hm_done()
   end)

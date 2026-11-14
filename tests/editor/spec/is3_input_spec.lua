@@ -7,6 +7,7 @@
 local K = require("tests.helpers.editor_keys")
 local marks = require("tests.helpers.spec_marks")
 local spec_it, spec_gap = marks.spec_it, marks.spec_gap
+local spec_deviation = marks.spec_deviation
 
 --- An assignment `n` characters long, to one long name: no
 --- formatting can shorten it.
@@ -267,9 +268,10 @@ describe("IS3 input #editor #spec", function()
       assert.same("x = 1\ny = 2\na = 1\nb = 2\n", K.file())
     end)
 
-    spec_it(
-        "IS3.7 Preserve accepted Lua: each empty line of a " ..
-        "draft becomes an empty-line block", function()
+    spec_deviation(
+        "IS3.7 Preserve accepted Lua: a run of empty lines in a "
+        .. "draft lands as the formatter leaves it, one empty line",
+        "rulings.md: The formatter decides a draft's empty lines", function()
       at_end()
       K.type_lines({
         "a = 1",
@@ -279,26 +281,23 @@ describe("IS3 input #editor #spec", function()
       })
       K.keys("return")
       assert.same(
-        "x = 1\ny = 2\na = 1\n\n\nb = 2\n",
+        "x = 1\ny = 2\na = 1\n\nb = 2\n",
         K.file()
       )
     end)
   end)
 
   describe("IS3.7, a draft of empty lines", function()
-    spec_it(
+    spec_deviation(
         "IS3.7 Preserve accepted Lua: a draft of only empty "
-        .. "lines becomes empty-line blocks", function()
-      -- IS3.7 names the empty lines between blocks; for a
-      -- draft with no statement the reference decides (Luditor
-      -- src/lua/chunker.rs: one empty-line block per blank
-      -- line), as an empty draft is one line (IS4.3)
+        .. "lines lands as the formatter leaves it, one empty line",
+        "rulings.md: The formatter decides a draft's empty lines", function()
       at_end()
       K.keys("lshift", "return")
       local drafted = K.draft()
       K.keys("return")
       assert.same("\n", drafted)
-      assert.same("x = 1\ny = 2\n\n\n", K.file())
+      assert.same("x = 1\ny = 2\n\n", K.file())
     end)
   end)
 

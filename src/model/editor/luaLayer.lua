@@ -2,9 +2,9 @@
 --- editor's own rules on Lua text, around the language
 --- layer's parser, formatter and gate (model.lang.lua), which
 --- decide what is Lua and what a block may hold. Here are the
---- editor's: a draft's empty lines stay (IS3.7); where a
---- failure shows (IS3.4, IS3.5); which reason a refusal
---- names; and the files a block names (IS1.5).
+--- editor's: where a failure shows (IS3.4, IS3.5); which
+--- reason a refusal names; and the files a block names
+--- (IS1.5).
 
 require('util.string.string')
 require('model.lang.lua.error')
@@ -194,77 +194,6 @@ function M.parser()
     { __index = function(_, k) return get_parser()[k] end })
 end
 
---- @param l string
---- @return boolean
-local function is_blank(l)
-  return string.match(l, '^%s*$') ~= nil
-end
-
---- The runs of blank lines among lines `from` to `to`
---- @param lines string[]
---- @param from integer
---- @param to integer
---- @return table[] --- {at, n}: first line and length
-local function blank_runs(lines, from, to)
-  local runs, run = {}, nil
-  for i = from, to do
-    if not is_blank(lines[i]) then
-      run = nil
-    elseif run then
-      run.n = run.n + 1
-    else
-      run = { at = i, n = 1 }
-      runs[#runs + 1] = run
-    end
-  end
-  return runs
-end
-
---- The line ranges around the statements of a text: before
---- the first, between each two, after the last
---- @param lines string[]
---- @return table[]? --- {from, to}; nil when it does not parse
-local function gaps(lines)
-  local ok, ast = get_parser().parse(lines)
-  if not ok then return nil end
-  local out, last = {}, 0
-  for _, st in ipairs(ast) do
-    local li = st.lineinfo
-    if not li then return nil end
-    out[#out + 1] = { last + 1, li.first.line - 1 }
-    last = li.last.line
-  end
-  out[#out + 1] = { last + 1, #lines }
-  return out
-end
-
---- Every empty line of a draft becomes an empty-line block
---- (IS3.7), and the formatter leaves one of a run: the runs
---- between statements get their lines back.
---- @param given string[] --- the draft
---- @param text string[] --- the draft formatted
---- @return string[]
---- @return integer[]? --- where each line of `text` is now
-local function keep_empty_lines(given, text)
-  local a, b = gaps(given), gaps(text)
-  if not a or not b or #a ~= #b then return text, nil end
-  local add = {}
-  for i = 1, #a do
-    local ra = blank_runs(given, a[i][1], a[i][2])
-    local rb = blank_runs(text, b[i][1], b[i][2])
-    if #ra == #rb then
-      for j = 1, #ra do add[rb[j].at] = ra[j].n - rb[j].n end
-    end
-  end
-  local out, at = {}, {}
-  for i, l in ipairs(text) do
-    for _ = 1, add[i] or 0 do out[#out + 1] = '' end
-    out[#out + 1] = l
-    at[i] = #out
-  end
-  return out, at
-end
-
 --- The formatter's text at `width`, or nil when it does not
 --- format: BufferModel's pretty printer
 --- @param lines string[]
@@ -273,22 +202,6 @@ end
 --- @return boolean formatted
 function M.format(lines, width)
   return format.format(lines, width)
-end
-
---- A draft as the editor writes it: formatted, or as given
---- when it does not format. A draft's empty lines between
---- statements stay when `keep_empty` asks (IS3.7).
---- @param lines string[]
---- @param width integer
---- @param keep_empty boolean?
---- @return string[] text
---- @return boolean formatted
-function M.formatted(lines, width, keep_empty)
-  local text, formatted = format.format(lines, width)
-  if formatted and keep_empty then
-    text = keep_empty_lines(lines, text)
-  end
-  return text, formatted
 end
 
 --- A file's blocks, or a draft's (`single`), as the language
@@ -317,8 +230,9 @@ end
 --- The language layer's verdict on a draft (check.gate), as
 --- the editor shows it. A draft that is no Lua where it lands
 --- is refused with its failure, before anything is measured
---- (IS3.2). An accepted draft keeps its empty lines between
---- statements (IS3.7), each an empty-line block. A refusal
+--- (IS3.2). An accepted draft is the gate's text and blocks,
+--- the empty lines the formatter leaves included (the ruling
+--- "The formatter decides a draft's empty lines"). A refusal
 --- for a line names that line and its length.
 --- @param lines string[]
 --- @param width integer
@@ -347,45 +261,7 @@ function M.submission(lines, width, max_block)
       l = l, len = string.ulen(line) or string.len(line),
     }
   end
-  if verdict.blocks then
-    --- every empty line of the draft is an empty-line block,
-    --- those at its end too: the text is chunked as a file's,
-    --- where each blank line is a block of its own
-    local text, at = verdict.lines, nil
-    if verdict.formatted then
-      text, at = keep_empty_lines(lines, verdict.lines)
-    end
-    local long = verdict.long_line
-    if long and at then long.l = at[long.l] end
-    local _, blocks = M.chunker(text, width)
-    verdict.lines, verdict.blocks = text, blocks
-    verdict.oversized = {}
-    for i in ipairs(blocks) do
-      if check.excess(verdict, i) > 0 then
-        table.insert(verdict.oversized, i)
-      end
-    end
-  end
   return verdict
-end
-
---- A draft of blank lines alone is accepted as that many
---- empty-line blocks (IS3.7; the principles name no draft
---- without a statement, and Luditor's chunker does this). One
---- line holding nothing is an empty draft, which is no
---- submission of text.
---- @param lines string[]
---- @return Block[]? --- nil when the draft holds text
-function M.empty_blocks(lines)
-  if #lines < 2 and lines[1] == '' then return nil end
-  if #lines == 0 then return nil end
-  require('model.editor.content')
-  local blocks = {}
-  for i, l in ipairs(lines) do
-    if not is_blank(l) then return nil end
-    blocks[i] = Empty(i)
-  end
-  return blocks
 end
 
 --- @param node luaAST

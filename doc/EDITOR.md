@@ -80,7 +80,6 @@
 | Undo / redo the typing                                            | <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> |
 | Select text                                                       | <kbd>Shift</kbd>+<kbd>⇦</kbd>/<kbd>⇨</kbd>/<kbd>⇧</kbd>/<kbd>⇩</kbd> |
 | Evaluate input                                                    | <kbd>Enter ⏎</kbd>                            |
-| Evaluate input and keep it in the field                           | <kbd>Shift</kbd>+<kbd>Insert</kbd>            |
 | **Editor**                                                        |                                               |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; _same as Input in the field, except for:_ |                                               |
 | No text selection: Shift with an arrow moves the cursor           | <kbd>Shift</kbd>+<kbd>⇦</kbd>/<kbd>⇨</kbd>/<kbd>⇧</kbd>/<kbd>⇩</kbd> |
@@ -140,7 +139,8 @@ changes, then send it back with <kbd>Enter ⏎</kbd>.
 ![capitalized](./interface/hello_cap.apng)
 
 In a Lua file a block is a statement or an empty line, and a
-text that is not valid Lua is not accepted. <kbd>F2</kbd> loads
+text that is not valid Lua is not accepted. Its empty lines are
+the formatter's: a run of them is kept as one. <kbd>F2</kbd> loads
 any block, one longer than 14 lines or with a line longer than
 64 characters too; <kbd>Enter ⏎</kbd> accepts it once it keeps
 to those limits. In a text or Markdown file every line is a

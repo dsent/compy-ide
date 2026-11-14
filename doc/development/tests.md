@@ -166,8 +166,8 @@ after every key that may write it:
   submits once, Escape drops once, Down and Backspace repeat.
 - `clipboard.lua`: Ctrl+V, Ctrl+C and Ctrl+X change neither the field nor the system clipboard,
   in the editor and the console.
-- `console.lua`: lines run by Enter, broken by Shift+Enter and Alt+Enter, run and kept by
-  Shift+Ins, and the history.
+- `console.lua`: lines run by Enter, broken by Shift+Enter and Alt+Enter, Shift+Ins doing
+  nothing, and the history.
 
 ## Manual smoke — what no suite here can reach
 

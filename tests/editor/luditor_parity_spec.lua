@@ -779,7 +779,10 @@ describe("Luditor parity #editor", function()
       assert.same(0, K.blocks())
     end)
 
-    it("escape_dismisses_a_notice_first_and_ctrl_q_keeps_a_draft / three blank lines submit as three blocks, then Ctrl+Q quits", function()
+    -- Luditor lands three empty-line blocks; the maintainer's
+    -- ruling of November 14, 2026 lets the formatter decide:
+    -- one empty line
+    it("escape_dismisses_a_notice_first_and_ctrl_q_keeps_a_draft / three blank lines submit as one empty line, then Ctrl+Q quits", function()
       K.reset({ ["main.lua"] = "" })
       K.open()
       K.keys("lalt", "return")
@@ -787,7 +790,7 @@ describe("Luditor parity #editor", function()
       local n = select(2, K.draft():gsub("\n", "")) + 1
       assert.same(3, n)
       K.keys("return")
-      assert.same(3, K.blocks())
+      assert.same(1, K.blocks())
       K.keys("lctrl", "q")
       assert.are_not.same("editor", K.app_state())
     end)

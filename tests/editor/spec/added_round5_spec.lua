@@ -10,6 +10,7 @@
 local K = require("tests.helpers.editor_keys")
 local marks = require("tests.helpers.spec_marks")
 local spec_it = marks.spec_it
+local spec_deviation = marks.spec_deviation
 local F = require("tests.helpers.input_fixture")
 
 --- a program that shows its input field and idles behind the
@@ -68,9 +69,9 @@ describe("round five #editor #spec", function()
 
   describe("the cursor of a retained draft beside blank lines",
     function()
-      spec_it("IS6.4 Submit and retain the field: the cursor in "
-          .. "leading blank lines stays when the formatter "
-          .. "changes the text after them", function()
+      spec_deviation("IS6.4 Submit and retain the field: of the "
+          .. "leading blank lines the formatter keeps one, the "
+          .. "cursor before the text after it", "rulings.md: The formatter decides a draft's empty lines", function()
         K.reset({ ["main.lua"] = "" })
         K.open()
         K.keys("lshift", "return")
@@ -80,13 +81,13 @@ describe("round five #editor #spec", function()
         K.keys("right")
         assert.same({ 2, 1 }, { K.cursor() })
         K.keys("lshift", "insert")
-        assert.same("\n\nx = 1", K.draft())
+        assert.same("\nx = 1", K.draft())
         assert.same({ 2, 1 }, { K.cursor() })
       end)
 
-      spec_it("IS6.4 Submit and retain the field: the cursor in "
-          .. "trailing blank lines stays when the formatter "
-          .. "changes the text before them", function()
+      spec_deviation("IS6.4 Submit and retain the field: of the "
+          .. "trailing blank lines the formatter keeps one, the "
+          .. "cursor on it", "rulings.md: The formatter decides a draft's empty lines", function()
         K.reset({ ["main.lua"] = "" })
         K.open()
         K.type("x=1")
@@ -95,7 +96,7 @@ describe("round five #editor #spec", function()
         K.keys("left")
         assert.same({ 2, 1 }, { K.cursor() })
         K.keys("lshift", "insert")
-        assert.same("x = 1\n\n", K.draft())
+        assert.same("x = 1\n", K.draft())
         assert.same({ 2, 1 }, { K.cursor() })
       end)
 

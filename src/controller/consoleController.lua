@@ -1857,19 +1857,6 @@ function ConsoleController:get_timestamp()
   return self.time
 end
 
---- Shift+Ins: run the line as Enter does, and keep it in the
---- field, the cursor where it was (a submission that retains
---- the draft). A line that fails stays as Enter leaves it.
-function ConsoleController:run_and_keep()
-  local input = self.input
-  local kept = string.unlines(input:get_text())
-  local l, c = input:get_cursor_pos()
-  self:evaluate_input()
-  if input:has_error() or not input:is_empty() then return end
-  input:set_text(kept)
-  input:set_cursor_pos(l, c)
-end
-
 function ConsoleController:evaluate_input()
   local inter = self.input
 
@@ -2438,7 +2425,6 @@ local ACTIONS = {
   run = function(cc)
     if not cc.input:has_error() then cc:evaluate_input() end
   end,
-  run_and_keep = function(cc) cc:run_and_keep() end,
   history = function(cc, k)
     if k == 'pageup' then
       cc.input:history_back()
@@ -2458,7 +2444,6 @@ local CLOSE_ONLY = {
   ['return'] = true, kpenter = true,
   ['shift+return'] = true, ['shift+kpenter'] = true,
   ['alt+return'] = true, ['alt+kpenter'] = true,
-  ['shift+insert'] = true,
   escape = true, up = true, down = true,
 }
 
@@ -2499,11 +2484,11 @@ function ConsoleController:keypressed(k, sc, isrepeat)
 
   -- doc/development/internals/user_input.md, "Error state":
   -- the line under the error is the one that failed, kept to
-  -- be corrected. Enter (with Shift or Alt too), Shift+Ins,
-  -- Escape, Up and Down only close the error; any other key
-  -- closes it and does its usual work. A modifier alone
-  -- leaves it up; a held Shift then anchors its selection
-  -- when the next key closes it.
+  -- be corrected. Enter (with Shift or Alt too), Escape, Up
+  -- and Down only close the error; any other key closes it
+  -- and does its usual work. A modifier alone leaves it up; a
+  -- held Shift then anchors its selection when the next key
+  -- closes it.
   if input:has_error() then
     if Key.is_mod(k) then
       return

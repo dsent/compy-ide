@@ -785,15 +785,16 @@ describe('Editor #editor', function()
           assert.same('a = 1\nb = 2\n', savefile())
         end)
 
-        --- every empty line between statements becomes an
-        --- empty-line block (editor principles, IS3.7)
-        it("typed at top level stay, each of a run",
+        --- the formatter leaves one empty line of a run (the
+        --- ruling "The formatter decides a draft's empty lines",
+        --- over IS3.7)
+        it("typed at top level stay, one of a run",
           function()
             session:open('x = 0\ny = 0\n', 2)
             session:select_and_open_block(1, 'x = 0')
             session:submit('\n\n\nx = 1\n\n\n\na = 1\nb = 1\n\n')
             assert.same(
-              '\n\n\nx = 1\n\n\n\na = 1\nb = 1\n\n\ny = 0\n',
+              '\nx = 1\n\na = 1\nb = 1\n\ny = 0\n',
               savefile())
           end)
 
@@ -897,11 +898,10 @@ describe('Editor #editor', function()
               'function g() end',
             }))
             local once = savefile()
-            --- the two empty lines between statements stay
-            --- (IS3.7); the run inside the function is one
+            --- every run is one empty line, inside the function
+            --- and between statements
             assert.same(string.unlines({
               'local a = 1',
-              '',
               '',
               '-- note',
               '',
