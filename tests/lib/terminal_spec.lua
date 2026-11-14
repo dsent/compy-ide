@@ -131,6 +131,28 @@ describe("terminal scrolling", function()
         assert_cells(t, t.height, 1, t.width, " ", OTHER)
       end)
   end
+
+  --- a row that came back at the bottom is cells of their own:
+  --- after 20 rolls every row of the grid has come back
+  for _, rolls in ipairs({ 1, 20 }) do
+    it("keeps each cell's colors on a row that came back after "
+      .. rolls .. " rolls", function()
+        local t = print_rows(19 + rolls)
+        for y = 1, t.height do
+          t:move_to(1, y)
+          for i, ch in ipairs({ "R", "G", "B" }) do
+            set_style(t, STYLES[i])
+            t:print(ch)
+          end
+        end
+        t:update(1000)
+        for y = 1, t.height do
+          for i, ch in ipairs({ "R", "G", "B" }) do
+            assert_cells(t, y, i, i, ch, STYLES[i])
+          end
+        end
+      end)
+  end
 end)
 
 --- The console draws the grid again only when it is marked
