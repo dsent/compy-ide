@@ -7,9 +7,12 @@ local KeyCard = require('model.editor.keyCard')
 --- console's with and without a program behind it, the key the
 --- row names is pressed and what the row says is checked. A
 --- row with no check here fails the scenario, so that the card
---- cannot gain a row the scenario does not try. Also: Ctrl+Q
---- acts while F1 is held in the console, and is held back
---- while the editor's card shows (the ruling of November 14).
+--- cannot gain a row the scenario does not try. The trivial
+--- keys (moving the cursor, deleting a character, paging) are
+--- on no card (the ruling of November 14, late); fields.lua
+--- tries them. Also: Ctrl+Q acts while F1 is held in the
+--- console, and is held back while the editor's card shows
+--- (the ruling of November 14).
 
 local PROJECT = 'h-rows'
 local FILE = 'rows.lua'
@@ -148,19 +151,18 @@ local EDITOR = {
       runs(wait, 'C-A-r')
     end },
     ['Ctrl+Esc'] = { 'quit the IDE', quits },
-    ['Ctrl+Shift+F'] = { 'format the file', function(wait)
+    ['Alt+F'] = { 'format the file', function(wait)
       D.leave(wait)
       D.open(wait, PROJECT, FILE, { [FILE] = 'a=1\n' .. TEXT:sub(7) })
-      D.key(wait, 'C-S-f')
+      D.key(wait, 'A-f')
       D.eq(stored(), TEXT, 'the file formatted')
     end },
-    ['PgDn/PgUp'] = { 'page down/up', function(wait)
-      -- the whole file fits the view: a page goes to its end
-      -- or its start
-      D.key(wait, 'pagedown')
-      D.eq(P.position(), 'end', 'PgDn')
-      D.key(wait, 'pageup')
-      D.eq(P.position(), 1, 'PgUp')
+    ['Home/End'] = { 'file start/end', function(wait)
+      D.key(wait, 'end')
+      D.eq(P.position(), 'end', 'End, to the end position')
+      D.key(wait, 'home')
+      D.eq(P.position(), 1, 'Home, to the first block')
+      D.eq(P.draft(), '', 'no text')
     end },
   },
 }
@@ -182,20 +184,6 @@ local function draft_rows(d)
       D.eq(P.position(), 1, 'Ctrl+Up')
       D.eq(P.draft(), d, 'the draft stays')
     end },
-    ['Up/Down'] = { 'row up/down', function(wait)
-      D.key(wait, 'S-return')
-      D.key(wait, 'up')
-      D.eq(col(), '1:1', 'Up moves a row')
-      D.key(wait, 'down')
-      D.eq(col(), '2:1', 'Down moves a row')
-      D.eq(P.position(), 2, 'no browsing')
-    end },
-    ['Left/Right'] = { 'a character', function(wait)
-      D.key(wait, 'left')
-      D.eq(col(), '1:' .. (n - 1), 'Left')
-      D.key(wait, 'right')
-      D.eq(col(), '1:' .. n, 'Right')
-    end },
     ['Ctrl+Left/Right'] = { 'a word', function(wait)
       D.key(wait, 'C-left')
       D.eq(col(), '1:' .. (n - 1), 'Ctrl+Left to the word start')
@@ -203,26 +191,6 @@ local function draft_rows(d)
       D.eq(col(), '1:1', 'and the one before')
       D.key(wait, 'C-right')
       D.eq(col(), '1:2', 'Ctrl+Right to the word end')
-    end },
-    ['Home/End'] = { 'row start/end', function(wait)
-      D.key(wait, 'home')
-      D.eq(col(), '1:1', 'Home')
-      D.key(wait, 'end')
-      D.eq(col(), '1:' .. n, 'End')
-    end },
-    ['Ctrl+Home/End'] = { 'text start/end', function(wait)
-      D.key(wait, 'S-return')
-      D.key(wait, 'C-home')
-      D.eq(col(), '1:1', 'Ctrl+Home')
-      D.key(wait, 'C-end')
-      D.eq(col(), '2:1', 'Ctrl+End')
-    end },
-    ['Bksp/Delete'] = { 'remove a char', function(wait)
-      D.key(wait, 'backspace')
-      D.eq(P.draft(), d:sub(1, -2), 'Backspace')
-      D.key(wait, 'home')
-      D.key(wait, 'delete')
-      D.eq(P.draft(), d:sub(2, -2), 'Delete')
     end },
     ['Ctrl+K'] = { 'delete to end', function(wait)
       D.key(wait, 'home')
@@ -264,17 +232,6 @@ local function draft_rows(d)
       D.eq(P.draft(), 'zz\n' .. d, 'Alt+Shift+Up')
       D.key(wait, 'A-S-down')
       D.eq(P.draft(), d .. '\nzz', 'Alt+Shift+Down')
-    end },
-    ['Ctrl+D'] = { 'copy the line', function(wait)
-      D.key(wait, 'C-d')
-      D.eq(P.draft(), d .. '\n' .. d, 'Ctrl+D')
-    end },
-    ['PgDn/PgUp'] = { 'page down/up', function(wait)
-      D.key(wait, 'pagedown')
-      D.eq(P.position(), 'end', 'PgDn')
-      D.key(wait, 'pageup')
-      D.eq(P.position(), 1, 'PgUp')
-      D.eq(P.draft(), d, 'the draft stays')
     end },
   }
 end
@@ -400,11 +357,6 @@ local CONSOLE = {
     D.key(wait, 'down')
     D.eq(P.console_draft(), '', 'Down, back')
   end },
-  ['Left/Right'] = { 'a character', function(wait)
-    D.key(wait, 'left')
-    D.eq(P.field_cursor('console') .. ':' ..
-      select(2, P.field_cursor('console')), '1:5', 'Left')
-  end },
   ['Ctrl+Left/Right'] = { 'a word', function(wait)
     D.key(wait, 'C-left')
     D.eq(select(2, P.field_cursor('console')), 5, 'Ctrl+Left')
@@ -412,25 +364,6 @@ local CONSOLE = {
     D.eq(select(2, P.field_cursor('console')), 1, 'again')
     D.key(wait, 'C-right')
     D.eq(select(2, P.field_cursor('console')), 2, 'Ctrl+Right')
-  end },
-  ['Home/End'] = { 'row start/end', function(wait)
-    D.key(wait, 'home')
-    D.eq(select(2, P.field_cursor('console')), 1, 'Home')
-    D.key(wait, 'end')
-    D.eq(select(2, P.field_cursor('console')), 6, 'End')
-  end },
-  ['Ctrl+Home/End'] = { 'text start/end', function(wait)
-    D.key(wait, 'S-return')
-    D.key(wait, 'C-home')
-    D.eq(P.field_cursor('console'), 1, 'Ctrl+Home')
-    D.key(wait, 'C-end')
-    D.eq(P.field_cursor('console'), 2, 'Ctrl+End')
-  end },
-  ['Bksp/Delete'] = { 'remove a char', function(wait)
-    D.key(wait, 'backspace')
-    D.key(wait, 'home')
-    D.key(wait, 'delete')
-    D.eq(P.console_draft(), ' = ', 'Backspace and Delete')
   end },
   ['Ctrl+Z'] = { 'undo', function(wait)
     D.type(wait, '8')

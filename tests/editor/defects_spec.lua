@@ -198,7 +198,7 @@ describe("editor defects #editor", function()
   for name, keys in pairs({
     ["a cut"] = { "lctrl", "delete" },
     ["a move"] = { "lalt", "down" },
-    ["a format of the file"] = { "lctrl", "lshift", "f" }
+    ["a format of the file"] = { "lalt", "f" }
   }) do
     it(name .. " never writes over a change from outside",
         function()
@@ -286,11 +286,13 @@ describe("editor defects #editor", function()
     end
   end)
 
-  it("Shift+Delete in browsing removes one block, not two",
-      function()
+  -- Ctrl+Delete alone cuts (the maintainer's ruling of
+  -- November 14, 2026)
+  it("Shift+Delete in browsing removes nothing", function()
     K.browse_to(2)
+    local before = K.file()
     K.keys("lshift", "delete")
-    assert.same("x = 1\nz = 3\n", K.file())
-    assert.same(2, K.blocks())
+    assert.same(before, K.file())
+    assert.same("", K.draft())
   end)
 end)

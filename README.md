@@ -55,6 +55,7 @@ a project must be selected first.
 | Browse the file block by block                                    | <kbd>Ctrl</kbd>+<kbd>⇧</kbd>/<kbd>Ctrl</kbd>+<kbd>⇩</kbd> |
 | Browse block by block (empty field) / move the cursor a row (text in the field) | <kbd>⇧</kbd>/<kbd>⇩</kbd>                     |
 | Page down / up: the next block hidden below comes to the top, the one above to the bottom | <kbd>PageDown</kbd>/<kbd>PageUp</kbd>        |
+| To the first block / the end of the file (empty field)            | <kbd>Home</kbd>/<kbd>End</kbd>                |
 | Insert the field's text before the highlighted block, or at the end of the file | <kbd>Enter ⏎</kbd>                            |
 | Insert an empty line (empty field)                                | <kbd>Enter ⏎</kbd>                            |
 | Load the highlighted block into the field, to replace it          | <kbd>F2</kbd>                                 |
@@ -64,12 +65,11 @@ a project must be selected first.
 | Drop the field's text or the replacement; step back from the file (empty field) | <kbd>Esc</kbd>                                |
 | Leave the editor for the console, every open file with it (empty field) | <kbd>Ctrl</kbd>+<kbd>Q</kbd>                  |
 | Copy the highlighted block into the field                         | <kbd>Ctrl</kbd>+<kbd>Insert</kbd>             |
-| Cut the highlighted block into the field (empty field)            | <kbd>Ctrl</kbd>+<kbd>Delete</kbd> / <kbd>Shift</kbd>+<kbd>Delete</kbd> |
+| Cut the highlighted block into the field (empty field)            | <kbd>Ctrl</kbd>+<kbd>Delete</kbd>             |
 | Move the highlighted block up / down                              | <kbd>Alt</kbd>+<kbd>⇧</kbd>/<kbd>Alt</kbd>+<kbd>⇩</kbd> |
 | Undo / redo                                                       | <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> |
-| Duplicate the field's current line                                | <kbd>Ctrl</kbd>+<kbd>D</kbd>                  |
 | Follow the require or dofile of the highlighted block (empty field) | <kbd>Ctrl</kbd>+<kbd>J</kbd>                  |
-| Format the whole file (empty field)                               | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> |
+| Format the whole file (empty field)                               | <kbd>Alt</kbd>+<kbd>F</kbd>                   |
 | Show the keys of the current state                                | hold <kbd>F1</kbd>                            |
 
 Each combination is a key of its own: a key pressed with a modifier the

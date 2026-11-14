@@ -94,11 +94,11 @@ describe("a #! first line #editor #spec", function()
       assert.truthy((K.message() or ""):find(NO_RUN, 1, true))
     end)
 
-  spec_it("FR3.1 Preserve file structure: Ctrl+Shift+F and "
+  spec_it("FR3.1 Preserve file structure: Alt+F and "
       .. "tidy() keep a #! first line", function()
     K.reset({ ["main.lua"] = "#!/usr/bin/lua\nx=1\n" })
     K.open()
-    K.keys("lctrl", "lshift", "f")
+    K.keys("lalt", "f")
     assert.same(TEXT, K.file())
     K.reset({ ["main.lua"] = "#!/usr/bin/lua\nx=1\n" })
     K.type('tidy("main.lua")')

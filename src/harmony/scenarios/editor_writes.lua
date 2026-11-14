@@ -4,7 +4,7 @@ local D = require('harmony.drive')
 --- Every key of the file editor that writes the file, with
 --- its undo and redo: Enter in the three states (IS4.1, IS4.2,
 --- IS4.3, IS5.3), Shift+Ins (IS6.4), cut (IS6.2, IS6.3), move
---- (IS6.5), formatting the file (Ctrl+Shift+F), and the
+--- (IS6.5), formatting the file (Alt+F), and the
 --- submissions that are refused and leave the file as it was
 --- (IS3.3, IS3.4, IS1.7). Each checks the file on storage.
 --- Every scenario works on a project of its own.
@@ -315,7 +315,7 @@ scenario('move', function(wait)
   hm_done()
 end)
 
--- Ctrl+Shift+F tidies the whole file while browsing, and one
+-- Alt+F tidies the whole file while browsing, and one
 -- Ctrl+Z takes it back
 scenario('format', function(wait)
   local f = 'format.lua'
@@ -323,12 +323,12 @@ scenario('format', function(wait)
   wait(.1)
   open(wait, f, untidy)
   D.shot(wait, 'untidy')
-  D.key(wait, 'C-S-f')
+  D.key(wait, 'A-f')
   D.shot(wait, 'tidy')
   local tidy = stored(f)
-  assert(tidy ~= untidy, 'Ctrl+Shift+F changed nothing')
+  assert(tidy ~= untidy, 'Alt+F changed nothing')
   assert(string.find(tidy, 'x = 1\n', 1, true),
-    'Ctrl+Shift+F did not tidy x=1: ' .. tostring(tidy))
+    'Alt+F did not tidy x=1: ' .. tostring(tidy))
   D.key(wait, 'C-z')
   holds(f, untidy, 'Ctrl+Z takes the tidying back')
   D.key(wait, 'C-y')
@@ -336,8 +336,8 @@ scenario('format', function(wait)
   -- while inserting it is not a command
   D.key(wait, 'C-z')
   D.type(wait, 'z')
-  D.key(wait, 'C-S-f')
-  holds(f, untidy, 'Ctrl+Shift+F while inserting writes nothing')
+  D.key(wait, 'A-f')
+  holds(f, untidy, 'Alt+F while inserting writes nothing')
   D.leave(wait)
   hm_done()
 end)

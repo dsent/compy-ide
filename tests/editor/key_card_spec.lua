@@ -31,8 +31,25 @@ describe("the key card #editor", function()
     }) do
       assert.is_string(now[k], k)
     end
-    assert.is_string(other["Left/Right"])
-    assert.is_nil(now["Left/Right"])
+    -- the field's keys in a draft come after them
+    assert.is_string(other["Ctrl+Left/Right"])
+    assert.is_nil(now["Ctrl+Left/Right"])
+    -- with an empty field Home and End move through the file
+    assert.same("file start/end", now["Home/End"])
+  end)
+
+  -- trivial keys are bound but not on the card (the
+  -- maintainer's ruling of November 14, 2026)
+  it("leaves the trivial keys off", function()
+    for _, st in ipairs({ "browsing", "inserting", "replacing" })
+    do
+      local now, other = group(st, st == "browsing")
+      for _, k in ipairs({ "Left/Right", "Ctrl+Home/End",
+        "Bksp/Delete", "PgDn/PgUp" }) do
+        assert.is_nil(now[k], st .. " " .. k)
+        assert.is_nil(other[k], st .. " " .. k)
+      end
+    end
   end)
 
   it("moves the keys a state does not admit after it",
@@ -64,8 +81,11 @@ describe("the key card #editor", function()
     assert.same("replace block", enter("replacing", false))
     assert.same("browse blocks",
       (group("replacing", true))["Up/Down"])
-    assert.same("row up/down",
-      (group("replacing", false))["Up/Down"])
+    -- in a draft Up and Down move the cursor, a trivial key:
+    -- the card says what they do with an empty field
+    local now, other = group("replacing", false)
+    assert.is_nil(now["Up/Down"])
+    assert.same("browse blocks", other["Up/Down"])
   end)
 
   it("fits one screen in every state", function()
@@ -88,7 +108,7 @@ describe("the key card #editor", function()
       end
       -- the editor's own keys, the field's, and the reserved
       -- chords that act in the editor
-      assert.same(29, keys)
+      assert.same(24, keys)
     end
   end)
 
@@ -130,7 +150,7 @@ describe("the key card #editor", function()
 
   it("takes one column where two do not fit", function()
     local lines = KeyCard.lines("browsing", true, 40, 40)
-    assert.same(31, #lines)
+    assert.same(26, #lines)
     assert.same(" Keys now, browsing:", lines[1])
   end)
 end)

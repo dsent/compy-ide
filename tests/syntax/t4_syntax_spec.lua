@@ -114,12 +114,12 @@ describe("a fourth syntax, through keys #syntax #editor", function()
     assert.same("ONE\nTWO\n!n", K.draft())
   end)
 
-  it("formats with Ctrl+Shift+F, and says why when it does "
+  it("formats with Alt+F, and says why when it does "
       .. "not", function()
     K.browse_to(1)
-    K.keys("lctrl", "lshift", "f")
+    K.keys("lalt", "f")
     assert.same("ONE\nTWO\nTHREE\nFOUR\n", K.file("a.t4"))
-    K.keys("lctrl", "lshift", "f")
+    K.keys("lalt", "f")
     assert.same("The file is upper case already.", K.message())
   end)
 

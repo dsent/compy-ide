@@ -180,7 +180,7 @@ describe("IS1 files #editor #spec", function()
       spec_it("IS1.2 Admit or refuse a file: formatting a " ..
           "file that does not parse changes nothing and says "
           .. "why", function()
-        K.keys("lctrl", "lshift", "f")
+        K.keys("lalt", "f")
         assert.same(BROKEN, K.file("broken.lua"))
         assert.same({ }, K.writes())
         assert.same(5, K.blocks())

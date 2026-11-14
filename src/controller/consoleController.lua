@@ -293,7 +293,7 @@ local function close_project(cc)
   end
 end
 
---- Format a project file the way the editor's Ctrl+Shift+F
+--- Format a project file the way the editor's Alt+F
 --- formats it, at a Compy's width: the REPL's `tidy(name)`.
 --- The file is written with LF line ends (BufferModel:save).
 --- It writes only when the text changes, and says why when

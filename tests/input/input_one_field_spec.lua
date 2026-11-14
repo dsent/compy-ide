@@ -103,6 +103,8 @@ describe("one text field everywhere #input", function()
     { "lctrl", "lshift", "left" }, { "lctrl", "lshift", "end" },
     { "lshift", "delete" }, { "lctrl", "delete" },
     { "lalt", "left" }, { "lalt", "home" }, { "lalt", "end" },
+    -- removed on November 14, 2026, late
+    { "lctrl", "d" },
   }
   for _, keys in ipairs(UNBOUND) do
     it(table.concat(keys, "+") .. " does nothing in any field",
@@ -198,13 +200,16 @@ describe("one text field everywhere #input", function()
       end
     end
 
-    it("at a line's start it joins the lines, the break alone "
-        .. "removed; at the draft's start nothing", function()
+    it("at a line's start it takes what Ctrl+Left moves over, "
+        .. "the break and the previous line's last word; at the "
+        .. "draft's start nothing", function()
       for _, owner in ipairs(ORDER) do
         local f = field_of(owner, { "ab cd", "ef" }, 2, 1)
         K.keys("lctrl", "backspace")
-        assert.same({ "ab cdef" }, f:get_text(), owner)
-        assert.same({ 1, 6 }, { f:get_cursor_pos() }, owner)
+        assert.same({ "ab ef" }, f:get_text(), owner)
+        assert.same({ 1, 4 }, { f:get_cursor_pos() }, owner)
+        K.keys("lctrl", "z")
+        assert.same({ "ab cd", "ef" }, f:get_text(), owner)
         f = field_of(owner, { "abc" }, 1, 1)
         K.keys("lctrl", "backspace")
         assert.same({ "abc" }, f:get_text(), owner)

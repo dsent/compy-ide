@@ -322,24 +322,17 @@ describe("round four #editor #spec", function()
   end)
 
   describe("the draft's own steps", function()
-    spec_it("IS6.6 Undo and redo: Ctrl+D is a change to the "
-        .. "draft: it drops the redo, and Ctrl+Z takes it back",
-      function()
-        K.reset({ ["main.lua"] = "" })
-        K.open()
-        K.type_lines({ "local total = 0", "total = total + 1" })
-        K.keys("lctrl", "z")
-        local before = K.draft()
-        K.keys("lctrl", "d")
-        K.keys("lctrl", "d")
-        local copied = K.draft()
-        assert.are_not.same(before, copied)
-        K.keys("lctrl", "y")
-        assert.same(copied, K.draft())
-        K.keys("lctrl", "z")
-        K.keys("lctrl", "z")
-        assert.same(before, K.draft())
-      end)
+    -- Ctrl+D duplicated the line until the maintainer's
+    -- ruling of November 14, 2026 removed it
+    spec_it("IS3.11 Preserve state on refusal: Ctrl+D does "
+        .. "nothing in the draft", function()
+      K.reset({ ["main.lua"] = "" })
+      K.open()
+      K.type_lines({ "local total = 0", "total = total + 1" })
+      local before = { K.draft(), K.cursor() }
+      K.keys("lctrl", "d")
+      assert.same(before, { K.draft(), K.cursor() })
+    end)
 
     spec_it("IS6.6 Undo and redo: a swap of the draft's lines "
         .. "undoes", function()
@@ -353,12 +346,13 @@ describe("round four #editor #spec", function()
     end)
 
     spec_it("IS5.6 Switch the replacement target: a draft "
-        .. "changed by Ctrl+D is modified", function()
+        .. "changed by Ctrl+K is modified", function()
       K.reset({ ["main.lua"] = "x = 1\ny = 2\n" })
       K.open()
       K.browse_to(1)
       K.keys("f2")
-      K.keys("lctrl", "d")
+      K.keys("home")
+      K.keys("lctrl", "k")
       K.browse_to(2)
       K.keys("f2")
       assert.truthy((K.message() or ""):find(EDITING, 1, true))
@@ -382,7 +376,7 @@ describe("round four #editor #spec", function()
 
   describe("tidy() in the console", function()
     spec_it("FR3.1 Preserve file structure: tidy() keeps a #! "
-        .. "first line and writes LF line ends, as Ctrl+Shift+F "
+        .. "first line and writes LF line ends, as Alt+F "
         .. "does", function()
       K.reset({
         ["main.lua"] = "#!/usr/bin/lua\r\nx   =   1\r\ny = 2\n",
@@ -394,7 +388,7 @@ describe("round four #editor #spec", function()
         ["main.lua"] = "#!/usr/bin/lua\r\nx   =   1\r\ny = 2\n",
       })
       K.open()
-      K.keys("lctrl", "lshift", "f")
+      K.keys("lalt", "f")
       assert.same("#!/usr/bin/lua\nx = 1\ny = 2\n", K.file())
     end)
 
@@ -685,7 +679,7 @@ describe("round four #editor #spec", function()
       assert.same("x = 1\ny = 2\n", K.file())
     end)
 
-    spec_it("IS3.11 Preserve state on refusal: Ctrl+Shift+F "
+    spec_it("IS3.11 Preserve state on refusal: Alt+F "
         .. "refused for a failed write leaves the position on "
         .. "the block it was on", function()
       local original = "x   =   1\ny = 2\n"
@@ -693,7 +687,7 @@ describe("round four #editor #spec", function()
       K.open()
       K.browse_to(1)
       K.fail_writes("card full")
-      K.keys("lctrl", "lshift", "f")
+      K.keys("lalt", "f")
       assert.same(original, K.file())
       assert.same(1, K.position())
     end)

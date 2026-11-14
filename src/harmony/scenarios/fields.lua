@@ -62,7 +62,8 @@ end
 --- Ctrl+Backspace, Alt+Backspace and Ctrl+W remove exactly
 --- what Ctrl+Left moves over (IS3.8, the ruling on word
 --- deletion), the non-word characters before the cursor, then
---- the word; at the start of a line, the line break alone.
+--- the word; at the start of a line, the line break and the
+--- word before it (the ruling of November 14, late).
 --- `clear` empties the field again.
 --- @param wait function
 --- @param which 'editor'|'console'|'program'
@@ -85,7 +86,9 @@ local function word_keys(wait, which, clear)
     D.type(wait, 'cd')
     D.key(wait, 'home')
     D.key(wait, k)
-    D.eq(P.text(which), 'abcd', k .. ' at a line\'s start in ' .. which)
+    -- what Ctrl+Left moves over: the break and the word
+    -- before it (the ruling of November 14, late)
+    D.eq(P.text(which), 'cd', k .. ' at a line\'s start in ' .. which)
     clear()
   end
 end
@@ -116,7 +119,9 @@ local function click(wait, which)
 end
 
 local FIELD_CHORDS = { 'C-return', 'C-kpenter', 'S-left', 'S-right',
-  'S-home', 'S-end', 'C-a', 'C-S-up', 'A-left', 'A-home' }
+  'S-home', 'S-end', 'C-a', 'C-S-up', 'A-left', 'A-home',
+  -- removed on November 14, late
+  'C-d', 'S-delete' }
 
 scenario('editor', function(wait)
   local f = 'fields.lua'

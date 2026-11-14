@@ -152,7 +152,7 @@ The other scenario files each work on a project of their own and check the file 
 after every key that may write it:
 
 - `editor_writes.lua`: every key that writes a file, with its undo and redo: Enter while
-  inserting, browsing and replacing; Shift+Ins; cut; move; Ctrl+Shift+F; and the submissions
+  inserting, browsing and replacing; Shift+Ins; cut; move; Alt+F; and the submissions
   that are refused and leave the file as it was (a syntax error, a line over 64 characters, a
   block over 14 lines, a file changed on storage since the editor read it).
 - `editor_states.lua`: F2 on an ordinary block (load, reload, switch, refusals), on blocks over

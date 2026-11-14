@@ -14,7 +14,9 @@
 ---
 --- `act` names the surface's action; `words` (a string, or a
 --- function of whether the draft is empty) is what the card
---- says while the state is in front. A state with no entry
+--- says while the state is in front. `trivial`: a key anyone
+--- finds without being told (moving the cursor, paging), bound
+--- and working but left off the card. A state with no entry
 --- leaves the chords unbound there. The card follows the
 --- list's order: one cell per `card` label.
 local Keymap = { }
@@ -37,7 +39,6 @@ function Keymap.new(defs, states)
             words = e.words,
             repeats = d.repeats == true,
             card = d.card,
-            only = d.only,
           }
         end
       end
@@ -53,7 +54,7 @@ end
 
 --- @param state string
 --- @param chord string --- Key.combo's name
---- @return table? entry --- { act, words, repeats, card, only }
+--- @return table? entry --- { act, words, repeats, card }
 function Keymap:lookup(state, chord)
   return self.tables[state][chord]
 end

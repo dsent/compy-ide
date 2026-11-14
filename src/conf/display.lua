@@ -20,9 +20,11 @@ return {
   --- field's, on one grid from the top. 18 of them take 594
   --- of the screen's 600.
   row_height = 33,
-  --- where the pixels the rows leave go: 'status' makes the
-  --- status line that much taller, its text centred in it;
-  --- 'top' or 'bottom' keeps them as a strip at that edge of
-  --- the screen, reserved for indicators
-  spare = 'status',
+  --- where the 6 pixels the rows leave go, as two numbers that
+  --- add up to them: pixels added to the status line, its text
+  --- centred in it, and pixels left at the screen's bottom,
+  --- under the field, in its background; what the two leave
+  --- lies at the top
+  status_extra = 6,
+  bottom_strip = 0,
 }

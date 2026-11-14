@@ -229,7 +229,7 @@ describe('the editor across files #input', function()
       function()
         files['main.lua'] = 'x=1\n'
         open()
-        chord('lctrl', 'lshift', 'f')
+        chord('lalt', 'f')
         assert.is_true(ed.input:has_error())
 
         --- the notice blocks no exit

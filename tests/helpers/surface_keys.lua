@@ -21,7 +21,6 @@ S.EXEMPT = {
   ["alt+kpenter"] = "alias of Alt+Enter",
   ["shift+backspace"] = "alias of Backspace",
   ["alt+backspace"] = "alias of Ctrl+Backspace",
-  ["shift+delete"] = "alias of Ctrl+Delete",
   f5 = "debug build",
   ["ctrl+f5"] = "debug build",
   ["ctrl+alt+t"] = "debug build",
@@ -39,9 +38,7 @@ S.EXEMPT = {
 function S.bound(keys, state)
   local out = { }
   for _, d in ipairs(FieldKeys.defs) do
-    if not d.only or keys.allows[d.only] then
-      for _, c in ipairs(d.chords) do out[c] = d end
-    end
+    for _, c in ipairs(d.chords) do out[c] = d end
   end
   for _, d in ipairs(keys.defs) do
     if d[state] then
@@ -89,14 +86,16 @@ function S.unbound_neighbours(bound)
 end
 
 --- The card labels the surface's keys need in `state`: each
---- bound chord's, unless EXEMPT. A chord whose definition has
---- no label is returned in `missing`.
+--- bound chord's, unless EXEMPT or marked trivial (a key
+--- anyone finds without being told). A chord whose definition
+--- has neither a label nor the trivial mark is returned in
+--- `missing`.
 --- @return table<string, true> labels
 --- @return string[] missing
 function S.inventory(keys, state)
   local labels, missing = { }, { }
   for chord, d in pairs(S.bound(keys, state)) do
-    if not S.EXEMPT[chord] then
+    if not S.EXEMPT[chord] and not d.trivial then
       if d.card then
         labels[d.card] = true
       else

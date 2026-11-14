@@ -1146,8 +1146,7 @@ describe('input surface: widget callbacks #input', function()
   -- alike, and no instance reads the screen mode to decide what
   -- a key does (doc/development/decisions/input.md,
   -- D-EDIT-LIFECYCLE). A surface that needs to differ says so
-  -- locally: the editor consumes Enter/Escape upstream, Ctrl+D
-  -- is the per-instance `allow_duplicate_line` flag.
+  -- locally: the editor consumes Enter/Escape upstream.
   --
   -- The repetition below IS the claim — same two keys, same
   -- lifecycle, three surfaces — and it guards against that
@@ -1444,40 +1443,6 @@ describe('input surface: widget callbacks #input', function()
         -- happens (D-LIFECYCLE-FLAGS, statement 3).
         assert.is_true(F.is_widget_visible())
         assert.same({ 'bye' }, F.widget:get_text())
-      end)
-    end)
-
-    -- ---- 7. `modify` per-instance flag ---------------------
-
-    -- Line-duplication is the one behaviour that genuinely
-    -- differs between surfaces, and it is carried by a
-    -- constructor flag on the instance that wants it —
-    -- `allow_duplicate_line`, alongside `disable_selection` —
-    -- not by the screen mode. Each case still sets app_state,
-    -- to the value the real caller would have, precisely to
-    -- show the flag and not the mode is what decides
-    -- (doc/development/decisions/input.md, D-EDIT-LIFECYCLE).
-    describe('the modify flag alone gates Ctrl+D', function()
-      it('with the flag: Ctrl+D duplicates the line', function()
-        local c = bare_uic()
-        c.allow_duplicate_line = true
-        love.state.app_state = 'editor'
-        c:show({ text = 'abc' })
-
-        mock.keystroke('C-d', driver(c))
-
-        assert.same({ 'abc', 'abc' }, c:get_text():items())
-      end)
-
-      it('without it: Ctrl+D does nothing', function()
-        local c = bare_uic()
-        c.allow_duplicate_line = false
-        love.state.app_state = 'ready'
-        c:show({ text = 'abc' })
-
-        mock.keystroke('C-d', driver(c))
-
-        assert.same({ 'abc' }, c:get_text():items())
       end)
     end)
 

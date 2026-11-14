@@ -887,7 +887,7 @@ describe('Editor #editor', function()
               'b = 2', '',
             }), 8)
             session:select_block(8, 'b = 2')
-            mock.keystroke('C-S-f', press)
+            mock.keystroke('M-f', press)
             assert.same(string.unlines({
               'a = 1', '',
               'function f()', '  return 1', 'end', '',
@@ -909,7 +909,7 @@ describe('Editor #editor', function()
               local text = f:read('*a')
               f:close()
               session:open(text)
-              mock.keystroke('C-S-f', press)
+              mock.keystroke('M-f', press)
               local lines = textfile.lines(text)
               local want = compyfmt.inspect(lines)
               assert.same(textfile.text(want), savefile())
@@ -929,7 +929,7 @@ describe('Editor #editor', function()
             end)
             local buffer = controller:get_active_buffer()
 
-            mock.keystroke('C-S-f', press)
+            mock.keystroke('M-f', press)
             assert.same('a  =  1\n', disk)
             assert.same({ 'a  =  1' },
               buffer:get_text_content())
@@ -938,7 +938,7 @@ describe('Editor #editor', function()
             --- storage back: trying again formats and saves;
             --- the chord's key dismisses the notice and acts
             failing = false
-            mock.keystroke('C-S-f', press)
+            mock.keystroke('M-f', press)
             assert.is_false(controller.input:has_error())
             assert.same('a = 1\n', disk)
           end)
@@ -949,7 +949,7 @@ describe('Editor #editor', function()
             'e = 5', '',
           }), 8)
           session:select_block(5, 'b = 2')
-          mock.keystroke('C-S-f', press)
+          mock.keystroke('M-f', press)
           assert.same({ 'b = 2' }, buffer:get_selected_text())
           mock.keystroke('C-z', press)
           --- the text is back, the position on the first
@@ -972,7 +972,7 @@ describe('Editor #editor', function()
               '',
             })
             session:open(file, 1)
-            mock.keystroke('C-S-f', press)
+            mock.keystroke('M-f', press)
             assert.same(file, savefile())
             assert.is_true(controller.input:has_error())
           end)
@@ -998,7 +998,7 @@ describe('Editor #editor', function()
           end
         end)
 
-        it("is written the same by an accept, Ctrl+Shift+F,"
+        it("is written the same by an accept, Alt+F,"
           .. " tidy and compyfmt --fix", function()
           require("controller.consoleController")
           local compyfmt = require("util.compyfmt")
@@ -1015,9 +1015,9 @@ describe('Editor #editor', function()
             assert.same(want, savefile(), 'accept: ' .. text)
 
             session:open(text)
-            mock.keystroke('C-S-f', press)
+            mock.keystroke('M-f', press)
             assert.same(want, savefile(),
-              'Ctrl+Shift+F: ' .. text)
+              'Alt+F: ' .. text)
 
             local path = os.tmpname()
             assert.is_true(FS.write(path, text))

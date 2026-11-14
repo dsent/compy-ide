@@ -182,13 +182,13 @@ describe("every chord is its own key #input", function()
   describe("the tables", function()
     -- which keys repeat while held (the ruling of November
     -- 14, 2026), for the keys whose repeat no key test can tell
-    -- from a press: a second F2, Ctrl+Shift+F or Ctrl+L changes
+    -- from a press: a second F2, Alt+F or Ctrl+L changes
     -- nothing the first did not
     local ONCE = {
       { EditorKeys, { "return", "kpenter", "escape", "f2",
         "shift+insert", "ctrl+insert", "ctrl+delete",
-        "shift+delete", "alt+up", "alt+down", "ctrl+shift+f",
-        "ctrl+j", "f1", "f5" } },
+        "alt+up", "alt+down", "alt+f", "home", "end", "ctrl+j",
+        "f1", "f5" } },
       { ConsoleKeys, { "return", "escape", "ctrl+l", "f1" } },
       { FieldKeys, { "return", "kpenter", "escape" } },
     }
@@ -199,8 +199,8 @@ describe("every chord is its own key #input", function()
       { FieldKeys, { "shift+return", "alt+return", "left",
         "ctrl+right", "home", "ctrl+end", "up", "backspace",
         "shift+backspace", "delete", "ctrl+backspace", "ctrl+w",
-        "alt+backspace", "ctrl+k", "alt+shift+up", "ctrl+d",
-        "ctrl+z", "ctrl+y" } },
+        "alt+backspace", "ctrl+k", "alt+shift+up", "ctrl+z",
+        "ctrl+y" } },
     }
     it("say which keys act once and which repeat", function()
       for _, set in ipairs({ { ONCE, false }, { REPEATS, true } })

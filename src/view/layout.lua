@@ -1,7 +1,8 @@
 --- The screen's rows, every one `cfg.fh` high on one grid
 --- from the top: `cfg.lines` above the status line, the status
---- line's, the field's. What they leave of the height goes
---- where conf/display.lua's `spare` says.
+--- line's, the field's. What they leave of the height goes to
+--- the status line and to a strip at the bottom, as
+--- conf/display.lua says; the rest lies at the top.
 local display = require("conf.display")
 
 --- @class ScreenLayout
@@ -13,10 +14,11 @@ local display = require("conf.display")
 --- @return ScreenLayout
 return function(cfg)
   local spare = math.max(0, cfg.h - (cfg.lines + 2) * cfg.fh)
-  local where = display.spare
+  local extra = math.min(display.status_extra, spare)
+  local bottom = math.min(display.bottom_strip, spare - extra)
   return {
-    top = where == 'top' and spare or 0,
-    bottom = where == 'bottom' and spare or 0,
-    status_h = cfg.fh + (where == 'status' and spare or 0),
+    top = spare - extra - bottom,
+    bottom = bottom,
+    status_h = cfg.fh + extra,
   }
 end

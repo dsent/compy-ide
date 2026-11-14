@@ -1,7 +1,7 @@
 -- The maintainer's rulings of November 14, 2026 on the
 -- editor's own keys: PgDn and PgUp browse a page at a time,
 -- the block that comes into view at the view's edge becoming
--- the browsing position; Ctrl+Shift+F says why it refuses;
+-- the browsing position; Alt+F says why it refuses;
 -- Ctrl+Shift+S and the Alt look-around keys are gone. Keys
 -- only, through tests/helpers/editor_keys.lua.
 
@@ -189,14 +189,14 @@ describe("paging, formatting, removed keys #editor #spec",
         end)
     end)
 
-    describe("Ctrl+Shift+F", function()
+    describe("Alt+F", function()
       for _, name in ipairs({ "notes.txt", "notes.md" }) do
-        spec_it("IS3.14 Explain a refusal: Ctrl+Shift+F in "
+        spec_it("IS3.14 Explain a refusal: Alt+F in "
             .. name .. " says the file has nothing to format, "
             .. "and the next key acts", function()
           K.reset({ [name] = "a  b\n" })
           K.open(name)
-          K.keys("lctrl", "lshift", "f")
+          K.keys("lalt", "f")
           assert.same("The file has nothing to format.",
             K.message())
           assert.same("a  b\n", K.file(name))
@@ -206,24 +206,71 @@ describe("paging, formatting, removed keys #editor #spec",
         end)
       end
 
-      spec_it("IS3.14 Explain a refusal: Ctrl+Shift+F during an "
+      spec_it("IS3.14 Explain a refusal: Alt+F during an "
           .. "edit says to finish it, and changes nothing",
         function()
           K.reset({ ["main.lua"] = "x=1\n" })
           K.open()
           K.type("y = 2")
-          K.keys("lctrl", "lshift", "f")
+          K.keys("lalt", "f")
           assert.truthy((K.message() or ""):find("Finish", 1, true))
           assert.same("x=1\n", K.file())
           assert.same("y = 2", K.draft())
           K.keys("escape")
           K.browse_to(1)
           K.keys("f2")
-          K.keys("lctrl", "lshift", "f")
+          K.keys("lalt", "f")
           assert.truthy((K.message() or ""):find("Finish", 1, true))
           assert.same("x=1\n", K.file())
           assert.same(1, K.target())
         end)
+    end)
+
+    -- with an empty field Home and End move through the file
+    -- (PR #28, D-PAGING; the maintainer's ruling of November
+    -- 14, 2026), and in a draft they are the field's
+    describe("Home and End", function()
+      spec_it("IS2.1 Browse blocks: with an empty field Home "
+          .. "browses to the first block and End to the end "
+          .. "position", function()
+        K.reset({ ["notes.txt"] = lines_file(60) })
+        K.open("notes.txt")
+        K.browse_to(30)
+        K.keys("home")
+        assert.same(1, K.position())
+        assert.same(1, (shown()))
+        K.keys("end")
+        assert.same("end", K.position())
+        assert.same(60, select(2, shown()))
+        assert.same("", K.draft())
+      end)
+
+      spec_it("IS2.1 Browse blocks: a held Home or End acts once, "
+          .. "and the field takes no text from it", function()
+        K.reset({ ["notes.txt"] = lines_file(60) })
+        K.open("notes.txt")
+        K.browse_to(30)
+        K.hold("home")
+        K.repeat_key("home")
+        K.release("home")
+        assert.same(1, K.position())
+        assert.same("browsing", K.state())
+      end)
+
+      spec_it("IS3.8 Position the text cursor: in a draft Home "
+          .. "and End go to the ends of the cursor's row, and the "
+          .. "position stays", function()
+        K.reset({ ["notes.txt"] = lines_file(60) })
+        K.open("notes.txt")
+        K.browse_to(30)
+        K.type("abc")
+        K.keys("home")
+        assert.same({ 1, 1 }, { K.cursor() })
+        assert.same(30, K.position())
+        K.keys("end")
+        assert.same({ 1, 4 }, { K.cursor() })
+        assert.same(30, K.position())
+      end)
     end)
 
     describe("removed keys", function()
@@ -235,6 +282,12 @@ describe("paging, formatting, removed keys #editor #spec",
         ["Alt+Home"] = { "lalt", "home" },
         ["Alt+End"] = { "lalt", "end" },
         ["Ctrl+Shift+S"] = { "lctrl", "lshift", "s" },
+        -- the file is formatted with Alt+F, and Ctrl+F is kept
+        -- for a search to come
+        ["Ctrl+Shift+F"] = { "lctrl", "lshift", "f" },
+        ["Ctrl+F"] = { "lctrl", "f" },
+        ["Ctrl+D"] = { "lctrl", "d" },
+        ["Shift+Delete"] = { "lshift", "delete" },
       }) do
         spec_it("IS2.1 Browse blocks: " .. label .. " does "
             .. "nothing", function()

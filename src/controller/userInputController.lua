@@ -25,11 +25,9 @@ local function default_callbacks()
 end
 
 --- @param model UserInputModel
---- @param allow_duplicate_line boolean?  editor-only today
-local new = function(model, allow_duplicate_line)
+local new = function(model)
   return {
     model = model,
-    allow_duplicate_line = allow_duplicate_line,
     -- is_shown() reads this, never love.state (owner ruling
     -- 2026-07-20).
     shown = false,
@@ -659,7 +657,6 @@ local ACT = {
   backspace_word = function(_, im) im:backspace_word() end,
   --- IS3.12: to the end of the line, the break kept
   kill = function(_, input) input:kill_to_line_end() end,
-  duplicate = function(_, input) input:duplicate_line() end,
   --- IS3.15: Shift+Enter and Alt+Enter each break the line
   line_feed = function(_, input) input:line_feed() end,
   --- the widget's own submit and cancel (D-EDIT-LIFECYCLE),
@@ -679,13 +676,7 @@ local ACT = {
 --- @param chord string
 --- @return table? entry
 function UserInputController:names(chord)
-  local e = FieldKeys:lookup('field', chord)
-  if not e then return nil end
-  if e.only == 'duplicate' and not self.allow_duplicate_line
-  then
-    return nil
-  end
-  return e
+  return FieldKeys:lookup('field', chord)
 end
 
 --- The keys an error unlocks the field with

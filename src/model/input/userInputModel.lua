@@ -364,14 +364,6 @@ function UserInputModel:insert_text_line(text, li)
   self:text_change()
 end
 
---- Duplicate the cursor's line below it, the cursor on the
---- copy: one change to the draft (Ctrl+D)
-function UserInputModel:duplicate_line()
-  self:_record_edit('duplicate', true)
-  self:insert_text_line(self:get_current_line() or '')
-  self:_note_edit()
-end
-
 --- The cursor's line swaps with the one above or below it,
 --- the cursor going with it at its column (Alt+Up,
 --- Alt+Down): one change to the draft, whose step holds the
@@ -503,13 +495,12 @@ function UserInputModel:backspace()
 end
 
 --- Ctrl+Backspace, Alt+Backspace and Ctrl+W: delete exactly
---- what Ctrl+Left moves over within the line (IS3.8), as one
---- change. At a line's start they remove the line break alone
---- and join the lines, as Backspace does; at the draft's
---- start, nothing.
+--- what Ctrl+Left moves over (IS3.8), as one change: one word
+--- splitting for both (the maintainer's ruling of November
+--- 14, 2026). At a line's start that is the line break and the
+--- previous line's last word; at the draft's start, nothing.
 function UserInputModel:backspace_word()
   local l, c = self:get_cursor_pos()
-  if c == 1 then return self:backspace() end
   local tl, tc = self:_word_left_of(l, c)
   if tl == l and tc == c then return end
   self:_record_edit('remove_word', true)

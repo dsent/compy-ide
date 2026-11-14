@@ -6,11 +6,12 @@
 --- table does not name either does nothing.
 ---
 --- An action names one of the field's (`ACT` in
---- userInputController.lua). `only = 'duplicate'`: where the
---- field's owner switches it on (allow_duplicate_line). The
---- words are what a key card says of the key; an alias of a
---- key with words has none. There is no selection: the
---- clipboard that needed one is gone.
+--- userInputController.lua). The words are what a key card
+--- says of the key; an alias of a key with words has none, and
+--- a `trivial` key, one anyone finds without being told
+--- (moving the cursor, deleting a character), is left off the
+--- card (the maintainer's ruling of November 14, 2026). There
+--- is no selection: the clipboard that needed one is gone.
 local Keymap = require('model.input.keymap')
 
 --- @param act string
@@ -34,33 +35,32 @@ local DEFS = {
     { chords = { 'shift+kpenter', 'alt+kpenter' },
       repeats = true }),
   --- IS3.8
-  with(key('char', 'a character'),
-    { chords = { 'left', 'right' }, card = 'Left/Right',
-      repeats = true }),
+  with(key('char'),
+    { chords = { 'left', 'right' }, repeats = true,
+      trivial = true }),
   with(key('word', 'a word'),
     { chords = { 'ctrl+left', 'ctrl+right' },
       card = 'Ctrl+Left/Right', repeats = true }),
   --- the ends of the cursor's row; with Ctrl, of the draft
-  with(key('edge', 'row start/end'),
-    { chords = { 'home', 'end' }, card = 'Home/End',
-      repeats = true }),
-  with(key('whole', 'text start/end'),
-    { chords = { 'ctrl+home', 'ctrl+end' },
-      card = 'Ctrl+Home/End', repeats = true }),
-  with(key('vertical', 'a row'),
-    { chords = { 'up', 'down' }, card = 'Up/Down',
-      repeats = true }),
+  with(key('edge'),
+    { chords = { 'home', 'end' }, repeats = true,
+      trivial = true }),
+  with(key('whole'),
+    { chords = { 'ctrl+home', 'ctrl+end' }, repeats = true,
+      trivial = true }),
+  with(key('vertical'),
+    { chords = { 'up', 'down' }, repeats = true,
+      trivial = true }),
   --- IS3.12
-  with(key('backspace', 'remove a char'),
-    { chords = { 'backspace' }, card = 'Bksp/Delete',
-      repeats = true }),
-  with(key('delete', 'remove a char'),
-    { chords = { 'delete' }, card = 'Bksp/Delete',
-      repeats = true }),
+  with(key('backspace'),
+    { chords = { 'backspace' }, repeats = true,
+      trivial = true }),
+  with(key('delete'),
+    { chords = { 'delete' }, repeats = true, trivial = true }),
   --- with Shift still held from a capital
   with(key('backspace'),
     { chords = { 'shift+backspace' }, repeats = true }),
-  --- PR #28, D-WORD-DELETE
+  --- PR #28, D-WORD-DELETE: what Ctrl+Left moves over
   with(key('backspace_word', 'delete a word'),
     { chords = { 'ctrl+backspace', 'ctrl+w' },
       card = 'Ctrl+Bksp/W', repeats = true }),
@@ -72,10 +72,6 @@ local DEFS = {
   with(key('move_line', 'move the line'),
     { chords = { 'alt+shift+up', 'alt+shift+down' },
       card = 'Alt+Shift+Up/Dn', repeats = true }),
-  --- PR #28, D-DUPLICATE-LINE
-  with(key('duplicate', 'copy the line'),
-    { chords = { 'ctrl+d' }, card = 'Ctrl+D', repeats = true,
-      only = 'duplicate' }),
   --- D-UNDO-KEYS
   with(key('undo', 'undo'),
     { chords = { 'ctrl+z' }, card = 'Ctrl+Z', repeats = true }),

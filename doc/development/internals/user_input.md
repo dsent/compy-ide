@@ -108,7 +108,7 @@ the widget is what happens only when nothing upstream consumes the event.
 
 Text characters arrive via `love.textinput` (OS-processed, handles IME and layout, fires only for character-producing keys). Raw key events arrive via `love.keypressed` — but `keypressed` is **not** restricted to non-character keys: LÖVE2D fires it for every physical key, textual or not. Pressing `q` fires both `keypressed('q')` and `textinput('q')`. (LÖVE2D does not guarantee the relative *order* the two arrive in for the same physical key.)
 
-The "keypressed = control channel, textinput = character channel" split used throughout this doc is therefore **compy's own convention, not a LÖVE2D guarantee**. Nowhere does compy's `keypressed` code filter out or ignore textual keycodes — it simply never gives `k` a match that means "insert this character" (see `UserInputController:keypressed` below: every branch checks `k` against a fixed set of named control keys, or a modifier + letter combo used as a *shortcut*, e.g. Ctrl+D). A bare `keypressed('q')` with no modifier held matches nothing and falls through untouched. All literal character insertion (`UserInputModel:add_text`) is reachable only from `textinput` handlers; the editor's keys that move **existing** text (not the pressed key) into the field, F2 and Ctrl+Ins, set it whole. The field has no system clipboard.
+The "keypressed = control channel, textinput = character channel" split used throughout this doc is therefore **compy's own convention, not a LÖVE2D guarantee**. Nowhere does compy's `keypressed` code filter out or ignore textual keycodes — it simply never gives `k` a match that means "insert this character" (see `UserInputController:keypressed` below: every branch checks `k` against a fixed set of named control keys, or a modifier + letter combo used as a *shortcut*, e.g. Ctrl+K). A bare `keypressed('q')` with no modifier held matches nothing and falls through untouched. All literal character insertion (`UserInputModel:add_text`) is reachable only from `textinput` handlers; the editor's keys that move **existing** text (not the pressed key) into the field, F2 and Ctrl+Ins, set it whole. The field has no system clipboard.
 
 Every channel carries LÖVE's own argument list end to end, unchanged. LÖVE calls `love.handlers.keypressed` with `(key, scancode, isrepeat)`; the gateway keeps all three, and the project route forwards all three to every consumer — shortcut, hook and widget alike. A handler written as `love.keypressed(key, scancode, isrepeat)` therefore behaves identically once it is seeded as a hook, which is the point (D-LOVE-ARGS).
 
@@ -262,7 +262,7 @@ touches it programmatically.
 **A separate population writes the cursor's fields directly**, bypassing every mover above, and a
 sweep over cursor semantics needs both lists: `_update_cursor`, `_advance_cursor` and
 `insert_text_line`. The last is the one on a hot path — it sets `self.cursor.l` unvalidated and runs
-on **every Shift+Enter** (through `line_feed`) and on **Ctrl+D** duplicate-line, where the other two
+on **every Shift+Enter** (through `line_feed`), where the other two
 are reached rarely or not at all. The census above is *callers of the cursor API*; this is *writers
 of the content*, and a site can be neither, either or both. Enumerated with the case for reviewing
 them in `../technical_debt/input.md`, *"`_update_cursor` measures the column on the wrong line"*.
@@ -606,12 +606,11 @@ and does nothing for a chord it does not name, whichever route drives it (consol
 project widget), one table for all three (the maintainer's ruling of 2026-11-14): moves
 (Left/Right, Ctrl+Left/Right by word, Home/End to the ends of the cursor's row, Ctrl+Home/End to the
 ends of the text, Up/Down), Alt+Shift+Up/Down moving the cursor's line, Backspace (with Shift too,
-held from a capital) and Delete, Ctrl+Backspace, Alt+Backspace and Ctrl+W deleting the word before
-the cursor, Ctrl+K the rest of its line, Shift+Enter and Alt+Enter breaking the line, Ctrl+Z and
-Ctrl+Y undoing and redoing the draft (D-UNDO-KEYS), bare Enter submitting and bare Escape
-cancelling. Ctrl+D is the one key an owner switches on: only where it sets `allow_duplicate_line`
-(a constructor parameter, `UserInputController(model, allow_duplicate_line)`, set only by the
-editor). Alt+Up/Down are the editor's block move and the widget's for no owner. It has no selection
+held from a capital) and Delete, Ctrl+Backspace, Alt+Backspace and Ctrl+W deleting what Ctrl+Left
+would cross (at a line's start, the break and the word before it), Ctrl+K the rest of its line,
+Shift+Enter and Alt+Enter breaking the line, Ctrl+Z and Ctrl+Y undoing and redoing the draft
+(D-UNDO-KEYS), bare Enter submitting and bare Escape cancelling. Every owner gets the same keys.
+Alt+Up/Down are the editor's block move and the widget's for no owner. It has no selection
 and no clipboard keys and never inserts literal characters — see "Text Input Widget" above for why
 `keypressed` and `textinput` divide the work this way. Ahead of the table run the error lock and the
 web build's space.
@@ -666,7 +665,7 @@ the editor keep independent text, cursor, history, and view state.
 
 A future migration should preserve the controller that owns each command's meaning:
 
-1. Keep normal editor commands upstream. Enter/Escape and Ctrl+D already demonstrate this split:
+1. Keep normal editor commands upstream. Enter/Escape already demonstrate this split:
    the editor consumes its own commands, while ordinary editing can reach its widget. Introduce an
    editor-local adapter to the shared dispatch shape only after naming the editor's shortcut and hook
    tables; do not expose the project `compy.input` table to editor internals.

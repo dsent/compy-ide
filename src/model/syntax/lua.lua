@@ -332,7 +332,7 @@ function M.submit(lines, width, max_block)
   return out
 end
 
---- A file formatted, as Ctrl+Shift+F and `tidy()` format it
+--- A file formatted, as Alt+F and `tidy()` format it
 --- @param lines string[]
 --- @param width integer
 --- @return string[] text --- as given when it does not format

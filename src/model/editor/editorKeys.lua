@@ -40,10 +40,11 @@ local function with(def, fields)
   return def
 end
 
---- Up and Down browse while the draft is empty (IS2.1), and
---- move the cursor a row in a draft (IS3.8)
+--- Up and Down browse while the draft is empty (IS2.1); in a
+--- draft they move the cursor a row (IS3.8), which needs no
+--- word on the card
 local function rows(empty)
-  return empty and 'browse blocks' or 'row up/down'
+  return empty and 'browse blocks' or nil
 end
 
 local DEFS = {
@@ -70,15 +71,20 @@ local DEFS = {
       card = 'Ctrl+Up/Down', repeats = true }),
   --- the field's Up and Down, which browse while the draft is
   --- empty
-  with(each('vertical', rows, rows, rows),
+  with(each('vertical', 'browse blocks', nil, rows),
     { chords = { 'up', 'down' }, card = 'Up/Down',
       repeats = true }),
+  --- with an empty field Home and End move through the file:
+  --- to the first block, and to the end position, where new
+  --- text goes (PR #28, D-PAGING; the maintainer's ruling of
+  --- November 14, 2026). In a draft they are the field's.
+  { chords = { 'home', 'end' }, card = 'Home/End',
+    browsing = { act = 'file_edge', words = 'file start/end' } },
   --- a page at a time, the position with it (the
-  --- maintainer's ruling of November 14, 2026)
-  with(each('page', 'page down/up', 'page down/up',
-    'page down/up'),
-    { chords = { 'pagedown', 'pageup' }, card = 'PgDn/PgUp',
-      repeats = true }),
+  --- maintainer's ruling of November 14, 2026); trivial, off
+  --- the card
+  with(each('page'), { chords = { 'pagedown', 'pageup' },
+    repeats = true, trivial = true }),
   --- IS6.1
   with(each('copy_block', 'copy block in', 'copy block in',
     'copy block in'),
@@ -87,9 +93,6 @@ local DEFS = {
   --- once per press
   with(each('cut_block', 'cut the block'),
     { chords = { 'ctrl+delete' }, card = 'Ctrl+Delete' }),
-  --- Shift+Delete cuts as well, in the browsing state only
-  { chords = { 'shift+delete' },
-    browsing = { act = 'cut_block' } },
   --- IS6.5; refused while replacing
   with(each('move_block', 'move the block', 'move the block'),
     { chords = { 'alt+up', 'alt+down' },
@@ -105,7 +108,7 @@ local DEFS = {
   --- the whole file formatted, from the browsing state (PR
   --- #28, D-FORMAT-FILE); refused with a notice in an edit
   with(each('format_file', 'format the file'),
-    { chords = { 'ctrl+shift+f' }, card = 'Ctrl+Shift+F' }),
+    { chords = { 'alt+f' }, card = 'Alt+F' }),
   --- IS3.16: its press brings up the card
   with(each('none', 'this card', 'this card', 'this card'),
     { chords = { 'f1' }, card = 'F1 (hold)' }),
@@ -118,6 +121,5 @@ local DEFS = {
 --- keys now while there is a draft to edit
 local keymap = Keymap.new(DEFS, STATES)
 keymap.field_now = { inserting = true, replacing = true }
-keymap.allows = { duplicate = true }
 keymap.surface = 'editor'
 return keymap

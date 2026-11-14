@@ -27,14 +27,14 @@ describe("mutation survivors, keys #editor", function()
   teardown(K.teardown)
   after_each(K.cleanup)
 
-  describe("Ctrl+Shift+F, which formats the file", function()
+  describe("Alt+F, which formats the file", function()
     before_each(function()
       K.reset({ ["main.lua"] = LOOSE })
       K.open()
     end)
 
     it("formats the file in the browsing state", function()
-      K.keys("lctrl", "lshift", "f")
+      K.keys("lalt", "f")
       assert.same("x = 1\ny = 2\n", K.file())
     end)
 
@@ -43,7 +43,7 @@ describe("mutation survivors, keys #editor", function()
       K.keys("f2")
       K.type("0")
       local before = held_state()
-      K.keys("lctrl", "lshift", "f")
+      K.keys("lalt", "f")
       assert.same(2, before.target)
       assert.same("y = 20", before.draft)
       assert.same(LOOSE, before.file)
@@ -58,7 +58,7 @@ describe("mutation survivors, keys #editor", function()
     it("changes nothing during an insertion", function()
       K.type("z = 3")
       local before = held_state()
-      K.keys("lctrl", "lshift", "f")
+      K.keys("lalt", "f")
       assert.same("z = 3", before.draft)
       assert.same(LOOSE, before.file)
       local msg = K.message()
@@ -79,16 +79,20 @@ describe("mutation survivors, keys #editor", function()
       })
     end)
 
-    it("at a line's start joins it to the line before",
-        function()
+    -- what Ctrl+Left moves over: the break, and the word
+    -- before it (the maintainer's ruling of November 14, 2026)
+    it("at a line's start takes the break and the word before "
+        .. "it", function()
       K.keys("home")
       K.keys("lctrl", "backspace")
-      assert.same("abcd", K.draft())
+      assert.same("cd", K.draft())
       assert.same({
         1,
-        3
+        1
       }, { K.cursor() })
       assert.same(FILE, K.file())
+      K.keys("lctrl", "z")
+      assert.same("ab\ncd", K.draft())
     end)
 
     it("at the draft's start changes nothing", function()

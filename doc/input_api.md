@@ -473,8 +473,10 @@ widget does not name does nothing in it (Ctrl+Enter, Shift+Escape, Ctrl+Up).
 Shift+Enter and Alt+Enter insert a newline. Ctrl+Z and Ctrl+Y undo and redo
 the user's typing; setting or clearing the text forgets what there was to
 undo. The widget's keys are the console's and the file editor's: Ctrl+Backspace,
-Alt+Backspace and Ctrl+W delete the word before the cursor, Ctrl+K the rest of
-its line, and Alt+Shift+Up and Alt+Shift+Down move its line; Home and End go to
+Alt+Backspace and Ctrl+W delete what Ctrl+Left moves over (a word is a run of
+letters, digits and underscores; at a line's start, the line break and the word
+before it), Ctrl+K the rest of its line, and Alt+Shift+Up and Alt+Shift+Down
+move its line; Home and End go to
 the ends of the cursor's row, Ctrl+Home and Ctrl+End to the ends of the text. A
 click places the cursor. The widget has no selection (Shift with an arrow does
 nothing, and a drag selects nothing) and no clipboard: Ctrl+C, Ctrl+X, Ctrl+V,

@@ -39,7 +39,7 @@ end)
 
 -- F2 opens a `#!` first line and Enter on it unchanged leaves
 -- the file as it was; a `#!` line anywhere else is refused
--- and the draft stays; Ctrl+Shift+F keeps the header
+-- and the draft stays; Alt+F keeps the header
 scenario('header', function(wait)
   local f = 'script.lua'
   local text = '#!/usr/bin/env lua\na=1\n'
@@ -65,10 +65,10 @@ scenario('header', function(wait)
   D.eq(stored(f), text, 'nothing was written')
   D.key(wait, 'escape')
 
-  D.key(wait, 'C-S-f')
+  D.key(wait, 'A-f')
   D.shot(wait, 'tidied')
   D.eq(stored(f), '#!/usr/bin/env lua\na = 1\n',
-    'Ctrl+Shift+F tidies and keeps the header')
+    'Alt+F tidies and keeps the header')
   D.leave(wait)
   hm_done()
 end)

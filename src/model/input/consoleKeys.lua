@@ -61,6 +61,5 @@ local DEFS = {
 --- The field's keys are the line's, in either state
 local keymap = Keymap.new(DEFS, STATES)
 keymap.field_now = { idle = true, live = true }
-keymap.allows = { }
 keymap.surface = 'console'
 return keymap

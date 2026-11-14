@@ -20,9 +20,8 @@ local function new(M, CC)
   return {
     -- Host chrome, not a transient widget: always_shown makes
     -- hide() refuse rather than leave the editor without an
-    -- input line. Its line duplicate (Ctrl+D) is the
-    -- editor's alone.
-    input = UserInputController(M.input, true)
+    -- input line.
+    input = UserInputController(M.input)
         :always_shown(),
     model = M,
     console = CC,
@@ -599,7 +598,7 @@ local function nth_text_block(buf, n)
   end
 end
 
---- Format the whole open file (Ctrl+Shift+F, browsing) as
+--- Format the whole open file (Alt+F, browsing) as
 --- its syntax formats it. It is the one place blank lines
 --- outside a block change: the user asked, and every run of
 --- them becomes one. The selection stays on the block with
@@ -952,6 +951,15 @@ local ACTIONS = {
     else
       ec.input:keypressed(k)
     end
+  end,
+  --- with an empty field: Home to the first block, End to the
+  --- end position
+  file_edge = function(ec, k)
+    local buf = ec:get_active_buffer()
+    local to = k == 'home' and 1 or buf:get_content_length() + 1
+    buf:set_selection(to)
+    ec.view:get_current_buffer():follow_selection()
+    ec:update_status()
   end,
   page = function(ec, k)
     ec:_page(k == 'pageup' and 'up' or 'down')

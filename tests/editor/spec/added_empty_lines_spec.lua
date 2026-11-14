@@ -51,7 +51,7 @@ describe("empty lines in a draft #editor #spec", function()
     end)
 
   spec_it("IS4.3 Submit an empty draft: Enter on an empty field "
-      .. "adds one empty line at a time, and Ctrl+Shift+F leaves "
+      .. "adds one empty line at a time, and Alt+F leaves "
       .. "one of a run", function()
     K.reset({ ["main.lua"] = "a = 1\nb = 2\n" })
     K.open()
@@ -60,7 +60,7 @@ describe("empty lines in a draft #editor #spec", function()
     K.keys("return")
     K.keys("return")
     assert.same("a = 1\n\n\n\nb = 2\n", K.file())
-    K.keys("lctrl", "lshift", "f")
+    K.keys("lalt", "f")
     assert.same("a = 1\n\nb = 2\n", K.file())
   end)
 

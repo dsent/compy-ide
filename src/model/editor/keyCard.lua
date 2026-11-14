@@ -66,8 +66,9 @@ local function split(context, rows)
 end
 
 --- A surface's rows in `state`: its own keys, the text
---- field's that it does not take for itself and that its field
---- has, then the reserved chords it gives words to
+--- field's that it does not take for itself, then the reserved
+--- chords it gives words to. A trivial key, which anyone finds
+--- without being told, has no words and no row.
 --- @param keys table --- the surface's keymap
 --- @param state string
 --- @param empty boolean?
@@ -77,7 +78,6 @@ function KeyCard.rows(keys, state, empty)
   local now = keys.field_now[state] == true
   local field = FieldKeys:card_rows('field', empty, function(d)
     return not keys:binds(d)
-        and (not d.only or keys.allows[d.only] == true)
   end)
   for _, r in ipairs(field) do
     rows[#rows + 1] = { r[1], r[2], now }

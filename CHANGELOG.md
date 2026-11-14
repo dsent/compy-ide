@@ -111,7 +111,7 @@ Project-author guide: `doc/input_api.md`.
   Ctrl+Delete takes a line into the field to repair it.
   Once the file parses, its blocks are statements again, and the browsing position
   stays on the one that holds the line it was on.
-- **A file that cannot be read is not written.** Enter, a cut, a move, Ctrl+Shift+F,
+- **A file that cannot be read is not written.** Enter, a cut, a move, Alt+F,
   Ctrl+Z and Ctrl+Y say the file could not be read, save nothing, and keep the text in
   the field.
 - **A run keeps the editor's files, and `edit()` starts afresh.** Ctrl+T back from
@@ -125,24 +125,27 @@ Project-author guide: `doc/input_api.md`.
   stops the program first, as Ctrl+T does: its keys, hooks and calls no longer reach
   the editor or close its files.
 - Ctrl+Up / Ctrl+Down browse blocks in every state, and Ctrl+K in the field deletes to
-  the end of the line.
+  the end of the line. With an empty field Home goes to the first block and End to the
+  end of the file, where new text is added.
+- **Formatting the file is Alt+F.** Ctrl+F is kept free for a search to come.
 - **PageDown and PageUp page through the file.** PageDown brings the first block hidden
   below the view to its top, PageUp the last one hidden above to its bottom, and the
   highlight goes with it; at the file's end or start they go to the end position or the
   first block. A block taller than the screen is paged through first. They work in
   every state, and repeat while held.
 - **One text field, the same everywhere.** The console, the file editor and a program's
-  input field take the same keys: Ctrl+Backspace, Alt+Backspace and Ctrl+W delete the
-  word before the cursor, Ctrl+K the rest of the line, and Alt+Shift+Up and
+  input field take the same keys: Ctrl+Backspace, Alt+Backspace and Ctrl+W delete what
+  Ctrl+Left moves over (at a line's start, the line break and the word before it),
+  Ctrl+K the rest of the line, and Alt+Shift+Up and
   Alt+Shift+Down move the cursor's line, in every field. Alt+Up and Alt+Down move a
   block in the file editor and do nothing elsewhere. A click places the cursor in every
   field, the file editor's included. No field selects text: Shift with an arrow, Home or
   End does nothing, and neither does a drag.
-- **Ctrl+Shift+F says why it refuses**, in a notice that blocks nothing: in a text or
+- **Alt+F says why it refuses**, in a notice that blocks nothing: in a text or
   Markdown file, "The file has nothing to format.", and during an edit. `tidy()` on a
   text or Markdown file says it has nothing to format, where it named an error or said
   the file could not be tidied.
-- **After Ctrl+Shift+F the highlight keeps its place among the blocks with text.** On
+- **After Alt+F the highlight keeps its place among the blocks with text.** On
   a comment it stays on that comment, where it moved to the statement below; from an
   empty line it goes to the next block with text.
 - **The file editor names no file type.** What differs between Lua, Markdown and text
@@ -153,7 +156,7 @@ Project-author guide: `doc/input_api.md`.
   file editor and the console: typing, moving the cursor, browsing, deleting in the
   field, Shift+Enter, and Ctrl+Z and Ctrl+Y through the field's own changes. Enter,
   Escape, F2, Shift+Insert, Ctrl+Insert, Ctrl+Delete, Alt+Up and Alt+Down, Ctrl+J,
-  Ctrl+Shift+F and the other commands act once per press: a held Enter adds one empty
+  Alt+F and the other commands act once per press: a held Enter adds one empty
   line, and a held Ctrl+Delete cuts one block. A program's own input keeps its repeats.
 - **Every chord is a key of its own.** A key pressed with a modifier that nothing
   binds does nothing, in the file editor, the console and a program's input field:
@@ -161,7 +164,8 @@ Project-author guide: `doc/input_api.md`.
   Ctrl+Down no longer move or recall in the console, and Shift+Escape no longer cancels
   a program's input. The F1 key card is drawn from the same key tables and lists every
   key the editor or the console takes, the reserved ones (Ctrl+T, Ctrl+Q, Ctrl+Alt+R,
-  Ctrl+Esc) included; only a bare F1 brings it up.
+  Ctrl+Esc) included, but the trivial ones that move the cursor, delete a character or
+  page; only a bare F1 brings it up.
 - **PageUp and PageDown do nothing in the console**: they no longer recall the history,
   which Up and Down still do, and are kept for paging the output.
 - **Ctrl+Z and Ctrl+Y undo and redo the typing in every input**, the console's and a
@@ -194,6 +198,8 @@ Project-author guide: `doc/input_api.md`.
 - **The Alt look-around keys** (Alt+PageUp, Alt+PageDown, Alt+Left, Alt+Right, Alt+Home,
   Alt+End), which scrolled the file editor's view apart from the highlight; PageUp and
   PageDown page with it.
+- **Ctrl+D**, which duplicated the field's line, and **Shift+Delete**, which cut a
+  block as Ctrl+Delete does.
 - **Text selection**, with Shift and the arrows or with the mouse, and Shift+Delete in a
   field: with the clipboard gone nothing used it.
 - **The system clipboard in the text field**: Ctrl+C, Ctrl+X and Ctrl+V do nothing in
@@ -235,14 +241,14 @@ Project-author guide: `doc/input_api.md`.
 - A line of spaces in a text or Markdown file is saved as typed.
 - **Ctrl+T from a file reached with Ctrl+J comes back to the whole chain** of files,
   each where it was left and with its undo history; Escape then returns to the caller.
-- **`tidy()` keeps a `#!` first line**, as Ctrl+Shift+F does; it emptied it.
+- **`tidy()` keeps a `#!` first line**, as Alt+F does; it emptied it.
 - **Holding F1 shows a key card only where its press went to the console or the
   editor.** Over a program that takes the keys, with its input field, a key hook or a
   shortcut, the card showed while the program kept them; there F1 is the program's
   now, and Ctrl+Q stops the program while F1 is held, with or without other keys
   pressed since. A card that shows stays until F1 is released, and so does the pause
   of the keys it holds back.
-- **A `#!` first line is kept, and edited like any line.** Ctrl+Shift+F and `tidy()`
+- **A `#!` first line is kept, and edited like any line.** Alt+F and `tidy()`
   keep it, F2 loads it, and a cut takes it out; a change that would leave a `#!` line
   anywhere but first, or put anything above it, is refused, since Lua could not run
   the file after it.

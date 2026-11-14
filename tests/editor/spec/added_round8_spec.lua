@@ -70,7 +70,7 @@ describe("round eight #editor #spec", function()
       .. "line under an empty line", function()
     K.reset({ ["main.lua"] = "\n#x = 1\ny=2\n" })
     K.open()
-    K.keys("lctrl", "lshift", "f")
+    K.keys("lalt", "f")
     assert.is_truthy(K.file():find("#x = 1", 1, true))
   end)
 

@@ -250,20 +250,6 @@ describe("IS6 reuse #editor #spec", function()
           assert.is_nil(K.message())
         end)
 
-    spec_deviation("IS6.2 Cut a block: a held Shift+Delete cuts "
-        .. "one block too", "rulings.md: Which keys repeat while "
-        .. "held", function()
-      open_file("x = 1\n\n\ny = 2\nz = 3\n")
-      K.browse_to(2)
-      K.hold("lshift")
-      K.hold("delete")
-      K.repeat_key("delete")
-      K.repeat_key("delete")
-      K.release("delete")
-      K.release("lshift")
-      assert.same("x = 1\n\ny = 2\nz = 3\n", K.file())
-    end)
-
     spec_it("IS6.3 Restore a cut block: Ctrl+Z puts it back in "
         .. "place, the field empty", function()
       open_file()
