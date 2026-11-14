@@ -25,6 +25,23 @@ love.timer = { getTime = function() return 0 end }
 
 local Terminal = require("lib.terminal")
 
+--- Run `f`, failing with "still running" when it would not end.
+--- LuaJIT fires a count hook only in code it runs uncompiled, and
+--- its hook holds for every coroutine, so the JIT and any hook
+--- before are put back however `f` ends.
+--- @return boolean ok, any err
+local function bounded(f)
+  local was_on = jit and jit.status()
+  local hook, mask, count = debug.gethook()
+  if jit then jit.off() end
+  debug.sethook(function() error("still running") end, "", 1e7)
+  local ok, err = pcall(f)
+  if hook then debug.sethook(hook, mask, count)
+  else debug.sethook() end
+  if was_on then jit.on() end
+  return ok, err
+end
+
 local function new_term()
   local font = {
     getWidth  = function() return 10 end,
@@ -64,15 +81,11 @@ describe("terminal scrolling", function()
   local OTHER =
     { color = { 1, 1, 1, 1 }, back = { 1, 0, 1, 1 }, rev = true }
 
-  --- Make `s` the cursor's style. reverse_cursor(false) is not
-  --- used: given false, it toggles.
+  --- Make `s` the cursor's style
   local function set_style(t, s)
     t:set_cursor_color(s.color)
     t:set_cursor_backcolor(s.back)
-    if s.rev ~= (t.test_reversed or false) then
-      t:reverse_cursor()
-      t.test_reversed = s.rev
-    end
+    t:reverse_cursor(s.rev)
   end
 
   --- Print `n` rows, each as wide as the grid, so that each
@@ -220,8 +233,8 @@ describe("terminal clear command", function()
 end)
 
 --- What falls outside the grid is lost: a clear or a frame is
---- cut at the edges, and a character printed at a cursor off the
---- grid is dropped while the cursor moves on.
+--- cut at the edges. (A cursor cannot be moved off the grid: see
+--- "terminal cursor moves".)
 describe("terminal outside the grid", function()
   --- a grid full of `x`
   local function full()
@@ -284,13 +297,7 @@ describe("terminal outside the grid", function()
     local t = full()
     t.cursor_y = math.huge
     t:print("\n")
-    --- a count hook fires only in code LuaJIT runs uncompiled,
-    --- and in LuaJIT it holds for every coroutine until cleared
-    if jit then jit.off() end
-    debug.sethook(function() error("still scrolling") end, "", 1e7)
-    local ok, err = pcall(t.update, t, 1000)
-    debug.sethook()
-    if jit then jit.on() end
+    local ok, err = bounded(function() t:update(1000) end)
     assert.is_true(ok, err)
     assert.equal(t.height, t.cursor_y)
     for y = 1, t.height do
@@ -314,6 +321,8 @@ describe("terminal cursor moves", function()
     { 0, 0, 1, 1 },
     { 30, 1, 20, 1 },
     { -5, -5, 1, 1 },
+    --- move_to floored a fraction before the clamp too: this
+    --- case pins that, and passes without the clamp
     { 2.7, 3.2, 2, 3 },
     --- the last cell's character wraps the grid up a row
     { huge, huge, 20, 20, 19 },
@@ -362,7 +371,8 @@ describe("terminal cursor moves", function()
     end)
 
   --- a position that is no number at all is the program's own
-  --- error, raised where it asks, and the terminal goes on
+  --- error, raised where it asks, and the terminal goes on: as
+  --- before the clamp, which this pins and does not test
   it("refuses no position or a word, in the asking call",
     function()
       local t = new_term()
