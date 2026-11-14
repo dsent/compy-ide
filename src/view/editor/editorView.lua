@@ -153,9 +153,8 @@ function EditorView:get_buffer(bid)
   return self.buffers[bid]
 end
 
---- @param moved integer?
-function EditorView:refresh(moved)
-  self:get_current_buffer():refresh(moved)
+function EditorView:refresh()
+  self:get_current_buffer():refresh()
   self:update_input()
 end
 

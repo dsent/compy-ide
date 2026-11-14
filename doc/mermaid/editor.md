@@ -131,7 +131,7 @@ classDiagram
 class BufferModel {
   name: string
   content: Content
-  content_type: ContentType
+  syntax: Syntax
   selection: Selected
   readonly: bool
   revmap: table
@@ -149,8 +149,7 @@ class BufferModel {
 class BufferView {
   cfg: ViewConfig
 
-  content: VisibleContent|VisibleStructuredContent
-  content_type: ContentType
+  content: VisibleStructuredContent
   buffer: BufferModel
 
   LINES: integer

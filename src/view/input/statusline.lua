@@ -174,7 +174,7 @@ function Statusline:draw(status, start_y)
         local lim = custom.buflen
         local sel, t_bbp, t_blp
         -- local more_i = ''
-        if custom.content_type == 'lua' then
+        if custom.spans_lines then
           sel = custom.selection
           t_bbp = 'B' .. sel .. ' '
           t_blp = custom.range and custom.range:ln_label() or ''
@@ -215,7 +215,7 @@ function Statusline:draw(status, start_y)
         gfx.print(t_blp, sxl, start_text.y)
         gfx.setColor(colors.fg)
         --- block number
-        if custom.content_type == 'lua' then
+        if custom.spans_lines then
           local bpw = cols(t_bbp)
           local sxb = sxl - bpw
           if sel == lim then

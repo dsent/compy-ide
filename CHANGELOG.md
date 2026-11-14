@@ -138,7 +138,16 @@ Project-author guide: `doc/input_api.md`.
   field, the file editor's included. No field selects text: Shift with an arrow, Home or
   End does nothing, and neither does a drag.
 - **Ctrl+Shift+F says why it refuses**, in a notice that blocks nothing: in a text or
-  Markdown file, which has nothing to format, and during an edit.
+  Markdown file, "The file has nothing to format.", and during an edit. `tidy()` on a
+  text or Markdown file says it has nothing to format, where it named an error or said
+  the file could not be tidied.
+- **After Ctrl+Shift+F the highlight keeps its place among the blocks with text.** On
+  a comment it stays on that comment, where it moved to the statement below; from an
+  empty line it goes to the next block with text.
+- **The file editor names no file type.** What differs between Lua, Markdown and text
+  files is the file's syntax processor's to say (`src/model/syntax/`, chosen by the
+  file's name): its blocks, its verdict on a draft, its formatting, its colors and the
+  files it names. Every file is drawn as blocks, its colors taken from the whole text.
 - **Held down, a key repeats only if it writes nothing and changes no state**, in the
   file editor and the console: typing, moving the cursor, browsing, deleting in the
   field, Shift+Enter, and Ctrl+Z and Ctrl+Y through the field's own changes. Enter,

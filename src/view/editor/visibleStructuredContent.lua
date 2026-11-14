@@ -15,7 +15,6 @@ require("util.range")
 --- @class VisibleStructuredContent: WrappedText
 --- @field offset integer
 --- @field overscroll integer
---- @field highlighter fun(c: string[]): SyntaxColoring
 --- @field size_max integer
 --- @field range Range?
 --- @field v_blocks Dequeue<VisibleBlock>
@@ -24,7 +23,7 @@ require("util.range")
 --- @field set_range fun(self, Range)
 --- @field get_range fun(self): Range
 --- @field move_range fun(self, integer): integer
---- @field load_blocks fun(self, blocks: Block[])
+--- @field load_blocks fun(self, blocks: Block[], hl: SyntaxColoring?)
 --- @field recalc_range function
 --- @field get_visible fun(self): string[]
 --- @field get_visible_blocks fun(self): VisibleBlock[]
@@ -46,19 +45,15 @@ setmetatable(VisibleStructuredContent, {
 
 --- @param opts VSCOpts
 --- @param blocks Block[]
---- @param highlighter fun(c: string[]): SyntaxColoring
+--- @param hl SyntaxColoring? --- the whole text's colors
 --- @return VisibleStructuredContent
-function VisibleStructuredContent.new(
-    opts,
-    blocks,
-    highlighter)
+function VisibleStructuredContent.new(opts, blocks, hl)
   local self = setmetatable({
     overscroll = opts.overscroll_max,
     opts = opts,
-    highlighter = highlighter,
     offset = 0,
   }, VisibleStructuredContent)
-  self:load_blocks(blocks)
+  self:load_blocks(blocks, hl)
   self:to_end()
 
   return self
@@ -71,9 +66,22 @@ function VisibleStructuredContent:to_end()
   self.offset = self.range.start - 1
 end
 
+--- The colors of the text's lines `r`, counted from one
+--- @param hl SyntaxColoring?
+--- @param r Range
+--- @return SyntaxColoring
+local function slice(hl, r)
+  local out = {}
+  for i, l in ipairs(r:enumerate()) do
+    out[i] = hl and hl[l] or {}
+  end
+  return out
+end
+
 --- Process a list of blocks into VisibleBlocks
 --- @param blocks Block[]
-function VisibleStructuredContent:load_blocks(blocks)
+--- @param hl SyntaxColoring? --- the whole text's colors
+function VisibleStructuredContent:load_blocks(blocks, hl)
   local fulltext = Dequeue.typed('string')
   local revmap = Dequeue.typed('integer')
   local visible_blocks = Dequeue()
@@ -87,8 +95,7 @@ function VisibleStructuredContent:load_blocks(blocks)
         VisibleBlock(w, { '' }, {}, v.pos, npos))
     else
       fulltext:append_all(v.lines)
-      local hl = self.highlighter(v.lines)
-      local vblock = VisibleBlock(w, v.lines, hl,
+      local vblock = VisibleBlock(w, v.lines, slice(hl, v.pos),
         v.pos, v.pos:translate(off))
       off = off + vblock.wrapped.n_breaks
       visible_blocks:append(vblock)

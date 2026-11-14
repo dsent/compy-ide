@@ -84,10 +84,6 @@ end
 --- Todo: convert to class, store revmap
 --- @alias Content Dequeue<string>|Dequeue<Block>
 
---- The editor's former names of the three syntaxes, which the
---- views not moved to the syntax yet still read
-local CONTENT_TYPE = { lua = 'lua', markdown = 'md', text = 'plain' }
-
 --- @param name string
 --- @param content str --- the file's text, or its lines
 --- @param save function
@@ -117,10 +113,7 @@ local function new(name, content, save, syntax)
     name = name or 'untitled',
     content = blocks,
     syntax = syntax,
-    content_type = CONTENT_TYPE[syntax.name] or syntax.name,
     save_file = save,
-    --- the views still color a Lua block by itself
-    highlighter = function(t) return syntax.highlight(t) end,
     revmap = {},
     selection = 1,
     active_line = 1,
@@ -142,7 +135,6 @@ end
 --- @class BufferModel : Object
 --- @field name string
 --- @field content Dequeue -- Content
---- @field content_type ContentType
 --- @field save_file function
 --- @field selection integer
 --- @field active_line integer --- source line inside the selection
@@ -155,7 +147,6 @@ end
 --- @field semantic BufferSemanticInfo?
 --- @field revmap table?
 ---
---- @field highlighter Highlighter
 --- @field move_selection function
 --- @field get_selection function
 --- @field get_selected_text function

@@ -4,15 +4,15 @@ require('util.table')
 
 --- @class RequireCall
 --- @field line integer
---- @field name string
---- @field file boolean? --- dofile's: the name is the file
+--- @field name string --- as the text writes it
+--- @field file string --- the file it names
 --- @field block blocknum
 
 --- @class BufferSemanticInfo
 --- @field requires RequireCall[]
 
 --- The files a buffer names, each with its block
---- @param refs table[] --- luaLayer.references
+--- @param refs table[] --- the syntax's references
 --- @param rev table --- source line to block
 --- @return BufferSemanticInfo
 local function convert(refs, rev)

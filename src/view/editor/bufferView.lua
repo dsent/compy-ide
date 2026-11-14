@@ -1,5 +1,3 @@
-require("model.input.cursor")
-require("view.editor.visibleContent")
 require("view.editor.visibleStructuredContent")
 
 local class = require("util.class")
@@ -19,7 +17,6 @@ local function new(cfg)
     wrap_w = cfg.drawableChars,
 
     content = nil,
-    content_type = nil,
     more = { up = false, down = false },
 
     buffer = nil
@@ -27,8 +24,7 @@ local function new(cfg)
 end
 
 --- @class BufferView : ViewBase
---- @field content VisibleContent|VisibleStructuredContent
---- @field content_type ContentType
+--- @field content VisibleStructuredContent
 --- @field buffers Dequeue<BufferModel>
 ---
 --- @field cfg ViewConfig
@@ -49,34 +45,18 @@ end
 
 --- @param buffer BufferModel
 function BufferView:open(buffer)
-  local L = self.LINES
   self.buffer = buffer
   if not self.buffer then
     error('no buffer')
   end
-  local ct = buffer.content_type
-  self.content_type = ct
-
-  if ct == 'plain' or ct == 'md' then
-    local bufcon = buffer:get_text_content()
-    self.buffer:highlight()
-    self.content = VisibleContent(
-      self.wrap_w, bufcon, self.SCROLL_BY, L)
-    self.hl = self.buffer:get_highlight()
-  elseif ct == 'lua' then
-    local bufcon = buffer:get_content()
-    self.content =
-        VisibleStructuredContent({
-            wrap_w = self.wrap_w,
-            overscroll_max = self.SCROLL_BY,
-            size_max = L,
-            cfg = self.cfg,
-          },
-          bufcon,
-          buffer.highlighter)
-  else
-    error 'unknown filetype'
-  end
+  self.content = VisibleStructuredContent({
+      wrap_w = self.wrap_w,
+      overscroll_max = self.SCROLL_BY,
+      size_max = self.LINES,
+      cfg = self.cfg,
+    },
+    buffer:get_content(),
+    buffer:get_highlight())
 
   local off = self.content.offset
   if off > 0 then
@@ -94,33 +74,13 @@ function BufferView:get_max_size()
   return self.cfg.input_max
 end
 
---- @param moved integer?
-function BufferView:refresh(moved)
+function BufferView:refresh()
   if not self.content then
     error('no buffer is open')
   end
-  local text = self.buffer:get_text_content()
-  self.hl = self.buffer:get_highlight()
-
-  self.content:wrap(text)
-  if self.content_type == 'lua' then
-    self.content:load_blocks(self.buffer.content)
-  end
-
-  if moved then
-    local sel = self.buffer:get_selection()
-    if self.content_type == 'lua' then
-      local vsc = self.content
-      local blocks = vsc.v_blocks
-      blocks:move(moved, sel)
-      vsc:recalc_range()
-    else
-      local t = Dequeue(text)
-      t:move(moved, sel)
-      self.content:wrap(t)
-    end
-  end
-
+  self.content:wrap(self.buffer:get_text_content())
+  self.content:load_blocks(self.buffer.content,
+    self.buffer:get_highlight())
   self:_show_from(1 + self.content.offset)
 end
 
@@ -187,15 +147,9 @@ end
 function BufferView:_block_rows(b)
   local cont = self.content
   local out = {}
-  local lines = { b }
-  if self.content_type == 'lua' then
-    local known = 0 < b and b <= #(cont.v_blocks)
-    local pos = known and cont:get_block_pos(b)
-    lines = pos and pos:enumerate() or {}
-  elseif b < 1 or cont:get_text_length() < 1
-      or self.buffer:get_content_length() < b then
-    lines = {}
-  end
+  local known = 0 < b and b <= #(cont.v_blocks)
+  local pos = known and cont:get_block_pos(b)
+  local lines = pos and pos:enumerate() or {}
   for _, l in ipairs(lines) do
     for _, r in ipairs(cont.wrap_forward[l] or {}) do
       out[#out + 1] = r
@@ -416,7 +370,6 @@ function BufferView:draw(special, bottom)
   local fh = self:row_height()
   local fw = self.cfg.fw
   local vc = self.content
-  --- @type VisibleContent|VisibleStructuredContent
   local content_text = vc:get_visible()
   local width, height = gfx.getDimensions()
   local range = vc.range
@@ -501,8 +454,7 @@ function BufferView:draw(special, bottom)
   --- @param hl table?
   --- @param to_row fun(l: integer): integer --- the content's
   --- wrapped row of text's row `l`
-  --- @param ctf fun(c: Cursor): Cursor?
-  local draw_rows = function(text, hl, to_row, ctf)
+  local draw_rows = function(text, hl, to_row)
     local color = colors.fg
     for l, line in ipairs(text) do
       local len = string.ulen(line)
@@ -510,8 +462,7 @@ function BufferView:draw(special, bottom)
       if not len or range.fin < v then return end
       local shown = range.start <= v
       for c = 1, len do
-        local tlc = hl and ctf(Cursor(l, c))
-        local ci = tlc and hl[tlc.l] and hl[tlc.l][tlc.c]
+        local ci = hl[l] and hl[l][c]
         if ci then
           color = Color[ci] or colors.fg
         end
@@ -527,37 +478,19 @@ function BufferView:draw(special, bottom)
 
   local draw_text = function()
     gfx.setFont(font)
-    local same = function(a) return a end
-    if self.content_type == 'lua' then
-      for _, block in ipairs(vc:get_visible_blocks()) do
-        local rs = block.app_pos.start
-        --- @type WrappedText
-        local wt = block.wrapped
-        draw_rows(wt:get_text(), block.highlight,
-          function(l) return l + rs - 1 end, same)
-      end
+    for _, block in ipairs(vc:get_visible_blocks()) do
+      local rs = block.app_pos.start
+      --- @type WrappedText
+      local wt = block.wrapped
+      draw_rows(wt:get_text(), block.highlight,
+        function(l) return l + rs - 1 end)
+    end
 
-      if love.DEBUG then
-        --- phantom text
-        gfx.setColor(Color.with_alpha(colors.fg, 0.3))
-        local text = string.unlines(content_text)
-        gfx.print(text, 0, top)
-      end
-    elseif self.content_type == 'md' then
-      draw_rows(content_text, self.hl,
-        function(l) return l + off end,
-        function(a)
-          --- @diagnostic disable-next-line: param-type-mismatch
-          return vc:translate_from_visible(a)
-        end)
-    elseif self.content_type == 'plain' then
-      gfx.setColor(colors.fg)
-      for l, line in ipairs(content_text) do
-        local v = l + off
-        if range:inc(v) then
-          gfx.print(line, 0, row_y(v))
-        end
-      end
+    if love.DEBUG then
+      --- phantom text
+      gfx.setColor(Color.with_alpha(colors.fg, 0.3))
+      local text = string.unlines(content_text)
+      gfx.print(text, 0, top)
     end
   end
 

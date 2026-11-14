@@ -556,15 +556,15 @@ end
 
 local TYPES = {
   lua = "lua",
-  md = "markdown",
-  plain = "plain"
+  markdown = "markdown",
+  text = "plain"
 }
 
 --- The open file's type: "lua", "markdown" or "plain"; nil
 --- when no file is open.
 function K.file_type()
   local b = K.buffer()
-  return b and TYPES[b.content_type]
+  return b and TYPES[b.syntax.name]
 end
 
 --- The message shown over the field, its parts joined, or
@@ -675,11 +675,9 @@ end
 --- The document view's rows, numbered, of block `b`.
 local function rows_of(b)
   local bv, out = doc_view(), { }
-  local lines = { b }
-  if bv.content_type == "lua" then
-    local pos = bv.content:get_block_pos(b)
-    lines = pos and pos:enumerate() or { }
-  end
+  local known = 0 < b and b <= #bv.content.v_blocks
+  local pos = known and bv.content:get_block_pos(b)
+  local lines = pos and pos:enumerate() or { }
   for _, l in ipairs(lines) do
     for _, r in ipairs(bv.content.wrap_forward[l] or { }) do
       out[#out + 1] = r

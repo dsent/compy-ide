@@ -14,17 +14,31 @@ This distinction pervades the entire editor stack. Understanding it is the prere
 
 ---
 
-## Content Types and Buffer Initialization
+## Syntax Processors and Buffer Initialization
 
-`EditorController:open()` (`src/controller/editorController.lua`) determines content type from the file extension and wires up the right tools:
+The editor names no file type: what differs between kinds of file is the file's **syntax processor**'s to say (`src/model/syntax/`, the maintainer's ruling "The syntax processor"). `EditorController:open()` (`src/controller/editorController.lua`) asks `Syntax.for_name(name)` for the file's syntax, chosen by its name's extension, and gives it to the `BufferModel` and to the file's field as its evaluator. `tests/syntax/editor_names_no_type_spec.lua` checks that the editor's controllers, its buffer and editor models and its views name no type.
 
-| Extension | Content type | Tools |
+| Extension | Syntax | Module |
 |---|---|---|
-| `.lua` | `lua` | metalua chunker, pretty-printer, truncer, highlighter |
-| `.md` | `md` | markdown highlighter only |
-| anything else | `plain` | none |
+| `.lua` | `lua` | `src/model/syntax/lua.lua`, around the Lua language layer's parser, formatter and gate |
+| `.md` | `markdown` | `src/model/syntax/markdown.lua`, the text syntax with Markdown's colors |
+| anything else | `text` | `src/model/syntax/text.lua`: a block per line, a draft taken as typed |
 
-A `BufferModel` (`src/model/editor/bufferModel.lua`) is created with these tools and immediately tries to chunk the file content. A Lua file is read as its lines (`src/util/textfile.lua`), the final newline part of the last one; a file without one reads the same, and saving gives it one. **If the Lua text does not parse, the buffer is marked `invalid = true`** and its blocks are its lines, one block per line, each kept as it is. The editor's parser reads less than LuaJIT: a byte order mark, names outside ASCII, a lone `;`, a form feed, `goto` and labels, and `1LL` make a file `invalid` that LuaJIT runs, so the notices say the editor cannot split the file into blocks, not that it is not Lua. The file opens like any other: text can be inserted, and every other line is written back unchanged. Edit (`F2`) opens a line as it opens any block, formatted when the line parses alone and as it stands otherwise, and `Ctrl+Delete` cuts it into the input; either way the draft is judged at submission as any draft is, on its own (`check.gate`): it must parse by itself, and a line that is half a statement goes on to a new line in the draft (IS3.5) until it is whole. The check that refuses a change which would stop a Lua file loading or merge two blocks (`_reuse_refusal`) leaves such a file alone, since its blocks are lines (`_reads_whole`). A `#!` first line is the language layer's matter, and the editor has no code for it: the parser skips it as LuaJIT does and refuses any other line that starts with `#`, the chunker makes it a block of its own, and the formatter keeps it (the maintainer's ruling of November 14, 2026). Everything else follows from the rule that a change leaves the file loadable (`_reuse_refusal`): F2 loads the line and Enter takes it back, changed or not; cutting it is accepted and Ctrl+Z puts it back; moving it down, moving a block above it, entering text above it, and a `#!` line entered anywhere but first are refused, since Lua could not run the file after them. In a file that already does not load that rule does not apply, so a `#!` line lands anywhere there. An empty Lua file has no block (`luaLayer.chunker`). Each change re-chunks the file, so once the text parses the blocks are statements again and `invalid` is cleared (`file_blocks` in `bufferModel.lua`).
+`Syntax.register(extension, processor)` adds a syntax, or removes one given nil; `tests/syntax/t4_syntax_spec.lua` drives the editor through keys with a fourth. A processor is a table with these members:
+
+| Member | What it answers |
+|---|---|
+| `name` | The syntax's name |
+| `spans_lines` | Whether a block may span lines; the status line then shows the browsed block's number and its lines, and otherwise its line alone |
+| `blocks(lines)` | The file's blocks (`Chunk` and `Empty`, `src/model/editor/content.lua`), tiling lines 1 to n, as a `Dequeue`; nil when the syntax cannot split the text, and the file is then a block per line (`invalid`) |
+| `submit(lines, width, max_block)` | A draft's verdict, `{lines, formatted, blocks?, failure?, refusal?}`: `blocks` accepts the draft as those blocks; otherwise `failure` (an `Error` at the failing character, `at_end` when the draft is only unfinished) or `refusal` (the notice's text) refuses it, and when `formatted` the field shows `lines`, the draft as the syntax writes it |
+| `format(lines, width)` | `text, ok, why`: the text formatted, whether that changed it, and when not, a phrase the notices put after "The file" or after the file's name, such as "has nothing to format" |
+| `loads(lines)` | `ok, why, merges`: whether the file still holds together after a cut or a move, the notice's text when not, and whether the change merged two blocks |
+| `highlight(lines)` | The whole text's colors, line by line and column by column (`SyntaxColoring`), or nil; a character with no color takes the color of the one before it in its block |
+| `references(lines)` | The files the text names, `{line, name, file}`, `file` being the file Ctrl+J opens |
+| `evaluator()` | The evaluator of the file's field |
+
+A `BufferModel` (`src/model/editor/bufferModel.lua`) is created with the syntax and immediately asks it for the file's blocks. A Lua file is read as its lines (`src/util/textfile.lua`), the final newline part of the last one; a file without one reads the same, and saving gives it one. **If the Lua text does not parse, the buffer is marked `invalid = true`** and its blocks are its lines, one block per line, each kept as it is. The editor's parser reads less than LuaJIT: a byte order mark, names outside ASCII, a lone `;`, a form feed, `goto` and labels, and `1LL` make a file `invalid` that LuaJIT runs, so the notices say the editor cannot split the file into blocks, not that it is not Lua. The file opens like any other: text can be inserted, and every other line is written back unchanged. Edit (`F2`) opens a line as it opens any block, formatted when the line parses alone and as it stands otherwise, and `Ctrl+Delete` cuts it into the input; either way the draft is judged at submission as any draft is, on its own (`check.gate`): it must parse by itself, and a line that is half a statement goes on to a new line in the draft (IS3.5) until it is whole. The check that refuses a change which would stop a Lua file loading or merge two blocks (`_reuse_refusal`) leaves such a file alone, since its blocks are lines (`_reads_whole`). A `#!` first line is the language layer's matter, and the editor has no code for it: the parser skips it as LuaJIT does and refuses any other line that starts with `#`, the chunker makes it a block of its own, and the formatter keeps it (the maintainer's ruling of November 14, 2026). Everything else follows from the rule that a change leaves the file loadable (`_reuse_refusal`): F2 loads the line and Enter takes it back, changed or not; cutting it is accepted and Ctrl+Z puts it back; moving it down, moving a block above it, entering text above it, and a `#!` line entered anywhere but first are refused, since Lua could not run the file after them. In a file that already does not load that rule does not apply, so a `#!` line lands anywhere there. An empty Lua file has no block (`blocks` in `src/model/syntax/lua.lua`). Each change re-chunks the file, so once the text parses the blocks are statements again and `invalid` is cleared (`file_blocks` in `bufferModel.lua`).
 
 **Every block is the file's own lines.** The chunker (`source_blocks` in `src/model/lang/lua/parser.lua`) takes the source lines each statement and each comment spans; spans that share a line are one block, a blank line is an `Empty` (one of spaces keeps them, as `Empty.text`), and a line nothing claims, such as a `#!` line, is a block of its own. A block's text is never re-rendered or wrapped: the view wraps long lines on screen only. `file_blocks` then checks that the blocks hold lines 1 to n, each once, in order and as read; when they do not, the file comes a line per block, as text that does not parse does, so that no line is lost on the next save.
 
@@ -66,20 +80,20 @@ A submission with a replacement target replaces that block, wherever the browsin
 
 ---
 
-## The Submit Pipeline (Lua Mode)
+## The Submit Pipeline
 
-Pressing `Enter` on non-empty input goes through `_handle_submit`, which asks `submission` in `src/model/editor/luaLayer.lua`, the file editor's one way into the Lua language layer (`src/model/lang/`, the vendored metalua), which the editor does not change. A draft that is no Lua where it lands is refused with its parse failure before anything else (IS3.2): at the failing character, or at its end when it is only unfinished (`failure`, which reads the token the parser stopped at; IS3.4, IS3.5). Otherwise the verdict is the language layer's own, `check.gate(lines, width, max_block)` in `src/model/lang/lua/check.lua`, which every other tool that wants it calls too; `submission` only presents it, naming the line a line refusal is for. A draft's empty lines are what the formatter leaves of them, a run of them one empty line at the draft's start, between statements and at its end, and a draft of empty lines alone one empty line (the ruling "The formatter decides a draft's empty lines", which departs from IS3.7's empty-line block per empty line); the editor puts none back. The gate:
+Pressing `Enter` on non-empty input goes through `_handle_submit`, which asks the file's syntax for its verdict (`submit`). The text and Markdown syntaxes take a draft as typed, a block per line. In a Lua file the verdict is the Lua syntax's (`src/model/syntax/lua.lua`), the file editor's one way into the Lua language layer (`src/model/lang/`, the vendored metalua), which the editor does not change. A draft that is no Lua where it lands is refused with its parse failure before anything else (IS3.2): at the failing character, or at its end when it is only unfinished (`failure`, which reads the token the parser stopped at; IS3.4, IS3.5). Otherwise the verdict is the language layer's own, `check.gate(lines, width, max_block)` in `src/model/lang/lua/check.lua`, which every other tool that wants it calls too; `submission` only presents it, naming the line a line refusal is for. A draft's empty lines are what the formatter leaves of them, a run of them one empty line at the draft's start, between statements and at its end, and a draft of empty lines alone one empty line (the ruling "The formatter decides a draft's empty lines", which departs from IS3.7's empty-line block per empty line); the editor puts none back. The gate:
 
 1. **Format** — `format.format(lines, width)` (`src/model/lang/lua/format.lua`) rewrites the text through metalua's printer (`ast_to_src`). The result may differ from what was typed (spacing, indentation, end-placement). Where the source has one or more blank lines before a statement or an own-line comment, at any nesting depth, the printer emits exactly one empty line. The start of an indented body keeps none, so the indented placeholder line of an empty function body is regenerated and never read as a typed blank line. Blank lines ending the text follow no token the printer measures from; `format` keeps one there. The formatted text must parse to the same program, with the same comment text, and must come out unchanged when formatted again; otherwise, and when the text does not parse, `format` returns it as it was. The printer's own behaviour is covered by `tests/interpreter/ast_spec.lua`, `format`'s by `tests/interpreter/format_spec.lua`.
 2. **Line and parse rules** — `check.check` runs on the formatted text: line length (the Compy's 64 columns), then a parse. A line over the limit is refused with a notice naming the line and its length; the input shows the formatted text, and the cursor stays where it stood (IS3.9). A long line the formatter wraps is no refusal.
-3. **Chunk and measure** — the formatted text is chunked into the blocks that will be stored, and a block longer than `max_block` (the block size limit, `input_max` = 14) makes the verdict name that block. The editor refuses the whole draft with a notice that gives the block's length and the limit (`_reject_oversized`): the draft stays, shown formatted as one undoable change to it, and the cursor stays where it stood (IS3.9).
+3. **Chunk and measure** — the formatted text is chunked into the blocks that will be stored, and a block longer than `max_block` (the block size limit, `input_max` = 14) makes the verdict name that block. The syntax refuses the whole draft with a notice that gives the block's length and the limit: the draft stays, shown formatted as one undoable change to it, and the cursor stays where it stood (IS3.9).
 4. **No blank line of the editor's own** — nothing adds an `Empty` beyond what step 1 keeps. Blank lines outside the accepted block stay as they are: the chunker makes one `Empty` per blank line, so re-chunking the whole file after the write keeps every run.
 5. **Replace or Insert** — `_land` puts the formatted lines in the target's place (`replace_lines`) or before the browsing position (`insert_lines`): a splice of the file's lines, after which the whole file is chunked again (see Block Position Tracking).
 6. **Auto-save** — `buf:save()` is called immediately. Every accepted submit writes to disk, each line with LF (see Line endings above), the last one included.
 
 Without a replacement target the new block(s) are inserted before the browsing position, or appended at the end position, and the position ends on the block after them, so typing goes on below. An empty draft inserts one empty line. `Shift+Insert` submits the same way and keeps the draft in the input.
 
-`Ctrl+Shift+F` in the browsing state (`format_file`; in a text or Markdown file, and during an edit, it refuses with a notice that says why) formats the whole file with the same `format` function at the window's width. Every run of blank lines in the file becomes one, a run made one empty line at a time with Enter on an empty field (IS4.3) included: the one place blank lines outside a block change, because the user asked. When `format` hands the text back as it was, the editor refuses with a message and the file stays. The selection stays on the statement the active line was on; from a blank line or a comment it moves to the statement below. The REPL's `tidy(name)` formats a file through the same `format` (`luaLayer.lua`) at a Compy's width (`src/conf/display.lua`) and writes it through a `BufferModel`, so it keeps what Ctrl+Shift+F keeps, a `#!` first line included, and writes LF line ends (see Line endings above). `util/compyfmt.lua --fix` formats at the same width and writes every line with a newline. compyfmt reports the gates and the lints (`src/model/lang/lua/lint.lua`); without `--fix` it changes nothing and also names each file formatting would change.
+`Ctrl+Shift+F` in the browsing state (`format_file`) formats the whole file as the syntax's `format` does, at the window's width; during an edit it refuses with a notice that says why. In a Lua file that is the same `format` function as above. Every run of blank lines in the file becomes one, a run made one empty line at a time with Enter on an empty field (IS4.3) included: the one place blank lines outside a block change, because the user asked. When `format` hands the text back as it was, the editor refuses with "The file" and the syntax's reason, such as "The file has nothing to format." in a text or Markdown file, and the file stays. The selection keeps its place among the blocks with text: on the block with as many blocks with text before it as before, and from an empty line on the next block with text. The REPL's `tidy(name)` formats a file through its syntax's `format` at a Compy's width (`src/conf/display.lua`) and writes it through a `BufferModel`, so it keeps what Ctrl+Shift+F keeps, a `#!` first line included, and writes LF line ends (see Line endings above). `util/compyfmt.lua --fix` formats at the same width and writes every line with a newline. compyfmt reports the gates and the lints (`src/model/lang/lua/lint.lua`); without `--fix` it changes nothing and also names each file formatting would change.
 
 ---
 
@@ -89,11 +103,11 @@ A block with more source lines than the editor's size limit is a **monster block
 
 - **Viewing** — monster blocks are displayed in the buffer normally; content beyond the visible window is scrolled.
 - **Loading** — `F2` opens a monster block as it opens any block: the editor judges no block at loading, whatever it holds (the maintainer's ruling of November 14, 2026, over IS1.3; `_editable_lines` refuses only the end position and an empty line). `Ctrl+Delete` cuts the block out of the file into the input instead, and the browsing position stays at its place. The editor's field shows eight of its rows at a time (see Three heights) and scrolls to the cursor.
-- **Submitting** — the draft goes through the submit pipeline like any other. If every block it chunks into is within the size limit, they replace the target, or, after a cut, are inserted at the browsing position, which is the cut block's place unless it was moved (effectively splitting it). If one is still over the limit, the whole draft is refused with a notice that gives that block's length and the limit, and the draft, the target and the cursor stay (`_reject_oversized`).
+- **Submitting** — the draft goes through the submit pipeline like any other. If every block it chunks into is within the size limit, they replace the target, or, after a cut, are inserted at the browsing position, which is the cut block's place unless it was moved (effectively splitting it). If one is still over the limit, the whole draft is refused with a notice that gives that block's length and the limit, and the draft, the target and the cursor stay.
 
 The practical editing pattern: open the monster block with `F2`, edit it into valid code that chunks into conforming-size pieces, submit. Multiple resulting chunks each become their own block in the buffer, separated by the blank lines typed between them and no others (step 1 of the submit pipeline).
 
-Source: commit `2ff95f03b8f8` ("Split monster block"); logic in `editorController.lua`: `_handle_submit`, `_reject_oversized` and `_editable_lines`.
+Source: commit `2ff95f03b8f8` ("Split monster block"); logic in `editorController.lua` (`_handle_submit`, `_editable_lines`) and in the Lua syntax's `submit`.
 
 ---
 
@@ -105,13 +119,9 @@ This matters because the revmap (source line → block index), used for semantic
 
 ---
 
-## The Two Visible Content Types
+## The Visible Content
 
-The view layer has two parallel implementations for the visible slice of a buffer:
-
-**`VisibleContent`** (`src/view/editor/visibleContent.lua`) — used for plain/md files. Wraps the raw line array at the configured character width, manages a scroll offset/range over the resulting wrapped lines. Straightforward.
-
-**`VisibleStructuredContent`** (`src/view/editor/visibleStructuredContent.lua`) — used for Lua. Must handle blocks, where each block wraps independently. Each block becomes a `VisibleBlock` (`src/view/editor/visibleBlock.lua`) that holds its own `WrappedText` and pre-maps syntax highlighting through wrap breaks.
+**`VisibleStructuredContent`** (`src/view/editor/visibleStructuredContent.lua`) is the document view's visible slice of a buffer, for every syntax. Each block wraps independently: it becomes a `VisibleBlock` (`src/view/editor/visibleBlock.lua`) that holds its own `WrappedText` and its rows of the syntax's colors, which the view takes from the whole text's `highlight` and maps through the wrap breaks. `VisibleContent` (`src/view/editor/visibleContent.lua`) is the input field's: it wraps the raw line array and keeps a scroll range over the wrapped lines.
 
 Text in the editor passes through three coordinate spaces (documented with a worked example in `doc/development/editor/visible.md`):
 
@@ -119,7 +129,7 @@ Text in the editor passes through three coordinate spaces (documented with a wor
 2. **Wrapped coords** — apparent lines after word-wrapping at screen width; a single long source line may produce multiple wrapped lines
 3. **Visible coords** — the subset of wrapped lines currently in the scroll window
 
-For Lua buffers, each block has **two position fields** tracking the first two spaces:
+Each block has **two position fields** tracking the first two spaces:
 - `pos` — the block's position in source lines (normal coords)
 - `app_pos` — the block's position in wrapped/apparent lines (what the view uses for rendering and scroll)
 
@@ -142,10 +152,9 @@ The whole-editor exits (`Ctrl+T`, `Ctrl+Q`, `Ctrl+Alt+R`) leave from the browsin
 ## Semantic Analysis
 
 `BufferModel:analyze()` runs on every `save()`. It:
-1. Rechunks the current text (to get a fresh AST)
-2. Runs `references(ast)` in `src/model/editor/luaLayer.lua`: the `require()` and `dofile()` calls that write a name out, with their line numbers (IS1.5)
-3. Builds `revmap` (source line → block index) from block positions
-4. Converts them into `BufferSemanticInfo` (`requires`), which replaces line numbers with block indices
+1. Asks the syntax for the files the text names (`references`); the Lua syntax gives the `require()` and `dofile()` calls that write a name out, with their line numbers and the file each names, a module's dots made folders (IS1.5)
+2. Builds `revmap` (source line → block index) from block positions
+3. Converts them into `BufferSemanticInfo` (`requires`), which replaces line numbers with block indices
 
 This gives the editor **Follow require** (Ctrl+J): if the selected block contains a `require('foo')` or `dofile('foo.lua')` call, open the file as a new buffer on top of the stack. The language layer's own analyzer (`src/model/lang/lua/analyze.lua`) is not called from the editor.
 
@@ -177,11 +186,11 @@ Only the front buffer can be in an edit: a buffer goes below another one only by
 | `src/model/editor/editorModel.lua` | Model aggregate (input, buffers) |
 | `src/model/editor/bufferSemanticInfo.lua` | Gives the files a buffer names their block indices |
 | `src/view/editor/bufferView.lua` | Scroll, selection visibility, draw orchestration |
-| `src/view/editor/visibleContent.lua` | Scroll/wrap for plain/md |
-| `src/view/editor/visibleStructuredContent.lua` | Scroll/wrap for Lua blocks |
+| `src/view/editor/visibleStructuredContent.lua` | Scroll/wrap of a file's blocks |
 | `src/view/editor/visibleBlock.lua` | Per-block wrap + highlight remapping |
 | `src/util/wrapped_text.lua` | Core wrap tables (forward/reverse/rank) |
-| `src/model/editor/luaLayer.lua` | The editor's one way into the Lua language layer: the editor's rules on Lua text around the parser, the formatter and the gate |
+| `src/model/syntax/init.lua` | The syntax processors: a file's syntax by its name, and the interface |
+| `src/model/syntax/lua.lua` | The Lua syntax, the editor's one way into the Lua language layer: the editor's rules on Lua text around the parser, the formatter and the gate |
 | `src/model/input/cursorMap.lua` | The cursor through a reformat of the field's text, and the text's elements |
 | `src/model/lang/lua/format.lua` | Formatting: the text as the editor writes it |
 | `src/model/lang/lua/check.lua` | Gates: line, parse and block-size rules, and `gate`, the editor's verdict |

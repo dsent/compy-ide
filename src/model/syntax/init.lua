@@ -17,7 +17,8 @@
 --- * `loads(lines)` --- whether the file holds together after
 ---   a change: ok, why, merges
 --- * `highlight(lines)` --- the text's colors, or nil
---- * `references(lines)` --- the files the text names
+--- * `references(lines)` --- the files the text names:
+---   {line, name, file}, `file` the one Ctrl+J opens
 --- * `evaluator()` --- the editor field's evaluator
 
 local M = {}

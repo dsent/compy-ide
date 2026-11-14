@@ -150,15 +150,17 @@ describe('the editor on Lua text #editor', function()
         'dofile("level.lua")',
         'require(name)',
         'local f = function() return require "deep" end',
+        'require("lib.util")',
       })
       local got = {}
       for _, r in ipairs(refs) do
-        got[#got + 1] = { r.line, r.name, r.file or false }
+        got[#got + 1] = { r.line, r.name, r.file }
       end
       assert.same({
-        { 1, 'mod', false },
-        { 2, 'level.lua', true },
-        { 4, 'deep', false },
+        { 1, 'mod', 'mod.lua' },
+        { 2, 'level.lua', 'level.lua' },
+        { 4, 'deep', 'deep.lua' },
+        { 5, 'lib.util', 'lib/util.lua' },
       }, got)
     end)
 end)

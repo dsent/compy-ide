@@ -192,12 +192,13 @@ describe("paging, formatting, removed keys #editor #spec",
     describe("Ctrl+Shift+F", function()
       for _, name in ipairs({ "notes.txt", "notes.md" }) do
         spec_it("IS3.14 Explain a refusal: Ctrl+Shift+F in "
-            .. name .. " says only Lua is formatted, and the "
-            .. "next key acts", function()
+            .. name .. " says the file has nothing to format, "
+            .. "and the next key acts", function()
           K.reset({ [name] = "a  b\n" })
           K.open(name)
           K.keys("lctrl", "lshift", "f")
-          assert.truthy((K.message() or ""):find("Lua", 1, true))
+          assert.same("The file has nothing to format.",
+            K.message())
           assert.same("a  b\n", K.file(name))
           K.type("c")
           assert.is_nil(K.message())

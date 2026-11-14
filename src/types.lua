@@ -31,11 +31,6 @@
 ---| 'lua'
 ---| 'text'
 
----@alias ContentType
----| 'plain'
----| 'lua'
----| 'md'
-
 ---@alias Fac # scaling
 ---| 1
 ---| 2

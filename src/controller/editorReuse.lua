@@ -713,10 +713,11 @@ function EditorController:submit_and_retain()
   buf:clear_loaded()
   self.input:set_text(table.clone(text))
   --- the cursor follows the text element it stood at in a
-  --- Lua draft the formatter changed; a text or Markdown
-  --- draft is not formatted, and keeps it where it was
+  --- draft the syntax wrote anew; one it took as typed keeps
+  --- the cursor where it was
   local l, c = kept.l, kept.c
-  if buf.content_type == 'lua' then
+  if table.concat(kept.text, '\n') ~= table.concat(text, '\n')
+  then
     l, c = require('model.input.cursorMap').cursor(
       kept.text, text, kept.l, kept.c)
   end

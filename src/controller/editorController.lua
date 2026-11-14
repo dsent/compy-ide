@@ -4,7 +4,7 @@ require("view.input.customStatus")
 require("model.input.cursor")
 
 local class = require('util.class')
-local lua = require('model.editor.luaLayer')
+local Syntax = require('model.syntax')
 local KeyCard = require('model.editor.keyCard')
 local EditorKeys = require('model.editor.editorKeys')
 
@@ -91,17 +91,6 @@ function EditorController:init_view(v)
   self.input:init_view(self.view.input)
 end
 
---- A file's field reads its draft as the file's type does
---- (IS1.2, IS3.2): the name's ending fixes the type, and any
---- other name is plain text
---- @param name string
---- @return table eval
-local function file_eval(name)
-  if string.match(name, '%.lua$') then return LuaEditorEval end
-  if string.match(name, '%.md$') then return MdEval() end
-  return TextEval
-end
-
 --- @private
 --- The field shows and edits the front file's own draft
 --- @param b BufferModel
@@ -115,34 +104,10 @@ end
 --- @param key string? --- the file's identity, project and
 --- name (_find_buffer)
 function EditorController:open(name, content, save, key)
-  local w = self.model.cfg.view.drawableChars
-  local is_lua = string.match(name, '%.lua$')
-  local is_md = string.match(name, '%.md$')
-  local ch, hl, pp, tr
-  local eval = file_eval(name)
-
-  if is_lua then
-    local luaEval = LuaEval()
-    local parser = luaEval.parser
-    if not parser then return end
-    hl = luaEval.highlighter
-    --- @param t string
-    --- @param single boolean
-    ch = function(t, single)
-      return lua.chunker(t, w, single)
-    end
-    pp = function(t)
-      local out, formatted = lua.format(t, w)
-      if formatted then return out end
-    end
-    tr = function(code)
-      return parser.trunc(code, self.model.cfg.view.fold_lines)
-    end
-  elseif is_md then
-    hl = eval.highlighter
-  end
-
-  local b = BufferModel(name, content, save, ch, hl, pp, tr)
+  --- the file's syntax, by its name (model.syntax), is all
+  --- that knows its language
+  local syntax = Syntax.for_name(name)
+  local b = BufferModel(name, content, save, syntax)
   b.key = key
   --- what the file held when it was read, missing included:
   --- a later change from outside is told from it (_baseline)
@@ -155,7 +120,8 @@ function EditorController:open(name, content, save, key)
   --- the file's own field: its draft and the draft's changes
   --- stay with it while another file is in front (IS1.5,
   --- IS6.6)
-  b.input = UserInputModel(self.model.cfg, eval, nil, true)
+  b.input = UserInputModel(self.model.cfg, syntax.evaluator(),
+    nil, true)
   self.model.buffers:push_front(b)
   self:_front(b)
   self.view:open(b)
@@ -193,13 +159,7 @@ function EditorController:follow_require()
       'No file named here. Ctrl+J needs require or dofile.'
     })
   end
-  --- dofile names the file; require names its module, a
-  --- dot for each folder on the way
-  local name = reqsel.name
-  if not reqsel.file and not string.match(name, '%.lua$') then
-    name = string.gsub(name, '%.', '/') .. '.lua'
-  end
-  self.console:edit(name, true)
+  self.console:edit(reqsel.file, true)
 end
 
 function EditorController:pop_buffer()
@@ -457,14 +417,11 @@ function EditorController:_generate_status(sel)
   local buffer = self:get_active_buffer()
   local len = buffer:get_content_length() + 1
   local bufview = self.view:get_buffer(buffer:get_id())
-  local cs
-  local ct = bufview.content_type
-  if ct == 'lua' then
-    local range = bufview.content:get_block_app_pos(sel)
-    cs = CustomStatus(buffer.name, ct, len, sel, range)
-  else
-    cs = CustomStatus(buffer.name, ct, len, sel)
-  end
+  --- a block's rows are named where a block may span lines
+  local spans = buffer.syntax.spans_lines
+  local range = spans and bufview.content:get_block_app_pos(sel)
+  local cs = CustomStatus(buffer.name, spans, len, sel,
+    range or nil)
   --- the state and the open project, always shown (FR4.6)
   cs.state = self:state_name()
   local projects = self.console and self.console.model
@@ -549,35 +506,26 @@ end
 ---------------------------
 
 --- @private
---- The language layer's gate gives the verdict, as
---- model.editor.luaLayer presents it (submission). An
---- accepted draft goes to go as its formatted blocks. A draft
+--- The file's syntax gives the verdict (model.syntax). An
+--- accepted draft goes to go as the syntax's blocks. A draft
 --- unfinished at its end goes on, on a new line (IS3.5); one
 --- that fails earlier gets the cursor before the failing
---- character (IS3.4); one with a line over the limit is shown
---- formatted, the cursor kept, under a notice naming the
---- limit (IS3.3). A block too large is go's to refuse, after
---- its own checks.
---- @param go fun(newtext: Block[]|string[], verdict: SubmissionVerdict?): boolean
+--- character (IS3.4); one the syntax refuses for a rule (a
+--- line or a block over its limit, IS3.3) is shown as the
+--- syntax writes it, the cursor kept, under the syntax's
+--- notice.
+--- @param go fun(newtext: Block[]): boolean
 --- @return boolean accepted --- go's verdict, or false
---- when the input does not evaluate
+--- when the draft is not taken
 function EditorController:_handle_submit(go)
   local inter = self.input
   local raw = inter:get_text()
-
   local buf = self:get_active_buffer()
-  local ct = buf.content_type
-  if ct ~= 'lua' then return go(raw) end
-  --- the gate decides what the draft becomes, its empty
-  --- lines included (the ruling "The formatter decides a
-  --- draft's empty lines")
-  local verdict = lua.submission(raw,
+  local verdict = buf.syntax.submit(raw,
     self.model.cfg.view.drawableChars, self:_size_limit())
-  --- an accepted draft goes as its formatted blocks; one
-  --- that fails to land (a write refused) stays as typed
-  if #verdict.errors == 0 then
-    return go(verdict.blocks, verdict)
-  end
+  --- an accepted draft goes as the syntax's blocks; one that
+  --- fails to land (a write refused) stays as typed
+  if verdict.blocks then return go(verdict.blocks) end
   local failure = verdict.failure
   if failure and failure.at_end then
     --- IS3.5: a draft that is only unfinished goes on, on
@@ -595,18 +543,13 @@ function EditorController:_handle_submit(go)
     inter:update_view()
     return false
   end
-  --- a draft refused for a line's length is shown
-  --- formatted, as one undoable change to it, the cursor
-  --- where it stood (IS3.2, IS3.9)
+  --- a refused draft is shown as the syntax writes it, as one
+  --- undoable change to it, the cursor where it stood (IS3.2,
+  --- IS3.9)
   if verdict.formatted then
     inter.model:reformat(verdict.lines)
   end
-  local long = verdict.long_line
-  self:refuse(long and { string.format(
-    'Line %d has %d characters, the limit is %d.'
-    .. ' Shorten or break it, then press Enter',
-    long.l, long.len, lua.max_line_length
-  ) } or verdict.errors)
+  self:refuse({ verdict.refusal })
   inter:update_view()
   return false
 end
@@ -629,45 +572,40 @@ function EditorController:_size_limit()
   return self.view:get_current_buffer():get_max_size()
 end
 
---- Refuse a block the gate found too large, and point
---- at it (9.6)
---- @param verdict SubmissionVerdict?
---- @return boolean refused
-function EditorController:_reject_oversized(verdict)
-  local first = verdict and verdict.oversized[1]
-  if not first then return false end
-  local block = verdict.blocks[first]
-  --- the refused draft stays shown formatted, as one
-  --- undoable change to it, the cursor where it stood
-  --- (IS3.2, IS3.9)
-  if verdict.formatted then
-    self.input.model:reformat(verdict.lines)
+--- @param buf BufferModel
+--- @param bn integer
+--- @return integer --- how many blocks with text stand before
+--- block `bn`
+local function text_blocks_before(buf, bn)
+  local n = 0
+  for i = 1, bn - 1 do
+    if buf:block_lines(i) then n = n + 1 end
   end
-  --- IS3.3: the notice names the limit
-  self:refuse({ string.format(
-    'Block of %d lines, the limit is %d.'
-    .. ' Shorten or split it, then press Enter',
-    block.pos:len(), verdict.max_block
-  ) })
-  self.input:update_view()
-  return true
+  return n
 end
 
---- @param lines string[]
---- @return table? --- the statements, when the text parses
-local function statements(lines)
-  local ok, ast = lua.parser().parse(lines)
-  if ok then return ast end
+--- @param buf BufferModel
+--- @param n integer
+--- @return integer? --- the block that has `n` blocks with
+--- text before it and text of its own
+local function nth_text_block(buf, n)
+  local seen = 0
+  for i = 1, buf:get_content_length() do
+    if buf:block_lines(i) then
+      if seen == n then return i end
+      seen = seen + 1
+    end
+  end
 end
 
---- Format the whole open file (Ctrl+Shift+F, browsing).
---- It is the one place blank lines outside a block change:
---- the user asked, and every run of them becomes one. The
---- selection stays on the statement it was on; from a blank
---- line or a comment it moves to the statement below. A
---- refusal says why in a notice, as every refusal does: during
---- an edit, and in a text or Markdown file, which has nothing
---- to format.
+--- Format the whole open file (Ctrl+Shift+F, browsing) as
+--- its syntax formats it. It is the one place blank lines
+--- outside a block change: the user asked, and every run of
+--- them becomes one. The selection stays on the block with
+--- text it was on, counted among the blocks with text, or on
+--- the next one from an empty line. A refusal says why in a
+--- notice, as every refusal does: during an edit, and in a
+--- file the syntax leaves as it is.
 function EditorController:format_file()
   local buf = self:get_active_buffer()
   local state = self:state_name()
@@ -678,10 +616,6 @@ function EditorController:format_file()
   if state == 'replacing' then
     return self:refuse({ 'Finish editing first: Enter keeps it,'
       .. ' Esc drops it.' })
-  end
-  if buf.content_type ~= 'lua' then
-    return self:refuse({ 'Only a Lua file is formatted;'
-      .. ' this one stays as it is.' })
   end
   --- text the editor cannot read has no tidy form: it stays
   --- as it is, line for line
@@ -694,27 +628,17 @@ function EditorController:format_file()
   if self:_refuse_stale(buf) then return end
   local snap = buf:snapshot()
   local before = snap.lines
-  local after, formatted = lua.format(before,
+  local after, formatted, why = buf.syntax.format(before,
     self.model.cfg.view.drawableChars)
   if not formatted then
-    return self:refuse({
-      'The file cannot be tidied without changing what'
-      .. ' it does, so it stays as it is'
-    })
+    return self:refuse({ 'The file ' .. why .. '.' })
   end
   if string.unlines(after) == string.unlines(before) then
     return
   end
 
-  --- which statement the active line is on, or above
-  local nth
-  local ln = buf:get_active_line()
-  for i, st in ipairs(statements(before) or {}) do
-    if st.lineinfo.last.line >= ln then
-      nth = i
-      break
-    end
-  end
+  --- which block with text the selection is on, or above
+  local nth = text_blocks_before(buf, buf:get_selection())
 
   local sel_before = buf:get_selection()
   buf:replace_text(after)
@@ -732,9 +656,7 @@ function EditorController:format_file()
     })
   end
 
-  local target = nth and (statements(after) or {})[nth]
-  local sel = target
-      and buf:block_at_line(target.lineinfo.first.line)
+  local sel = nth_text_block(buf, nth)
       or buf:get_content_length()
   buf:set_selection(sel)
   buf:push_history(snap, sel_before, sel)
@@ -798,19 +720,16 @@ function EditorController:_load_target(bn, lines)
 end
 
 --- @private
---- A block's text as Edit loads it: Lua formatted as a
---- submission formats it, as far as the formatter can, so a
---- line over the limit may come back within it (ruling: F2
---- opens a block that breaks a limit); as it stands when it
---- does not format, and in a text or Markdown file. Loading
---- is no change to the draft (IS5.6).
+--- A block's text as Edit loads it: formatted as its syntax
+--- formats it, as far as it can, so a line over the limit
+--- may come back within it (ruling: F2 opens a block that
+--- breaks a limit); as it stands when it does not format.
+--- Loading is no change to the draft (IS5.6).
 --- @param lines string[]
 --- @return string[]
 function EditorController:_as_loaded(lines)
-  if self:get_active_buffer().content_type ~= 'lua' then
-    return lines
-  end
-  return (lua.format(lines, self.model.cfg.view.drawableChars))
+  return (self:get_active_buffer().syntax.format(lines,
+    self.model.cfg.view.drawableChars))
 end
 
 --- @private
@@ -930,7 +849,7 @@ end
 --- @param lines string[]
 --- @param kind string
 --- @param n integer? --- the blocks the lines make on their
---- own, for a Lua file
+--- own
 --- @return boolean landed
 --- @return string[]? lines --- the lines landed
 function EditorController:_land(lines, kind, n)
@@ -997,22 +916,14 @@ end
 --- @return string[]? lines --- the lines the file took
 function EditorController:submit()
   local buf = self:get_active_buffer()
-  local is_lua = buf.content_type == 'lua'
-  local draft = self.input:get_text()
-  --- one line of spaces alone is an empty Lua draft too
-  --- (IS4.3); text keeps its spaces as written (IS8.2)
-  local blank = is_lua and #draft == 1
-      and not string.is_non_empty_string_array(draft)
-  if blank or self:_draft_is_empty() then
+  if self:_draft_is_empty() then
     return self:_land({ '' },
-      buf.loaded and 'replace' or 'empty_line',
-      is_lua and 1 or nil)
+      buf.loaded and 'replace' or 'empty_line', 1)
   end
   local kind = buf.loaded and 'replace' or 'insert'
-  return self:_handle_submit(function(newtext, verdict)
-    if self:_reject_oversized(verdict) then return false end
-    return self:_land(BufferModel.lines_of(newtext), kind,
-      is_lua and #newtext or nil)
+  return self:_handle_submit(function(blocks)
+    return self:_land(BufferModel.lines_of(blocks), kind,
+      #blocks)
   end)
 end
 

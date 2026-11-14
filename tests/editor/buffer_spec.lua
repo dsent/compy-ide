@@ -58,7 +58,7 @@ describe('Buffer #editor', function()
     local tst = { l1, l2, l3, l4 }
     local cbuffer = BufferModel('untitled.lua', tst, noop, chunker, hl)
     local bc = cbuffer:get_content()
-    assert.same(cbuffer.content_type, 'lua')
+    assert.same('lua', cbuffer.syntax.name)
     assert.same(4, #bc)
     assert.same({ l1 }, bc[1].lines)
     assert.same({ l2 }, bc[2].lines)

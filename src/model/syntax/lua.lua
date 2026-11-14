@@ -19,8 +19,6 @@ local M = {
   name = 'lua',
   --- a block may span lines: a statement, a comment
   spans_lines = true,
-  --- the language layer's line limit, which notices name
-  max_line_length = check.max_line_length,
 }
 
 --- The parser is built on first use
@@ -199,23 +197,6 @@ function M.parser()
     { __index = function(_, k) return get_parser()[k] end })
 end
 
---- A file's blocks, or a draft's (`single`), as the language
---- layer's chunker splits them; a file of no lines has none
---- (IS1.1)
---- @param text str
---- @param width integer
---- @param single boolean?
---- @return boolean ok
---- @return Dequeue<Block>|string[]
---- @return any
-function M.chunker(text, width, single)
-  if not single and type(text) == 'table' and #text == 0 then
-    require('util.dequeue')
-    return true, Dequeue.typed('block')
-  end
-  return get_parser().chunker(text, width, single)
-end
-
 --- @class SubmissionVerdict: GateVerdict
 --- @field failure Error? --- the parse failure, at the failing
 --- character, or `at_end` when the draft is only unfinished
@@ -272,11 +253,16 @@ local function reference(node)
   if type(arg) ~= 'table' or arg.tag ~= 'String' then
     return {}
   end
+  --- require names a module, a dot for each folder on the way
+  local file = arg[1]
+  if name == 'require' and not string.match(file, '%.lua$') then
+    file = string.gsub(file, '%.', '/') .. '.lua'
+  end
   local li = arg.lineinfo
   return { {
     line = li and li.first and li.first.line,
     name = arg[1],
-    file = name == 'dofile' or nil,
+    file = file,
   } }
 end
 
@@ -330,7 +316,7 @@ function M.submit(lines, width, max_block)
     out.refusal = long and string.format(
       'Line %d has %d characters, the limit is %d.'
       .. ' Shorten or break it, then press Enter',
-      long.l, long.len, M.max_line_length)
+      long.l, long.len, check.max_line_length)
         or tostring(v.errors[1])
     return out
   end

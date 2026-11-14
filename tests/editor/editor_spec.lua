@@ -501,7 +501,7 @@ describe('Editor #editor', function()
       local cont = buffer:get_content()
 
 
-      assert.same('lua', buffer.content_type)
+      assert.same('lua', buffer.syntax.name)
       assert.same('block', cont:type())
       assert.same(3, buffer:get_content_length())
       local modified = table.clone(sierpinski)
