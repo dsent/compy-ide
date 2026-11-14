@@ -48,5 +48,5 @@ Assessment of `doc/` relative to the codebase and the knowledge base under `doc/
 - **Project environments** — the three Lua environments (`main_env`, `base_env`, `project_env`). Covered by `internals/console.md`.
 - **The retired `user_input` polling API** — `input_text()`, `validated_input()`, `user_input()`. **Removed in 1.0.0-rc20260712**, no shim; `internals/console.md` records what it was, and [`input_api.md`](../input_api.md) documents `compy.input`, which replaced it.
 - **Editor modes** — reorder (`Ctrl+M`) and search (`Ctrl+F`) modes not documented in `doc/`.
-- **Harmony testing mode** — mentioned in passing in README, no developer doc.
+- **Harmony testing mode** — covered by `doc/development/tests.md`, "Harmony scenarios".
 - **`doc/development/editor/buffer.md`** — file exists but is empty.

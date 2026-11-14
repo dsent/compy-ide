@@ -705,10 +705,12 @@ makes a chord, and on a Compy its character still arrives on the
 tiers ① and ② like any other text event, so `shortcuts.textinput['ctrl+j']`,
 `'alt+*'` and your `textinput` hook all see it with its modifiers. It stops
 there: the widget never types it, and it does not fall through to the
-console's prompt either. Shift alone composes text, and so does AltGr, the
-right Alt key: `@`, `ł` or `€` typed through it reach the widget. The one
-thing AltGr does not type is the key's own letter, digit or space, which is
-what a chord with the right Alt key would send.
+console's prompt either. Shift alone composes text. On a Compy the right Alt
+key is an Alt like the left one, so what it sends is a chord's character
+too, whatever the character. On a computer running the IDE, the right Alt
+key is AltGr and composes text in the keyboard layout set there: whatever
+it types reaches the widget, `@`, `ł`, `€` or a digit alike, since a
+computer sends no text for a chord.
 
 ### Why the widget sits at tier 3
 

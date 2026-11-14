@@ -108,13 +108,14 @@ describe("IS1 files #editor #spec", function()
     spec_it("IS1.2 Admit or refuse a file: a file that cannot "
         .. "be read is refused with a notice, and is not opened "
         .. "empty", function()
-      K.fail_reads("the card cannot be read")
+      -- the device's read gives no text and no reason
+      K.fail_reads()
       K.open("main.lua")
       assert.same("ready", K.app_state())
       assert.same("", K.console_draft())
       local notice = K.console_text()
       assert.truthy(notice:find("main.lua", 1, true))
-      assert.truthy(notice:find("the card cannot be read", 1, true))
+      assert.truthy(notice:find("could not be read", 1, true))
       assert.same("x = 1", K.file("main.lua"))
     end)
 
@@ -514,6 +515,18 @@ describe("IS1 files #editor #spec", function()
       assert.is_not_nil(K.message())
     end)
 
+    spec_it("IS1.5 Follow a file reference: with a draft of "
+        .. "spaces alone Ctrl+J is refused, the draft kept",
+        function()
+      K.open()
+      K.browse_to(1)
+      K.type("  ")
+      K.keys("lctrl", "j")
+      assert.same("main.lua", K.file_name())
+      assert.same("  ", K.draft())
+      assert.is_not_nil(K.message())
+    end)
+
     spec_it("IS1.5 Follow a file reference: with a replacement "
         .. "target Ctrl+J is refused with a notice", function()
       K.open()
@@ -649,27 +662,45 @@ describe("IS1 files #editor #spec", function()
       assert.same(K.PROJECT, K.cc.model.projects.current.name)
     end)
 
-    -- A program that finished its code idles behind the
-    -- console, not stopped; Ctrl+Q stops it, and the console's
-    -- key card lists the key only then.
-    spec_it("IS3.16 Show the key card: the console's card " ..
-        "lists Ctrl+Q only while a program is not stopped, " ..
-        "and the key is suspended while the card shows",
-        function()
-      local function card_has_ctrl_q()
-        K.hold("f1")
-        local card = table.concat(K.key_card() or { }, "\n")
-        K.release("f1")
-        return card:find("Ctrl+Q", 1, true) ~= nil
+    -- What the console's key card says of Ctrl+Q while F1 is
+    -- held: "exit program", under "Keys now" while a program
+    -- is not stopped, under "Other keys" with none. The card is
+    -- read in its reading order, column by column.
+    local function card_ctrl_q()
+      K.hold("f1")
+      local lines = K.key_card() or { }
+      K.release("f1")
+      local section
+      for col = 0, 1 do
+        for _, l in ipairs(lines) do
+          local cell = l:sub(col * 32 + 1, col * 32 + 32)
+          if cell:find("Keys now", 1, true) then
+            section = "now"
+          elseif cell:find("Other keys", 1, true) then
+            section = "other"
+          elseif cell:find("^ Ctrl%+Q ") then
+            return section, cell:match("^ Ctrl%+Q +(.-)%s*$")
+          end
+        end
       end
+    end
+
+    -- A program that finished its code idles behind the
+    -- console, not stopped; Ctrl+Q stops it.
+    spec_it("IS3.16 Show the key card: the console's card " ..
+        "lists Ctrl+Q as exit program, among the keys now " ..
+        "while a program is not stopped and after them with " ..
+        "none, and the key is suspended while the card shows",
+        function()
       K.reset({ ["main.lua"] = "x = 1\n" })
-      assert.is_false(card_has_ctrl_q())
+      assert.same({ "other", "exit program" },
+        { card_ctrl_q() })
       -- run the project from the editor: it ends idle
       K.open()
       K.keys("lctrl", "t")
       assert.same("ready", K.app_state())
       assert.is_true(K.cc.run_live)
-      assert.is_true(card_has_ctrl_q())
+      assert.same({ "now", "exit program" }, { card_ctrl_q() })
       K.hold("f1")
       K.keys("lctrl", "q")
       K.release("f1")
@@ -678,7 +709,36 @@ describe("IS1 files #editor #spec", function()
       assert.is_false(K.cc.run_live)
       assert.same("ready", K.app_state())
       assert.same(K.PROJECT, K.cc.model.projects.current.name)
-      assert.is_false(card_has_ctrl_q())
+      assert.same({ "other", "exit program" },
+        { card_ctrl_q() })
+    end)
+
+    -- A program paused by an error hands the console over; its
+    -- card shows there, and Ctrl+Q exits the program.
+    spec_it("IS3.16 Show the key card: while a program is " ..
+        "paused, the console's card lists Ctrl+Q among the " ..
+        "keys now, and the key is suspended while the card " ..
+        "shows", function()
+      K.reset({
+        ["main.lua"] = "function love.update() error('x') end\n"
+      })
+      K.open()
+      K.keys("lctrl", "t")
+      -- the error suspends the run; the move from the snapshot
+      -- to 'inspect' is the screenshot's callback, which needs
+      -- a real graphics context
+      K.frame()
+      assert.same("snapshot", K.app_state())
+      K.cc:suspend()
+      assert.same("inspect", K.app_state())
+      assert.same({ "now", "exit program" }, { card_ctrl_q() })
+      K.hold("f1")
+      K.keys("lctrl", "q")
+      K.release("f1")
+      assert.same("inspect", K.app_state())
+      K.keys("lctrl", "q")
+      assert.same("ready", K.app_state())
+      assert.is_false(K.cc.run_live)
     end)
 
     -- keys the map reserves no longer: in the editor they do

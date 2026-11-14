@@ -136,9 +136,17 @@ function Project:readfile(name)
 
   if not FS.exists(fp, "file", self.play) then
     return false, messages.file_does_not_exist(name)
-  else
-    return true, FS.combined_read(fp)
   end
+  --- the device's read gives the text or nil; the desktop's a
+  --- flag, then the text or the reason
+  local got, desk = FS.combined_read(fp)
+  if got == true then got = desk end
+  if type(got) ~= 'string' then
+    --- a file that is there and gives no text is no empty file
+    return false, type(desk) == 'string' and desk
+        or FS.messages.unreadable(name)
+  end
+  return true, got
 end
 
 --- @return function? chunk
@@ -190,6 +198,15 @@ end
 --- @return string? path
 function Project:get_path(name)
   return FS.join_path(self.path, name)
+end
+
+--- Whether writefile takes this name: a file of the project's
+--- own folder, not one in a folder of its own
+--- @param name string
+--- @return boolean valid
+--- @return string? error
+function Project.writable_name(name)
+  return validate_filename(name)
 end
 
 --- Flash a .hex firmware to the micro:bit through its drive,

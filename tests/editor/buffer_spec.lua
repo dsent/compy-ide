@@ -32,6 +32,22 @@ describe('Buffer #editor', function()
     assert.is_nil(bc[5])
   end)
 
+  --- blocks that would not give back every line as read are
+  --- not trusted: the file comes a line per block, as text
+  --- that does not parse does, every line as it is
+  it('keeps every line when the blocks would lose one', function()
+    local lossy = function(t, single)
+      local ok, blocks, ast = chunker(t, single)
+      if ok and #blocks > 1 then blocks:remove(2) end
+      return ok, blocks, ast
+    end
+    local text = { 'x = 1', '-- note', '', 'y = 2' }
+    local buf = BufferModel('untitled.lua', text, noop, lossy)
+    assert.same(text, buf:get_text_content():items())
+    assert.is_true(buf.invalid)
+    assert.same(4, buf:get_content_length())
+  end)
+
   it('renders lua', function()
     local l1 = '--- comment 1'
     local l2 = '--- comment 2'

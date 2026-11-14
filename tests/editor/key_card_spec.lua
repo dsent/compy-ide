@@ -3,9 +3,11 @@ local KeyCard = require("model.editor.keyCard")
 --- the Compy's screen: 17 rows over the status line, 64 wide
 local ROWS, WIDTH = 17, 64
 
-local function group(state, empty)
+--- A card's keys under its first heading and under the
+--- second, each as { key = what it does }.
+local function group_of(cells)
   local now, other, to = { }, { }, nil
-  for _, c in ipairs(KeyCard.cells(state, empty)) do
+  for _, c in ipairs(cells) do
     if c.heading then
       to = to and other or now
     else
@@ -13,6 +15,10 @@ local function group(state, empty)
     end
   end
   return now, other
+end
+
+local function group(state, empty)
+  return group_of(KeyCard.cells(state, empty))
 end
 
 describe("the key card #editor", function()
@@ -86,32 +92,38 @@ describe("the key card #editor", function()
 
   it("has a card for the console that fits one screen",
       function()
-    local cells = KeyCard.console_cells()
-    local lines = KeyCard.lines_of(cells, ROWS, WIDTH)
-    assert.is_true(#lines <= ROWS)
-    assert.same(" Keys now, console:", lines[1])
-    local text = table.concat(lines, "\n")
-    for _, c in ipairs(cells) do
-      if c.key then
-        assert.truthy(text:find(c.key .. " ", 1, true), c.key)
-        assert.truthy(text:find(c.what, 1, true), c.what)
+    for _, live in ipairs({ false, true }) do
+      local cells = KeyCard.console_cells(live)
+      local lines = KeyCard.lines_of(cells, ROWS, WIDTH)
+      assert.is_true(#lines <= ROWS)
+      assert.same(" Keys now, console:", lines[1])
+      local text = table.concat(lines, "\n")
+      for _, c in ipairs(cells) do
+        if c.key then
+          assert.truthy(text:find(c.key .. " ", 1, true), c.key)
+          assert.truthy(text:find(c.what, 1, true), c.what)
+        end
       end
     end
   end)
 
-  it("lists Ctrl+Q in the console only while a program is "
-      .. "not stopped", function()
-    local function has(cells)
-      for _, c in ipairs(cells) do
-        if c.key == "Ctrl+Q" then
-          return c.what
-        end
-      end
+  it("lists Ctrl+Q in the console as exit program: among the "
+      .. "keys now while a program is not stopped, after them "
+      .. "with none", function()
+    local now, other = group_of(KeyCard.console_cells(true))
+    assert.same("exit program", now["Ctrl+Q"])
+    assert.same({ }, other)
+    local function after_them(cells)
+      local n, o = group_of(cells)
+      assert.is_nil(n["Ctrl+Q"])
+      assert.same({ ["Ctrl+Q"] = "exit program" }, o)
     end
-    assert.is_nil(has(KeyCard.console_cells()))
-    assert.is_nil(has(KeyCard.console_cells(false)))
-    assert.same("stop program",
-      has(KeyCard.console_cells(true)))
+    after_them(KeyCard.console_cells(false))
+    after_them(KeyCard.console_cells())
+    local lines = KeyCard.lines_of(KeyCard.console_cells(),
+      ROWS, WIDTH)
+    assert.same(" Other keys:", lines[#lines - 1])
+    assert.truthy(lines[#lines]:find("^ Ctrl%+Q +exit program$"))
   end)
 
   it("takes one column where two do not fit", function()

@@ -297,6 +297,39 @@ describe("IS3 input, added #editor #spec", function()
       }, { K.cursor() })
     end)
 
+    spec_it("IS3.9 Preserve cursor through formatting: refused "
+        .. "for a line's length, inside a string requoted, it "
+        .. "keeps its offset there", function()
+      -- "s='abc' x=" and a name the formatter puts on a line
+      -- of its own, indented to 66 characters; the cursor
+      -- before "b"
+      at_end()
+      K.type("s='abc' x=" .. string.rep("n", 62))
+      K.keys("lctrl", "home")
+      for _ = 1, 4 do
+        K.keys("right")
+      end
+      K.keys("return")
+      assert.matches("^Line 3 has 66 characters", K.message())
+      assert.same('s = "abc"', line_of(1))
+      assert.same({
+        1,
+        7
+      }, { K.cursor() })
+    end)
+
+    spec_it("IS3.9 Preserve cursor through formatting: inside "
+        .. "a string requoted, it keeps its offset there",
+        function()
+      -- "  s='abc'", the cursor before "b"
+      refuse("  s='abc'", 2, 6)
+      assert.same('  s = "abc"', line_of(2))
+      assert.same({
+        2,
+        9
+      }, { K.cursor() })
+    end)
+
     spec_it("IS3.9 Preserve cursor through formatting: the " ..
         "replacement target is unchanged", function()
       K.reset({ ["main.lua"] = FILE })
@@ -384,6 +417,68 @@ describe("IS3 input, added #editor #spec", function()
       assert.same({
         1,
         6
+      }, { K.cursor() })
+    end)
+
+    spec_it("IS3.9 Preserve cursor through formatting: " ..
+        "retained, inside a string requoted, it keeps its offset",
+        function()
+      -- "s='abc'", the cursor before "b"
+      retain({ "s='abc'" }, 1, 4)
+      assert.same('s = "abc"', K.draft())
+      assert.same({
+        1,
+        7
+      }, { K.cursor() })
+    end)
+
+    spec_it("IS3.9 Preserve cursor through formatting: " ..
+        "retained, inside a number rewritten, it keeps its offset",
+        function()
+      -- "x=0xff", the cursor before the first "f"
+      retain({ "x=0xff" }, 1, 4)
+      assert.same("x = 255", K.draft())
+      assert.same({
+        1,
+        7
+      }, { K.cursor() })
+    end)
+
+    spec_it("IS3.9 Preserve cursor through formatting: " ..
+        "retained, the offset is limited to the new length",
+        function()
+      -- "x=0x10 y=1", the cursor before the last "0"; "16" is
+      -- two characters long
+      retain({ "x=0x10 y=1" }, 1, 5)
+      assert.same("x = 16\ny = 1", K.draft())
+      assert.same({
+        1,
+        7
+      }, { K.cursor() })
+    end)
+
+    spec_it("IS3.9 Preserve cursor through formatting: " ..
+        "retained, inside a string cut into pieces, it keeps "
+        .. "its offset", function()
+      local v = string.rep("abcdefghij", 9)
+      -- the cursor before the 67th character of the text
+      retain({ "s='" .. v .. "'" }, 1, 69)
+      local l, c = K.cursor()
+      -- the string is cut, and the cursor in its last piece
+      assert.is_true(l > 1)
+      assert.same(v:sub(67) .. '"', line_of(l):sub(c))
+    end)
+
+    spec_it("IS3.9 Preserve cursor through formatting: " ..
+        "retained, a line added above, it keeps its element",
+        function()
+      -- the cursor before "y" in 'xyz', a line below the one
+      -- formatting splits
+      retain({ "a=1 b=2", "s='xyz'" }, 2, 4)
+      assert.same('a = 1\nb = 2\ns = "xyz"', K.draft())
+      assert.same({
+        3,
+        7
       }, { K.cursor() })
     end)
   end)

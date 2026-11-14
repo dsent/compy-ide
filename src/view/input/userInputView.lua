@@ -54,6 +54,15 @@ function UserInputView:get_rows(input)
   return draft
 end
 
+--- Where the status line's text starts on the screen when
+--- the field takes `rows` rows under it; its band reaches
+--- half the status line's border above that.
+--- @param rows integer
+--- @return number
+function UserInputView:status_y(rows)
+  return love.graphics.getHeight() - (rows + 1) * self.cfg.fh
+end
+
 --- Whether a message leaves this field as it is: the file
 --- editor shows its messages over the document view, above
 --- the status line, and neither the field nor the status
@@ -113,8 +122,7 @@ function UserInputView:render_input(input, status, time)
   local wrap_forward = vc.wrap_forward
 
 
-  local vpH = gfx.getHeight()
-  self.start_h = vpH - (inLines + 1) * fh
+  self.start_h = self:status_y(inLines)
 
   local function drawCursor()
     --- the cursor blinks (H-NFR4.4): in its hidden phase
@@ -266,7 +274,6 @@ end
 function UserInputView:render_error(err_text, status)
   local colors = self.cfg.colors
   local fh = self.cfg.fh
-  local vpH = gfx.getHeight()
 
   --- the canvas has input_max rows under the statusline; a
   --- longer message shows its head and ends in '...'
@@ -277,7 +284,7 @@ function UserInputView:render_error(err_text, status)
   end
 
   local inLines = #err_text
-  self.start_h = vpH - (inLines + 1) * fh
+  self.start_h = self:status_y(inLines)
   local drawableWidth = self.cfg.drawableWidth
   local apparentHeight = #err_text
   local start_y = fh -- statusline

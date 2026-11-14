@@ -74,6 +74,48 @@ describe("IS3 input #editor #spec", function()
       assert.same("a = 1\nb = 2", K.draft())
       assert.same("inserting", K.state())
     end)
+
+    spec_it("IS3.1 Prepare input: a draft of spaces alone is "
+        .. "an insertion: Edit is refused, Escape drops it",
+        function()
+      K.reset({ ["main.lua"] = "x = 1\n" })
+      K.open()
+      K.browse_to(1)
+      K.type("   ")
+      assert.same("inserting", K.state())
+      K.keys("f2")
+      local edit = {
+        K.state(),
+        K.draft(),
+        K.message() ~= nil
+      }
+      K.keys("escape")
+      assert.same({
+        "inserting",
+        "   ",
+        true
+      }, edit)
+      assert.same("main.lua", K.file_name())
+      assert.same("browsing", K.state())
+      assert.same("", K.draft())
+    end)
+
+    spec_it("IS3.1 Prepare input: a draft of empty lines alone "
+        .. "is an insertion, where Up moves the text cursor",
+        function()
+      K.reset({ ["main.lua"] = "x = 1\ny = 2\n" })
+      K.open()
+      K.browse_to(2)
+      K.keys("lshift", "return")
+      assert.same("inserting", K.state())
+      K.keys("up")
+      assert.same({
+        1,
+        1
+      }, { K.cursor() })
+      assert.same(2, K.position())
+      assert.same("\n", K.draft())
+    end)
   end)
 
   describe("IS3.2", function()
@@ -298,6 +340,36 @@ describe("IS3 input #editor #spec", function()
         1,
         4
       }, { K.cursor() })
+    end)
+
+    --- The columns three presses of Ctrl+Right, then three of
+    --- Ctrl+Left, stop at in a draft of `text`, from its start.
+    local function word_stops(text)
+      at_end()
+      K.type(text)
+      K.keys("home")
+      local stops = { }
+      for _, k in ipairs({ "right", "right", "right", "left",
+        "left", "left" }) do
+        K.keys("lctrl", k)
+        local _, c = K.cursor()
+        stops[#stops + 1] = c
+      end
+      return stops
+    end
+
+    spec_it("IS3.8 Position the text cursor: a word ends at "
+        .. "the punctuation of its script", function()
+      local stops = {
+        word_stops("foo_bar, (baz)"),
+        word_stops("«да» — нет"),
+        word_stops("أ،ب؟ لا")
+      }
+      assert.same({
+        { 8, 14, 15, 11, 1, 1 },
+        { 4, 11, 11, 8, 2, 1 },
+        { 2, 4, 8, 6, 3, 1 }
+      }, stops)
     end)
 
     spec_it("IS3.8 Position the text cursor: Ctrl+Home and " ..

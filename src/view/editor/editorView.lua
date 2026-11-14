@@ -38,10 +38,14 @@ function EditorView:draw()
   else
     local bv = self:get_current_buffer()
 
-    self:fit_buffer()
+    local rows = self:fit_buffer()
     gfx.push('all')
     if ViewUtils.conditional_draw('show_buffer') then
-      bv:draw()
+      --- the view's area ends where the status line's band
+      --- starts
+      local band = self.input:status_y(rows)
+          - self.cfg.statusline_border / 2
+      bv:draw(false, band)
     end
     if ViewUtils.conditional_draw('show_input') then
       gfx.push('all')
@@ -176,10 +180,13 @@ end
 --- the field grows upwards over the view's last rows, and the
 --- view keeps the browsed block in those left (IS2.2)
 --- @param input InputDTO?
+--- @return integer? rows --- the field's, its status line apart
 function EditorView:fit_buffer(input)
   local bm = self.controller:get_active_buffer()
   local bv = bm and self.buffers[bm:get_id()]
   if not bv then return end
   local inp = input or self.controller:get_input()
-  bv:set_covered(self.input:get_rows(inp) - 1)
+  local rows = self.input:get_rows(inp)
+  bv:set_covered(rows - 1)
+  return rows
 end

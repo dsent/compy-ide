@@ -428,13 +428,23 @@ desktop, where it surfaces, it comes after. `Key.chord_text(t)`
   console.
 
 The rule reads the device, like every modifier read (D-ASK-THE-DEVICE): any
-Ctrl or the left Alt held makes the text a chord's. AltGr composes text and
-is the right Alt key: `ralt` alone on Linux and Android, left Ctrl plus
-`ralt` on Windows. Text that arrives under AltGr is typed unless it is one
-ASCII letter, digit or space, the key's own glyph, which no layout composes
-through AltGr and which is all a chord with the right Alt key leaks. The
-order of text and key press does not enter the rule, which is why it holds
-in both.
+Ctrl or the left Alt held makes the text a chord's. On a Compy
+(`love.system.getOS() == 'Android'`) the right Alt key does too: it is an
+Alt like the left one, not AltGr. On a computer, where people run the IDE
+with their own keyboard layouts, AltGr composes text and is the right Alt
+key: `ralt` alone on Linux, left Ctrl plus `ralt` on Windows. A chord's
+stray glyph exists only on the device: a computer's SDL sends no text for a
+Ctrl or Alt chord, so every character that arrives under AltGr is typed,
+whatever it is (the French `us-alt` layout types `6` through AltGr).
+`altgr()` in `util/key.lua` is the one place that decides by platform. The
+text itself and the order of text and key press do not enter the rule,
+which is why it holds in both orders.
+
+The simple API's `on_key` (`arrives_as_text`, `consoleController.lua`)
+reports every key pressed with Ctrl or Alt held. On a computer that includes
+AltGr: a key whose composed character is typed is reported as well, because
+the key press comes before its text and cannot tell whether the layout
+composes a character for it.
 
 One text source bypasses the gate: the web build's synthesised space
 (`UserInputController:keypressed`), which asks `Key.chord_text` itself.

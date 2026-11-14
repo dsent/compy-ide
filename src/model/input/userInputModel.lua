@@ -1052,6 +1052,30 @@ function UserInputModel:jump_line_end()
   self:_jump_to(self.cursor.l, last)
 end
 
+--- Past ASCII, the punctuation, signs and symbols that
+--- separate words, as code point ranges. LÖVE's utf8 module,
+--- which the IDE runs on, has no character classes.
+--- In order, by script: Latin-1, Greek, Cyrillic, Armenian,
+--- Hebrew, Arabic, Devanagari, then the shared blocks of
+--- punctuation and symbols, fullwidth forms and pictographs.
+local NON_WORD = {
+  { 0xA0, 0xA9 }, { 0xAB, 0xB4 }, { 0xB6, 0xB9 },
+  { 0xBB, 0xBF }, { 0xD7, 0xD7 }, { 0xF7, 0xF7 },
+  { 0x37E, 0x37E }, { 0x387, 0x387 },
+  { 0x482, 0x482 },
+  { 0x55A, 0x55F }, { 0x589, 0x58A },
+  { 0x5BE, 0x5BE }, { 0x5C0, 0x5C0 }, { 0x5C3, 0x5C3 },
+  { 0x5C6, 0x5C6 }, { 0x5F3, 0x5F4 },
+  { 0x600, 0x60F }, { 0x61B, 0x61F }, { 0x66A, 0x66D },
+  { 0x6D4, 0x6D4 }, { 0x6DD, 0x6DE }, { 0x6E9, 0x6E9 },
+  { 0x964, 0x965 },
+  { 0x2000, 0x2BFF }, { 0x2E00, 0x2E7F }, { 0x3000, 0x303F },
+  { 0xFE10, 0xFE1F }, { 0xFE30, 0xFE6F }, { 0xFF01, 0xFF0F },
+  { 0xFF1A, 0xFF20 }, { 0xFF3B, 0xFF3E }, { 0xFF40, 0xFF40 },
+  { 0xFF5B, 0xFF65 },
+  { 0x1F000, 0x1FAFF },
+}
+
 --- @param ch string?
 --- @return boolean --- a letter, a digit or an underscore
 local function is_word_char(ch)
@@ -1059,15 +1083,13 @@ local function is_word_char(ch)
   if string.byte(ch) < 128 then
     return string.match(ch, '^[%w_]') ~= nil
   end
-  --- past ASCII a character is a letter unless it lies in a
-  --- block of punctuation, signs or symbols
   local ok, cp = pcall(utf8.codepoint, ch)
   if not ok then return false end
-  local sign = (cp >= 0xA0 and cp <= 0xBF)
-      or cp == 0xD7 or cp == 0xF7
-      or (cp >= 0x2000 and cp <= 0x2BFF)
-      or (cp >= 0x3000 and cp <= 0x303F)
-  return not sign
+  for _, r in ipairs(NON_WORD) do
+    if cp < r[1] then return true end
+    if cp <= r[2] then return false end
+  end
+  return true
 end
 
 --- Ctrl+Left: to the start of the word under or before the

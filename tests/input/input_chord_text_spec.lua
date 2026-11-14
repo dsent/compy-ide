@@ -54,6 +54,21 @@ local function in_both_orders(name, case)
   end
 end
 
+--- Pose as the system `name` (love.system.getOS) in each case
+--- of the enclosing describe, from its before_each on.
+local function posing_as(name)
+  local get_os
+  before_each(function()
+    get_os = love.system.getOS
+    love.system.getOS = function()
+      return name
+    end
+  end)
+  after_each(function()
+    love.system.getOS = get_os
+  end)
+end
+
 describe("a chord's own glyph is no text #input", function()
   setup(K.setup)
   teardown(K.teardown)
@@ -238,87 +253,252 @@ describe("a chord's own glyph is no text #input", function()
     end)
   end)
 
-  describe("through AltGr", function()
-    local get_os
-
+  -- On a computer the right Alt key is AltGr, which composes
+  -- text in the layout its user brings. On a Compy (Android)
+  -- it is an Alt like the left one: what arrives while it is
+  -- held is a chord's, whatever the character.
+  describe("the right Alt key, in the console", function()
     before_each(function()
       K.reset()
-      get_os = love.system.getOS
       K.type("abc")
     end)
 
-    after_each(function()
-      love.system.getOS = get_os
+    describe("on a computer (Linux), as AltGr", function()
+      posing_as("Linux")
+
+      in_both_orders("a composed character lands", function(
+        order
+      )
+        chord(order, { "ralt" }, "q", "@")
+        chord(order, { "ralt" }, "a", "ą")
+        chord(order, { "ralt" }, "e", "€")
+        assert.same("abc@ą€", K.console_draft())
+      end)
+
+      in_both_orders("with Shift, a composed character lands",
+          function(order)
+        chord(order, {
+          "ralt",
+          "lshift"
+        }, "a", "Ą")
+        assert.same("abcĄ", K.console_draft())
+      end)
+
+      -- a computer sends no text for a chord, so whatever
+      -- arrives under AltGr is composed: the French us-alt
+      -- layout types 6 through AltGr on its 6 key
+      in_both_orders("an ASCII letter, digit or space lands too",
+          function(order)
+        chord(order, { "ralt" }, "6", "6")
+        chord(order, { "ralt" }, "x", "x")
+        chord(order, { "ralt" }, "space", " ")
+        assert.same("abc6x ", K.console_draft())
+      end)
+
+      in_both_orders("left Ctrl with right Alt is a chord",
+          function(order)
+        chord(order, {
+          "lctrl",
+          "ralt"
+        }, "q", "@")
+        assert.same("abc", K.console_draft())
+      end)
+
+      in_both_orders("with the left Alt or the right Ctrl too, "
+          .. "it is a chord", function(order)
+        chord(order, {
+          "lalt",
+          "ralt"
+        }, "q", "@")
+        chord(order, {
+          "rctrl",
+          "ralt"
+        }, "q", "@")
+        assert.same("abc", K.console_draft())
+      end)
     end)
 
-    in_both_orders("a composed character lands", function(order)
-      chord(order, { "ralt" }, "q", "@")
-      chord(order, { "ralt" }, "a", "ą")
-      chord(order, { "ralt" }, "e", "€")
-      assert.same("abc@ą€", K.console_draft())
+    describe("on a computer (Windows), as AltGr", function()
+      posing_as("Windows")
+
+      in_both_orders("as Windows reports it, left Ctrl with "
+          .. "right Alt, a composed character lands", function(
+        order
+      )
+        chord(order, {
+          "lctrl",
+          "ralt"
+        }, "q", "@")
+        assert.same("abc@", K.console_draft())
+      end)
     end)
 
-    in_both_orders("with Shift, a composed character lands",
-        function(order)
-      chord(order, {
-        "ralt",
-        "lshift"
-      }, "a", "Ą")
-      assert.same("abcĄ", K.console_draft())
-    end)
+    describe("on a Compy (Android), as an Alt", function()
+      posing_as("Android")
 
-    in_both_orders("the key's own glyph does not: it is a "
-        .. "chord's", function(order)
-      chord(order, { "ralt" }, "x", "x")
-      chord(order, { "ralt" }, "1", "1")
-      chord(order, { "ralt" }, "space", " ")
-      assert.same("abc", K.console_draft())
-    end)
+      in_both_orders("a composed character does not land",
+          function(order)
+        chord(order, { "ralt" }, "q", "@")
+        chord(order, { "ralt" }, "a", "ą")
+        chord(order, { "ralt" }, "e", "€")
+        assert.same("abc", K.console_draft())
+      end)
 
-    in_both_orders("as Windows reports it, left Ctrl with "
-        .. "right Alt, a composed character lands", function(
-      order
-    )
-      function love.system.getOS()
-        return "Windows"
-      end
-      chord(order, {
-        "lctrl",
-        "ralt"
-      }, "q", "@")
-      assert.same("abc@", K.console_draft())
-    end)
+      in_both_orders("with Shift, a composed character does "
+          .. "not land", function(order)
+        chord(order, {
+          "ralt",
+          "lshift"
+        }, "a", "Ą")
+        assert.same("abc", K.console_draft())
+      end)
 
-    in_both_orders("elsewhere, left Ctrl with right Alt is a "
-        .. "chord", function(order)
-      chord(order, {
-        "lctrl",
-        "ralt"
-      }, "q", "@")
-      assert.same("abc", K.console_draft())
-    end)
+      in_both_orders("the key's own glyph does not either",
+          function(order)
+        chord(order, { "ralt" }, "x", "x")
+        chord(order, { "ralt" }, "1", "1")
+        chord(order, { "ralt" }, "space", " ")
+        assert.same("abc", K.console_draft())
+      end)
 
-    in_both_orders("with the left Alt or the right Ctrl too, "
-        .. "it is a chord", function(order)
-      chord(order, {
-        "lalt",
-        "ralt"
-      }, "q", "@")
-      chord(order, {
-        "rctrl",
-        "ralt"
-      }, "q", "@")
-      assert.same("abc", K.console_draft())
-    end)
+      in_both_orders("left Ctrl with right Alt is a chord",
+          function(order)
+        chord(order, {
+          "lctrl",
+          "ralt"
+        }, "q", "@")
+        assert.same("abc", K.console_draft())
+      end)
 
-    in_both_orders("it lands in the file editor's field",
-        function(order)
+      in_both_orders("typing goes on after the chord", function(
+        order
+      )
+        chord(order, { "ralt" }, "q", "@")
+        K.type("d")
+        assert.same("abcd", K.console_draft())
+      end)
+    end)
+  end)
+
+  describe("the right Alt key, in the file editor's field",
+      function()
+    before_each(function()
       K.reset({ ["main.lua"] = "x = 1\n" })
       K.open()
       K.browse_to_end()
       K.type("s = ")
-      chord(order, { "ralt" }, "q", "@")
-      assert.same("s = @", K.draft())
+    end)
+
+    describe("on a computer (Linux), as AltGr", function()
+      posing_as("Linux")
+
+      in_both_orders("a composed character lands", function(
+        order
+      )
+        chord(order, { "ralt" }, "q", "@")
+        assert.same("s = @", K.draft())
+      end)
+
+      in_both_orders("an ASCII digit lands too", function(
+        order
+      )
+        chord(order, { "ralt" }, "6", "6")
+        assert.same("s = 6", K.draft())
+      end)
+    end)
+
+    describe("on a Compy (Android), as an Alt", function()
+      posing_as("Android")
+
+      in_both_orders("a composed character does not land",
+          function(order)
+        chord(order, { "ralt" }, "q", "@")
+        assert.same("s = ", K.draft())
+      end)
+
+      in_both_orders("the key's own glyph does not either",
+          function(order)
+        chord(order, { "ralt" }, "x", "x")
+        assert.same("s = ", K.draft())
+      end)
+    end)
+  end)
+
+  describe("the right Alt key, in a project's input field",
+      function()
+    local input, widget
+
+    before_each(function()
+      K.reset()
+      input = F.activate_project()
+      widget = F.show_widget({ text = "hey" })
+    end)
+
+    local function field()
+      return table.concat(widget:get_text(), "\n")
+    end
+
+    describe("on a computer (Linux), as AltGr", function()
+      posing_as("Linux")
+
+      in_both_orders("a composed character lands", function(
+        order
+      )
+        chord(order, { "ralt" }, "q", "@")
+        assert.same("hey@", field())
+      end)
+
+      in_both_orders("an ASCII digit lands too", function(
+        order
+      )
+        chord(order, { "ralt" }, "6", "6")
+        assert.same("hey6", field())
+      end)
+    end)
+
+    describe("on a Compy (Android), as an Alt", function()
+      posing_as("Android")
+
+      in_both_orders("a composed character does not land",
+          function(order)
+        chord(order, { "ralt" }, "q", "@")
+        assert.same("hey", field())
+      end)
+
+      in_both_orders("the key's own glyph does not either",
+          function(order)
+        chord(order, { "ralt" }, "x", "x")
+        assert.same("hey", field())
+      end)
+
+      in_both_orders("the project's shortcut still gets the "
+          .. "chord's text", function(order)
+        local got = { }
+        input.shortcuts.textinput["alt+@"] = function(t)
+          got[#got + 1] = t
+          return true
+        end
+        chord(order, { "ralt" }, "q", "@")
+        assert.same({ "@" }, got)
+        assert.same("hey", field())
+      end)
+
+      in_both_orders("the project's hook still gets it, and the "
+          .. "field does not", function(order)
+        local got = { }
+        input.hooks.textinput = function(t)
+          got[#got + 1] = t
+        end
+        chord(order, { "ralt" }, "q", "@")
+        chord(order, { "ralt" }, "x", "x")
+        chord(order, { }, "z", "z")
+        assert.same({
+          "@",
+          "x",
+          "z"
+        }, got)
+        assert.same("heyz", field())
+      end)
     end)
   end)
 
@@ -460,17 +640,44 @@ describe("Key.chord_text #input", function()
     }, "@"))
   end)
 
-  it("under AltGr is true for a key's own glyph alone", function()
-    assert.is_false(with({ "ralt" }, "@"))
-    assert.is_false(with({ "ralt" }, "ł"))
-    assert.is_false(with({ "ralt" }, "{"))
-    assert.is_false(with({
-      "ralt",
-      "lshift"
-    }, "Ł"))
-    assert.is_true(with({ "ralt" }, "l"))
-    assert.is_true(with({ "ralt" }, "L"))
-    assert.is_true(with({ "ralt" }, "7"))
-    assert.is_true(with({ "ralt" }, " "))
+  describe("on a computer (Linux)", function()
+    posing_as("Linux")
+
+    it("is false under AltGr, whatever the text", function()
+      assert.is_false(with({ "ralt" }, "@"))
+      assert.is_false(with({ "ralt" }, "ł"))
+      assert.is_false(with({ "ralt" }, "{"))
+      assert.is_false(with({
+        "ralt",
+        "lshift"
+      }, "Ł"))
+      assert.is_false(with({ "ralt" }, "l"))
+      assert.is_false(with({ "ralt" }, "L"))
+      assert.is_false(with({ "ralt" }, "6"))
+      assert.is_false(with({ "ralt" }, " "))
+    end)
+  end)
+
+  describe("on a Compy (Android)", function()
+    posing_as("Android")
+
+    it("is true with the right Alt, whatever the text",
+        function()
+      assert.is_true(with({ "ralt" }, "@"))
+      assert.is_true(with({ "ralt" }, "ł"))
+      assert.is_true(with({ "ralt" }, "{"))
+      assert.is_true(with({
+        "ralt",
+        "lshift"
+      }, "Ł"))
+      assert.is_true(with({ "ralt" }, "l"))
+      assert.is_true(with({ "ralt" }, " "))
+    end)
+
+    it("is false with no modifier, or with Shift alone",
+        function()
+      assert.is_false(with({ }, "a"))
+      assert.is_false(with({ "lshift" }, "A"))
+    end)
   end)
 end)

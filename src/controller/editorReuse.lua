@@ -210,9 +210,6 @@ function EditorController:_timeline_state_step(kind)
     kind = kind,
     field = self:_field_snapshot(),
   })
-  if #buf.history > BLOCK_HISTORY_CAP then
-    table.remove(buf.history, 1)
-  end
   buf.redo_history = {}
 end
 
@@ -286,38 +283,54 @@ end
 
 --- @private
 --- @param buf BufferModel
---- @return string? --- the file's text as the card holds it
+--- @return string|false|nil --- the file's text as the card
+--- holds it, false when the file is missing, nil when it is
+--- there and cannot be read
+--- @return boolean asked --- there is a project to ask
 function EditorController:_disk_text(buf)
   local con = self.console
   local projects = con and con.model and con.model.projects
-  local readable = projects and projects.current
-      and con._readfile
-  if not readable then return nil end
-  local text = con:_readfile(buf.name, true)
-  return type(text) == 'string' and text or nil
+  local p = projects and projects.current
+  if not p then return nil, false end
+  local ok, text = p:readfile(buf.name)
+  if ok and type(text) == 'string' then return text, true end
+  local FS = require('util.filesystem')
+  if FS.exists(p:get_path(buf.name)) then return nil, true end
+  return false, true
 end
 
 --- @private
---- Called after each successful save: what the card holds
---- now is what the timeline's latest action left
+--- What the file holds as the editor opens it: the text it
+--- read, or false for a missing file (`disk_seen`)
+--- @param buf BufferModel
+--- @param text string? --- nil: the file is missing
+function EditorController:_note_read(buf, text)
+  buf.disk_seen = type(text) == 'string' and text or false
+end
+
+--- @private
+--- Called after each successful save: the card holds what the
+--- editor wrote
 --- @param buf BufferModel
 function EditorController:_note_saved(buf)
-  buf.disk_seen = self:_disk_text(buf)
+  if type(buf.stored) == 'string' then
+    buf.disk_seen = buf.stored
+  else
+    buf.disk_seen = self:_disk_text(buf)
+  end
 end
 
 --- @private
+--- The file is written only over what the editor last read
+--- or wrote there, a missing file included: a file that
+--- changed, appeared, went or cannot be read is not
 --- @param buf BufferModel
---- @return boolean --- the file is as the editor's last save
---- left it; true as well when it cannot be read
+--- @return boolean --- the card holds what the editor last
+--- read or wrote; true when there is no project to ask
 function EditorController:_file_matches(buf)
-  if buf.unsaved then return true end
-  local now = self:_disk_text(buf)
-  if buf.disk_seen == nil then
-    --- no baseline yet: the file as it stands is one
-    buf.disk_seen = now
-    return true
-  end
-  return now == buf.disk_seen
+  local now, asked = self:_disk_text(buf)
+  if not asked then return true end
+  return now ~= nil and now == buf.disk_seen
 end
 
 --- @private
@@ -497,14 +510,6 @@ end
 -----------------
 
 --- @private
---- @return 'browsing'|'inserting'|'replacing'
-function EditorController:_reuse_state()
-  if self:get_active_buffer().loaded then return 'replacing' end
-  if self.input:is_empty() then return 'browsing' end
-  return 'inserting'
-end
-
---- @private
 --- A Lua file stays one chunk whose blocks read as they
 --- stand (IS3.7): a cut or a move that would stop the file
 --- loading, or join two blocks into one statement, is
@@ -578,7 +583,7 @@ end
 --- notice, at the first block it cuts into the field
 function EditorController:cut_block(isrepeat)
   local buf = self:get_active_buffer()
-  local state = self:_reuse_state()
+  local state = self:state_name()
   if isrepeat and state ~= 'browsing' then return end
   if state == 'inserting' then
     return self:refuse({ NOTICE.cut_inserting })
@@ -641,7 +646,7 @@ end
 --- @param dir VerticalDir
 function EditorController:move_block(dir)
   local buf = self:get_active_buffer()
-  if self:_reuse_state() == 'replacing' then
+  if self:state_name() == 'replacing' then
     return self:refuse({ NOTICE.replacing })
   end
   local n = buf:get_content_length()
@@ -760,10 +765,6 @@ end
 function EditorController:_reuse_keys(k, isrepeat)
   if isrepeat == nil then isrepeat = self.key_repeat end
   local buf = self:get_active_buffer()
-  if buf and buf.disk_seen == nil and not buf.unsaved then
-    --- what the file holds before the first action on it
-    buf.disk_seen = self:_disk_text(buf)
-  end
   --- every change to a draft stays undoable, so that Ctrl+Z
   --- reaches the file only once the draft holds none
   local eh = self.input.model.edit_history
@@ -812,7 +813,7 @@ function EditorController:_reuse_keys(k, isrepeat)
   --- the spec names Ctrl+Delete alone, and with a draft the
   --- key stays the field's Delete
   if shift and not ctrl and not alt and k == 'delete'
-      and self:_reuse_state() == 'browsing' then
+      and self:state_name() == 'browsing' then
     self:cut_block(isrepeat)
     return true
   end

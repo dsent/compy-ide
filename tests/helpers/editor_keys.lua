@@ -34,14 +34,16 @@ local function path_of(_, f)
   return ROOT .. f
 end
 
-local function read(_, f)
-  if read_failure then
-    return false, read_failure
-  end
-  return true, files[f]
-end
+-- The project's own reading and its check of the name it
+-- writes, over the memory card: what the device answers
+require("model.project.project")
+local read = Project.readfile
 
 local function write(_, f, text)
+  local valid, invalid = Project.writable_name(f)
+  if not valid then
+    return false, invalid
+  end
   if write_failure then
     return false, write_failure
   end
@@ -73,16 +75,34 @@ local function exists_over(exists)
   end
 end
 
+--- FS.combined_read answered for the memory project as the
+--- device answers: the text, or nil when the read fails.
+local function read_over(combined_read)
+  return function(path)
+    local f = path:match("^/memory%-k/(.+)$")
+    if not f then
+      return combined_read(path)
+    end
+    if read_failure then
+      return nil
+    end
+    return files[f]
+  end
+end
+
 --- Stub the filesystem calls the editor makes; returns what
 --- puts them back.
 local function stub_fs()
   local exists, fsync = FS.exists, FS.fsync
+  local combined_read = FS.combined_read
   FS.exists = exists_over(exists)
+  FS.combined_read = read_over(combined_read)
   function FS.fsync()
     return true
   end
   return function()
     FS.exists, FS.fsync = exists, fsync
+    FS.combined_read = combined_read
   end
 end
 
@@ -254,11 +274,16 @@ function K.fail_writes(reason)
   write_failure = reason
 end
 
---- From now on, every read fails with `reason`, as a damaged
---- card would answer.
---- @param reason string
-function K.fail_reads(reason)
-  read_failure = reason
+--- From now on, every read of a file that is there fails, as
+--- a damaged card answers on the device: no text and no
+--- reason.
+function K.fail_reads()
+  read_failure = true
+end
+
+--- From now on, reads succeed again.
+function K.mend_reads()
+  read_failure = nil
 end
 
 -- keystrokes -------------------------------------------------

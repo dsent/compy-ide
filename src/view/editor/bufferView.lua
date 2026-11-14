@@ -366,7 +366,9 @@ function BufferView:row_height()
 end
 
 --- @param special boolean
-function BufferView:draw(special)
+--- @param bottom number? --- where the view's area ends: the
+--- top of the status line's band
+function BufferView:draw(special, bottom)
   local gfx = love.graphics
   local cf_colors = self.cfg.colors
   local colors = cf_colors.editor
@@ -378,7 +380,16 @@ function BufferView:draw(special)
   local content_text = vc:get_visible()
   local last_line_n = #content_text
   local width, height = gfx.getDimensions()
-
+  local range = vc.range
+  --- The rows' pitch does not divide the area: the strip
+  --- left under the last row is that row's, which goes on
+  --- under the status line.
+  local edge = (range.fin - vc.offset) * fh
+  local strip = 0
+  if bottom then
+    strip = math.max(0, math.min(fh, bottom - edge))
+  end
+  local text_edge = range.fin <= vc:get_text_length()
 
   local draw_background = function()
     gfx.push('all')
@@ -386,13 +397,15 @@ function BufferView:draw(special)
     gfx.rectangle("fill", 0, 0, width, height)
     gfx.setColor(Color.with_alpha(colors.fg, .0625))
     local bh = math.min(last_line_n, self.cfg.lines) * fh
+    if text_edge then
+      bh = bh + strip
+    end
     gfx.rectangle("fill", 0, 0, width, bh)
     gfx.pop()
   end
 
   local draw_highlight = function()
     local off = self.content.offset
-    local range = self.content.range
 
     --- @param rows integer[]
     --- @param color RGB
@@ -402,8 +415,12 @@ function BufferView:draw(special)
       for _, v in ipairs(rows) do
         if range:inc(v) then
           local l_y = (v - off - 1) * fh
+          local h = fh
+          if v == range.fin then
+            h = fh + strip
+          end
           gfx.rectangle('fill', inset, l_y,
-            width - 2 * inset, fh)
+            width - 2 * inset, h)
         end
       end
     end

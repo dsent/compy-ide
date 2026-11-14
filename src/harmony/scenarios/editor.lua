@@ -1,524 +1,481 @@
 local h = love.harmony.utils or error()
 
---- line `n` of a project's file, as the editor saved it
-local function saved_line(project, file, n)
+--- The file editor's scenarios, with its keys (the key card,
+--- model/editor/keyCard.lua): a file opens at its end; Up and
+--- Down browse the blocks while the field is empty, Ctrl+Up
+--- and Ctrl+Down always; typing starts a draft that Enter
+--- inserts before the browsed block; F2 loads the browsed
+--- block for replacement; Escape drops an edit, and while
+--- browsing steps back from the file; Ctrl+Q leaves the
+--- editor for the console.
+---
+--- A scenario that changes a file checks what the editor
+--- saved. The turtle example is run by later scenarios, so a
+--- scenario that edits it works on a clone, or takes its
+--- changes back with Ctrl+Z and checks that it did.
+
+--- the lines of a project's file, as the editor saved it
+--- @param project string
+--- @param file string
+--- @return string[]
+local function saved(project, file)
   local path = FS.join_path(
     love.harmony.tmpdir, 'projects', project, file)
-  return string.lines(FS.read(path) or '')[n]
+  return string.lines(FS.read(path) or '')
+end
+
+--- @param lines string[]
+--- @param text string
+--- @return integer? --- the first line that is `text`
+local function find(lines, text)
+  for i, l in ipairs(lines) do
+    if l == text then return i end
+  end
+end
+
+--- @param a string[]
+--- @param b string[]
+--- @return boolean
+local function same(a, b)
+  return table.concat(a, '\n') == table.concat(b, '\n')
+end
+
+--- @param want string --- love.state.app_state
+local function in_state(want)
+  local st = love.state.app_state
+  assert(st == want,
+    string.format('expected %s, the IDE is %s', want, st))
+end
+
+--- `keys`, with its modifiers let go once it has landed: a
+--- modifier stays held until release_keys, and a key or text
+--- sent while it is held is a chord
+--- @param wait function
+--- @param keys string
+local function chord(wait, keys)
+  h.love_key(keys)
+  wait(.05)
+  h.release_keys()
+  wait(.05)
+end
+
+--- a screenshot of the screen as it is now: it is taken a
+--- frame later, so the next key waits for it
+--- @param wait function
+--- @param tag string
+local function shot(wait, tag)
+  h.screenshot(tag)
+  wait(.1)
+end
+
+--- `key`, `n` times
+--- @param wait function
+--- @param key string
+--- @param n integer
+local function press(wait, key, n)
+  for _ = 1, n do
+    h.love_key(key)
+    wait(.05)
+  end
+end
+
+--- browse to the file's first block: a page key moves ten
+--- blocks, and every line of a comment is a block
+--- @param wait function
+local function to_top(wait)
+  press(wait, 'pageup', 12)
+end
+
+--- type a line into the console, or a draft into the editor,
+--- and submit it with Enter
+--- @param wait function
+--- @param text string
+local function enter(wait, text)
+  h.love_text(text)
+  wait(.1)
+  h.love_key('return')
+  wait(.2)
 end
 
 local function editor()
   scenario('open-close', function(wait)
     wait(.1)
-    h.love_text('project("create")')
-    wait(.1)
-    h.love_key('return')
-    wait(.1)
-    h.love_text('edit()')
-    wait(.1)
-    h.love_key('return')
-    wait(.1)
-    h.screenshot('open')
-    wait(1)
-    h.love_key('C-S-s')
-    wait(.1)
-    h.release_keys()
-
-    wait(.1)
-    h.love_text('list_contents()')
-    wait(.1)
-    h.love_key('return')
-    wait(1)
-    -- no key closes a project: the console command does
-    h.love_text('close_project()')
-    wait(.1)
-    h.love_key('return')
+    enter(wait, 'project("create")')
+    enter(wait, 'edit()')
+    in_state('editor')
+    shot(wait, 'open')
+    wait(.5)
+    -- Escape while browsing steps back from the file, here
+    -- to the console
+    h.love_key('escape')
     wait(.2)
+    in_state('ready')
+
+    enter(wait, 'list_contents()')
+    wait(.5)
+    -- no key closes a project: the console command does
+    enter(wait, 'close_project()')
 
     hm_done('edit')
   end)
 
+  -- Ctrl+F searches the file's definitions. Whether the
+  -- editor keeps it is not decided yet.
   scenario('search', function(wait)
     wait(.1)
-    h.love_text('project("turtle")')
-    wait(.1)
-    h.love_key('return')
-    wait(.1)
-    h.love_text('edit()')
-    wait(.1)
-    h.love_key('return')
+    enter(wait, 'project("turtle")')
+    enter(wait, 'edit()')
+    in_state('editor')
+    chord(wait, 'C-f')
+    shot(wait, 'symbols')
     wait(.2)
-    h.love_key('C-f')
-    wait(.1)
-    h.release_keys()
-    h.screenshot('symbols')
-    wait(.2)
-    h.love_key('down')
-    wait(.01)
-    h.love_key('down')
-    wait(.01)
-    h.love_key('down')
-    h.screenshot('symbols-2')
+    press(wait, 'down', 3)
+    shot(wait, 'symbols-2')
 
-    wait(.1)
     h.love_text('draw')
-    h.screenshot('symbols-3')
-    wait(.5)
-    h.love_key('backspace')
-    wait(.01)
-    h.love_key('backspace')
-    wait(.01)
-    h.love_key('backspace')
-    wait(.01)
-    h.love_key('backspace')
-    wait(.2)
+    wait(.1)
+    shot(wait, 'symbols-3')
+    wait(.4)
+    press(wait, 'backspace', 4)
     h.love_text('tx')
-    h.screenshot('symbols-4')
+    wait(.1)
+    shot(wait, 'symbols-4')
     wait(.2)
-
+    -- Enter jumps to the definition and ends the search, so
+    -- the next Escape steps back from the file; with nothing
+    -- found it would end the search alone
     h.love_key('return')
-    wait(1)
-    h.love_key('S-escape')
-    wait(1)
+    wait(.2)
+    shot(wait, 'found')
+    wait(.5)
+    h.love_key('escape')
+    wait(.2)
+    in_state('ready')
 
     hm_done()
   end)
 
   scenario('add', function(wait)
     wait(.1)
-    h.love_text('project("test-add")')
-    wait(.1)
-    h.love_key('return')
+    enter(wait, 'project("test-add")')
+    enter(wait, 'edit()')
+    in_state('editor')
 
-    wait(.1)
-    h.love_text('edit()')
-    wait(.1)
-    h.love_key('return')
-
-    wait(.1)
+    -- at the end of the file, a draft is added there, as
+    -- the formatter lays it out
     h.love_text('for i=1,5 do print(i) end')
     wait(.1)
-    h.screenshot('input')
+    shot(wait, 'input')
     wait(.1)
     h.love_key('return')
+    wait(.2)
+    shot(wait, 'added')
+    local loop = 'for i = 1, 5 do'
+    local lines = saved('test-add', 'main.lua')
+    local at = find(lines, loop)
+    assert(at and lines[at + 1] == '  print(i)'
+      and lines[at + 2] == 'end', 'the loop was not added')
 
-    wait(.1)
-    h.screenshot('added')
-    wait(.1)
+    -- Up browses onto the new block, and a draft goes in
+    -- before it
     h.love_key('up')
     wait(.1)
-    h.screenshot('sel-up')
+    shot(wait, 'sel-up')
+    enter(wait, 'print("count")')
+    -- Enter with no draft adds an empty line
+    h.love_key('return')
     wait(.2)
-    h.love_key('S-return')
-    h.screenshot('newline')
+    shot(wait, 'newline')
+    lines = saved('test-add', 'main.lua')
+    at = find(lines, loop)
+    assert(at and lines[at - 1] == ''
+      and lines[at - 2] == 'print("count")',
+      'expected print, an empty line and the loop')
 
-    wait(1)
-    h.love_key('S-escape')
-    wait(.1)
-    h.release_keys()
-    wait(.1)
+    -- Ctrl+Ins copies the browsed block into the draft, and
+    -- Enter adds the copy before it
+    chord(wait, 'C-insert')
+    shot(wait, 'copied')
+    h.love_key('return')
+    wait(.2)
+    lines = saved('test-add', 'main.lua')
+    assert(lines[at] == loop and lines[at + 3] == loop,
+      'expected the loop twice')
+
+    h.love_key('escape')
+    wait(.2)
+    in_state('ready')
 
     hm_done()
   end)
 
   scenario('change', function(wait)
-    wait(.1)
-    h.love_text('clone("turtle", "turtlemod")')
-    wait(.1)
-    h.love_key('return')
-    wait(.1)
-    h.screenshot('clone')
+    local file = 'drawing.lua'
+    local function body()
+      return saved('turtlemod', file)[2]
+    end
+    --- browse to line 2, the body's color, and load it
+    local function load_body()
+      -- the blocks of the file's top are its single lines
+      to_top(wait)
+      h.love_key('down')
+      wait(.1)
+      h.love_key('f2')
+      wait(.1)
+    end
 
     wait(.1)
-    h.love_text('project("turtlemod")')
-    wait(.1)
-    h.love_key('return')
-
-    wait(.1)
-    h.love_text('edit("drawing.lua")')
-    wait(.1)
-    h.love_key('return')
-    wait(.1)
-    h.screenshot('open')
+    enter(wait, 'clone("turtle", "turtlemod")')
+    shot(wait, 'clone')
+    enter(wait, 'project("turtlemod")')
+    enter(wait, 'edit("' .. file .. '")')
+    in_state('editor')
+    shot(wait, 'open')
     wait(.2)
-    h.love_key(h.shortcuts.toggle)
+    -- Ctrl+T runs the project, and again returns to the file
+    chord(wait, h.shortcuts.toggle)
+    in_state('running')
+    wait(1.5)
+    shot(wait, 'before')
+    chord(wait, h.shortcuts.toggle)
+    in_state('editor')
 
-    wait(2)
+    press(wait, 'up', 7)
+    shot(wait, 'sel-up')
+    h.love_key('pageup')
+    wait(.1)
+    shot(wait, 'page-up')
 
-    wait(.1)
-    h.screenshot('before')
-    wait(.2)
-    h.love_key(h.shortcuts.toggle)
-    wait(.2)
-    h.love_key('C-home')
-    wait(.1)
-    h.release_keys()
-    wait(.1)
-    h.screenshot('start')
-
-    wait(.2)
-    h.love_key('down')
-    wait(.1)
-    h.love_key('down')
-    wait(.1)
-    h.love_key('down')
-    wait(.1)
-    h.love_key('down')
-    wait(.1)
-    h.love_key('down')
-    wait(.1)
-    h.love_key('down')
-    wait(.1)
-    h.love_key('down')
-    wait(.1)
-    h.screenshot('sel-down')
-    wait(.1)
-    h.love_key('pagedown')
-    wait(.1)
-    h.screenshot('scroll-down')
-
-    wait(.1)
-    h.love_key('C-f')
-    wait(.01)
-    h.release_keys()
-    wait(.1)
-    h.love_text('body')
-    wait(.01)
-    h.love_key('return')
-
-    wait(.1)
-    h.love_key('return')
-    wait(.1)
-    h.love_key('end')
-    wait(.1)
-    h.love_key('backspace')
-    wait(.02)
-    h.love_key('backspace')
-    wait(.02)
-    h.love_key('backspace')
-    wait(.02)
-    h.love_key('backspace')
-    wait(.02)
-    h.love_key('backspace')
-
-    wait(.1)
+    load_body()
+    shot(wait, 'loaded')
+    assert(body() == 'body_color = Color.green')
+    -- F2 puts the cursor at the end of the block
+    press(wait, 'backspace', 5)
     h.love_text('red')
-    wait(.01)
+    wait(.1)
     h.love_key('return')
-
-    wait(.1)
-    h.screenshot('edited')
-    assert(saved_line('turtlemod', 'drawing.lua', 2)
-      == 'body_color = Color.red')
     wait(.2)
-    h.love_key(h.shortcuts.toggle)
-    wait(.1)
-    h.screenshot('after')
+    shot(wait, 'edited')
+    assert(body() == 'body_color = Color.red',
+      'the change was not saved')
+    chord(wait, h.shortcuts.toggle)
+    in_state('running')
+    wait(.3)
+    shot(wait, 'after')
 
     wait(.4)
-    h.love_key(h.shortcuts.toggle)
-    wait(.1)
-    h.love_key('C-f')
-    wait(.01)
-    h.release_keys()
-    wait(.1)
-    h.love_text('body')
-    wait(.01)
-    h.love_key('return')
-    wait(.1)
-    h.love_key('return')
-    wait(.1)
-    h.love_key('end')
-    wait(.1)
-    h.love_key('backspace')
-    wait(.02)
-    h.love_key('backspace')
-    wait(.02)
-    h.love_key('backspace')
-    wait(.02)
-    wait(.1)
+    chord(wait, h.shortcuts.toggle)
+    in_state('editor')
+    load_body()
+    press(wait, 'backspace', 3)
     h.love_text('blue')
-    wait(.01)
+    wait(.1)
     h.love_key('return')
-
-    wait(.1)
-    h.screenshot('edited-2')
-    assert(saved_line('turtlemod', 'drawing.lua', 2)
-      == 'body_color = Color.blue')
     wait(.2)
-    h.love_key(h.shortcuts.toggle)
-    wait(.1)
-    h.screenshot('after-2')
+    shot(wait, 'edited-2')
+    assert(body() == 'body_color = Color.blue',
+      'the second change was not saved')
+    chord(wait, h.shortcuts.toggle)
+    in_state('running')
+    wait(.3)
+    shot(wait, 'after-2')
 
-    wait(1)
-    h.love_key('C-q')
-    wait(.1)
-    h.release_keys()
+    wait(.5)
+    -- Ctrl+Q stops the program; the project stays open
+    chord(wait, 'C-q')
+    in_state('ready')
     wait(.1)
 
     hm_done()
   end)
 
   scenario('move', function(wait)
+    local file = 'action.lua'
+    local fn = 'function pause_game(msg)'
     wait(.1)
-    h.love_text('project("turtle")')
-    wait(.1)
-    h.love_key('return')
-
-    wait(.1)
-    h.love_text('edit("action.lua")')
-    wait(.1)
-    h.love_key('return')
-    wait(.1)
-    h.screenshot('open')
+    enter(wait, 'project("turtle")')
+    local original = saved('turtle', file)
+    enter(wait, 'edit("' .. file .. '")')
+    in_state('editor')
+    shot(wait, 'open')
 
     wait(.2)
-    h.love_key('up')
-    wait(.1)
-    h.love_key('up')
-    wait(.1)
-    h.love_key('up')
-    wait(.1)
-    h.screenshot('sel-up')
-    wait(.1)
-    h.love_key('up')
-    wait(.1)
-    h.love_key('up')
+    -- from the end: the return, the table, the pause function
+    press(wait, 'up', 5)
+    shot(wait, 'sel-up')
+    local from = find(original, fn)
 
-    wait(.1)
-    h.love_key('C-m')
-    wait(.01)
-    h.release_keys()
-    wait(.1)
-    h.screenshot('move-start')
-    wait(.1)
-    h.love_key('pageup')
-    wait(.1)
-    h.screenshot('scroll-up')
-    wait(.1)
-    h.love_key('up')
-    wait(.1)
-    h.love_key('up')
-    wait(.1)
-    h.screenshot('move-up')
-    wait(.1)
-    h.love_key('return')
-    wait(.1)
-    h.screenshot('move-done')
+    -- Alt+Up moves the browsed block past the one above it
+    chord(wait, 'A-up')
+    shot(wait, 'move-up')
+    chord(wait, 'A-up')
+    shot(wait, 'move-done')
+    local moved = saved('turtle', file)
+    local to = find(moved, fn)
+    assert(to and from and to < from, 'the block did not move up')
 
-    wait(.1)
-    h.love_key('down')
+    -- Ctrl+Z takes the moves back one at a time, Ctrl+Y
+    -- makes one again
+    chord(wait, 'C-z')
+    chord(wait, 'C-z')
+    shot(wait, 'undone')
+    assert(same(saved('turtle', file), original),
+      'two undos did not restore the file')
+    chord(wait, 'C-y')
+    shot(wait, 'redone')
+    local redone = find(saved('turtle', file), fn)
+    assert(redone and redone < from, 'redo did not move it')
+    chord(wait, 'C-z')
+    assert(same(saved('turtle', file), original),
+      'the undo after the redo did not restore the file')
+
+    wait(.5)
+    h.love_key('escape')
     wait(.2)
-    h.love_key('S-return')
-    h.screenshot('newline')
-
-    wait(1)
-    h.love_key('S-escape')
-    wait(.1)
-    h.release_keys()
-    wait(.1)
+    in_state('ready')
     hm_done()
   end)
 
   scenario('delete', function(wait)
+    local function main()
+      return saved('turtlecut', 'main.lua')
+    end
     wait(.1)
-    h.love_text('project("turtle")')
-    wait(.1)
-    h.love_key('return')
-
-    wait(.1)
-    h.love_text('edit("main.lua")')
-    wait(.1)
-    h.love_key('return')
-    wait(.1)
-    h.screenshot('open')
+    enter(wait, 'clone("turtle", "turtlecut")')
+    enter(wait, 'project("turtlecut")')
+    enter(wait, 'edit("main.lua")')
+    in_state('editor')
+    shot(wait, 'open')
 
     wait(.2)
-    h.love_key('pageup')
-    wait(.1)
-    h.love_key('pageup')
-    wait(.1)
-    h.love_key('pageup')
-    wait(.1)
-    h.screenshot('up')
+    to_top(wait)
+    shot(wait, 'up')
+    -- from the first line down to `incr = 10`
+    press(wait, 'down', 6)
+    shot(wait, 'move-down')
 
-    wait(.2)
-    h.love_key('C-home')
-    wait(.1)
-    h.release_keys()
-    wait(.1)
-    h.love_key('down')
-    wait(.1)
-    h.love_key('down')
-    wait(.1)
-    h.love_key('down')
-    wait(.1)
-    h.love_key('down')
-    wait(.1)
-    h.love_key('down')
-    wait(.1)
-    h.love_key('down')
-    wait(.1)
-    h.screenshot('move-down')
-
-    wait(.1)
+    -- Ctrl+Delete cuts the browsed block into the draft, and
+    -- Escape drops it
+    chord(wait, 'C-delete')
+    shot(wait, 'cut')
+    assert(not find(main(), 'incr = 10'), 'nothing was cut')
     h.love_key('escape')
-    wait(.1)
-    h.screenshot('load')
-    wait(.1)
-    h.love_key('C-w')
-    wait(.1)
-    h.release_keys()
-    wait(.1)
-    h.screenshot('wipe')
-    wait(.1)
-    h.love_key('C-y')
-    wait(.1)
-    h.release_keys()
-    wait(.1)
-    h.screenshot('delete')
+    wait(.2)
+    shot(wait, 'delete')
+    assert(not find(main(), 'incr = 10'))
 
-    wait(.3)
+    wait(.2)
     h.love_text('incr = 20')
     wait(.1)
-    h.screenshot('input')
-    wait(.1)
-    h.love_key('return')
-    wait(.1)
-    h.screenshot('added')
-
-
-    wait(.2)
-    h.love_key('C-w')
-    wait(.1)
-    h.release_keys()
-    wait(.1)
-    h.love_key('S-return')
-    wait(.1)
-    h.screenshot('newline')
-
-
-    wait(1)
-    h.love_key('C-S-s')
-    wait(.1)
-    h.release_keys()
-    wait(.1)
-    h.screenshot('leave')
-
-    wait(.1)
-    h.love_text('print("let\'s check back")')
-    wait(.1)
-    h.love_key('return')
-    wait(.1)
-    h.screenshot('msg')
-
-    wait(.1)
-    h.love_key('up')
-    wait(.1)
-    h.screenshot('history-1')
-    wait(.1)
-    h.love_key('up')
-    wait(.1)
-    h.screenshot('history-2')
-    wait(.1)
+    shot(wait, 'input')
     h.love_key('return')
     wait(.2)
-    h.love_key('C-home')
-    wait(.1)
-    h.release_keys()
-    wait(.1)
-    h.screenshot('reopen')
+    shot(wait, 'added')
+    assert(find(main(), 'incr = 20'), 'the new line is missing')
 
-    wait(1)
-    h.love_key('S-escape')
-    wait(.1)
-    h.release_keys()
-    wait(.1)
-    h.screenshot('exit')
+    wait(.5)
+    chord(wait, 'C-q')
+    in_state('ready')
+    shot(wait, 'leave')
 
+    enter(wait, 'print("let\'s check back")')
+    shot(wait, 'msg')
+    -- the console's history: the print, then the edit
+    h.love_key('up')
     wait(.1)
+    shot(wait, 'history-1')
+    h.love_key('up')
+    wait(.1)
+    shot(wait, 'history-2')
+    h.love_key('return')
+    wait(.2)
+    in_state('editor')
+    to_top(wait)
+    shot(wait, 'reopen')
+
+    wait(.5)
+    h.love_key('escape')
+    wait(.2)
+    in_state('ready')
+    shot(wait, 'exit')
+
     hm_done()
   end)
 
+  -- The view follows the browsing position; Alt with a page
+  -- or edge key scrolls the view alone. A loaded block stays
+  -- the target while the position moves, and the editor is
+  -- not left while it is loaded.
+  scenario('scroll', function(wait)
+    local file = 'drawing.lua'
+    wait(.1)
+    enter(wait, 'project("turtle")')
+    local original = saved('turtle', file)
+    enter(wait, 'edit("' .. file .. '")')
+    in_state('editor')
+    shot(wait, 'end')
+
+    press(wait, 'pageup', 2)
+    shot(wait, 'page-up')
+    chord(wait, 'A-end')
+    shot(wait, 'peek-end')
+    chord(wait, 'A-pageup')
+    shot(wait, 'peek-up')
+    -- a browse brings the view back to the position
+    chord(wait, 'C-down')
+    shot(wait, 'follow-back')
+
+    h.love_key('f2')
+    wait(.1)
+    chord(wait, 'C-down')
+    chord(wait, 'C-down')
+    chord(wait, 'C-down')
+    shot(wait, 'loaded-browse')
+    -- Ctrl+Q is refused during an edit, with a notice
+    chord(wait, 'C-q')
+    in_state('editor')
+    shot(wait, 'loaded-protect')
+
+    wait(.5)
+    -- the first Escape drops the edit and the notice, the
+    -- second leaves the file
+    h.love_key('escape')
+    wait(.2)
+    in_state('editor')
+    shot(wait, 'dropped')
+    h.love_key('escape')
+    wait(.2)
+    in_state('ready')
+    assert(same(saved('turtle', file), original),
+      'the file changed')
+
+    hm_done()
+  end)
+
+  -- Ctrl+J opens the file a require names; Escape steps back
+  -- to the file that named it
   scenario('follow', function(wait)
     wait(.1)
-    h.love_text('project("turtle")')
-    wait(.1)
-    h.love_key('return')
+    enter(wait, 'project("turtle")')
+    enter(wait, 'edit("main.lua")')
+    in_state('editor')
+    -- the first line: actions = require("action")
+    to_top(wait)
+    shot(wait, 'require')
+    chord(wait, 'C-j')
+    in_state('editor')
+    shot(wait, 'followed')
 
-    wait(.1)
-    h.love_text('edit("drawing.lua")')
-    wait(.1)
-    h.love_key('return')
-
-    wait(.1)
-    h.love_key('C-f')
-    wait(.01)
-    h.release_keys()
-    wait(.1)
-    h.love_text('body')
-    wait(.01)
-    h.love_key('return')
-    wait(.1)
-    h.screenshot('find')
-
-    wait(.1)
+    wait(.3)
+    -- still in the editor after one Escape: Ctrl+J opened a
+    -- second file, and a refusal would have opened none
     h.love_key('escape')
-    wait(.1)
-    h.love_key('end')
-    wait(.1)
-    h.love_key('down')
-    wait(.1)
-    h.love_key('down')
-    wait(.1)
-    h.love_key('down')
-    wait(.1)
-    h.love_key('down')
-    wait(.1)
-    h.screenshot('sel-down')
-
-    wait(.1)
-    h.love_key('return')
-    wait(.1)
-    h.screenshot('jump-back')
-
-    wait(.1)
-    h.love_key('C-pagedown')
-    wait(.01)
-    h.release_keys()
-    wait(.1)
-    h.screenshot('jump-end')
-
-    wait(.1)
-    h.love_key('down')
-    wait(.1)
-    h.screenshot('sel-offscreen')
-
-
-    wait(.1)
-    h.love_key('S-pageup')
-    wait(.01)
-    h.release_keys()
-    wait(.1)
-    h.screenshot('scroll-one-up')
-    wait(.1)
-    h.love_key('pageup')
-    wait(.1)
-    h.screenshot('scroll-up')
-
-    wait(.1)
-    h.love_key('return')
-    wait(.1)
-    h.screenshot('loaded-protect')
-
-    wait(1)
-    --- the first leaves the open block, the second the editor
-    h.love_key('S-escape')
-    wait(.1)
-    h.love_key('S-escape')
-    wait(.1)
-    h.release_keys()
-    wait(.1)
+    wait(.2)
+    in_state('editor')
+    shot(wait, 'back')
+    h.love_key('escape')
+    wait(.2)
+    in_state('ready')
 
     hm_done()
   end)

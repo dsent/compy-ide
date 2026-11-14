@@ -1130,7 +1130,8 @@ Controller = {
       -- While the key card shows, the editor's keys do
       -- nothing, Ctrl+Q included (editor spec, IS3.16).
       local st = love.state.app_state
-      local card = (st == 'editor' or st == 'ready')
+      local card = (st == 'editor' or st == 'ready'
+            or st == 'inspect')
           and require('model.editor.keyCard').held()
       if reservation and not card then reservation() end
 

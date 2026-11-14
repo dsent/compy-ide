@@ -1311,8 +1311,12 @@ local ASK_FLAGS = {
 --- Whether this key will arrive as text, and so is textinput's
 --- rather than on_key's. A single-character key constant is a
 --- printable; `space` is the one multi-character name that
---- produces text. Ctrl/Alt suppress textinput, so a chord over
---- a printable IS reportable.
+--- produces text. With Ctrl or Alt held the key is a chord,
+--- whose text the event gate stops (Key.chord_text), so a
+--- chord over a printable IS reportable. On a computer, AltGr
+--- is the exception: the key is reported and the character it
+--- composes is typed as well, as whether it composes one is
+--- known only from its text, which comes after the key press.
 --- @param k string
 --- @return boolean
 local function arrives_as_text(k)
@@ -2185,13 +2189,30 @@ function ConsoleController:edit(name, state, must_exist)
       print(msg)
     end
   end
+  --- an edit in progress is resolved first (FR1.2): opening
+  --- a file empties the field, and a cut block may be held
+  --- nowhere else
+  if love.state.app_state == 'editor'
+      and self.editor:state_name() ~= 'browsing' then
+    refuse('Finish the text first: Enter keeps it, Esc drops it.')
+    return
+  end
+  --- a file the editor could never save stays shut: every
+  --- submission to it would be refused
+  local writable, invalid = Project.writable_name(filename)
+  if not writable then
+    refuse(string.format(
+      '%s cannot be saved (%s), so it cannot be opened.',
+      filename, invalid))
+    return
+  end
   local text
   if ex then
     --- a file that is there and cannot be read stays shut
     --- (IS1.2): opened empty, its first submission would
     --- write over it
     local ok, got = p:readfile(filename)
-    if not ok then
+    if not ok or type(got) ~= 'string' then
       local why = type(got) == 'string' and got ~= ''
           and string.format(' (%s)', got) or ''
       refuse(string.format(
@@ -2270,10 +2291,12 @@ end
 --- Handlers ---
 
 --- The console's key card while the help key is held in the
---- console input context (IS3.16), nil otherwise.
+--- console input context (IS3.16), nil otherwise: the
+--- console's own and the one a paused program hands over.
 --- @return string[]?
 function ConsoleController:key_card()
-  if love.state.app_state ~= 'ready' then return nil end
+  local st = love.state.app_state
+  if st ~= 'ready' and st ~= 'inspect' then return nil end
   local KeyCard = require('model.editor.keyCard')
   if not KeyCard.held() then return nil end
   return self.view.editor.key_card:console_lines(self.run_live)
@@ -2365,7 +2388,8 @@ function ConsoleController:keypressed(k, sc, isrepeat)
     -- keypressed still runs for its editing side effects; its
     -- return is unused.
     input:keypressed(k)
-    if not Key.shift() and Key.is_enter(k) then
+    --- Shift+Enter and Alt+Enter broke the line (IS3.15)
+    if Key.is_enter(k) and not Key.shift() and not Key.alt() then
       if not input:has_error() then
         self:evaluate_input()
       end

@@ -192,6 +192,42 @@ describe("IS6 reuse #editor #spec", function()
       assert.is_not_nil(K.message())
     end)
 
+    spec_it("IS6.2 Cut a block: refused during an insertion "
+        .. "of spaces alone, the draft kept", function()
+      open_file()
+      K.browse_to(2)
+      K.type("   ")
+      K.keys("lctrl", "delete")
+      local ctrl = {
+        K.file(),
+        K.draft(),
+        K.message() ~= nil
+      }
+      --- Shift+Delete cuts while browsing only; here it is
+      --- the field's Delete, at the draft's end
+      K.keys("lshift", "delete")
+      assert.same({
+        FILE,
+        "   ",
+        true
+      }, ctrl)
+      assert.same(FILE, K.file())
+      assert.same("   ", K.draft())
+      assert.same("inserting", K.state())
+    end)
+
+    spec_it("IS6.2 Cut a block: refused during an insertion "
+        .. "of empty lines alone, the draft kept", function()
+      open_file()
+      K.browse_to(2)
+      K.keys("lshift", "return")
+      K.keys("lctrl", "delete")
+      assert.same(FILE, K.file())
+      assert.same("\n", K.draft())
+      assert.same("inserting", K.state())
+      assert.is_not_nil(K.message())
+    end)
+
     spec_it("IS6.2 Cut a block: a held key removes the empty "
         .. "lines, cuts the first block with text, and stops",
         function()

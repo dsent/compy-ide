@@ -275,7 +275,11 @@ describe('the editor across files #input', function()
       open()
       draft('x = 1')
       F.session.type(' -- the old draft')
+      --- the edit ends first: opening a file over a draft is
+      --- refused, since the field may hold a cut block alone
+      chord('escape')
       chord('lctrl', 'lshift', 's')
+      assert.same('ready', love.state.app_state)
 
       files['new.lua'] = 'fresh = 1\n'
       open('new.lua')

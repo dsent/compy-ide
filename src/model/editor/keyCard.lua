@@ -68,15 +68,16 @@ local function keys(state, empty)
   }
 end
 
---- The card's cells in reading order: the state's keys
---- under a heading naming the state, then the other keys.
---- @param state EditorStateName
---- @param empty boolean
+--- Rows { key, what it does, admitted } as cells: the
+--- admitted keys under a heading naming the context, then the
+--- other keys under their own.
+--- @param context string --- a state's or the console's name
+--- @param rows table[]
 --- @return table[] --- { heading = s } or { key = k, what = w }
-function KeyCard.cells(state, empty)
-  local now = { { heading = 'Keys now, ' .. state .. ':' } }
+local function split(context, rows)
+  local now = { { heading = 'Keys now, ' .. context .. ':' } }
   local other = { }
-  for _, k in ipairs(keys(state, empty)) do
+  for _, k in ipairs(rows) do
     local to = k[3] and now or other
     to[#to + 1] = { key = k[1], what = k[2] }
   end
@@ -89,31 +90,35 @@ function KeyCard.cells(state, empty)
   return now
 end
 
+--- The card's cells in reading order: the state's keys
+--- under a heading naming the state, then the other keys.
+--- @param state EditorStateName
+--- @param empty boolean
+--- @return table[] --- { heading = s } or { key = k, what = w }
+function KeyCard.cells(state, empty)
+  return split(state, keys(state, empty))
+end
+
 --- The console's card: the keys of the console input context.
---- Ctrl+Q is on it only while a program idles behind the
---- console: with none it does nothing there.
+--- Ctrl+Q exits a program that runs, is paused or idles behind
+--- the console; with none it does nothing, and the card lists
+--- it among the other keys.
 --- @param live boolean? --- a program is not stopped
 --- @return table[]
 function KeyCard.console_cells(live)
-  local cells = {
-    { heading = 'Keys now, console:' },
-    { key = 'Enter', what = 'run the line' },
-    { key = 'Shift/Alt+Enter', what = 'break the line' },
-    { key = 'Esc', what = 'clear the line' },
-    { key = 'Up/Down', what = 'earlier/later' },
-    { key = 'Left/Right', what = 'a character' },
-    { key = 'Ctrl+Left/Right', what = 'a word' },
-    { key = 'Home/End', what = 'row start/end' },
-    { key = 'Ctrl+Home/End', what = 'text start/end' },
-    { key = 'Bksp/Delete', what = 'remove a char' },
-  }
-  if live then
-    cells[#cells + 1] = {
-      key = 'Ctrl+Q', what = 'stop program',
-    }
-  end
-  cells[#cells + 1] = { key = 'F1 (hold)', what = 'this card' }
-  return cells
+  return split('console', {
+    { 'Enter', 'run the line', true },
+    { 'Shift/Alt+Enter', 'break the line', true },
+    { 'Esc', 'clear the line', true },
+    { 'Ctrl+Q', 'exit program', live },
+    { 'Up/Down', 'earlier/later', true },
+    { 'Left/Right', 'a character', true },
+    { 'Ctrl+Left/Right', 'a word', true },
+    { 'Home/End', 'row start/end', true },
+    { 'Ctrl+Home/End', 'text start/end', true },
+    { 'Bksp/Delete', 'remove a char', true },
+    { 'F1 (hold)', 'this card', true },
+  })
 end
 
 --- The cells laid out in as few columns as fit `rows`, each

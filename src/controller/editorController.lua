@@ -109,6 +109,23 @@ function EditorController:init_view(v)
   self.input:init_view(self.view.input)
 end
 
+--- @private
+--- The field reads its draft as the file's type does
+--- (IS1.2, IS3.2): the name's ending fixes the type, and any
+--- other name is plain text
+--- @param name string
+--- @return table eval --- the evaluator the field now has
+function EditorController:_use_eval(name)
+  local eval = TextEval
+  if string.match(name, '%.lua$') then
+    eval = LuaEditorEval
+  elseif string.match(name, '%.md$') then
+    eval = MdEval()
+  end
+  self.input:set_eval(eval)
+  return eval
+end
+
 --- @param name string
 --- @param content str?
 --- @param save function
@@ -116,14 +133,12 @@ end
 --- name: a file open already comes back as its own buffer
 function EditorController:open(name, content, save, key)
   local w = self.model.cfg.view.drawableChars
-  --- the name's ending fixes the type (IS1.2); any other
-  --- name is plain text
   local is_lua = string.match(name, '%.lua$')
   local is_md = string.match(name, '%.md$')
   local ch, hl, pp, tr
+  local eval = self:_use_eval(name)
 
   if is_lua then
-    self.input:set_eval(LuaEditorEval)
     local luaEval = LuaEval()
     local parser = luaEval.parser
     if not parser then return end
@@ -141,11 +156,7 @@ function EditorController:open(name, content, save, key)
       return parser.trunc(code, self.model.cfg.view.fold_lines)
     end
   elseif is_md then
-    local mdEval = MdEval()
-    hl = mdEval.highlighter
-    self.input:set_eval(mdEval)
-  else
-    self.input:set_eval(TextEval)
+    hl = eval.highlighter
   end
 
   --- one buffer per file: a second copy would save a
@@ -155,9 +166,14 @@ function EditorController:open(name, content, save, key)
   if created then
     b = BufferModel(name, content, save, ch, hl, pp, tr)
     b.key = key
-    --- what the file holds now: a later change from outside
-    --- is told from it (_file_matches)
-    self:_note_saved(b)
+    --- what the file held when it was read, missing included:
+    --- a later change from outside is told from it
+    --- (_file_matches)
+    if type(content) == 'table' then
+      self:_note_saved(b)
+    else
+      self:_note_read(b, content)
+    end
   end
   --- the file comes in with an input of its own: nothing
   --- typed, no message, no search of another file's
@@ -183,7 +199,7 @@ end
 function EditorController:follow_require()
   local buf = self:get_active_buffer()
   --- an edit in progress is resolved first (FR1.2)
-  if buf.loaded or not self.input:is_empty() then
+  if self:state_name() ~= 'browsing' then
     return self:refuse({
       'Finish the text first: Enter keeps it, Esc drops it.'
     })
@@ -219,6 +235,8 @@ function EditorController:pop_buffer()
   local out = bs:pop_front()
   self:_let_go(out)
   local b = bs:first()
+  --- the caller's draft is read as the caller's type again
+  self:_use_eval(b.name)
   local bv = self.view:get_current_buffer()
   --- the caller comes back as it was left: the buffer
   --- keeps its position, and the view its rows (IS1.6) —
@@ -316,27 +334,6 @@ function EditorController:refuse(msg, kind)
   if msg then self:notice(msg, kind) end
 end
 
---- `text` in rows of at most `w` columns, broken between
---- words; a word wider than a row is left to the field's own
---- wrap.
---- @param text string
---- @param w integer
---- @return string[]
-local function wrap_words(text, w)
-  local rows, row = { }, nil
-  for word in text:gmatch('%S+') do
-    local joined = row and row .. ' ' .. word
-    if joined and string.ulen(joined) <= w then
-      row = joined
-    else
-      rows[#rows + 1] = row
-      row = word
-    end
-  end
-  rows[#rows + 1] = row
-  return rows
-end
-
 --- What a message in the band is: a notice says why an
 --- action was refused and what would work; an error is the
 --- parser's message for a draft that is not valid Lua. The
@@ -355,7 +352,9 @@ function EditorController:notice(msg, kind)
   local rows = { }
   local parts = type(msg) == 'table' and msg or { msg }
   for _, part in ipairs(parts) do
-    for _, row in ipairs(wrap_words(tostring(part), w)) do
+    --- a word wider than a row is left to the field's wrap
+    local wrapped = string.wrap_words(tostring(part), w)
+    for _, row in ipairs(wrapped) do
       rows[#rows + 1] = row
     end
   end
@@ -420,9 +419,10 @@ function EditorController:_held_back(k)
   return false
 end
 
---- The editor's state, as the status line and the key card
---- name it: a loaded block is replaced, a draft alone is
---- inserted, an empty field browses.
+--- The editor's state: a loaded block is replaced, a draft
+--- alone is inserted, an empty field browses. A draft of
+--- spaces or of empty lines is a draft. Every guard that
+--- depends on the state asks here.
 --- @return EditorStateName
 function EditorController:state_name()
   local buf = self:get_active_buffer()
@@ -983,7 +983,7 @@ function EditorController:edit_block()
   local buf = self:get_active_buffer()
   local sel = buf:get_selection()
   local target = buf.loaded
-  if not target and not self:_draft_is_empty() then
+  if self:state_name() == 'inserting' then
     return self:refuse({
       'Finish the text first: Enter adds it, Esc drops it.'
     })
@@ -1121,8 +1121,9 @@ function EditorController:submit()
   --- lines becomes an empty-line block (IS3.7)
   local is_lua = buf.content_type == 'lua'
   local draft = self.input:get_text()
-  --- one line of spaces alone is an empty draft too (IS4.3)
-  local blank = #draft == 1
+  --- one line of spaces alone is an empty Lua draft too
+  --- (IS4.3); text keeps its spaces as written (IS8.2)
+  local blank = is_lua and #draft == 1
       and not string.is_non_empty_string_array(draft)
   if blank or self:_draft_is_empty() then
     return self:_land({ '' },
@@ -1198,6 +1199,10 @@ function EditorController:_normal_mode_keys(k)
     if Key.ctrl() then return end
   end
   if bare and k == 'escape' then
+    --- the press acts once: held, it would abort the edit and
+    --- then leave the file, which ends the timeline that
+    --- holds the abort (IS6.6)
+    if self.key_repeat then return end
     if self:state_name() == 'browsing' then
       --- stepping back from a file (IS1.6)
       self:close_buffer()

@@ -112,6 +112,26 @@ The editor is checked against its spec, the editor principles (`docs/editor-prin
 
 ---
 
+## Harmony scenarios — the real IDE, driven by keys
+
+`love src harmony` starts the IDE with its storage in a fresh `/tmp/compy-harmony-*` directory and
+runs the scenarios under `src/harmony/scenarios/`, a file at a time in name order. A scenario types
+text and presses keys into the running IDE (`h.love_text`, `h.love_key`; a chord such as `C-q`
+holds its modifiers until `h.release_keys`), takes screenshots into the directory's
+`screenshots/<file>/`, and checks with `assert`: the IDE's state (`love.state.app_state`) and, in
+`editor.lua`, the file the editor saved. Each scenario's name goes to standard output as it starts.
+The run ends with `harmony: N scenarios passed` and exit status 0, or at the first failed check or
+error with `harmony: FAILED in <scenario>`, the message and exit status 1. With no display, run it
+under Xvfb (`Xvfb :n -screen 0 1024x600x24`, `DISPLAY=:n`); a full run takes under two minutes.
+
+`editor.lua` drives the file editor with the keys its key card lists
+(`src/model/editor/keyCard.lua`), one scenario per user-level task: open and leave a file
+(`open-close`), search with Ctrl+F (`search`), add blocks and copy one (`add`), replace a block with
+F2 and run the change with Ctrl+T (`change`), move a block and undo the move (`move`), cut a block
+and reopen the file from the console's history (`delete`), scroll the view and keep a loaded block
+(`scroll`), and follow a `require` with Ctrl+J (`follow`). The examples run later, so a scenario
+that edits the turtle example works on a clone or undoes its change and checks that it did.
+
 ## Manual smoke — what no suite here can reach
 
 Nothing in CI can press a key, and the example projects carry no suite of their own — the detached

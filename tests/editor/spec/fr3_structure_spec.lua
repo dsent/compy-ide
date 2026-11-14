@@ -44,7 +44,11 @@ describe("FR3 structure and position #editor #spec", function()
       K.type("w = 4")
       local ok = pcall(K.keys, "return")
       assert.is_true(ok)
-      assert.is_true(parses(K.file("shared.lua")))
+      assert.same("x = 1; y = {\n  2,\n}\nz = 3\nw = 4\n",
+        K.file("shared.lua"))
+      assert.same(3, K.blocks())
+      assert.same("browsing", K.state())
+      assert.same("", K.draft())
     end)
 
     spec_it("FR3.1 Preserve file structure: a text file keeps "

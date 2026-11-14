@@ -26,6 +26,12 @@ This distinction pervades the entire editor stack. Understanding it is the prere
 
 A `BufferModel` (`src/model/editor/bufferModel.lua`) is created with these tools and immediately tries to chunk the file content. A Lua file is read as its lines (`src/util/textfile.lua`), the final newline part of the last one; a file without one reads the same, and saving gives it one. **If the Lua text does not parse, the buffer is marked `invalid = true`** and its blocks are its lines, one block per line, each kept as it is. The file opens like any other: text can be inserted, and every other line is written back unchanged. Edit (`F2`) is refused on such a line with a notice; `Ctrl+Delete` cuts it into the input for repair. Each change re-chunks the file, so once the text parses the blocks are statements again and `invalid` is cleared (`file_blocks` in `bufferModel.lua`).
 
+**Every block is the file's own lines.** The chunker (`source_blocks` in `src/model/lang/lua/parser.lua`) takes the source lines each statement and each comment spans; spans that share a line are one block, a blank line is an `Empty` (one of spaces keeps them, as `Empty.text`), and a line nothing claims, such as a `#!` line, is a block of its own. A block's text is never re-rendered or wrapped: the view wraps long lines on screen only. `file_blocks` then checks that the blocks hold lines 1 to n, each once, in order and as read; when they do not, the file comes a line per block, as text that does not parse does, so that no line is lost on the next save.
+
+**Line endings.** The buffer holds lines without them. `BufferModel.stored` keeps the text the file held when read or last written, and `save` writes each line the change left as it was with its own line ending, and a new or changed line with the ending most of the file's lines have (the first one on a tie). A last line without an ending gets that one (IS1.2).
+
+**A file is written only over what the editor last read or wrote there.** The buffer's `disk_seen` holds that text, or `false` for a file missing when it was opened (`_note_read` and `_note_saved` in `src/controller/editorReuse.lua`). Before every write, undo and redo included, `_file_matches` reads the file again: a file changed, created, removed or unreadable since refuses the action with a notice, and nothing is written. A file that is there and gives no text is not opened at all (`ConsoleController:edit`; `Project:readfile` fails for it), nor is one the editor could not save, such as a file in a folder of the project.
+
 After construction, `lateinit` calls `analyze()` immediately to populate semantic info.
 
 ---
@@ -96,7 +102,7 @@ Source: commit `2ff95f03b8f8` ("Split monster block"); logic in `editorControlle
 
 ## Block Position Tracking
 
-Each `Chunk` carries a `pos: Range` recording which source lines it occupies (e.g. `{3-7}` means lines 3 through 7). When blocks are inserted, deleted, or replaced, all subsequent blocks have their `pos` adjusted by the line delta. This is done manually in `replace_content` and `insert_content` — there is no automatic re-sync; it is purely arithmetic on the stored ranges.
+Each `Chunk` carries a `pos: Range` recording which source lines it occupies (e.g. `{3-7}` means lines 3 through 7). Since a block's lines are its source lines, `pos` and the rendered text agree, and an insertion or a replacement splices lines at `pos` (`_splice`) and re-chunks the whole file. The older `replace_content` and `insert_content` adjust `pos` by arithmetic instead; no editor path calls them.
 
 This matters because the revmap (source line → block index), used for semantic info, is rebuilt only on `analyze()`, which runs on `buf:save()`. Between saves, the revmap may be stale. In practice this is fine because semantic info is only used at search time, which always follows a save in the normal workflow.
 

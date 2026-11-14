@@ -9,52 +9,66 @@ require('util.string.string')
 require('util.dequeue')
 local textfile = require('util.textfile')
 
+--- The lines of a block as the file holds them: an empty
+--- line keeps the spaces it was read with
+--- @param b Block
+--- @return string[]
+local function own_lines(b)
+  if b:is_empty() then return { b.text or '' } end
+  return b.lines
+end
+
 --- Convert Blocks to string array
 --- @param blocks Block[]
 --- @return Dequeue<string>
 local function render_blocks(blocks)
   local ret = Dequeue.typed('string')
   for _, v in ipairs(blocks) do
-    if v:is_empty() then
-      ret:append('')
-    else
-      ret:append_all(v.lines)
-    end
+    ret:append_all(own_lines(v))
   end
   return ret
 end
 
---- The chunker finds the blocks; their text is the file's
---- own lines, which no re-chunking may rewrite (FR3.1): a
---- block the user did not touch is written back as it was
+--- The blocks hold the file's lines 1 to n, each once, in
+--- order and as they are: written back, a file the user did
+--- not touch is the file that was read (FR3.1)
 --- @param blocks Block[]
 --- @param lines string[] --- what the chunker was given
---- @return Block[]
-local function keep_source(blocks, lines)
+--- @return boolean
+local function tiles(blocks, lines)
+  local ln = 1
   for _, b in ipairs(blocks) do
     local p = b.pos
-    local n = type(b.lines) == 'table' and #b.lines or 0
-    if p and n > 0 and p:len() == n then
-      local own = {}
-      for i = p.start, p.fin do own[#own + 1] = lines[i] end
-      if #own == n then b.lines = own end
+    if not p or p.start ~= ln then return false end
+    local own = own_lines(b)
+    if #own ~= p:len() then return false end
+    for i = 1, #own do
+      if own[i] ~= lines[ln + i - 1] then return false end
     end
+    ln = p.fin + 1
   end
-  return blocks
+  return ln == #lines + 1
 end
 
 --- A Lua file's lines as blocks. Text that does not parse is
 --- no reason to keep a file shut: it comes a line per block,
 --- every line as it is, so that it can be repaired (IS1.2).
+--- Blocks that would not give back every line as read come
+--- the same way: a line lost on opening is lost on the next
+--- save.
 --- @param chunker Chunker
 --- @param lines string[]
 --- @return Dequeue<Block> blocks
---- @return boolean invalid --- the text did not parse
+--- @return boolean invalid --- the text did not parse, or
+--- its blocks would not keep it
 local function file_blocks(chunker, lines)
   local ok, blocks = chunker(lines)
   if ok then
-    keep_source(blocks, lines)
-    return blocks, false
+    for _, b in ipairs(blocks) do
+      local l = b:is_empty() and b.pos and lines[b.pos.start]
+      if l and l ~= '' then b.text = l end
+    end
+    if tiles(blocks, lines) then return blocks, false end
   end
   local out = Dequeue.typed('block')
   for ln, l in ipairs(lines) do
@@ -65,6 +79,84 @@ local function file_blocks(chunker, lines)
     end
   end
   return out, true
+end
+
+--- A text's lines, each with the line ending after it in the
+--- text, '' after a last line that has none
+--- @param text string
+--- @return string[] lines
+--- @return string[] ends
+local function ended_lines(text)
+  local lines, ends = {}, {}
+  local i, n = 1, #text
+  while i <= n do
+    local p = string.find(text, '[\r\n]', i)
+    if not p then
+      lines[#lines + 1] = string.sub(text, i)
+      ends[#ends + 1] = ''
+      break
+    end
+    local e = string.sub(text, p, p)
+    if e == '\r' and string.sub(text, p + 1, p + 1) == '\n' then
+      e = '\r\n'
+    end
+    lines[#lines + 1] = string.sub(text, i, p - 1)
+    ends[#ends + 1] = e
+    i = p + #e
+  end
+  return lines, ends
+end
+
+--- The line ending most lines of a text end with; the first
+--- one in the text when two are as frequent, a newline when
+--- there is none
+--- @param ends string[]
+--- @return string
+local function main_ending(ends)
+  local count, best = {}, nil
+  for _, e in ipairs(ends) do
+    if e ~= '' then
+      count[e] = (count[e] or 0) + 1
+      if not best or count[e] > count[best] then best = e end
+    end
+  end
+  return best or '\n'
+end
+
+--- The text to write for `lines` over `stored`, the text the
+--- file holds: a line the change left as it was keeps its own
+--- line ending, a new or changed one takes the file's main
+--- ending, and every line ends in one, the last one too
+--- (util.textfile)
+--- @param lines string[]
+--- @param stored string? --- nil for a file not yet written
+--- @param eol string --- the file's main ending
+--- @return string
+local function file_text(lines, stored, eol)
+  local old, ends = ended_lines(stored or '')
+  local nb, na = #old, #lines
+  local head = 0
+  while head < nb and head < na
+      and old[head + 1] == lines[head + 1] do
+    head = head + 1
+  end
+  local tail = 0
+  while tail < nb - head and tail < na - head
+      and old[nb - tail] == lines[na - tail] do
+    tail = tail + 1
+  end
+  local out = {}
+  for i, l in ipairs(lines) do
+    local e
+    if i <= head then
+      e = ends[i]
+    elseif i > na - tail then
+      e = ends[nb - (na - i)]
+    end
+    if not e or e == '' then e = eol end
+    out[i] = l .. e
+  end
+  return table.concat(out)
 end
 
 --- Todo: convert to class, store revmap
@@ -88,13 +180,14 @@ local function new(
     truncer)
   local _content, sel, ct, semantic
   local invalid = false
-  --- the file keeps the line ending it was read with; its
-  --- lines are held without it, in blocks, drafts and checks
+  --- the file keeps the line endings it was read with; its
+  --- lines are held without them, in blocks, drafts and
+  --- checks (file_text)
   local eol = '\n'
+  local stored
   if type(content) == 'string' then
-    if string.find(content, '\r\n', 1, true) then
-      eol = '\r\n'
-    end
+    stored = content
+    eol = main_ending(select(2, ended_lines(content)))
     content = string.gsub(content, '\r\n', '\n')
     content = string.gsub(content, '\r', '\n')
   end
@@ -143,6 +236,7 @@ local function new(
     active_line = 1,
     invalid = invalid,
     eol = eol,
+    stored = stored,
     history = {},
     redo_history = {}
   }
@@ -189,15 +283,16 @@ function BufferModel:get_id()
   return self.id
 end
 
---- The block-level undo (1.1): a 32-step ring of file
---- operations. A step is a trimmed diff — the common
---- prefix and suffix of the file before/after are cut,
---- so what remains is exactly the affected line range,
---- whatever the operation was (accept, move, delete,
---- insert, discard pair). Applying a step is a splice;
---- the caller re-chunks and saves, the same path every
---- write takes.
-BLOCK_HISTORY_CAP = 32
+--- The block-level undo (1.1): every file operation since
+--- the file was opened, none dropped, since every action
+--- stays undoable while the file is open (IS6.6). A step is
+--- a trimmed diff — the common prefix and suffix of the file
+--- before/after are cut, so what remains is exactly the
+--- affected line range, whatever the operation was (accept,
+--- move, delete, insert, discard pair): the timeline grows
+--- with the text changed, and goes when the file is left.
+--- Applying a step is a splice; the caller re-chunks and
+--- saves, the same path every write takes.
 
 --- @param before string[] --- file lines pre-operation
 --- @param after string[] --- file lines post-operation
@@ -241,9 +336,6 @@ function BufferModel:push_history(before, after, sel_b, sel_a)
   local step = make_step(before, after, sel_b, sel_a)
   if not step then return end
   table.insert(self.history, step)
-  if #self.history > BLOCK_HISTORY_CAP then
-    table.remove(self.history, 1)
-  end
   self.redo_history = {}
 end
 
@@ -323,16 +415,15 @@ function BufferModel:rechunk()
 end
 
 --- A file is written as its lines, each with its line
---- ending (util.textfile), the one the file was read with
+--- ending (file_text)
 function BufferModel:save()
   self:_text_change()
   local text = self:get_text_content()
   self:analyze()
-  local out = textfile.text(text)
-  if self.eol ~= '\n' then
-    out = string.gsub(out, '\n', self.eol)
-  end
-  return self.save_file(out)
+  local out = file_text(text, self.stored, self.eol)
+  local ok, err = self.save_file(out)
+  if ok then self.stored = out end
+  return ok, err
 end
 
 function BufferModel:highlight()

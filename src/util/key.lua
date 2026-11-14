@@ -182,49 +182,45 @@ local function alt()
   return love.keyboard.isDown(unpack(alt_k))
 end
 
+--- @return string?
+local function os_name()
+  local sys = love.system
+  return sys and sys.getOS and sys.getOS()
+end
+
 --- AltGr, the key that types a layout's third-level
---- characters, is the right Alt key. Linux and Android report
---- it as `ralt` alone; Windows reports it as left Ctrl plus
---- right Alt. With the left Alt or the right Ctrl down as well,
---- the keys are a chord of their own.
+--- characters, is the right Alt key on a computer, where people
+--- bring their own layouts. Linux reports it as `ralt` alone;
+--- Windows as left Ctrl plus right Alt. With the left Alt or
+--- the right Ctrl down as well, the keys are a chord of their
+--- own. A Compy (Android) has no AltGr: its right Alt key is an
+--- Alt like the left one.
 --- @return boolean
 local function altgr()
+  local name = os_name()
+  if name == 'Android' then return false end
   local down = love.keyboard.isDown
   if not down('ralt') or down('lalt') or down('rctrl') then
     return false
   end
-  if not down('lctrl') then return true end
-  local sys = love.system
-  return sys ~= nil and sys.getOS ~= nil
-      and sys.getOS() == 'Windows'
-end
-
---- A key's own glyph, which is all a chord can leak: one
---- ASCII letter, digit or space. No layout composes these
---- through AltGr.
---- @param t string
---- @return boolean
-local function own_glyph(t)
-  return string.match(t, '^[%w ]$') ~= nil
+  return not down('lctrl') or name == 'Windows'
 end
 
 --- Whether text that arrives now is a modifier chord's own
 --- glyph and no typed text. With Ctrl or Alt held, a key makes
 --- a chord; on the device its glyph is sent as text all the
 --- same, before or after the key press (the Compy input
---- quirks 1 and 3). Shift alone composes text. AltGr composes
---- text too, so what arrives with it is text unless it is the
---- key's own glyph.
+--- quirks 1 and 3). Shift alone composes text. On a computer
+--- a chord sends no text, so what arrives under AltGr is what
+--- the layout composes, whatever the character.
 ---
 --- This is the one statement of the rule; the event gate
 --- asks it for every text event (controller.lua,
 --- handlers.textinput), so no text field has to.
---- @param t string
+--- @param _ string --- the text, which does not enter the rule
 --- @return boolean
-local function chord_text(t)
-  if not (ctrl() or alt()) then return false end
-  if altgr() then return own_glyph(t) end
-  return true
+local function chord_text(_)
+  return (ctrl() or alt()) and not altgr()
 end
 
 Key = {

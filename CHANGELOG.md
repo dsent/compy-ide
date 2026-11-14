@@ -90,12 +90,14 @@ Project-author guide: `doc/input_api.md`.
   with no syntax check and no formatting, and nothing is added after the last line. A
   file whose name ends in neither `.lua`, `.txt` nor `.md` opens as plain text.
 - **Ctrl+J follows `dofile("name.lua")` as well as `require`.** A file that is missing,
-  already open, unreadable or not UTF-8 text is refused with a notice, and `edit()` on
-  an unreadable or non-UTF-8 file says so in the console and opens nothing.
+  already open, unreadable, not UTF-8 text or in a folder of the project (which the
+  editor cannot save) is refused with a notice, and `edit()` on such a file says so in
+  the console and opens nothing.
 - **Two statements sharing a line are one block.** Editing elsewhere in such a file no
   longer breaks it.
-- **A file with Windows line ends (CRLF) keeps them.** Its lines are shown and edited
-  without the carriage return, and every line is written back with CRLF.
+- **A file keeps its line ends.** Its lines are shown and edited without them; a line
+  you did not change is written back with the line end it had, and a new or changed
+  line takes the one most of the file's lines have (Windows CRLF, LF or CR).
 - **A Lua file with a syntax error opens, so you can fix it.** Each of its lines is a
   block until the file is valid Lua again: you can add text, and Ctrl+Delete cuts a
   broken line into the field to repair it. F2 on such a line is refused with a notice.
@@ -126,6 +128,18 @@ Project-author guide: `doc/input_api.md`.
 
 ### Fixed
 
+- **Opening a Lua file no longer loses lines.** A comment line after a line that ends in
+  a comment, the later lines of a long comment that starts after code, a `#!` first
+  line and a line of spaces were dropped or emptied on opening, and the next save wrote
+  the loss. Every line now opens as it is written and is written back unchanged.
+- **A long line in a multi-line comment no longer sends an edit to the wrong block.**
+- **The editor writes a file only over what it last read or wrote there.** A file that
+  could not be read opened empty and was written over by the first Enter, and a missing
+  file that something else created before the first Enter was replaced; both are
+  refused with a notice now.
+- **Ctrl+Z reaches back to the opening of the file**, not only the latest 32 actions,
+  and holding Escape no longer leaves the file after cancelling an edit.
+- A line of spaces in a text or Markdown file is saved as typed.
 - Multi-line string content now writes — `show{text = "a\nb"}` / `set_text("a\nb")`
   previously wrote nothing silently — and the two spellings of the text shape now agree.
 - Non-text content is refused with a readable message that names the failing call.

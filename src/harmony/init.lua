@@ -22,6 +22,14 @@ local debug_print = function(...)
   -- Log.debug(...)
 end
 
+--- The run's report goes to standard output: print reaches
+--- the IDE's console, on the screen the scenarios capture
+--- @param s string
+local function report(s)
+  io.stdout:write('harmony: ' .. s .. '\n')
+  io.stdout:flush()
+end
+
 Harmony = {
   --- @private
   pre = '',
@@ -389,7 +397,8 @@ local function runner()
         for _, v in ipairs(scenarios) do
           local tag = v.id
           local sc = v.sc
-          debug_print('---- ' .. tag .. ' ----')
+          Harmony.current = tag
+          report(tag)
           done = false
           timer:script(function(wait)
             _G.context = v.context
@@ -399,6 +408,8 @@ local function runner()
           coroutine.yield()
         end
 
+        Harmony.current = nil
+        report(string.format('%d scenarios passed', #scenarios))
         if Harmony.lock then
           Harmony.exit()
         end
@@ -431,6 +442,19 @@ function Harmony.load()
   love.window.setTitle(love.window.getTitle())
 
   Harmony.runner = runner()
+
+  --- A failed check or an error ends the run at once, the
+  --- scenario named and the exit status 1, rather than at an
+  --- error screen that waits for a key no one presses
+  if lock then
+    love.errorhandler = function(msg)
+      report('FAILED in ' .. tostring(Harmony.current))
+      io.stdout:write(debug.traceback(tostring(msg), 2), '\n')
+      io.stdout:flush()
+      return function() return 1 end
+    end
+    love.errhand = love.errorhandler
+  end
 end
 
 function Harmony.screenshot(tag)
