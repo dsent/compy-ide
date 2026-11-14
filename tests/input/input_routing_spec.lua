@@ -202,9 +202,9 @@ describe('input surface: inbound events — routing #input',
     end)
 
     -- SURFACED GAP (doc/development/internals/user_input.md,
-    -- "Touch"): touch has no gateway entry today and both the
-    -- widget and route touch handlers are no-ops, so delivery
-    -- is not black-box observable. Greens when a touch consumer
+    -- "Touch"): the gateway's touch entries reach the route,
+    -- but the widget's and the console's touch handlers do
+    -- nothing yet, so delivery is not black-box observable. Greens when a touch consumer
     -- lands.
     pending('touch reaches the active route')
   end)

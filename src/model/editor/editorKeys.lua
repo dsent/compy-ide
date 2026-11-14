@@ -1,19 +1,20 @@
---- The file editor's keys, one table per state (Keymap): what
---- each chord does in the browsing, inserting and replacing
---- states, whether it repeats while held, and what the key
---- card says of it. A chord no state binds does nothing; Ctrl
---- with Enter is not Enter (the maintainer's ruling of
---- November 14, 2026: every chord is its own key).
+--- The file editor's own keys, one table per state (Keymap):
+--- what each chord does in the browsing, inserting and
+--- replacing states, whether it repeats while held, and what
+--- the key card says of it. A chord these tables do not name
+--- goes to the text field's (fieldKeys.lua), and does nothing
+--- if that does not name it either: every chord is its own
+--- key (the maintainer's ruling of November 14, 2026).
 ---
 --- An action names EditorController's (`ACTIONS` in
---- editorController.lua); 'field' hands the key to the shared
---- text field, and 'none' takes it and does nothing (Ctrl+Q,
---- which the gate acts on, and the help key).
+--- editorController.lua); 'field' hands the key to the text
+--- field, and 'none' takes it and does nothing (the help
+--- key). The gate's reserved chords are in reservedKeys.lua.
 ---
 --- A key repeats while held only if it writes nothing and
 --- changes no state (the ruling of November 14, 2026, "Which
---- keys repeat while held"); Ctrl+Z, Ctrl+Y and a cut stop
---- where their rules say (IS6.6, IS6.2).
+--- keys repeat while held"); Ctrl+Z and Ctrl+Y stop at the
+--- draft's changes (IS6.6).
 local Keymap = require('model.input.keymap')
 
 --- @alias EditorStateName 'browsing'|'inserting'|'replacing'
@@ -54,12 +55,6 @@ local DEFS = {
   with(each('submit_and_retain', 'add empty line',
     'insert, keep', 'replace, keep'),
     { chords = { 'shift+insert' }, card = 'Shift+Ins' }),
-  --- IS3.15
-  with(each('field', 'break the line', 'break the line',
-    'break the line'),
-    { chords = { 'shift+return', 'alt+return', 'shift+kpenter',
-      'alt+kpenter' }, card = 'Shift/Alt+Enter',
-      repeats = true }),
   --- IS5.1, IS5.5, IS5.6; refused while inserting
   with(each('edit_block', 'edit the block', nil,
     'reload/switch'),
@@ -68,50 +63,38 @@ local DEFS = {
   with(each('escape', 'leave the file', 'drop the text',
     'drop the edit'),
     { chords = { 'escape' }, card = 'Esc' }),
-  --- the gate acts on it, and refuses it during an edit
-  with(each('none', 'to the console'),
-    { chords = { 'ctrl+q' }, card = 'Ctrl+Q' }),
   --- IS2.1, IS2.3
   with(each('browse', 'browse blocks', 'browse blocks',
     'browse blocks'),
     { chords = { 'ctrl+up', 'ctrl+down' },
       card = 'Ctrl+Up/Down', repeats = true }),
+  --- the field's Up and Down, which browse while the draft is
+  --- empty
   with(each('vertical', rows, rows, rows),
     { chords = { 'up', 'down' }, card = 'Up/Down',
       repeats = true }),
-  --- IS3.8, the draft's own keys: nothing to move in an
-  --- empty field
-  with(each('field', nil, 'a character', 'a character'),
-    { chords = { 'left', 'right' }, card = 'Left/Right',
+  --- a page at a time, the position with it (the
+  --- maintainer's ruling of November 14, 2026)
+  with(each('page', 'page down/up', 'page down/up',
+    'page down/up'),
+    { chords = { 'pagedown', 'pageup' }, card = 'PgDn/PgUp',
       repeats = true }),
-  with(each('field', nil, 'a word', 'a word'),
-    { chords = { 'ctrl+left', 'ctrl+right' },
-      card = 'Ctrl+Left/Right', repeats = true }),
-  with(each('field', nil, 'row start/end', 'row start/end'),
-    { chords = { 'home', 'end' }, card = 'Home/End',
-      repeats = true }),
-  with(each('field', nil, 'text start/end', 'text start/end'),
-    { chords = { 'ctrl+home', 'ctrl+end' },
-      card = 'Ctrl+Home/End', repeats = true }),
-  --- IS3.12
-  with(each('field', nil, 'remove a char', 'remove a char'),
-    { chords = { 'backspace', 'delete' }, card = 'Bksp/Delete',
-      repeats = true }),
-  with(each('field', nil, 'delete to end', 'delete to end'),
-    { chords = { 'ctrl+k' }, card = 'Ctrl+K', repeats = true }),
   --- IS6.1
   with(each('copy_block', 'copy block in', 'copy block in',
     'copy block in'),
     { chords = { 'ctrl+insert' }, card = 'Ctrl+Ins' }),
-  --- IS6.2; refused during an edit
+  --- IS6.2; refused during an edit. It writes, so it acts
+  --- once per press
   with(each('cut_block', 'cut the block'),
-    { chords = { 'ctrl+delete' }, card = 'Ctrl+Delete',
-      repeats = true }),
+    { chords = { 'ctrl+delete' }, card = 'Ctrl+Delete' }),
+  --- Shift+Delete cuts as well, in the browsing state only
+  { chords = { 'shift+delete' },
+    browsing = { act = 'cut_block' } },
   --- IS6.5; refused while replacing
   with(each('move_block', 'move the block', 'move the block'),
     { chords = { 'alt+up', 'alt+down' },
       card = 'Alt+Up/Down' }),
-  --- IS6.6
+  --- IS6.6: the file's timeline, through the draft's changes
   with(each('undo', 'undo', 'undo', 'undo'),
     { chords = { 'ctrl+z' }, card = 'Ctrl+Z', repeats = true }),
   with(each('redo', 'redo', 'redo', 'redo'),
@@ -119,33 +102,22 @@ local DEFS = {
   --- IS1.5; refused during an edit
   with(each('follow_require', 'follow a link'),
     { chords = { 'ctrl+j' }, card = 'Ctrl+J' }),
+  --- the whole file formatted, from the browsing state (PR
+  --- #28, D-FORMAT-FILE); refused with a notice in an edit
+  with(each('format_file', 'format the file'),
+    { chords = { 'ctrl+shift+f' }, card = 'Ctrl+Shift+F' }),
   --- IS3.16: its press brings up the card
   with(each('none', 'this card', 'this card', 'this card'),
     { chords = { 'f1' }, card = 'F1 (hold)' }),
-
-  --- not on the card --------------------------------------
-  --- Shift+Delete cuts as well, in the browsing state only
-  { chords = { 'shift+delete' }, repeats = true,
-    browsing = { act = 'cut_block' } },
-  --- PgDn shows the first block not wholly visible below at
-  --- the view's top, PgUp the last not wholly visible above
-  --- at its bottom, and browses to it (the maintainer's
-  --- ruling of November 14, 2026)
-  with(each('page'), { chords = { 'pageup', 'pagedown' },
-    repeats = true }),
-  --- the draft's word deletions (D-WORD-DELETE), its line
-  --- duplicated (D-DUPLICATE-LINE) or moved past its
-  --- neighbor, and a Backspace with Shift still held: the
-  --- field's own keys, as in every field
-  with(each('field'), { chords = { 'ctrl+backspace',
-    'alt+backspace', 'ctrl+w', 'ctrl+d', 'alt+shift+up',
-    'alt+shift+down', 'shift+backspace' }, repeats = true }),
-  --- the whole file formatted, from the browsing state (PR
-  --- #28, D-FORMAT-FILE); refused with a notice in an edit
-  with(each('format_file'), { chords = { 'ctrl+shift+f' } }),
   --- with love.debug: the view drawn anew, the file split
   --- anew with Ctrl
   with(each('debug_refresh'), { chords = { 'f5', 'ctrl+f5' } }),
 }
 
-return Keymap.new(DEFS, STATES)
+--- The field's keys are the draft's: on the card among the
+--- keys now while there is a draft to edit
+local keymap = Keymap.new(DEFS, STATES)
+keymap.field_now = { inserting = true, replacing = true }
+keymap.allows = { duplicate = true }
+keymap.surface = 'editor'
+return keymap

@@ -1,7 +1,7 @@
 -- Every chord is its own key (the maintainer's ruling of
 -- November 14, 2026): in each of the file editor's states a
--- key with a modifier its table does not bind does nothing,
--- and the key card lists exactly the table's keys. The card
+-- key with a modifier its tables do not bind does nothing,
+-- and the key card lists every key the editor takes. The card
 -- suspends the reserved chords in the editor alone, and a
 -- click on a block no longer browses (PR #28, D-MOUSE-BROWSE).
 -- Keys only, through tests/helpers/editor_keys.lua.
@@ -9,6 +9,7 @@
 local K = require("tests.helpers.editor_keys")
 local F = require("tests.helpers.input_fixture")
 local EditorKeys = require("model.editor.editorKeys")
+local Keys = require("tests.helpers.surface_keys")
 local marks = require("tests.helpers.spec_marks")
 local spec_it = marks.spec_it
 
@@ -48,60 +49,10 @@ local function snapshot()
   }
 end
 
-local MOD_KEYS = { ctrl = "lctrl", alt = "lalt", shift = "lshift" }
-local ORDER = { "ctrl", "alt", "shift" }
-
---- A chord's held keys, for K.keys.
-local function keys_of(mods, trigger)
-  local ks = { }
-  for _, m in ipairs(ORDER) do
-    if mods[m] then ks[#ks + 1] = MOD_KEYS[m] end
-  end
-  ks[#ks + 1] = trigger
-  return ks
-end
-
---- @return table mods, string trigger
-local function split(chord)
-  local mods, trigger = { }, nil
-  for part in chord:gmatch("[^+]+") do
-    if MOD_KEYS[part] then mods[part] = true else trigger = part end
-  end
-  return mods, trigger
-end
-
---- the gate's own chords, and the help key: not the tables'
-local RESERVED = {
-  ["ctrl+escape"] = true, ["ctrl+t"] = true, ["ctrl+q"] = true,
-  ["ctrl+pause"] = true, ["ctrl+alt+r"] = true,
-  ["ctrl+alt+p"] = true, ["ctrl+alt+shift+p"] = true,
-  f10 = true,
-}
-
---- Every chord of `state`'s table with one more modifier,
---- which the table does not bind: { name, keys }.
+--- Every chord the editor's tables take in `state` with one
+--- more modifier that none of them binds
 local function unbound_neighbours(state)
-  local out, seen = { }, { }
-  local t = EditorKeys.tables[state]
-  for chord in pairs(t) do
-    local mods, trigger = split(chord)
-    for _, m in ipairs(ORDER) do
-      if not mods[m] and trigger ~= "f1" then
-        local more = { }
-        for k in pairs(mods) do more[k] = true end
-        more[m] = true
-        local name = table.concat(keys_of(more, trigger), "+")
-          :gsub("l(%a+)%+", "%1+")
-        if not t[name] and not RESERVED[name] and not seen[name]
-        then
-          seen[name] = true
-          out[#out + 1] = { name, keys_of(more, trigger) }
-        end
-      end
-    end
-  end
-  table.sort(out, function(a, b) return a[1] < b[1] end)
-  return out
+  return Keys.unbound_neighbours(Keys.bound(EditorKeys, state))
 end
 
 describe("every chord is its own key #editor #spec", function()
@@ -146,40 +97,18 @@ describe("every chord is its own key #editor #spec", function()
     for _, state in ipairs({ "browsing", "inserting",
       "replacing" }) do
       spec_it("IS3.16 Show the key card: while " .. state
-          .. ", the card lists exactly the table's keys with "
-          .. "words, the state's own first", function()
-        reach(state)
-        K.hold("f1")
-        local lines = K.key_card()
-        K.release("f1")
-        local now, other, section = { }, { }, nil
-        for col = 0, 1 do
-          for _, l in ipairs(lines) do
-            local cell = l:sub(col * 32 + 1, col * 32 + 32)
-            if cell:find("Keys now", 1, true) then
-              section = now
-            elseif cell:find("Other keys", 1, true) then
-              section = other
-            else
-              local key = cell:match("^ (%S+)")
-              if key then section[key] = true end
-            end
-          end
-        end
-        -- F1's label has a space in it
-        now["F1"] = nil
-        local want_now, want_other = { }, { }
-        for _, row in ipairs(EditorKeys:card_rows(state,
-          state == "browsing")) do
-          local key = row[1]:match("^(%S+)")
-          if key ~= "F1" then
-            if row[3] then want_now[key] = true
-            else want_other[key] = true end
-          end
-        end
-        assert.same(want_now, now)
-        assert.same(want_other, other)
-      end)
+          .. ", the card lists every key the editor takes",
+        function()
+          -- the labels the tables' chords need, not the card's
+          -- own rows: a key added without words is missing here
+          local want, missing = Keys.inventory(EditorKeys, state)
+          assert.same({ }, missing)
+          reach(state)
+          K.hold("f1")
+          local lines = K.key_card()
+          K.release("f1")
+          assert.same(want, Keys.shown(lines, want))
+        end)
     end
   end)
 

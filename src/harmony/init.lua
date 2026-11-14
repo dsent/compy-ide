@@ -399,6 +399,8 @@ local function runner()
   return {
     load_scenarios = function()
       local ls = FS.dir("src/harmony/scenarios")
+      --- in name order, whatever order the directory lists
+      table.sort(ls, function(a, b) return a.name < b.name end)
       for _, d in ipairs(ls) do
         if d.type == 'file' then
           local module_name = string.sub(d.name, 1, -5)

@@ -140,11 +140,14 @@ describe("a fourth syntax, through keys #syntax #editor", function()
   it("draws the syntax's colors", function()
     K.reset({ ["b.t4"] = "# a\nbc\n" })
     K.open("b.t4")
-    local texts = { }
-    for _, t in pairs(K.text_colours()) do
-      texts[#texts + 1] = t
+    --- the key K.text_colours files a colour's text under
+    local function key(ci)
+      local c = Color[ci]
+      return string.format("%.2f,%.2f,%.2f", c[1], c[2], c[3])
     end
-    table.sort(texts)
-    assert.same({ "#a", "bc" }, texts)
+    assert.same({
+      [key(Color.green)] = "#a",
+      [key(Color.blue)] = "bc",
+    }, K.text_colours())
   end)
 end)

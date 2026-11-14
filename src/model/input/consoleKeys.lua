@@ -1,18 +1,21 @@
---- The console's keys (Keymap): one table while no program
---- lives behind the console, one while a program runs, is
---- paused or idles there, so that the card lists Ctrl+Q,
---- which stops it, among the keys now. A chord neither binds
---- does nothing: Ctrl with Enter is not Enter, Ctrl with Up
---- is not Up (the maintainer's ruling of November 14, 2026).
---- Shift+Ins, the file editor's submit-and-keep, does nothing
---- here (his ruling of the same day).
+--- The console's own keys (Keymap): one table while no
+--- program lives behind the console, one while a program
+--- runs, is paused or idles there. A chord these tables do not
+--- name goes to the text field's (fieldKeys.lua), and does
+--- nothing if that does not name it either: Ctrl with Enter is
+--- not Enter, Ctrl with Up is not Up (the maintainer's ruling
+--- of November 14, 2026). Shift+Ins, the file editor's
+--- submit-and-keep, does nothing here, and neither do PgUp and
+--- PgDn until they page the output (his rulings of the same
+--- day).
 ---
 --- An action names ConsoleController's (`ACTIONS` in
 --- consoleController.lua); 'field' hands the key to the
 --- console's text field, 'none' takes it and does nothing
---- (Ctrl+Q, which the gate acts on, and the help key). A key
---- repeats while held only if it writes nothing and changes
---- no state (the ruling "Which keys repeat while held").
+--- (the help key). The gate's reserved chords are in
+--- reservedKeys.lua. A key repeats while held only if it
+--- writes nothing and changes no state (the ruling "Which keys
+--- repeat while held").
 local Keymap = require('model.input.keymap')
 
 local STATES = { 'idle', 'live' }
@@ -36,59 +39,28 @@ local DEFS = {
   --- IS3.6
   with(both('run', 'run the line'),
     { chords = { 'return', 'kpenter' }, card = 'Enter' }),
-  --- IS3.15
-  with(both('field', 'break the line'),
-    { chords = { 'shift+return', 'alt+return', 'shift+kpenter',
-      'alt+kpenter' }, card = 'Shift/Alt+Enter',
-      repeats = true }),
+  --- the field's Escape, which clears the line and remembers
+  --- it (its clear_on_cancel)
   with(both('field', 'clear the line'),
     { chords = { 'escape' }, card = 'Esc' }),
-  --- the gate stops the program
-  { chords = { 'ctrl+q' }, card = 'Ctrl+Q',
-    idle = { act = 'none' },
-    live = { act = 'none', words = 'exit program' } },
-  --- IS7.8: at the first or last row, the history
+  --- the field's Up and Down, which recall the history at the
+  --- first and last row (IS7.8)
   with(both('field', 'earlier/later'),
     { chords = { 'up', 'down' }, card = 'Up/Down',
       repeats = true }),
-  with(both('field', 'a character'),
-    { chords = { 'left', 'right' }, card = 'Left/Right',
-      repeats = true }),
-  with(both('field', 'a word'),
-    { chords = { 'ctrl+left', 'ctrl+right' },
-      card = 'Ctrl+Left/Right', repeats = true }),
-  with(both('field', 'row start/end'),
-    { chords = { 'home', 'end' }, card = 'Home/End',
-      repeats = true }),
-  with(both('field', 'text start/end'),
-    { chords = { 'ctrl+home', 'ctrl+end' },
-      card = 'Ctrl+Home/End', repeats = true }),
-  with(both('field', 'remove a char'),
-    { chords = { 'backspace', 'delete' }, card = 'Bksp/Delete',
-      repeats = true }),
-  --- the draft's undo and redo (D-UNDO-KEYS)
-  with(both('field', 'undo'),
-    { chords = { 'ctrl+z' }, card = 'Ctrl+Z', repeats = true }),
-  with(both('field', 'redo'),
-    { chords = { 'ctrl+y' }, card = 'Ctrl+Y', repeats = true }),
+  --- the output cleared
+  with(both('clear_terminal', 'clear screen'),
+    { chords = { 'ctrl+l' }, card = 'Ctrl+L' }),
   --- IS3.16: its press brings up the card
   with(both('none', 'this card'),
     { chords = { 'f1' }, card = 'F1 (hold)' }),
-
-  --- not on the card --------------------------------------
-  --- the history a whole entry at a time
-  with(both('history'), { chords = { 'pageup', 'pagedown' },
-    repeats = true }),
-  --- the terminal cleared
-  with(both('clear_terminal'), { chords = { 'ctrl+l' } }),
-  --- the field's own keys, as in every field: the word
-  --- deletions, the rest of the line, the cursor's line moved
-  --- past its neighbor, and a Backspace with Shift still held
-  with(both('field'), { chords = { 'ctrl+backspace',
-    'alt+backspace', 'ctrl+w', 'ctrl+k', 'alt+shift+up',
-    'alt+shift+down', 'shift+backspace' }, repeats = true }),
   --- with love.DEBUG: the terminal test
   with(both('terminal_test'), { chords = { 'ctrl+alt+t' } }),
 }
 
-return Keymap.new(DEFS, STATES)
+--- The field's keys are the line's, in either state
+local keymap = Keymap.new(DEFS, STATES)
+keymap.field_now = { idle = true, live = true }
+keymap.allows = { }
+keymap.surface = 'console'
+return keymap

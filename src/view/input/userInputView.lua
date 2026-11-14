@@ -76,6 +76,35 @@ function UserInputView:row_y(r)
       + (r - 1) * self.cfg.fh
 end
 
+--- The draft's cell under a point of the screen: its wrapped
+--- row and the column, nil outside the rows the field shows.
+--- The field's rows end at the screen's bottom (status_y),
+--- the first showing the visible range's first row. A field
+--- that shows an error in the draft's place has no cell.
+--- @param x number
+--- @param y number
+--- @param input InputDTO
+--- @return integer? row --- of the draft's wrapped rows
+--- @return integer? col
+function UserInputView:cell_at(x, y, input)
+  local cfg = self.cfg
+  if not self:_message_elsewhere()
+      and string.is_non_empty_string_array(input.wrapped_error)
+  then
+    return nil
+  end
+  local rows = self:_draft_rows(input)
+  local top = self:status_y(rows) + self:row_y(1)
+  local inside = top <= y and y < top + rows * cfg.fh
+      and 0 <= x
+  if not inside then return nil end
+  local row = math.floor((y - top) / cfg.fh) + 1
+  local a, b = math.modf(x / cfg.fw)
+  --- a click on a cell's right half lands after it
+  local col = a + 1 + (b > .5 and 1 or 0)
+  return row + input.visible.offset, col
+end
+
 --- Whether a message leaves this field as it is: the file
 --- editor shows its messages over the document view, above
 --- the status line, and neither the field nor the status

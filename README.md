@@ -38,8 +38,6 @@ a project must be selected first.
 | **Input**                                                         |                                               |
 | Move cursor horizontally                                          | <kbd>⇦</kbd>/<kbd>⇨</kbd>                     |
 | Move cursor vertically                                            | <kbd>⇧</kbd>/<kbd>⇩</kbd>                     |
-| Go back in command history                                        | <kbd>PageUp</kbd>                             |
-| Go forward in command history                                     | <kbd>PageDown</kbd>                           |
 | Move in history (if in first/last line)                           | <kbd>⇧</kbd>/<kbd>⇩</kbd>                     |
 | Jump to start                                                     | <kbd>Ctrl</kbd>+<kbd>Home</kbd>               |
 | Jump to end                                                       | <kbd>Ctrl</kbd>+<kbd>End</kbd>                |
@@ -186,14 +184,15 @@ changes, then send it back with <kbd>Enter ⏎</kbd>.
 
 ![capitalized](./doc/interface/hello_cap.apng)
 
-In a Lua file a block is a statement or an empty line, and a
-text that is not valid Lua is not accepted. In a text or
+In a Lua file a block is a statement, a comment or an empty
+line, and a text that is not valid Lua is not accepted. In a text or
 Markdown file every line is a block, and a line is accepted as
 written.
 
-When the editor cannot do what a key asks, it shows a one-line
-notice over the field that says why and what would work. The
-next key dismisses it. The editor asks no questions.
+When the editor cannot do what a key asks, it shows a notice
+just above the status line that says why and what would work.
+The next key dismisses it and does its usual work. The editor
+asks no questions.
 
 Happy with the modifications now, we can leave the editor by
 pressing <kbd>Esc</kbd> with an empty field, which steps back one
@@ -207,7 +206,7 @@ leaving is refused with a notice: submit the text with
 
 #### Moving
 
-Select the block you want to move and press
+Browse to the block you want to move and press
 <kbd>Alt</kbd>+<kbd>⇧</kbd> or <kbd>Alt</kbd>+<kbd>⇩</kbd>: each
 press moves it one block up or down, and the file is saved with
 it. <kbd>Ctrl-Z</kbd> takes a move back.

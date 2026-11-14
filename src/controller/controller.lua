@@ -1095,23 +1095,25 @@ Controller = {
     -- project's entry CONSUMES the key by returning truthy: a
     -- reservation NEVER CONSUMES, so the key still reaches the
     -- route afterward exactly as it did before this table.
-    local RESERVED = {
-      keypressed = {
-        ['ctrl+t']           = reserved_quickswitch,
-        ['ctrl+pause']       = reserved_suspend,
-        ['ctrl+q']           = reserved_stop,
-        ['ctrl+alt+r']       = reserved_restart,
-        ['ctrl+alt+p']       = reserved_profile_start,
-        ['ctrl+alt+shift+p'] = reserved_profile_stop,
-        ['f10']              = reserved_overlay,
-      },
-      -- Ctrl+Escape lives on release, matching the key it quits
-      -- on (doc/development/decisions/input.md,
-      -- D-RESERVE-TABLE).
-      keyreleased = {
-        ['ctrl+escape'] = Application.request_application_exit,
-      },
+    -- The chords and what the key cards say of them live in
+    -- model/input/reservedKeys.lua; Ctrl+Escape lives on
+    -- release, matching the key it quits on
+    -- (doc/development/decisions/input.md, D-RESERVE-TABLE).
+    local ACTS = {
+      quickswitch = reserved_quickswitch,
+      suspend = reserved_suspend,
+      stop = reserved_stop,
+      restart = reserved_restart,
+      profile_start = reserved_profile_start,
+      profile_stop = reserved_profile_stop,
+      overlay = reserved_overlay,
+      exit = Application.request_application_exit,
     }
+    local RESERVED = { keypressed = { }, keyreleased = { } }
+    for _, r in ipairs(require('model.input.reservedKeys')) do
+      local event = r.release and 'keyreleased' or 'keypressed'
+      RESERVED[event][r.chord] = assert(ACTS[r.name], r.name)
+    end
 
     handlers.keypressed = function(k, sc, isr)
       --- a key press shows the text cursor (H-NFR4.4)

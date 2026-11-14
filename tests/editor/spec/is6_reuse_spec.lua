@@ -7,6 +7,7 @@
 local K = require("tests.helpers.editor_keys")
 local marks = require("tests.helpers.spec_marks")
 local spec_it, spec_gap = marks.spec_it, marks.spec_gap
+local spec_deviation = marks.spec_deviation
 
 local FILE = "x = 1\ny = 2\nz = 3\n"
 
@@ -228,22 +229,39 @@ describe("IS6 reuse #editor #spec", function()
       assert.is_not_nil(K.message())
     end)
 
-    spec_it("IS6.2 Cut a block: a held key removes the empty "
-        .. "lines, cuts the first block with text, and stops",
+    -- the spec's note has a held Ctrl+Delete cut on through
+    -- the empty lines; a key that writes acts once per press
+    spec_deviation("IS6.2 Cut a block: a held key cuts one "
+        .. "block, an empty line here, and its repeats nothing",
+        "rulings.md: Which keys repeat while held",
         function()
+          open_file("x = 1\n\n\ny = 2\nz = 3\n")
+          K.browse_to(2)
+          K.hold("lctrl")
+          K.hold("delete")
+          for _ = 1, 5 do
+            K.repeat_key("delete")
+          end
+          K.release("delete")
+          K.release("lctrl")
+          assert.same("x = 1\n\ny = 2\nz = 3\n", K.file())
+          assert.same("", K.draft())
+          assert.same(2, K.position())
+          assert.is_nil(K.message())
+        end)
+
+    spec_deviation("IS6.2 Cut a block: a held Shift+Delete cuts "
+        .. "one block too", "rulings.md: Which keys repeat while "
+        .. "held", function()
       open_file("x = 1\n\n\ny = 2\nz = 3\n")
       K.browse_to(2)
-      K.hold("lctrl")
+      K.hold("lshift")
       K.hold("delete")
-      for _ = 1, 5 do
-        K.repeat_key("delete")
-      end
+      K.repeat_key("delete")
+      K.repeat_key("delete")
       K.release("delete")
-      K.release("lctrl")
-      assert.same("x = 1\nz = 3\n", K.file())
-      assert.same("y = 2", K.draft())
-      assert.same(2, K.position())
-      assert.is_nil(K.message())
+      K.release("lshift")
+      assert.same("x = 1\n\ny = 2\nz = 3\n", K.file())
     end)
 
     spec_it("IS6.3 Restore a cut block: Ctrl+Z puts it back in "

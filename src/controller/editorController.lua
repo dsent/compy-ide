@@ -285,7 +285,8 @@ end
 
 --- Whether a key press is held back from the editor's keys:
 --- every key while the key card shows (IS3.16), and a gate
---- chord's own key. A message is a hint that blocks nothing
+--- chord's own key. Ctrl+Escape is the gate's on its release,
+--- and exits whether or not the card shows. A message is a hint that blocks nothing
 --- (IS3.14): any other key dismisses it here and then does
 --- its ordinary work, Escape included, which aborts the edit
 --- or steps back from the file in the same press.
@@ -932,8 +933,6 @@ end
 --- repeat
 local ACTIONS = {
   none = function() end,
-  --- the shared text field's own key
-  field = function(ec, k) ec.input:keypressed(k) end,
   submit = function(ec) ec:submit() end,
   submit_and_retain = function(ec) ec:submit_and_retain() end,
   edit_block = function(ec) ec:edit_block() end,
@@ -958,7 +957,7 @@ local ACTIONS = {
     ec:_page(k == 'pageup' and 'up' or 'down')
   end,
   copy_block = function(ec) ec:copy_block() end,
-  cut_block = function(ec, _, rep) ec:cut_block(rep) end,
+  cut_block = function(ec) ec:cut_block() end,
   move_block = function(ec, k) ec:move_block(k) end,
   undo = function(ec, _, rep) ec:timeline_undo(rep) end,
   redo = function(ec, _, rep) ec:timeline_redo(rep) end,
@@ -976,24 +975,33 @@ local ACTIONS = {
 }
 
 --- A key is looked up by its full chord in the table of the
---- state in front (editorKeys.lua); a chord the table does
---- not name does nothing.
+--- state in front (editorKeys.lua), then in the text field's
+--- (fieldKeys.lua); a chord neither names does nothing.
 --- @param k string
 --- @param _ string? --- LÖVE's scancode, unused
 --- @param isrepeat boolean? --- the key is held
 function EditorController:keypressed(k, _, isrepeat)
-  local entry = EditorKeys:lookup(self:state_name(),
-    Key.combo(k))
+  local chord = Key.combo(k)
+  local entry = EditorKeys:lookup(self:state_name(), chord)
+  local field = not entry and self.input:names(chord)
+  local bound = entry or field
   --- a held key repeats only if its entry says so, and only
   --- where its press acted: one held since before the editor
   --- came to the front, a program's, does nothing in it
-  local repeats = entry and entry.repeats and self.pressed[k]
+  local repeats = bound and bound.repeats and self.pressed[k]
   if isrepeat and not repeats then return end
   if self:_held_back(k) then return end
-  self.pressed[k] = true
-  if not entry then return end
+  --- only a bare F1 is the help key (KeyCard.shows)
+  if k ~= KeyCard.KEY or chord == KeyCard.KEY then
+    self.pressed[k] = true
+  end
+  if not bound then return end
   self.input:update_view()
-  ACTIONS[entry.act](self, k, isrepeat)
+  if entry then
+    ACTIONS[entry.act](self, k, isrepeat)
+  else
+    self.input:keypressed(k, nil, isrepeat)
+  end
 end
 
 require("controller.editorReuse")

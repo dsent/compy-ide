@@ -648,6 +648,12 @@ a captured handler, so it is the one where falling through would have reached th
 while looking at the keyboard channels and missed `tixy`'s `mousepressed`. Per-example measurement:
 `../wip/77-new-input-api/validation/notes/S83-legacy-handler-blast-radius.md`.)*
 
+**Note, 2026-11-14 — selection is gone, and the constructor argument with it.** No field selects
+text now (the maintainer's ruling "Selection is off until the clipboard is designed"), and
+`build_input_widget` builds the widget as `UserInputController(model)`: the argument that disabled
+selection no longer exists. The account above of the widget's use of the affected channels
+describes the build before that ruling; the migrations it lists stand.
+
 **Four examples deliberately keep the legacy spelling** — `clock`, `colors`, `life`, `pong`. They own
 the screen, show no widget, and have nothing below the handler for the wrap to shield, so for them
 this decision's *"code written against LÖVE works as expected"* is exactly true, and they are what
@@ -730,6 +736,9 @@ Enter submits, and Ctrl+Enter does nothing); `SearchController:keypressed` retur
 its caller; and the input widget view's per-frame-render workaround keyed by widget identity. Each is
 individually revisable — but only by a named ruling, not by drift. See
 [`../technical_debt/input.md`](../technical_debt/input.md) for the live list.
+
+**Note, 2026-11-14 — one member is gone.** `SearchController` was removed with the editor's search
+(the maintainer's ruling "Search leaves the editor"), and its jump target with it.
 
 ---
 
@@ -1567,6 +1576,13 @@ one would have changed both. **Neither is a gate reservation.** `ctrl+shift+s` s
 the Scope paragraph above puts it, at route level in `EditorController:_leave_keys`, and the
 gate's `ctrl+s` reservation is unchanged — it stops a *running* project and has never had an
 editor branch. See `technical_debt/input.md`, `T-CTRL-S-UNCLAIMED`.
+
+**Note, 2026-11-14 — the editor's half moved again.** Ctrl+Shift+S no longer leaves the editor
+(the maintainer's ruling "Keys removed from the editor"), and `EditorController:_leave_keys` is
+gone: the editor's key table names neither `ctrl+s` nor `ctrl+shift+s`, so both do nothing there.
+The checkpoint on Ctrl+K went with the editor's checkpoints (the ruling "The editor's own
+checkpoints go"), and the gate's `ctrl+s` reservation went too (D-RESERVE-TABLE's note of the same
+day).
 
 ## D-RESERVE-TABLE — the gate's reservations are combo strings in a privileged table
 

@@ -171,6 +171,220 @@ function Probe.put(project, file, text)
   assert(FS.write(path, text), 'cannot write ' .. path)
 end
 
+--- The three text fields: the editor's, the console's, and a
+--- running program's (nil when it shows none)
+--- @param which 'editor'|'console'|'program'
+--- @return UserInputController?
+function Probe.field(which)
+  if which == 'editor' then return Probe.ed().input end
+  if which == 'console' then return Probe.cc().input end
+  local ui = love.state.user_input
+  return ui and ui.C
+end
+
+--- A field's draft, its lines joined with a line break
+--- @param which 'editor'|'console'|'program'
+--- @return string
+function Probe.text(which)
+  return text_of(Probe.field(which))
+end
+
+--- A field's cursor
+--- @param which 'editor'|'console'|'program'
+--- @return integer line, integer column
+function Probe.field_cursor(which)
+  return Probe.field(which).model:get_cursor_pos()
+end
+
+--- The document view of the open file
+--- @return BufferView
+function Probe.view()
+  return Probe.ed().view:get_current_buffer()
+end
+
+--- How many rows block `b` has, and how many the document
+--- view shows
+--- @param b integer
+--- @return integer rows, integer shown
+function Probe.rows_shown(b)
+  local bv = Probe.view()
+  local content = bv.content
+  local rows = {}
+  if 0 < b and b <= #content.v_blocks then
+    local pos = content:get_block_pos(b)
+    for _, l in ipairs(pos and pos:enumerate() or {}) do
+      for _, r in ipairs(content.wrap_forward[l] or {}) do
+        rows[#rows + 1] = r
+      end
+    end
+  end
+  local shown = 0
+  for _, r in ipairs(rows) do
+    if content.range:inc(r) then shown = shown + 1 end
+  end
+  return #rows, shown
+end
+
+--- Every row of block `b` is in the document view
+--- @param b integer
+--- @return boolean
+function Probe.in_view(b)
+  local rows, shown = Probe.rows_shown(b)
+  return 0 < rows and rows == shown
+end
+
+--- The first and the last block wholly in the document view
+--- @return integer? first, integer? last
+function Probe.blocks_in_view()
+  local first, last
+  for b = 1, Probe.blocks() do
+    if Probe.in_view(b) then
+      first = first or b
+      last = b
+    end
+  end
+  return first, last
+end
+
+--- The document view's first row
+--- @return integer
+function Probe.offset()
+  return Probe.view():get_offset()
+end
+
+-- what the screen shows, as pixels ------------------------
+
+--- The screen as it is drawn now, as image data
+--- @param wait function
+--- @return love.ImageData
+function Probe.capture(wait)
+  local got
+  love.graphics.captureScreenshot(function(img) got = img end)
+  for _ = 1, 50 do
+    if got then return got end
+    wait(.02)
+  end
+  error('no screenshot came back')
+end
+
+--- @param img love.ImageData
+--- @param x integer
+--- @param y integer
+--- @return string --- the pixel as 'r,g,b', 0 to 255
+local function pixel(img, x, y)
+  local r, g, b = img:getPixel(x, y)
+  return string.format('%d,%d,%d', math.floor(r * 255 + .5),
+    math.floor(g * 255 + .5), math.floor(b * 255 + .5))
+end
+
+--- @param key string
+--- @return number[]
+local function rgb(key)
+  local t = {}
+  for n in string.gmatch(key, '%d+') do t[#t + 1] = n / 255 end
+  return t
+end
+
+--- The pixel rectangle of a cell: `col` and `row` count from
+--- 1, `top` is the y of the first row of the grid the cell is
+--- on
+--- @param col integer
+--- @param row integer
+--- @param top integer?
+--- @return integer x, integer y, integer w, integer h
+function Probe.cell_rect(col, row, top)
+  local v = Probe.cc().cfg.view
+  return (col - 1) * v.fw, (top or 0) + (row - 1) * v.fh,
+      v.fw, v.fh
+end
+
+--- A rectangle's background, the colour most of its pixels
+--- have, and its glyph's, the colour most of the others have
+--- (nil when there are none)
+--- @param img love.ImageData
+--- @param x integer
+--- @param y integer
+--- @param w integer
+--- @param h integer
+--- @return number[] bg, number[]? fg
+function Probe.colors(img, x, y, w, h)
+  local count = {}
+  for py = y, math.min(y + h, img:getHeight()) - 1 do
+    for px = x, math.min(x + w, img:getWidth()) - 1 do
+      local k = pixel(img, px, py)
+      count[k] = (count[k] or 0) + 1
+    end
+  end
+  local bg, most = nil, -1
+  for k, n in pairs(count) do
+    if n > most then bg, most = k, n end
+  end
+  local bgc = rgb(bg)
+  --- the glyph: the commonest colour well apart from the
+  --- background, so that an edge blended with it is skipped
+  local fg, fmost = nil, 0
+  for k, n in pairs(count) do
+    local c = rgb(k)
+    local far = math.abs(c[1] - bgc[1]) + math.abs(c[2] - bgc[2])
+        + math.abs(c[3] - bgc[3])
+    if far > .45 and n > fmost then fg, fmost = k, n end
+  end
+  return bgc, fg and rgb(fg)
+end
+
+--- A cell's background and glyph colours
+--- @param img love.ImageData
+--- @param col integer
+--- @param row integer
+--- @param top integer?
+--- @return number[] bg, number[]? fg
+function Probe.cell(img, col, row, top)
+  return Probe.colors(img, Probe.cell_rect(col, row, top))
+end
+
+--- Whether colour `c` is the theme's `want`, within a margin
+--- for antialiasing and rounding
+--- @param c number[]?
+--- @param want number[]
+--- @return boolean
+function Probe.near(c, want)
+  if not c then return false end
+  for i = 1, 3 do
+    if math.abs(c[i] - want[i]) > .1 then return false end
+  end
+  return true
+end
+
+--- @param c number[]?
+--- @return string
+function Probe.show(c)
+  if not c then return 'none' end
+  return string.format('#%02X%02X%02X', math.floor(c[1] * 255 + .5),
+    math.floor(c[2] * 255 + .5), math.floor(c[3] * 255 + .5))
+end
+
+--- The status line's band: the first and last pixel rows,
+--- read down the screen's left column, of the longest run of
+--- `color`
+--- @param img love.ImageData
+--- @param color number[]
+--- @return integer? first, integer? last
+function Probe.band(img, color)
+  local best_a, best_b, a
+  for y = 0, img:getHeight() - 1 do
+    local on = Probe.near(rgb(pixel(img, 1, y)), color)
+    if on and not a then a = y end
+    if a and (not on or y == img:getHeight() - 1) then
+      local b = on and y or y - 1
+      if not best_a or b - a > best_b - best_a then
+        best_a, best_b = a, b
+      end
+      a = nil
+    end
+  end
+  return best_a, best_b
+end
+
 local recording
 
 --- Record the text the screen draws while `wait` runs for

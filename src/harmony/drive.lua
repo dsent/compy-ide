@@ -97,6 +97,17 @@ function D.held(wait, key, repeats)
   wait(.02)
 end
 
+--- a click of the left button at `x`, `y`
+--- @param wait function
+--- @param x number
+--- @param y number
+function D.click(wait, x, y)
+  h.love_event('mousepressed', x, y, 1, false, 1)
+  wait(.02)
+  h.love_event('mousereleased', x, y, 1, false, 1)
+  wait(.05)
+end
+
 --- open `project`, creating it, write `files` to it as
 --- fixtures, and open `file` in the editor
 --- @param wait function

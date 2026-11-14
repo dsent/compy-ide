@@ -1,10 +1,15 @@
---- The key card (IS3.16, FR4.9): the keys the state in front
---- admits and what each does, then the surface's other keys,
---- laid out to fit the screen. The words come from the key
+--- The key card (IS3.16, FR4.9): every key the surface in
+--- front takes, those its state admits first, with what each
+--- does, laid out to fit the screen. The words come from the
 --- tables the keys are looked up in, so the card cannot
---- disagree with them. It reads state and changes none.
+--- disagree with them: the surface's own (editorKeys.lua,
+--- consoleKeys.lua), then the text field's (fieldKeys.lua),
+--- then the gate's reserved chords (reservedKeys.lua). It
+--- reads state and changes none.
 local EditorKeys = require('model.editor.editorKeys')
 local ConsoleKeys = require('model.input.consoleKeys')
+local FieldKeys = require('model.input.fieldKeys')
+local Reserved = require('model.input.reservedKeys')
 
 local KeyCard = { }
 
@@ -25,11 +30,13 @@ function KeyCard.held()
 end
 
 --- Whether a surface's card shows (IS3.16): while the help
---- key is held and its press reached the surface's own key
---- handler, which records it in `pressed` until the release.
---- A press a program took is recorded nowhere: the program
---- gives its own help, and nothing is suspended. While a card
---- shows no key does anything, a reserved one included.
+--- key is held and its press, a bare F1, reached the
+--- surface's own key handler, which records it in `pressed`
+--- until the release. A press a program took is recorded
+--- nowhere: the program gives its own help, and nothing is
+--- suspended. While the file editor's card shows, its keys and
+--- the reserved chords do nothing, Ctrl+Escape apart; the
+--- console's holds back the console's own keys alone.
 --- @param pressed table<string, true> --- the surface's record
 --- @return boolean
 function KeyCard.shows(pressed)
@@ -58,25 +65,56 @@ local function split(context, rows)
   return now
 end
 
---- The card's cells in reading order: the keys the state's
---- table gives words to, under a heading naming the state,
---- then the other states' keys (editorKeys.lua).
+--- A surface's rows in `state`: its own keys, the text
+--- field's that it does not take for itself and that its field
+--- has, then the reserved chords it gives words to
+--- @param keys table --- the surface's keymap
+--- @param state string
+--- @param empty boolean?
+--- @return table[] --- { key, what it does, admitted }
+function KeyCard.rows(keys, state, empty)
+  local rows = keys:card_rows(state, empty)
+  local now = keys.field_now[state] == true
+  local field = FieldKeys:card_rows('field', empty, function(d)
+    return not keys:binds(d)
+        and (not d.only or keys.allows[d.only] == true)
+  end)
+  for _, r in ipairs(field) do
+    rows[#rows + 1] = { r[1], r[2], now }
+  end
+  for _, r in ipairs(Reserved) do
+    local words = r.card and r[keys.surface]
+    if words then
+      local w = words[state]
+      if not w then
+        for _, st in ipairs(keys.states) do
+          w = w or words[st]
+        end
+      end
+      rows[#rows + 1] = { r.card, w, words[state] ~= nil }
+    end
+  end
+  return rows
+end
+
+--- The file editor's card in reading order: the keys its
+--- state admits, under a heading naming the state, then its
+--- other keys.
 --- @param state EditorStateName
 --- @param empty boolean
 --- @return table[] --- { heading = s } or { key = k, what = w }
 function KeyCard.cells(state, empty)
-  return split(state, EditorKeys:card_rows(state, empty))
+  return split(state, KeyCard.rows(EditorKeys, state, empty))
 end
 
---- The console's card, from the console's tables
---- (consoleKeys.lua): Ctrl+Q exits a program that runs, is
+--- The console's card: Ctrl+Q exits a program that runs, is
 --- paused or idles behind the console; with none it does
 --- nothing, and the card lists it among the other keys.
 --- @param live boolean? --- a program is not stopped
 --- @return table[]
 function KeyCard.console_cells(live)
   return split('console',
-    ConsoleKeys:card_rows(live and 'live' or 'idle'))
+    KeyCard.rows(ConsoleKeys, live and 'live' or 'idle'))
 end
 
 --- The cells laid out in as few columns as fit `rows`, each

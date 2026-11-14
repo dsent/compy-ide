@@ -22,8 +22,10 @@
 - `edit()` in the console starts the editor afresh: the files a
   run came from close, and the file opens alone, at its end.
   <kbd>Ctrl</kbd>+<kbd>T</kbd> is the way back to them.
-- The contents are always validated, changes cannot be persisted
-  unless syntactically valid.
+- A change to a Lua file is saved only as valid Lua, and only if
+  the file still loads after it; in a file that does not load,
+  only the change's own text is checked, so that you can repair
+  it. A text or Markdown file is saved as you write it.
 - Editor contents should only change when it's the user's
   explicit aim. Operations which could be interpreted otherwise
   should not make changes as a side effect.
@@ -51,11 +53,11 @@
   through the field's own changes. Every other key acts once per
   press: <kbd>Enter</kbd>, <kbd>Escape</kbd>, <kbd>F2</kbd>,
   <kbd>Shift</kbd>+<kbd>Insert</kbd>,
-  <kbd>Ctrl</kbd>+<kbd>Insert</kbd>, moving a block, formatting
-  the file, following a `require`. A held
-  <kbd>Ctrl</kbd>+<kbd>Delete</kbd> cuts the empty lines it meets
-  and stops at the first block with text. The console keeps the
-  same rule: a held <kbd>Enter</kbd> runs the line once.
+  <kbd>Ctrl</kbd>+<kbd>Insert</kbd>, cutting and moving a block,
+  formatting the file, following a `require`: a held
+  <kbd>Ctrl</kbd>+<kbd>Delete</kbd> cuts one block. The console
+  keeps the same rule: a held <kbd>Enter</kbd> runs the line
+  once.
 
 ### Keys
 
@@ -70,8 +72,6 @@
 | **Input**                                                         |
 | Move cursor horizontally                                          | <kbd>⇦</kbd>/<kbd>⇨</kbd>                     |
 | Move cursor vertically                                            | <kbd>⇧</kbd>/<kbd>⇩</kbd>                     |
-| Go back in command history                                        | <kbd>PageUp</kbd>                             |
-| Go forward in command history                                     | <kbd>PageDown</kbd>                           |
 | Move in history (if in first/last line)                           | <kbd>⇧</kbd>/<kbd>⇩</kbd>                     |
 | Jump to start                                                     | <kbd>Ctrl</kbd>+<kbd>Home</kbd>               |
 | Jump to end                                                       | <kbd>Ctrl</kbd>+<kbd>End</kbd>                |
@@ -133,8 +133,8 @@ changes, then send it back with <kbd>Enter ⏎</kbd>.
 
 ![capitalized](./interface/hello_cap.apng)
 
-In a Lua file a block is a statement or an empty line, and a
-text that is not valid Lua is not accepted. Its empty lines are
+In a Lua file a block is a statement, a comment or an empty
+line, and a text that is not valid Lua is not accepted. Its empty lines are
 the formatter's: a run of them is kept as one. <kbd>F2</kbd> loads
 any block, one longer than 14 lines or with a line longer than
 64 characters too; <kbd>Enter ⏎</kbd> accepts it once it keeps

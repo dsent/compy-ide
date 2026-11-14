@@ -7,6 +7,7 @@
 local K = require("tests.helpers.editor_keys")
 local marks = require("tests.helpers.spec_marks")
 local spec_it, spec_gap = marks.spec_it, marks.spec_gap
+local spec_deviation = marks.spec_deviation
 
 local FILE = "x = 1\ny = 2\nz = 3\n"
 local GAPPED = "x = 1\n\ny = 2\n"
@@ -127,18 +128,21 @@ describe("IS6 reuse, added #editor #spec", function()
       assert.same(FILE, K.file())
     end)
 
-    spec_it("IS6.2 Cut a block: held, it removes the empty " ..
-        "lines, cuts the first full block and stops", function()
-      open_file("x = 1\n\n\ny = 2\nz = 3\n")
-      K.browse_to(2)
-      local blocks = K.blocks()
-      hold_ctrl("delete", 6)
-      assert.same(5, blocks)
-      assert.same(CUT, K.file())
-      assert.same("y = 2", K.draft())
-      assert.same("inserting", K.state())
-      assert.same(2, K.position())
-    end)
+    -- the spec's note has a held Ctrl+Delete cut on through
+    -- the empty lines; a key that writes acts once per press
+    spec_deviation("IS6.2 Cut a block: held, it cuts one block, "
+        .. "however many repeats follow",
+        "rulings.md: Which keys repeat while held",
+        function()
+          open_file("x = 1\n\n\ny = 2\nz = 3\n")
+          K.browse_to(2)
+          assert.same(5, K.blocks())
+          hold_ctrl("delete", 6)
+          assert.same("x = 1\n\ny = 2\nz = 3\n", K.file())
+          assert.same("", K.draft())
+          assert.same("browsing", K.state())
+          assert.same(2, K.position())
+        end)
 
     spec_it("IS6.3 Restore a cut block: the position stays on "
         .. "the block after the restored one", function()

@@ -320,9 +320,7 @@ end
 -- keystrokes -------------------------------------------------
 -- A person's keystrokes are frames apart, and a key with a
 -- character sends it between its press and its release, as
--- LÖVE does. The editor depends on both (a Space that answers
--- a question swallows its own character, until the next
--- frame).
+-- LÖVE does.
 
 --- Let one frame pass.
 --- @param dt number?  seconds, 1/60 when omitted

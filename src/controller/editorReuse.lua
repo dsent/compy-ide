@@ -593,13 +593,12 @@ function EditorController:copy_block()
 end
 
 --- Ctrl+Delete: the block at the browsing position leaves
---- the file, its text in the field (IS6.2)
---- @param isrepeat boolean? --- a held key stops, without a
---- notice, at the first block it cuts into the field
-function EditorController:cut_block(isrepeat)
+--- the file, its text in the field (IS6.2). It writes, so it
+--- acts once per press (the ruling "Which keys repeat while
+--- held").
+function EditorController:cut_block()
   local buf = self:get_active_buffer()
   local state = self:state_name()
-  if isrepeat and state ~= 'browsing' then return end
   if state == 'inserting' then
     return self:refuse({ NOTICE.cut_inserting })
   end
@@ -608,8 +607,6 @@ function EditorController:cut_block(isrepeat)
   end
   local sel = buf:get_selection()
   if sel > buf:get_content_length() then
-    --- a held key that ran out of empty lines stops quietly
-    if isrepeat then return end
     return self:refuse({ NOTICE.cut_end })
   end
   if self:_refuse_stale(buf) then return end

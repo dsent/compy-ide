@@ -37,6 +37,7 @@ function Keymap.new(defs, states)
             words = e.words,
             repeats = d.repeats == true,
             card = d.card,
+            only = d.only,
           }
         end
       end
@@ -52,9 +53,21 @@ end
 
 --- @param state string
 --- @param chord string --- Key.combo's name
---- @return table? entry --- { act, words, repeats, card }
+--- @return table? entry --- { act, words, repeats, card, only }
 function Keymap:lookup(state, chord)
   return self.tables[state][chord]
+end
+
+--- Whether any state binds one of `def`'s chords
+--- @param def table
+--- @return boolean
+function Keymap:binds(def)
+  for _, t in pairs(self.tables) do
+    for _, chord in ipairs(def.chords) do
+      if t[chord] then return true end
+    end
+  end
+  return false
 end
 
 --- @param e table?
@@ -69,15 +82,17 @@ end
 --- The card's rows in the list's order: { label, words, now }.
 --- A label is now when the state's entry has words; else it
 --- is listed with the words another state gives it, the first
---- in `states` order, after the state's own.
+--- in `states` order, after the state's own. `keep`, when
+--- given, says which definitions the card may list.
 --- @param state string
 --- @param empty boolean?
+--- @param keep (fun(def: table): boolean)?
 --- @return table[]
-function Keymap:card_rows(state, empty)
+function Keymap:card_rows(state, empty, keep)
   local rows, seen = { }, { }
   for _, d in ipairs(self.defs) do
     local label = d.card
-    if label and not seen[label] then
+    if label and not seen[label] and (not keep or keep(d)) then
       local w = words_of(d[state], empty)
       local now = w ~= nil
       if not now then

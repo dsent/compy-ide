@@ -336,3 +336,35 @@ scenario('cursor', function(wait)
   D.leave(wait)
   hm_done()
 end)
+
+-- Formatting keeps the cursor at the same place in the text
+-- (IS3.9): in a draft kept with Shift+Ins, and in a draft a
+-- line over the limit sends back formatted
+scenario('cursor-format', function(wait)
+  local f = 'format-cursor.lua'
+  wait(.1)
+  D.open(wait, PROJECT, f, { [f] = 'a = 1\n' })
+  D.type(wait, 'x=1+2')
+  D.key(wait, 'left')
+  local _, col = P.cursor()
+  D.eq(col, 5, 'the cursor between + and 2')
+  D.key(wait, 'S-insert')
+  D.eq(P.draft(), 'x = 1 + 2', 'the kept draft is formatted')
+  -- a boundary two elements share keeps to the end of the
+  -- first: after +
+  _, col = P.cursor()
+  D.eq(col, 8, 'the cursor is still after +')
+  D.key(wait, 'escape')
+
+  local name = 'v' .. string.rep('n', 70)
+  D.type(wait, name .. ' =1')
+  D.key(wait, 'left')
+  D.key(wait, 'return')
+  D.eq(P.draft(), name .. '\n    = 1', 'the refused draft is formatted')
+  local l
+  l, col = P.cursor()
+  D.eq(l .. ':' .. col, '2:6', 'the cursor is still after =')
+  D.shot(wait, 'refused')
+  D.leave(wait)
+  hm_done()
+end)

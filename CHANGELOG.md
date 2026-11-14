@@ -59,12 +59,13 @@ Project-author guide: `doc/input_api.md`.
   F1 shows the keys it admits. `doc/EDITOR.md` has the key table.
 - **A file opens at its end, ready to append.** An empty or new file starts with no
   line at all, and a new file is created by the first text you submit.
-- **Escape is the one way back.** It dismisses a notice, drops the text in the field
-  or the replacement, and with an empty field steps back from the file: to the file
-  you came from with Ctrl+J, at the place you left it, or to the console.
-- **Refusals are one-line notices over the field.** A notice says what was refused and
-  what would work, and the next key dismisses it. A failed save names the file and the
-  reason and keeps your text in the field.
+- **Escape steps back.** It dismisses a notice, drops the text in the field or the
+  replacement, and with an empty field steps back from the file: to the file you came
+  from with Ctrl+J, at the place you left it, or to the console.
+- **Refusals are notices just above the status line.** A notice says what was refused
+  and what would work, wraps between words when it is long, and the next key dismisses
+  it and does its usual work. A failed save names the file and the reason and keeps
+  your text in the field.
 - **The text cursor is a blinking block.** In the file editor, the console and a
   project's input alike, the cursor is a block on the character it stands before,
   which stays readable on it, and on the empty cell at a line's end. It blinks as
@@ -151,14 +152,18 @@ Project-author guide: `doc/input_api.md`.
 - **Held down, a key repeats only if it writes nothing and changes no state**, in the
   file editor and the console: typing, moving the cursor, browsing, deleting in the
   field, Shift+Enter, and Ctrl+Z and Ctrl+Y through the field's own changes. Enter,
-  Escape, F2, Shift+Insert, Ctrl+Insert, Alt+Up and Alt+Down, Ctrl+J, Ctrl+Shift+F and
-  the other commands act once per press: a held Enter adds one empty line, not one per
-  repeat. A program's own input keeps its repeats.
+  Escape, F2, Shift+Insert, Ctrl+Insert, Ctrl+Delete, Alt+Up and Alt+Down, Ctrl+J,
+  Ctrl+Shift+F and the other commands act once per press: a held Enter adds one empty
+  line, and a held Ctrl+Delete cuts one block. A program's own input keeps its repeats.
 - **Every chord is a key of its own.** A key pressed with a modifier that nothing
   binds does nothing, in the file editor, the console and a program's input field:
   Ctrl+Enter no longer submits in the console or a program's input, Ctrl+Up and
   Ctrl+Down no longer move or recall in the console, and Shift+Escape no longer cancels
-  a program's input. The F1 key card is drawn from the same key tables.
+  a program's input. The F1 key card is drawn from the same key tables and lists every
+  key the editor or the console takes, the reserved ones (Ctrl+T, Ctrl+Q, Ctrl+Alt+R,
+  Ctrl+Esc) included; only a bare F1 brings it up.
+- **PageUp and PageDown do nothing in the console**: they no longer recall the history,
+  which Up and Down still do, and are kept for paging the output.
 - **Ctrl+Z and Ctrl+Y undo and redo the typing in every input**, the console's and a
   program's as well as the editor's. Ctrl+Y no longer deletes the line.
 - **F1 holds back Ctrl+Q and the other reserved keys in the file editor only.** In the

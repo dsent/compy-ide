@@ -178,7 +178,7 @@ local function build_widget(cfg)
   -- something else (doc/development/decisions/input.md,
   -- D-LIFECYCLE-FLAGS, statement 3).
   c:seat_lifecycle({ clear_on_submit = true })
-  c:init_view({ render = function() end, draw = function() end })
+  c:init_view(UserInputView(cfg.view, c))
   -- The same call production makes, not a fixture-local
   -- equivalent: a widget built here must be wired the way
   -- build_input_widget wires one.
@@ -380,7 +380,7 @@ end
 function F.show_multiline_widget(lines)
   local m = UserInputModel(cfg, InputEvalText)
   local w = UserInputController(m)
-  w:init_view({ render = function() end, draw = function() end })
+  w:init_view(UserInputView(cfg.view, w))
   w.model:set_text(lines or { 'aa', 'bb', 'cc' })
   love.state.user_input = { M = m, C = w, V = w.view }
   -- The dispatch chain resolves its terminal consumer from

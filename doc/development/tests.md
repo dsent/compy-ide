@@ -20,11 +20,11 @@ Assessment of `tests/` relative to the codebase and the knowledge base under `do
 
 **`testutil.lua`** — Shared constants: `wrap=64` (screen width, matching the code convention line limit), `LINES=16` (buffer display height), `SCROLL_BY=8`. `get_save_function(init)` returns a save callback paired with a `reftable` handle — the same callable-table-as-mutable-reference pattern used by `user_input()` handles in project code.
 
-**`input_fixture.lua`** (`tests/helpers/input_fixture.lua`) — full input standup for the `#input` contract suite (Compy input API, 1.0.0-rc20260712). Stands up the REAL `love.handlers` gate over a REAL `ConsoleController` (gfx/font stubbed, never a real display), the persistent singleton input widget exactly as `main.lua` wires it, and the click/update path — module-level, once, shared across the whole spec file. Exposes `F`: `F.activate_project(natives)` drives the real project-activation path (`Controller.set_user_handlers`) and returns the project-facing `compy.input` surface; `F.compy_input()` resolves the same surface a project sees; `F.show_widget(opts)` / `F.show_selectable_widget(lines)` activate the singleton or a selection-enabled widget; `F.is_widget_visible()` answers "is a widget shown" the way the framework does — through `love.state.user_input`, the field the draw loop paints on and the console route forwards on, rather than the widget's own `is_shown()` self-report; `F.session` is the keypress-level driver (see below); `F.reset()` (called `before_each`) stops the real project route, then clears fixture state. Consumed, never copied — the ~175 lines of MVC/gfx/font boilerplate this replaces used to live inline in the spec file.
+**`input_fixture.lua`** (`tests/helpers/input_fixture.lua`) — full input standup for the `#input` contract suite (Compy input API, 1.0.0-rc20260712). Stands up the REAL `love.handlers` gate over a REAL `ConsoleController` (gfx/font stubbed, never a real display), the project's input widget as production builds it, which lives for one project run (`../decisions/input.md`, D-WIDGET-AT-BOOT as amended; `F.widget` is always the current one), and the click/update path — module-level, once, shared across the whole spec file. Exposes `F`: `F.activate_project(natives)` drives the real project-activation path (`Controller.set_user_handlers`) and returns the project-facing `compy.input` surface; `F.compy_input()` resolves the same surface a project sees; `F.show_widget(opts)` shows the current widget, and `F.show_multiline_widget(lines)` stands up a widget holding several lines, so that a click moves its cursor observably; `F.is_widget_visible()` answers "is a widget shown" the way the framework does — through `love.state.user_input`, the field the draw loop paints on and the console route forwards on, rather than the widget's own `is_shown()` self-report; `F.session` is the keypress-level driver (see below); `F.reset()` (called `before_each`) stops the real project route, then clears fixture state. Consumed, never copied — the ~175 lines of MVC/gfx/font boilerplate this replaces used to live inline in the spec file.
 
 **`input_session.lua`** (`tests/helpers/input_session.lua`) — the keypress-level driver `input_fixture.lua` builds `F.session` from. One emitter per gateway entry (`press`, `repeat_press`, `release`, `type`, `mousepressed`, `mousereleased`, `touchpressed`), each firing a REAL event through `love.handlers.*` — never straight into a controller — so a contract test exercises the same path a keystroke takes from LÖVE. Distinct from `EditorSession`: that helper bypasses the `love` slots and drives `EditorController` directly, below the gate.
 
-**`editor_keys.lua`** (`tests/helpers/editor_keys.lua`) — the editor driven the way a user drives it, built on `input_fixture`. `K.reset(contents)` opens a project held in memory (`contents` maps file names to text; writes land back in it, and Ctrl+T runs its `main.lua`) with a clipboard of the test's own; `K.open(name)` types `edit("name")` in the console and presses Enter. **Keystrokes have the device's shape:** `K.keys(...)` presses a chord and releases it in reverse, and a key that types a character (alone or with Shift) sends it between its press and its release, as LÖVE does; `K.type(text)` types each character with its key where it has one (letters, digits, Space), as text alone where it has none, and refuses a line break, which is a key (`K.type_lines` puts Shift+Enter between lines); `K.hold(k)` and `K.release(k)` are for what happens while a key is down. Shift with a key other than a letter types nothing through `K.keys` (its character depends on the layout): type it with `K.type`. `K.browse_to(b)` and `K.browse_to_end()` browse with the spec's keys as many presses as it takes, since a tall block may scroll first. `K.restart()` resets everything but the memory card's files, for a test that opens a second file from the console. **A frame passes after each keystroke** (`K.frame(dt)` for more), since the editor waits on frames (a Space that answers a question swallows its own character until the next one). `K.fail_writes(reason)` makes every write fail, as a full card would. `K.write_outside(name, text)` changes a file on the card not through the editor. Caps Lock is a device state its key toggles, answered through `love.keyboard.isModifierActive`. Everything else is a **read-only** accessor, in the spec's terms where the spec has one: `K.position()` (a block's number or `"end"`), `K.target()`, `K.state()` (`"browsing"`, `"inserting"`, `"replacing"`), `K.draft()`, `K.cursor()`, `K.blocks()`, `K.file_name()`, `K.file_type()`, `K.message()`; what the screen shows: `K.view_rows()`, `K.in_view(b)`, `K.rows_shown(b)`, `K.highlights()` (the blocks under the white and the yellow highlight, read from what the view's draw actually fills) and `K.highlight()`; `K.text_colours()`, the colours the view's draw prints its text in; `K.field_highlight()`, the token classes and the parse-error position the editor field's render colours the draft from (read from the field's model, since the field draws to a canvas the fixture does not render), `K.status_text()`, `K.console_text()`, `K.console_draft()`; and the clipboard, a file's text and the writes made. Tests read through the accessors and never drive the editor by calling a controller or a model, which is what sets it apart from `EditorSession`. `K.screen()` draws the whole screen as `love.draw` does, through the real draw functions with recording calls in place of `love.graphics`', raises a draw error, and returns the fills, outlines and texts drawn, every fill and text drawn in the input field in the order drawn (`field_log`, from which the cursor tests read the cursor's block), and the rows the field takes (`K.screen_rows` and `K.screen_text` read them); `K.screen(also)` draws `also` after the screen and records it too, as `love.draw` draws a project's input field; `K.message_kind()` tells a refusal's notice from the parser's error; `tests/editor/render_smoke_spec.lua` draws each editor state and the console through it, the one path no other test runs. `K.cleanup()` in `after_each` puts back the project, its loader, the filesystem and the clipboard. `K.block(n)` and `K.block_lines(n)` give a canonical Lua block of `n` lines for fixtures, so a test never depends on whether the editor formats a file when it opens it. Its own cases and a journey (type, submit, save) are in `tests/editor/editor_keys_spec.lua`.
+**`editor_keys.lua`** (`tests/helpers/editor_keys.lua`) — the editor driven the way a user drives it, built on `input_fixture`. `K.reset(contents)` opens a project held in memory (`contents` maps file names to text; writes land back in it, and Ctrl+T runs its `main.lua`) with a clipboard of the test's own; `K.open(name)` types `edit("name")` in the console and presses Enter. **Keystrokes have the device's shape:** `K.keys(...)` presses a chord and releases it in reverse, and a key that types a character (alone or with Shift) sends it between its press and its release, as LÖVE does; `K.type(text)` types each character with its key where it has one (letters, digits, Space), as text alone where it has none, and refuses a line break, which is a key (`K.type_lines` puts Shift+Enter between lines); `K.hold(k)` and `K.release(k)` are for what happens while a key is down. Shift with a key other than a letter types nothing through `K.keys` (its character depends on the layout): type it with `K.type`. `K.browse_to(b)` and `K.browse_to_end()` browse with the spec's keys as many presses as it takes, since a tall block may scroll first. `K.restart()` resets everything but the memory card's files, for a test that opens a second file from the console. **A frame passes after each keystroke** (`K.frame(dt)` for more), since a person's keystrokes are frames apart. `K.fail_writes(reason)` makes every write fail, as a full card would. `K.write_outside(name, text)` changes a file on the card not through the editor. Caps Lock is a device state its key toggles, answered through `love.keyboard.isModifierActive`. Everything else is a **read-only** accessor, in the spec's terms where the spec has one: `K.position()` (a block's number or `"end"`), `K.target()`, `K.state()` (`"browsing"`, `"inserting"`, `"replacing"`), `K.draft()`, `K.cursor()`, `K.blocks()`, `K.file_name()`, `K.file_type()`, `K.message()`; what the screen shows: `K.view_rows()`, `K.in_view(b)`, `K.rows_shown(b)`, `K.highlights()` (the blocks under the white and the yellow highlight, read from what the view's draw actually fills) and `K.highlight()`; `K.text_colours()`, the colours the view's draw prints its text in; `K.field_highlight()`, the token classes and the parse-error position the editor field's render colours the draft from (read from the field's model, since the field draws to a canvas the fixture does not render), `K.status_text()`, `K.console_text()`, `K.console_draft()`; and the clipboard, a file's text and the writes made. Tests read through the accessors and never drive the editor by calling a controller or a model, which is what sets it apart from `EditorSession`. `K.screen()` draws the whole screen as `love.draw` does, through the real draw functions with recording calls in place of `love.graphics`', raises a draw error, and returns the fills, outlines and texts drawn, every fill and text drawn in the input field in the order drawn (`field_log`, from which the cursor tests read the cursor's block), and the rows the field takes (`K.screen_rows` and `K.screen_text` read them); `K.screen(also)` draws `also` after the screen and records it too, as `love.draw` draws a project's input field; `K.message_kind()` tells a refusal's notice from the parser's error; `tests/editor/render_smoke_spec.lua` draws each editor state and the console through it, the one path no other test runs. `K.cleanup()` in `after_each` puts back the project, its loader, the filesystem and the clipboard. `K.block(n)` and `K.block_lines(n)` give a canonical Lua block of `n` lines for fixtures, so a test never depends on whether the editor formats a file when it opens it. Its own cases and a journey (type, submit, save) are in `tests/editor/editor_keys_spec.lua`.
 
 **Run order is load-bearing.** The suite is green in declaration order and only in
 declaration order — `busted tests --shuffle` fails a few dozen rows, at the PR base as well
@@ -56,7 +56,7 @@ declaration order".
 | `Controller.lua` | Draw override detection. Click detection timer + handler registration are now covered by `input_shortcuts_click_spec`'s "framework click detection" and the `input_events_spec` rows |
 | `ProjectService` | File I/O, project open/create, filesystem mount |
 | Drawing system | Depends on LÖVE2D graphics context |
-| Views (rendering) | Expected; view testing requires LÖVE2D |
+| Views (pixels) | What the screen shows in pixels needs LÖVE2D. The draw calls themselves are tested: `K.screen()` runs the real draw functions with recording calls in place of `love.graphics`' (`tests/editor/render_smoke_spec.lua` and the editor's rendering specs) |
 
 ---
 
@@ -80,9 +80,9 @@ Tags beyond the file-level `#input`:
 
 | Location | Row | Why it's pending, not red |
 |---|---|---|
-| `input_routing_spec.lua:68` | `routes the key release to the console` | A key release carries no text, so console delivery has no observable mutation to assert on — only the project-route release is directly witnessed |
-| `input_routing_spec.lua:144` | `routes the pointer to the editor` | The input fixture leaves the editor's mouse off (`cfg.editor.mouse_enabled`), so pointer delivery has no observable outcome without extra scaffolding |
-| `input_routing_spec.lua:214` | `touch reaches the active route` | Touch has no gateway entry yet; both the widget and route touch handlers are no-ops, so delivery isn't black-box observable. Greens when a touch consumer lands |
+| `input_routing_spec.lua:63` | `routes the key release to the console` | A key release carries no text, so console delivery has no observable mutation to assert on — only the project-route release is directly witnessed |
+| `input_routing_spec.lua:141` | `routes the pointer to the editor` | The input fixture leaves the editor's mouse off (`cfg.editor.mouse_enabled`), so pointer delivery has no observable outcome without extra scaffolding |
+| `input_routing_spec.lua:209` | `touch reaches the active route` | The gateway has touch entries (`handlers.touchpressed` and its pair in `controller.lua`), but the widget's and the console's touch handlers do nothing yet, so delivery isn't black-box observable. Greens when a touch consumer lands |
 
 **A second kind of pending row, added deliberately: the reserved combos' own effects.** `input_global_shortcuts_spec.lua` asserts one property live — that a project cannot suppress a global shortcut by registering the same combo — and lists the remaining reserved combos (`ctrl+alt+r`, the profiler pair, `f10`, and `ctrl+escape` on release) as pending. `ctrl+s` and `ctrl+shift+r` left the list on 2026-11-14, when they stopped being reserved; the same file asserts that a running program receives them. Those are not unobservable like the rows above; they are simply **someone else's contract**. What each one *does* is the framework's own behaviour, worth asserting eventually and out of scope for the input API's suite, so the gap is named where a reader will meet it rather than left to be rediscovered. `ctrl+pause` and `ctrl+q` are absent from that list because their effects are asserted live, and **`ctrl+t` left it on 2026-09-09** for the same reason, once both arms of `reserved_quickswitch` were covered — the running one in that file, the editor one in `input_editor_keys_spec.lua`.
 
@@ -114,7 +114,7 @@ The editor is checked against its spec, the editor principles (`docs/editor-prin
 
 `love src harmony` starts the IDE with its storage in a fresh `/tmp/compy-harmony-*` directory,
 whose path it prints as `harmony: storage <path>`, and runs the scenarios under
-`src/harmony/scenarios/`, a file at a time in name order. A scenario types text and presses keys
+`src/harmony/scenarios/`, a file at a time in name order (the loader sorts the names). A scenario types text and presses keys
 into the running IDE (`h.love_text`, `h.love_key`; a chord such as `C-q` holds its modifiers until
 `h.release_keys`; `h.hold` and `h.let_go` keep a key such as F1 held, and `h.key_repeat` sends a
 held key's repeat as LÖVE does, its `isrepeat` true), takes screenshots into the
@@ -122,19 +122,24 @@ directory's `screenshots/<file>/`, and checks with `assert`. Each scenario's nam
 output as it starts. The run ends with `harmony: N scenarios passed` and exit status 0, or at the
 first failed check or error with `harmony: FAILED in <scenario>`, the message and exit status 1.
 With no display, run it with `SDL_VIDEODRIVER=offscreen`, or under Xvfb
-(`Xvfb :n -screen 0 1024x600x24`, `DISPLAY=:n`); a full run takes about two and a half minutes.
+(`Xvfb :n -screen 0 1024x600x24`, `DISPLAY=:n`); a full run takes about three and a half minutes.
 
 Two helper modules serve the scenarios. `src/harmony/drive.lua` types: a key or chord with its
 modifiers let go (`D.key`), text (`D.type`), a line and Enter (`D.enter`), a screenshot
 (`D.shot`), F1 held around a check (`D.with_card`), a key held for its press and repeats
-(`D.held`), a project's file opened in the editor with
-fixture files written first (`D.open`), and Escape back to the console (`D.leave`).
+(`D.held`), a click (`D.click`), a project's file opened in the editor with fixture files
+written first (`D.open`), and Escape back to the console (`D.leave`).
 `src/harmony/probe.lua` reads, in the specification's terms: the editor's state, browsing
 position, replacement target, draft, cursor and message (`P.state`, `P.position`, `P.target`,
 `P.draft`, `P.cursor`, `P.message`, `P.message_kind`), the console's field and text, whether a
 key card shows (`P.card`), a project's file on storage (`P.stored`), and the strings drawn on
-screen over a few frames (`P.drawn`, `P.shows`). It writes fixtures straight to storage
-(`P.put`) and changes nothing else.
+screen over a few frames (`P.drawn`, `P.shows`). It also reads any of the three text fields
+(`P.field`, `P.text`, `P.field_cursor`), the document view (`P.rows_shown`, `P.in_view`,
+`P.blocks_in_view`, `P.offset`), and the screen's pixels: `P.capture` takes the frame as image
+data, `P.cell` gives a cell's background and its glyph's dominant colour, `P.near` compares a
+colour with the theme's (`conf/colors.lua`) within a margin for antialiasing, and `P.band` finds
+the status line's band. It writes fixtures straight to storage (`P.put`) and changes nothing
+else.
 
 `editor.lua` drives the file editor one scenario per user-level task: open and leave a file
 (`open-close`), add blocks and copy one (`add`), replace a block with F2 and run the change with
@@ -168,6 +173,23 @@ after every key that may write it:
   in the editor and the console.
 - `console.lua`: lines run by Enter, broken by Shift+Enter and Alt+Enter, Shift+Ins doing
   nothing, and the history.
+- `editor_open.lua`: a file that is not UTF-8 refused, a file without a final line end, Ctrl+J
+  to a file that cannot be opened, an empty file, a block taller than the view scrolled a row at
+  a time, and PgUp and PgDn paging by the view. `editor_states.lua` also keeps the cursor
+  through formatting (`cursor-format`).
+- `fields.lua`: the editor's, the console's and a program's field take the same field keys, a
+  click places the cursor and a click on the document view browses nothing, Shift with the
+  arrows selects nothing, and chords nothing binds, Ctrl+Enter first, do nothing.
+- `editor_rulings.lua`: a run of empty lines lands as one in Lua and stays in text; a refused
+  formatting says why.
+- `keycard_rows.lua`: every row of the editor's card in each state and of the console's, with
+  and without a program behind it, pressed and checked against what the row says; a row with no
+  check fails. Ctrl+Q while F1 is held acts in the console and is held back in the editor.
+- `colors.lua`: the highlights, the strips of a block both browsed and loaded, a syntax error's
+  red and the band's, the notice's orange, a Markdown heading, the block cursor, and the status
+  line's pixel rows with a field of one row and of eight, which it prints as `LAYOUT` lines.
+- `zz_findings.lua`: checks of behaviour found wrong and not yet fixed, run last so that the
+  rest of the run has passed when one fails.
 
 ## Manual smoke — what no suite here can reach
 

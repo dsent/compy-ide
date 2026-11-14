@@ -478,12 +478,11 @@ describe("requirements, added #editor #spec", function()
     end)
 
     spec_it("H-NFR3.2 Avoid sudden disappearance: a held cut "
-        .. "takes the empty lines and one block, no more",
-        function()
+        .. "takes one block, no more", function()
       open_file("x = 1\n\n\ny = 2\nz = 3\nw = 4\n")
-      K.browse_to(2)
+      K.browse_to(4)
       hold("delete", 8, true)
-      assert.same("x = 1\nz = 3\nw = 4\n", K.file())
+      assert.same("x = 1\n\n\nz = 3\nw = 4\n", K.file())
       assert.same("y = 2", K.draft())
     end)
 

@@ -1,4 +1,5 @@
 local class = require('util.class')
+local FieldKeys = require('model.input.fieldKeys')
 require("util.key")
 require("util.view")
 require("util.string.string")
@@ -585,15 +586,12 @@ end
 --  keyboard  --
 ----------------
 
---- The field's keys, each chord by its full name (Key.combo):
---- one table for every owner, the console, the file editor
---- and a program's input (the maintainer's ruling of November
---- 14, 2026: one text field, the same everywhere). A chord the
---- table does not name does nothing in the field, whatever its
---- key does with other modifiers. Each action takes the
---- controller, its model and the key. `duplicate`: where the
---- owner allows it (allow_duplicate_line). There is no
---- selection: the clipboard that needed it is gone.
+--- The field's keys are one table for every owner, the
+--- console, the file editor and a program's input
+--- (model/input/fieldKeys.lua), each chord by its full name
+--- (Key.combo): a chord the table does not name does nothing in
+--- the field. These are its actions, each taking the
+--- controller, its model, the key and whether it repeats.
 
 --- Navigation-boundary output (doc/development/decisions/
 --- input.md, D-EDIT-CALLBACKS): a hit limit is signalled only
@@ -676,45 +674,18 @@ local ACT = {
   redo = function(_, input) input:redo_edit() end,
 }
 
---- chord -> { action, only where (duplicate) }
-local FIELD_KEYS = { }
-local function bind(chords, act, only)
-  for _, c in ipairs(chords) do
-    FIELD_KEYS[c] = { act = ACT[act], only = only }
-  end
-end
-bind({ 'left', 'right' }, 'char')
-bind({ 'ctrl+left', 'ctrl+right' }, 'word')
---- the ends of the cursor's row; with Ctrl, of the draft
-bind({ 'home', 'end' }, 'edge')
-bind({ 'ctrl+home', 'ctrl+end' }, 'whole')
-bind({ 'up', 'down' }, 'vertical')
---- Alt+Up and Alt+Down are the file editor's block move
-bind({ 'alt+shift+up', 'alt+shift+down' }, 'move_line')
---- with Shift still held from a capital
-bind({ 'backspace', 'shift+backspace' }, 'backspace')
-bind({ 'delete' }, 'delete')
-bind({ 'ctrl+backspace', 'alt+backspace', 'ctrl+w' },
-  'backspace_word')
-bind({ 'ctrl+k' }, 'kill')
-bind({ 'ctrl+d' }, 'duplicate', 'duplicate')
-bind({ 'shift+return', 'alt+return',
-  'shift+kpenter', 'alt+kpenter' }, 'line_feed')
-bind({ 'return', 'kpenter' }, 'submit')
-bind({ 'escape' }, 'cancel')
-bind({ 'ctrl+z' }, 'undo')
-bind({ 'ctrl+y' }, 'redo')
-
---- Whether the field acts on a chord (Key.combo's name)
+--- Whether the field acts on a chord (Key.combo's name), and
+--- its entry (fieldKeys.lua)
 --- @param chord string
---- @return boolean
+--- @return table? entry
 function UserInputController:names(chord)
-  local e = FIELD_KEYS[chord]
-  if not e then return false end
-  if e.only == 'duplicate' then
-    return self.allow_duplicate_line == true
+  local e = FieldKeys:lookup('field', chord)
+  if not e then return nil end
+  if e.only == 'duplicate' and not self.allow_duplicate_line
+  then
+    return nil
   end
-  return true
+  return e
 end
 
 --- The keys an error unlocks the field with
@@ -768,8 +739,9 @@ function UserInputController:keypressed(k, sc, isr)
     return
   end
 
-  if self:names(chord) then
-    FIELD_KEYS[chord].act(self, input, k, isr)
+  local entry = self:names(chord)
+  if entry then
+    ACT[entry.act](self, input, k, isr)
   end
   self:update_view()
 end
@@ -814,53 +786,20 @@ end
 --   mouse   --
 ---------------
 
---- @private
---- @param x integer
---- @param y integer
---- @return integer c
---- @return integer l
-function UserInputController:_translate_to_input_grid(x, y)
-  local cfg = self.model.cfg
-  local h = cfg.view.h
-  local fh = cfg.view.fh
-  local fw = cfg.view.fw
-  local line = math.floor((h - y) / fh)
-  local a, b = math.modf((x / fw))
-  local char = a + 1
-  if b > .5 then char = char + 1 end
-  return char, line
-end
-
---- @private
+--- A click in the draft places the text cursor on the cell
+--- it points at, in every field; it selects nothing (the
+--- ruling of November 14, 2026). A click outside the rows the
+--- field shows leaves the cursor where it is.
 --- @param x integer
 --- @param y integer
 --- @param btn integer
---- @param handler function
-function UserInputController:_handle_mouse(x, y, btn, handler)
-  if btn == 1 then
-    local im = self.model
-    local n_lines = im:get_wrapped_text():get_content_length()
-    local c, l = self:_translate_to_input_grid(x, y)
-    if l < n_lines then
-      handler(n_lines - l, c)
-    end
-  end
-end
-
---- @param x integer
---- @param y integer
---- @param btn integer
---- @param touch boolean
---- @param presses number
---- A click in the draft places the text cursor there, in
---- every field; it selects nothing (the ruling of November
---- 14, 2026)
-function UserInputController:mousepressed(
-    x, y, btn, touch, presses)
+function UserInputController:mousepressed(x, y, btn)
+  local v = self.view
+  if btn ~= 1 or not (v and v.cell_at) then return end
   local im = self.model
-  self:_handle_mouse(x, y, btn, function(l, c)
-    im:move_cursor(im:translate_grid_to_cursor(l, c))
-  end)
+  local row, col = v:cell_at(x, y, im:get_input())
+  if not row then return end
+  im:move_cursor(im:translate_grid_to_cursor(row, col))
   self:update_view()
 end
 

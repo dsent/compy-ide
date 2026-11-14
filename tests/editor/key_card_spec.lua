@@ -86,7 +86,9 @@ describe("the key card #editor", function()
           assert.truthy(text:find(c.what, 1, true), c.what)
         end
       end
-      assert.same(21, keys)
+      -- the editor's own keys, the field's, and the reserved
+      -- chords that act in the editor
+      assert.same(29, keys)
     end
   end)
 
@@ -96,7 +98,7 @@ describe("the key card #editor", function()
       local cells = KeyCard.console_cells(live)
       local lines = KeyCard.lines_of(cells, ROWS, WIDTH)
       assert.is_true(#lines <= ROWS)
-      assert.same(" Keys now, console:", lines[1])
+      assert.truthy(lines[1]:find("^ Keys now, console:"))
       local text = table.concat(lines, "\n")
       for _, c in ipairs(cells) do
         if c.key then
@@ -122,13 +124,13 @@ describe("the key card #editor", function()
     after_them(KeyCard.console_cells())
     local lines = KeyCard.lines_of(KeyCard.console_cells(),
       ROWS, WIDTH)
-    assert.same(" Other keys:", lines[#lines - 1])
-    assert.truthy(lines[#lines]:find("^ Ctrl%+Q +exit program$"))
+    assert.truthy(lines[#lines - 1]:find(" Other keys:$"))
+    assert.truthy(lines[#lines]:find(" Ctrl%+Q +exit program$"))
   end)
 
   it("takes one column where two do not fit", function()
-    local lines = KeyCard.lines("browsing", true, 30, 40)
-    assert.same(23, #lines)
+    local lines = KeyCard.lines("browsing", true, 40, 40)
+    assert.same(31, #lines)
     assert.same(" Keys now, browsing:", lines[1])
   end)
 end)

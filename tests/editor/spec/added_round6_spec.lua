@@ -1,8 +1,9 @@
 -- The sixth review round's findings, each as the keys that
--- showed it: the key card follows who the help key goes to,
--- a `#!` first line stays as it is through every action, and
--- formatting keeps the line endings the documents promise.
--- Keys only, through tests/helpers/editor_keys.lua.
+-- showed it: the key card follows who the help key goes to, a
+-- `#!` first line keeps its text through a change, formatting
+-- and their undo and redo, and a key held as the editor comes
+-- to the front adds nothing. Keys only, through
+-- tests/helpers/editor_keys.lua.
 
 local K = require("tests.helpers.editor_keys")
 local marks = require("tests.helpers.spec_marks")

@@ -45,10 +45,11 @@ UserInputModel = class.create()
 --- @param cfg Config
 --- @param eval Evaluator
 --- @param custom_label PromptLabel?
---- @param editing boolean? --- the editor's rich input: word
---- deletion (2.7) and the field's height. Off everywhere
---- else — the console and project inputs keep the plain
---- widget. The draft's undo is every field's (D-UNDO-KEYS).
+--- @param editing boolean? --- the file editor's field: its
+--- height (half the rows it shares with the document view),
+--- Up on its first row and Down on its last going to the
+--- draft's ends (IS3.8), and a notice that blocks no key. The
+--- keys are every field's (fieldKeys.lua).
 function UserInputModel.new(cfg, eval, custom_label, editing)
   local self = setmetatable({
     editing = editing or false,
@@ -501,46 +502,28 @@ function UserInputModel:backspace()
   self:_note_edit()
 end
 
---- Start of the word ending at column cc (spec 2.7:
---- Ctrl+Backspace / Ctrl+W). Whitespace before the
---- cursor is eaten with the word, as readline does.
---- @param line string
---- @param cc integer --- cursor column
---- @return integer --- the column the word starts at
-local function word_start(line, cc)
-  local i = cc - 1
-  while i > 1 and string.usub(line, i - 1, i - 1) == ' ' do
-    i = i - 1
-  end
-  while i > 1 do
-    local ch = string.usub(line, i - 1, i - 1)
-    if ch == ' ' then break end
-    i = i - 1
-  end
-  return i
-end
-
---- Delete the word before the cursor; at the line's
---- start it falls back to joining lines
+--- Ctrl+Backspace, Alt+Backspace and Ctrl+W: delete exactly
+--- what Ctrl+Left moves over within the line (IS3.8), as one
+--- change. At a line's start they remove the line break alone
+--- and join the lines, as Backspace does; at the draft's
+--- start, nothing.
 function UserInputModel:backspace_word()
-  --- at a line's start it joins lines, as Backspace does, in
-  --- one step of its own
-  local _, c0 = self:get_cursor_pos()
-  if c0 == 1 and not self:has_selection() then
-    return self:backspace()
-  end
+  local l, c = self:get_cursor_pos()
+  if c == 1 then return self:backspace() end
+  local tl, tc = self:_word_left_of(l, c)
+  if tl == l and tc == c then return end
   self:_record_edit('remove_word', true)
-  self:pop_selected_text()
-  local line = self:get_current_line()
-  local cl, cc = self:get_cursor_pos()
-  if cc == 1 then return self:backspace() end
-
-  local ws = word_start(line, cc)
-  local pre = string.usub(line, 1, ws - 1)
-  local post = string.usub(line, cc)
-  self:_set_text_line(pre .. post, cl, true)
-  self:move_cursor(cl, ws)
+  self:clear_selection()
+  local lines = { }
+  for i = 1, tl - 1 do lines[i] = self:get_text_line(i) end
+  lines[tl] = string.usub(self:get_text_line(tl), 1, tc - 1)
+      .. string.usub(self:get_text_line(l), c)
+  for i = l + 1, self:get_n_text_lines() do
+    lines[#lines + 1] = self:get_text_line(i)
+  end
+  self.entered = InputText(lines)
   self:text_change()
+  self:move_cursor(tl, tc)
   self:_note_edit()
 end
 
@@ -1144,11 +1127,14 @@ local function is_word_char(ch)
   return true
 end
 
---- Ctrl+Left: to the start of the word under or before the
---- cursor (IS3.8); everything that is no letter, digit or
---- underscore separates words, line breaks included.
-function UserInputModel:cursor_word_left()
-  local l, c = self:get_cursor_pos()
+--- Where Ctrl+Left lands from (l, c): the start of the word
+--- under or before it (IS3.8); everything that is no letter,
+--- digit or underscore separates words, line breaks included
+--- @param l integer
+--- @param c integer
+--- @return integer l
+--- @return integer c
+function UserInputModel:_word_left_of(l, c)
   while true do
     local ch
     if c > 1 then
@@ -1168,7 +1154,13 @@ function UserInputModel:cursor_word_left()
   while c > 1 and is_word_char(string.usub(line, c - 1, c - 1)) do
     c = c - 1
   end
-  self:_jump_to(l, c)
+  return l, c
+end
+
+--- Ctrl+Left: to the start of the word under or before the
+--- cursor (IS3.8)
+function UserInputModel:cursor_word_left()
+  self:_jump_to(self:_word_left_of(self:get_cursor_pos()))
 end
 
 --- Ctrl+Right: to the end of the word under or after the
@@ -1387,17 +1379,21 @@ end
 ----------------
 -- selection  --
 ----------------
+--- The draft's line and column of a cell on its wrapped row
+--- `l`, column `c`: the row's place in its own line counts,
+--- not the rows the lines before it wrap to
 --- @param l integer
 --- @param c integer
+--- @return integer li
+--- @return integer ci
 function UserInputModel:translate_grid_to_cursor(l, c)
-  local wt       = self.visible.wrap_reverse
-  local li       = wt[l] or wt[#wt]
-  local line     = self:get_wrapped_text_line(l)
-  local llen     = string.ulen(line)
-  local c_offset = math.min(llen + 1, c)
-  local c_base   = l - li
-  local ci       = c_base * self.visible.wrap_w + c_offset
-  return li, ci
+  local vis = self.visible
+  local wt = vis.wrap_reverse
+  if not wt[l] then l = #wt end
+  local li = wt[l]
+  local rank = vis.wrap_rank[l] or 0
+  local len = string.ulen(self:get_wrapped_text_line(l))
+  return li, rank * vis.wrap_w + math.min(len + 1, c)
 end
 
 --- @param c1 Cursor?
