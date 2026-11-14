@@ -7,9 +7,9 @@
 --- key (the maintainer's ruling of November 14, 2026).
 ---
 --- An action names EditorController's (`ACTIONS` in
---- editorController.lua); 'field' hands the key to the text
---- field, and 'none' takes it and does nothing (the help
---- key). The gate's reserved chords are in reservedKeys.lua.
+--- editorController.lua); 'none' takes the key and does
+--- nothing (the help key). The gate's reserved chords are in
+--- reservedKeys.lua.
 ---
 --- A key repeats while held only if it writes nothing and
 --- changes no state (the ruling of November 14, 2026, "Which
@@ -41,8 +41,8 @@ local function with(def, fields)
 end
 
 --- Up and Down browse while the draft is empty (IS2.1); in a
---- draft they move the cursor a row (IS3.8), which needs no
---- word on the card
+--- draft they move the cursor a row (IS3.8), a trivial key
+--- with no word and no row on the card
 local function rows(empty)
   return empty and 'browse blocks' or nil
 end
@@ -71,7 +71,7 @@ local DEFS = {
       card = 'Ctrl+Up/Down', repeats = true }),
   --- the field's Up and Down, which browse while the draft is
   --- empty
-  with(each('vertical', 'browse blocks', nil, rows),
+  with(each('vertical', 'browse blocks', rows, rows),
     { chords = { 'up', 'down' }, card = 'Up/Down',
       repeats = true }),
   --- with an empty field Home and End move through the file:

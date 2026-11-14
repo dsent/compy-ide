@@ -11,7 +11,9 @@ local D = require('harmony.drive')
 --- (ruling 2.5), a Markdown heading (IS8.3), and the block
 --- cursor at its cell. Also the layout: the status line's band
 --- with a field of one row and of eight, in the console and
---- the editor.
+--- the editor, and the strip under the field in the field's
+--- background (the ruling of November 14, late: 4 pixels for
+--- the status line, 2 at the bottom).
 
 local PROJECT = 'h-colors'
 
@@ -148,15 +150,27 @@ local function layout(wait, where, color, eight)
   local a, b = band(img, color)
   print(string.format('LAYOUT %s, a field of 1 row: the status'
     .. ' line takes pixel rows %d to %d', where, a, b))
-  local h, fh = P.cc().cfg.view.h, P.cc().cfg.view.fh
-  D.eq(b, h - fh - 1, where .. ': the status line ends above one row')
+  local view = P.cc().cfg.view
+  local h, fh = view.h, view.fh
+  local l = require('view.layout')(view)
+  D.eq(b - a + 1, l.status_h, where .. ': the status line\'s height')
+  D.eq(b, h - l.bottom - fh - 1,
+    where .. ': the status line ends above one row and the strip')
+  for y = h - l.bottom, h - 1 do
+    for _, x in ipairs({ 1, img:getWidth() - 2 }) do
+      local r, g, bl = img:getPixel(x, y)
+      is({ r, g, bl }, view.colors.input.console.bg,
+        where .. ': the strip at the bottom, pixel row ' .. y)
+    end
+  end
   eight()
   img = P.capture(wait)
   D.shot(wait, where .. '-8')
   local a8, b8 = band(img, color)
   print(string.format('LAYOUT %s, a field of 8 rows: the status'
     .. ' line takes pixel rows %d to %d', where, a8, b8))
-  D.eq(b8, h - 8 * fh - 1, where .. ': the status line ends above 8 rows')
+  D.eq(b8, h - l.bottom - 8 * fh - 1,
+    where .. ': the status line ends above 8 rows and the strip')
   D.eq(b8 - a8, b - a, where .. ': the band keeps its height')
 end
 

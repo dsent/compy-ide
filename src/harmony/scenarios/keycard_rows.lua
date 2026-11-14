@@ -2,17 +2,20 @@ local P = require('harmony.probe')
 local D = require('harmony.drive')
 local KeyCard = require('model.editor.keyCard')
 
---- The key card says what each key does (IS3.16): for every
---- row of the editor's card in each state, and of the
---- console's with and without a program behind it, the key the
---- row names is pressed and what the row says is checked. A
---- row with no check here fails the scenario, so that the card
---- cannot gain a row the scenario does not try. The trivial
---- keys (moving the cursor, deleting a character, paging) are
---- on no card (the ruling of November 14, late); fields.lua
---- tries them. Also: Ctrl+Q acts while F1 is held in the
---- console, and is held back while the editor's card shows
---- (the ruling of November 14).
+--- The key card says what each key does (IS3.16): for each
+--- row among the keys now of the editor's card in each state,
+--- and of the console's with and without a program behind it,
+--- the key the row names is pressed and what the row says is
+--- checked. A row there with no check fails the scenario, so
+--- that the card cannot gain such a row the scenario does not
+--- try. The rows under "Other keys" are not pressed: each is a
+--- key now in another state, tried there. Ctrl+Esc's row is
+--- read and its key not pressed, since it would end the run.
+--- The trivial keys (the arrows in a draft, Home and End on its
+--- row, Backspace, Delete, paging) are on no card (the ruling
+--- of November 14, late); fields.lua tries them. Also: Ctrl+Q
+--- acts while F1 is held in the console, and is held back
+--- while the editor's card shows (the ruling of November 14).
 
 local PROJECT = 'h-rows'
 local FILE = 'rows.lua'
@@ -191,6 +194,14 @@ local function draft_rows(d)
       D.eq(col(), '1:1', 'and the one before')
       D.key(wait, 'C-right')
       D.eq(col(), '1:2', 'Ctrl+Right to the word end')
+    end },
+    ['Ctrl+Home/End'] = { 'text start/end', function(wait)
+      D.key(wait, 'S-return')
+      D.type(wait, 'zz')
+      D.key(wait, 'C-home')
+      D.eq(col(), '1:1', 'Ctrl+Home, the text\'s start')
+      D.key(wait, 'C-end')
+      D.eq(col(), '2:3', 'Ctrl+End, its end')
     end },
     ['Ctrl+K'] = { 'delete to end', function(wait)
       D.key(wait, 'home')
@@ -415,6 +426,16 @@ local CONSOLE = {
     D.key(wait, 'home')
     D.key(wait, 'C-k')
     D.eq(P.console_draft(), '', 'Ctrl+K')
+  end },
+  ['Ctrl+Home/End'] = { 'text start/end', function(wait)
+    D.key(wait, 'S-return')
+    D.type(wait, 'zz')
+    D.key(wait, 'C-home')
+    D.eq(table.concat({ P.field_cursor('console') }, ':'), '1:1',
+      'Ctrl+Home')
+    D.key(wait, 'C-end')
+    D.eq(table.concat({ P.field_cursor('console') }, ':'), '2:3',
+      'Ctrl+End')
   end },
   ['Alt+Shift+Up/Dn'] = { 'move the line', function(wait)
     D.key(wait, 'S-return')

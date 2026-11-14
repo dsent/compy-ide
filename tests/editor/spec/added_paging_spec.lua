@@ -250,11 +250,42 @@ describe("paging, formatting, removed keys #editor #spec",
         K.reset({ ["notes.txt"] = lines_file(60) })
         K.open("notes.txt")
         K.browse_to(30)
+        -- browsed away while the key is held, so that a repeat
+        -- that acted would bring the position back
         K.hold("home")
+        assert.same(1, K.position())
+        K.keys("lctrl", "down")
         K.repeat_key("home")
         K.release("home")
-        assert.same(1, K.position())
+        assert.same(2, K.position())
+        K.hold("end")
+        assert.same("end", K.position())
+        K.keys("lctrl", "up")
+        K.repeat_key("end")
+        K.release("end")
+        assert.same(60, K.position())
+        assert.same("", K.draft())
         assert.same("browsing", K.state())
+      end)
+
+      spec_it("IS3.16 Show the key card: with text in the field "
+          .. "the card gives Home and End no row, since they move "
+          .. "the cursor there; with none it lists them", function()
+        K.reset({ ["notes.txt"] = lines_file(60) })
+        K.open("notes.txt")
+        local function card_text()
+          K.hold("f1")
+          local card = K.key_card()
+          K.release("f1")
+          assert.is_not_nil(card)
+          return table.concat(card, "\n")
+        end
+        assert.truthy(card_text():find("file start/end", 1, true))
+        K.type("abcd")
+        assert.is_nil(card_text():find("file start/end", 1, true))
+        -- Ctrl+Home/End, to the text's ends, stays
+        assert.is_nil(card_text():find("[^+]Home/End "))
+        assert.truthy(card_text():find("Ctrl+Home/End", 1, true))
       end)
 
       spec_it("IS3.8 Position the text cursor: in a draft Home "

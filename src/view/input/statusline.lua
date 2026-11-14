@@ -57,9 +57,11 @@ function Statusline:draw(status, start_y)
   local h = start_y or 0
   local w = cf.w
   local font = cf.font
-  --- the status line's own row, its text centred in it
-  local band = Layout(cf).status_h
-  local pad = math.floor((band - font:getHeight()) / 2)
+  --- the status line's own row; its text sits as in any row,
+  --- with the pixels the line gains split above and below it
+  local lay = Layout(cf)
+  local band = lay.status_h
+  local pad = lay.status_pad
 
   --- The width of `text` in the monospace font: its columns.
   --- @param text string

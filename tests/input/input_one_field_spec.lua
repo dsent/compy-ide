@@ -296,6 +296,30 @@ describe("one text field everywhere #input", function()
       end
     end)
 
+    -- the Compy's 600 pixels: 2 at the bottom, the field's rows
+    -- of 33 over them, the status line of 37 over those (the
+    -- maintainer's ruling of November 14, late)
+    it("a click finds the field's first and last row at their "
+        .. "pixels, and not the strip under them or the status "
+        .. "line over them", function()
+      for _, owner in ipairs(ORDER) do
+        local function lands(y)
+          local f = field_of(owner, { "one", "two" }, 1, 1)
+          click(16 * 1.2, y)
+          return { f:get_cursor_pos() }
+        end
+        -- row 2 is 565 to 597, row 1 532 to 564
+        assert.same({ 2, 2 }, lands(597), owner)
+        assert.same({ 2, 2 }, lands(565), owner)
+        assert.same({ 1, 2 }, lands(564), owner)
+        assert.same({ 1, 2 }, lands(532), owner)
+        assert.same({ 1, 1 }, lands(598), owner)
+        assert.same({ 1, 1 }, lands(599), owner)
+        assert.same({ 1, 1 }, lands(531), owner)
+        assert.same({ 1, 1 }, lands(495), owner)
+      end
+    end)
+
     it("a click in the draft places the cursor, in every "
         .. "field", function()
       for _, owner in ipairs(ORDER) do

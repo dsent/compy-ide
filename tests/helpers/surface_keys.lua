@@ -85,17 +85,24 @@ function S.unbound_neighbours(bound)
   return out
 end
 
---- The card labels the surface's keys need in `state`: each
---- bound chord's, unless EXEMPT or marked trivial (a key
---- anyone finds without being told). A chord whose definition
---- has neither a label nor the trivial mark is returned in
---- `missing`.
+--- The card labels the surface's keys need in `state`, its
+--- draft `empty` or not: each bound chord's, unless EXEMPT or
+--- trivial (a key anyone finds without being told), marked so
+--- or given no words for the draft, as Up and Down in a draft.
+--- A chord whose definition has neither a label nor that is
+--- returned in `missing`.
+--- @param keys table
+--- @param state string
+--- @param empty boolean?
 --- @return table<string, true> labels
 --- @return string[] missing
-function S.inventory(keys, state)
+function S.inventory(keys, state, empty)
   local labels, missing = { }, { }
   for chord, d in pairs(S.bound(keys, state)) do
-    if not S.EXEMPT[chord] and not d.trivial then
+    local e = d[state]
+    local wordless = e and type(e.words) == "function"
+        and e.words(empty) == nil
+    if not S.EXEMPT[chord] and not d.trivial and not wordless then
       if d.card then
         labels[d.card] = true
       else

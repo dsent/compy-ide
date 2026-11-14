@@ -13,8 +13,9 @@
 ---     inserting = { act = 'vertical' } }
 ---
 --- `act` names the surface's action; `words` (a string, or a
---- function of whether the draft is empty) is what the card
---- says while the state is in front. `trivial`: a key anyone
+--- function of whether the draft is empty, nil where the key
+--- is trivial then) is what the card says while the state is
+--- in front. `trivial`: a key anyone
 --- finds without being told (moving the cursor, paging), bound
 --- and working but left off the card. A state with no entry
 --- leaves the chords unbound there. The card follows the
@@ -80,23 +81,50 @@ local function words_of(e, empty)
   return w
 end
 
+--- Whether the key acts in `state` with a meaning of its own
+--- that has no words: a function of the draft gave none, or
+--- the state leaves the chords to another table (`falls_to`)
+--- that binds them.
+--- @param d table
+--- @param state string
+--- @param empty boolean?
+--- @param falls_to (fun(chord: string): boolean)?
+--- @return boolean
+local function wordless_here(d, state, empty, falls_to)
+  local e = d[state]
+  if e then
+    return type(e.words) == 'function' and e.words(empty) == nil
+  end
+  if not falls_to then return false end
+  for _, chord in ipairs(d.chords) do
+    if falls_to(chord) then return true end
+  end
+  return false
+end
+
 --- The card's rows in the list's order: { label, words, now }.
---- A label is now when the state's entry has words; else it
+--- A label is now when the state's entry has words. Else it
 --- is listed with the words another state gives it, the first
---- in `states` order, after the state's own. `keep`, when
---- given, says which definitions the card may list.
+--- in `states` order, after the state's own, unless the key
+--- acts in this state with a meaning that has no words: then
+--- it has no row, so that the card never gives a key that acts
+--- here another state's meaning. `keep`, when given, says
+--- which definitions the card may list; `falls_to`, which
+--- chords the state leaves to another table that binds them.
 --- @param state string
 --- @param empty boolean?
 --- @param keep (fun(def: table): boolean)?
+--- @param falls_to (fun(chord: string): boolean)?
 --- @return table[]
-function Keymap:card_rows(state, empty, keep)
+function Keymap:card_rows(state, empty, keep, falls_to)
   local rows, seen = { }, { }
   for _, d in ipairs(self.defs) do
     local label = d.card
     if label and not seen[label] and (not keep or keep(d)) then
       local w = words_of(d[state], empty)
       local now = w ~= nil
-      if not now then
+      if not now and not wordless_here(d, state, empty, falls_to)
+      then
         for _, st in ipairs(self.states) do
           w = w or words_of(d[st], empty)
         end

@@ -45,9 +45,11 @@ local DEFS = {
   with(key('edge'),
     { chords = { 'home', 'end' }, repeats = true,
       trivial = true }),
-  with(key('whole'),
-    { chords = { 'ctrl+home', 'ctrl+end' }, repeats = true,
-      trivial = true }),
+  --- not trivial for a child: on the card (the maintainer's
+  --- ruling of November 14, late)
+  with(key('whole', 'text start/end'),
+    { chords = { 'ctrl+home', 'ctrl+end' },
+      card = 'Ctrl+Home/End', repeats = true }),
   with(key('vertical'),
     { chords = { 'up', 'down' }, repeats = true,
       trivial = true }),

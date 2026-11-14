@@ -13,7 +13,7 @@
   so does a file you return to with <kbd>Escape</kbd>. A file
   changed while the editor shows it keeps the text it had: each
   key that would write it (<kbd>Enter</kbd>, a cut, a move,
-  <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd>,
+  <kbd>Alt</kbd>+<kbd>F</kbd>,
   <kbd>Ctrl</kbd>+<kbd>Z</kbd>, <kbd>Ctrl</kbd>+<kbd>Y</kbd>) says
   it changed and saves nothing, and so does each when the file
   cannot be read. To see what the SD card holds then, leave the

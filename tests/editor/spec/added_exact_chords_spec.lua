@@ -101,7 +101,8 @@ describe("every chord is its own key #editor #spec", function()
         function()
           -- the labels the tables' chords need, not the card's
           -- own rows: a key added without words is missing here
-          local want, missing = Keys.inventory(EditorKeys, state)
+          local want, missing = Keys.inventory(EditorKeys, state,
+            state == "browsing")
           assert.same({ }, missing)
           reach(state)
           K.hold("f1")

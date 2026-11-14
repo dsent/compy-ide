@@ -133,6 +133,8 @@ Project-author guide: `doc/input_api.md`.
   the other states it does nothing.
 - **The status line shows a block's lines as `L2-21`**, without the count that
   followed in brackets.
+- **The status line is 37 pixels high**, a row's 33 and two pixels above and below its
+  text, and a strip of two pixels stays under the field at the screen's bottom.
 - **PageDown and PageUp page through the file.** PageDown brings the first block hidden
   below the view to its top, PageUp the last one hidden above to its bottom, and the
   highlight goes with it; at the file's end or start they go to the end position or the
@@ -169,10 +171,17 @@ Project-author guide: `doc/input_api.md`.
   Ctrl+Down no longer move or recall in the console, and Shift+Escape no longer cancels
   a program's input. The F1 key card is drawn from the same key tables and lists every
   key the editor or the console takes, the reserved ones (Ctrl+T, Ctrl+Q, Ctrl+Alt+R,
-  Ctrl+Esc) included, but the trivial ones that move the cursor, delete a character or
-  page; only a bare F1 brings it up.
+  Ctrl+Esc) included, but the trivial ones: the arrows, Home and End within a draft,
+  Backspace, Delete and paging. Ctrl+Home and Ctrl+End, to the text's start and end,
+  are on it. Only a bare F1 brings it up.
 - **PageUp and PageDown do nothing in the console**: they no longer recall the history,
   which Up and Down still do, and are kept for paging the output.
+- **The console's history works as a classic shell's.** It holds only the lines that ran:
+  Up no longer adds the line being typed, an edit to a recalled line no longer replaces
+  the line that ran, and Escape no longer stores the line it clears. The line being typed
+  waits below the newest line and comes back on Down, which no longer empties the field.
+  An edit to a recalled line stays while you move away and back, until Enter runs it as
+  a new line; a recalled line run unchanged is stored again as the newest.
 - **Ctrl+Z and Ctrl+Y undo and redo the typing in every input**, the console's and a
   program's as well as the editor's. Ctrl+Y no longer deletes the line.
 - **F1 holds back Ctrl+Q and the other reserved keys in the file editor only.** In the

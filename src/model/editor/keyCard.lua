@@ -1,11 +1,12 @@
 --- The key card (IS3.16, FR4.9): every key the surface in
 --- front takes, those its state admits first, with what each
 --- does, laid out to fit the screen. The words come from the
---- tables the keys are looked up in, so the card cannot
---- disagree with them: the surface's own (editorKeys.lua,
---- consoleKeys.lua), then the text field's (fieldKeys.lua),
---- then the gate's reserved chords (reservedKeys.lua). It
---- reads state and changes none.
+--- tables the keys are looked up in: the surface's own
+--- (editorKeys.lua, consoleKeys.lua), then the text field's
+--- (fieldKeys.lua), then the gate's reserved chords
+--- (reservedKeys.lua). A key that acts in the state is never
+--- listed with what it does in another. It reads state and
+--- changes none.
 local EditorKeys = require('model.editor.editorKeys')
 local ConsoleKeys = require('model.input.consoleKeys')
 local FieldKeys = require('model.input.fieldKeys')
@@ -68,13 +69,17 @@ end
 --- A surface's rows in `state`: its own keys, the text
 --- field's that it does not take for itself, then the reserved
 --- chords it gives words to. A trivial key, which anyone finds
---- without being told, has no words and no row.
+--- without being told, has no words and no row; nor has a key
+--- of the surface's that the state leaves to the field, as
+--- Home and End in a draft.
 --- @param keys table --- the surface's keymap
 --- @param state string
 --- @param empty boolean?
 --- @return table[] --- { key, what it does, admitted }
 function KeyCard.rows(keys, state, empty)
-  local rows = keys:card_rows(state, empty)
+  local rows = keys:card_rows(state, empty, nil, function(c)
+    return FieldKeys:lookup('field', c) ~= nil
+  end)
   local now = keys.field_now[state] == true
   local field = FieldKeys:card_rows('field', empty, function(d)
     return not keys:binds(d)

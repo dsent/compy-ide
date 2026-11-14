@@ -319,8 +319,9 @@ end
 
 -- keystrokes -------------------------------------------------
 -- A person's keystrokes are frames apart, and a key with a
--- character sends it between its press and its release, as
--- LÖVE does.
+-- character sends it between its press and its release. On a
+-- Compy the text can also come before its key's press; a test
+-- of that sends the events itself.
 
 --- Let one frame pass.
 --- @param dt number?  seconds, 1/60 when omitted
@@ -381,7 +382,7 @@ end
 
 --- Press and release a chord, modifiers first and released
 --- last, then a frame: K.keys('lctrl', 'up'). A printable key
---- types its character, as on the device.
+--- sends its character between its press and its release.
 function K.keys(...)
   local ks = { ... }
   chord(ks, chord_glyph(ks))
