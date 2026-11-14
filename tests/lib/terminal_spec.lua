@@ -218,3 +218,118 @@ describe("terminal clear command", function()
     end
   end)
 end)
+
+--- What falls outside the grid is lost: a clear or a frame is
+--- cut at the edges, and a character printed at a cursor off the
+--- grid is dropped while the cursor moves on.
+describe("terminal outside the grid", function()
+  --- a grid full of `x`
+  local function full()
+    local t = new_term()
+    t:print(string.rep("x", t.width * t.height - 1))
+    t:update(1000)
+    return t
+  end
+
+  --- the text of grid row `y`, spaces at its end left out
+  local function row(t, y)
+    return (table.concat(t.buffer[y]):gsub("%s+$", ""))
+  end
+
+  it("clears only the part of a clear inside the grid", function()
+    local t = full()
+    t:clear(15, 15, 10, 10)
+    t:clear(25, 25, 2, 2)
+    t:update(1000)
+    for y = 1, 14 do
+      assert.equal(string.rep("x", 20), row(t, y), "row " .. y)
+    end
+    for y = 15, 19 do
+      assert.equal(string.rep("x", 14), row(t, y), "row " .. y)
+    end
+  end)
+
+  it("draws only the part of a frame inside the grid", function()
+    local t = new_term()
+    t:frame("line", 15, 2, 10, 3)
+    t:frame("line", 2, 18, 5, 5)
+    t:update(1000)
+    assert.equal(string.rep(" ", 14) .. "┌─────", row(t, 2))
+    assert.equal(string.rep(" ", 14) .. "│", row(t, 3))
+    assert.equal(string.rep(" ", 14) .. "└─────", row(t, 4))
+    assert.equal(" ┌───┐", row(t, 18))
+    assert.equal(" │   │", row(t, 19))
+    assert.equal(" │   │", row(t, 20))
+  end)
+
+  --- the debug self-test frames at column 90 and down to row 19
+  --- on the console's 64 by 16 grid
+  it("draws the self-test's frames on the console's grid",
+    function()
+      local font = {
+        getWidth  = function() return 10 end,
+        getHeight = function() return 10 end,
+      }
+      local t = Terminal(640, 160, font, 10, 10)
+      t:frame("line", 10, 10, 10, 10)
+      t:frame("line", 90, 10, 10, 10)
+      t:update(1000)
+      assert.equal("┌", t.buffer[10][10])
+      assert.equal("│", t.buffer[16][19])
+    end)
+
+  it("drops a print below the grid; the next lands at the bottom",
+    function()
+      local t = new_term()
+      t:move_to(1, 30)
+      t:print("hi\n")
+      t:print("next\n")
+      t:update(1000)
+      assert.equal(t.height, t.cursor_y)
+      assert.equal("next", row(t, t.height - 1))
+      for y = 1, t.height do
+        assert.falsy(row(t, y):find("h", 1, true), "row " .. y)
+      end
+    end)
+
+  it("drops a print at 0, 0; the next lands on the first row",
+    function()
+      local t = new_term()
+      t:move_to(0, 0)
+      t:print("hi\n")
+      t:print("next\n")
+      t:update(1000)
+      assert.equal("next", row(t, 1))
+      assert.equal("", row(t, 2))
+    end)
+
+  it("drops a print at a column that is not a number", function()
+    local t = new_term()
+    t:move_to(0 / 0, 1)
+    t:print("hi\n")
+    t:print("next\n")
+    t:update(1000)
+    assert.equal("", row(t, 1))
+    assert.equal("next", row(t, 2))
+  end)
+
+  --- more rolls than rows leave the same blank grid, so a
+  --- cursor however far below takes a grid's worth at most
+  it("scrolls a grid's worth at most from far below", function()
+    local t = full()
+    t:move_to(1, math.huge)
+    t:print("hi\n")
+    --- a count hook fires only in code LuaJIT runs uncompiled,
+    --- and in LuaJIT it holds for every coroutine until cleared
+    if jit then jit.off() end
+    debug.sethook(function() error("still scrolling") end, "", 1e7)
+    local ok, err = pcall(t.update, t, 1000)
+    debug.sethook()
+    if jit then jit.on() end
+    assert.is_true(ok, err)
+    assert.equal(t.height, t.cursor_y)
+    for y = 1, t.height do
+      assert.equal("", row(t, y), "row " .. y)
+    end
+  end)
+end)

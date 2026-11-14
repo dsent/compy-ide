@@ -24,6 +24,11 @@ local function utf8_sub(s, i, j)
 end
 
 local function terminal_update_character(terminal, x, y, new_char)
+    -- a cell outside the grid is no cell: what lands there is lost
+    if not (x >= 1 and x <= terminal.width
+            and y >= 1 and y <= terminal.height) then
+        return
+    end
     terminal.buffer[y][x] = new_char
     local char_color = terminal.cursor_color
     local char_backcolor = terminal.cursor_backcolor
@@ -135,7 +140,9 @@ end
 
 local function wrap_if_bottom(terminal)
     if terminal.cursor_y > terminal.height then
-        terminal_roll_up(terminal, terminal.cursor_y - terminal.height)
+        -- more rolls than rows leave the same blank grid
+        terminal_roll_up(terminal, math.min(
+            terminal.cursor_y - terminal.height, terminal.height))
         terminal.cursor_y = terminal.height
     end
 end
@@ -178,7 +185,6 @@ local function terminal_update(terminal, dt)
             for y = y, y + h - 1 do
                 for x = x, x + w - 1 do
                     terminal_update_character(terminal, x, y, " ")
-                    terminal.buffer[y][x] = " "
                 end
             end
             terminal.dirty = true
