@@ -369,6 +369,9 @@ describe('editor key contract #input', function()
       local function project(name)
         return {
           name = name,
+          -- a folder that is there, the file missing from it:
+          -- edit() opens it as a new one
+          path = '/',
           get_path = function(_, f) return '/nonexistent/' .. f end,
           readfile = function() return true, 'x = 1\n' end,
           writefile = function(_, f)

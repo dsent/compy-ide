@@ -322,6 +322,21 @@ describe("input model spec #input", function()
       assert.same({ 'a', 'b', '', 'c' }, model:get_text())
     end)
 
+    -- A clipboard or a program may spell a break CRLF or a
+    -- lone CR: each is a break, and no line keeps a CR.
+    it('take CRLF and a lone CR as line breaks', function()
+      local model = UserInputModel(mockConf, luaEval)
+      model:set_text('a\r\nb\rc')
+      assert.same({ 'a', 'b', 'c' }, model:get_text())
+      model:set_text({ 'a\r\nb', 'c\r' })
+      assert.same({ 'a', 'b', 'c', '' }, model:get_text())
+      model:set_text('')
+      model:add_text('x\r\ny')
+      assert.same({ 'x', 'y' }, model:get_text())
+      model:reformat({ 'p\rq' })
+      assert.same({ 'p', 'q' }, model:get_text())
+    end)
+
     it('both spellings agree on the cursor', function()
       local listed = UserInputModel(mockConf, luaEval)
       listed:set_text({ 'a\nb' })

@@ -5,8 +5,15 @@
 - The contents only change on either <kbd>Enter</kbd> or
   combinations of at least two keys (such as
   <kbd>Ctrl</kbd>+<kbd>Delete</kbd>).
-- The contents shown on canvas always correspond to the contents
-  on disk (SD card).
+- The editor shows a file as it last read or wrote it, and writes
+  nothing over a change made outside it: a file a program or a
+  computer changed meanwhile, a run of your project included, keeps
+  showing the text it had until you open it again, and the next
+  <kbd>Enter</kbd>, cut, move, <kbd>Ctrl</kbd>+<kbd>Z</kbd> or
+  <kbd>Ctrl</kbd>+<kbd>Y</kbd> says it changed and saves nothing.
+  To see what the SD card holds, leave the editor
+  (<kbd>Ctrl</kbd>+<kbd>Q</kbd>) and open the file again with
+  `edit()`.
 - The contents are always validated, changes cannot be persisted
   unless syntactically valid.
 - Editor contents should only change when it's the user's

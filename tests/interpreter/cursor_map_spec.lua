@@ -17,6 +17,19 @@ describe('cursor through formatting #check', function()
     assert.same({ 1, 6 }, at(old, new, 1, 6))
   end)
 
+  it('keeps every place in text that did not change', function()
+    for _, text in ipairs({
+      { '  hello' }, { 'hello  ' }, { '  a  ', '', '  b' },
+      { 's = "a  b"' }, { '' },
+    }) do
+      for l, line in ipairs(text) do
+        for c = 1, string.ulen(line) + 1 do
+          assert.same({ l, c }, at(text, text, l, c))
+        end
+      end
+    end
+  end)
+
   it('keeps the side of an element it stands beside', function()
     local old, new = { 'v1=1' }, { 'v1 = 1' }
     -- after "v1": its end

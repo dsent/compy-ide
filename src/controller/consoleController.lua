@@ -8,9 +8,8 @@ local class = require('util.class')
 local Blink = require('view.input.cursorBlink')
 local LANG = require("util.eval")
 local FS = require('util.filesystem')
-local format = require('model.lang.lua.format')
+local check = require('model.lang.lua.check')
 local display = require('conf.display')
-local textfile = require('util.textfile')
 local Application = require('util.application')
 local usb = require('util.usb')
 require("util.key")
@@ -346,9 +345,12 @@ local function lua_parser()
   return parser
 end
 
---- Format a project file the way the editor writes code on
---- a Compy: the REPL's `tidy(name)`. It writes only when the
---- text changes, and says why when it leaves the file alone.
+--- Format a project file the way the editor's Ctrl+Shift+F
+--- formats it, at a Compy's width: the REPL's `tidy(name)`.
+--- A `#!` first line stays, and every line keeps its own
+--- line ending where it stays, the file's main one where it
+--- changed (BufferModel). It writes only when the text
+--- changes, and says why when it leaves the file alone.
 --- @param name string
 --- @return boolean tidy --- the file is formatted now
 function ConsoleController:tidy(name)
@@ -363,8 +365,11 @@ function ConsoleController:tidy(name)
   end
   local text = self:_readfile(name)
   if not text then return false end
-  local lines = textfile.lines(text)
-  local out, formatted = format.format(lines, display.columns)
+  local buf = BufferModel(name, text, function(out)
+    return self:_writefile(name, out)
+  end)
+  local lines = buf:snapshot().lines
+  local out, formatted = check.tidied(lines, display.columns)
   if not formatted then
     local parsed, err = lua_parser().parse(lines)
     if not parsed and err and err.l then
@@ -377,12 +382,11 @@ function ConsoleController:tidy(name)
     end
     return false
   end
-  --- written as the editor and compyfmt write a file
-  local tidied = textfile.text(out)
-  if tidied == text then
+  if string.unlines(out) == string.unlines(lines) then
     return true
   end
-  local ok, err = self:_writefile(name, tidied)
+  buf:replace_text(out)
+  local ok, err = buf:save()
   if not ok then
     print(err)
     return false
@@ -2226,7 +2230,11 @@ function ConsoleController:edit(name, must_exist)
   local open = self.editor:_find_buffer(fpath)
   if open then
     local hidden = love.state.app_state ~= 'editor'
-    if hidden then self:show_editor() end
+    --- a program stopped first may have changed the project
+    --- and its files: the request is read again
+    if hidden and not self:show_editor() then
+      return self:edit(name, must_exist)
+    end
     if not hidden or open ~= self.editor:get_active_buffer() then
       self.editor:refuse({ filename .. ' is already open.' })
     end
@@ -2239,6 +2247,14 @@ function ConsoleController:edit(name, must_exist)
     refuse(string.format(
       '%s cannot be saved (%s), so it cannot be opened.',
       filename, invalid))
+    return
+  end
+  --- a file missing from a folder that is itself gone (the
+  --- SD card is out) cannot be read just now: opened as a new
+  --- one, it would show no text where there is some
+  if not ex and not FS.exists(p.path) then
+    refuse(string.format(
+      '%s could not be read, so it cannot be opened.', filename))
     return
   end
   local text
@@ -2271,9 +2287,8 @@ function ConsoleController:edit(name, must_exist)
     return
   end
 
-  if love.state.app_state ~= 'editor' then
-    love.state.prev_state = love.state.app_state
-    love.state.app_state = 'editor'
+  if not self:_enter_editor() then
+    return self:edit(name, must_exist)
   end
   --- Editor accept path: a save is durable before the
   --- editor reports acceptance (spec 2.6), so a force-stop
@@ -2301,11 +2316,44 @@ function ConsoleController:hide_editor()
   love.state.prev_state = nil
 end
 
---- The editor's files again, as a run left them
-function ConsoleController:show_editor()
+--- @private
+--- @return boolean --- a program's code can still run: it
+--- runs, it is paused, or it idles behind the console with
+--- its handlers and hooks still connected (run_live)
+function ConsoleController:_program_live()
+  local st = love.state.app_state
+  return self.run_live == true or st == 'running'
+      or st == 'inspect' or st == 'snapshot'
+end
+
+--- @private
+--- Every way the file editor comes to the screen passes here
+--- (Ctrl+T, edit() from the console or from a program):
+--- no program runs or idles behind it, so that none of its
+--- handlers or hooks takes the editor's keys, or stops,
+--- runs or closes the project during an edit (FR1.2). A live
+--- program is stopped first, as Ctrl+T stops it, and nothing
+--- is shown yet: its exit hook may have changed the project
+--- and its files, so the caller asks again.
+--- @return boolean entered --- the editor's state is on
+function ConsoleController:_enter_editor()
+  if love.state.app_state == 'editor' then return true end
+  if self:_program_live() then
+    self:stop_project_run()
+    return false
+  end
   love.state.prev_state = love.state.app_state
   love.state.app_state = 'editor'
+  return true
+end
+
+--- The editor's files again, as a run left them
+--- @return boolean shown --- false when a program had to stop
+--- first (_enter_editor)
+function ConsoleController:show_editor()
+  if not self:_enter_editor() then return false end
   self.editor:show()
+  return true
 end
 
 --- Leave the editor: its files go (IS1.6)

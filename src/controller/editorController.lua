@@ -442,8 +442,10 @@ end
 
 --- A run of the project hides the editor (IS1.4): its
 --- files stay as they are, and the system clipboard is kept
---- from the program
+--- from the program. The key that hides it acts, so it
+--- dismisses the message (IS3.14).
 function EditorController:hide()
+  self.input:clear_error()
   self:set_mode('nav')
   self.search:clear()
   self.clipboard = love.system.getClipboardText()
@@ -608,9 +610,12 @@ function EditorController:_handle_submit(go)
       local block = buf:get_content():get(sel)
       if not block then return true end
     else
+      --- a `#!` line is Lua's at the top of a file alone: in
+      --- the target's place there, or before the first block
+      local at_head = (buf.loaded or buf:get_selection()) == 1
       local verdict = check.gate(raw,
         self.model.cfg.view.drawableChars, self:_size_limit(),
-        true)
+        true, at_head)
       --- an accepted draft goes as its formatted blocks; one
       --- that fails to land (a write refused) stays as typed
       if #verdict.errors == 0 then
@@ -742,11 +747,7 @@ function EditorController:format_file()
   if self:_refuse_stale(buf, 'tidied') then return end
   local snap = buf:snapshot()
   local before = snap.lines
-  --- a `#!` first line is no Lua, and stays as it is
-  local head = before[1] and string.match(before[1], '^#!')
-      and { before[1] } or {}
-  local after, formatted = format.format(
-    table.slice(before, #head + 1, #before),
+  local after, formatted = check.tidied(before,
     self.model.cfg.view.drawableChars)
   if not formatted then
     return self:refuse({
@@ -754,8 +755,6 @@ function EditorController:format_file()
       .. ' it does, so it stays as it is'
     })
   end
-  for _, l in ipairs(after) do head[#head + 1] = l end
-  after = head
   if string.unlines(after) == string.unlines(before) then
     return
   end
@@ -880,10 +879,19 @@ function EditorController:_as_loaded(lines)
 end
 
 --- @private
---- @return boolean --- the draft holds a change Ctrl+Z
---- would take back: typing, a deletion, a reload (IS5.6)
+--- @return boolean --- the draft is not the text Edit loaded
+--- for the replacement target (IS5.6), whatever the draft's
+--- steps hold: text typed and deleted again is no change,
+--- and a change stays one when a change from outside has
+--- ended the steps (_timeline_ready)
 function EditorController:_draft_modified()
-  return #self.input.model.edit_history.steps > 0
+  local buf = self:get_active_buffer()
+  local target = buf.loaded
+  if not target then return false end
+  local lines = buf:block_lines(target)
+  local loaded = lines and self:_as_loaded(lines) or {}
+  return table.concat(loaded, '\n')
+      ~= table.concat(self.input:get_text(), '\n')
 end
 
 --- @private

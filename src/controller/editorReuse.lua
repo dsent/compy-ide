@@ -755,9 +755,14 @@ function EditorController:submit_and_retain()
   end
   buf:clear_loaded()
   self.input:set_text(table.clone(text))
-  --- the cursor follows the text element it stood at
-  local l, c = require('model.lang.lua.cursor_map').cursor(
-    kept.text, text, kept.l, kept.c)
+  --- the cursor follows the text element it stood at in a
+  --- Lua draft the formatter changed; a text or Markdown
+  --- draft is not formatted, and keeps it where it was
+  local l, c = kept.l, kept.c
+  if buf.content_type == 'lua' then
+    l, c = require('model.lang.lua.cursor_map').cursor(
+      kept.text, text, kept.l, kept.c)
+  end
   im:move_cursor(l, c)
   self:_reuse_sync()
   local step = buf.history[#buf.history]

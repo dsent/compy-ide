@@ -106,7 +106,12 @@ Project-author guide: `doc/input_api.md`.
   cuts a line into the field to repair it. F2 on such a line is refused with a notice.
 - **An SD card that cannot be read refuses the key, and forgets nothing.** Enter, a
   cut, a move, Ctrl+Z and Ctrl+Y say the file could not be read; the same key works
-  once it can.
+  once it can. With the card out, `edit()` and Ctrl+J say the file could not be read
+  and open nothing.
+- **The file editor shows no program behind it.** `edit()` in the console while a
+  finished program still holds its handlers, or from such a program's own handler,
+  stops the program first, as Ctrl+T does: its keys, hooks and calls no longer reach
+  the editor or close its files.
 - Ctrl+Up / Ctrl+Down browse blocks in every state, PageUp / PageDown browse ten
   blocks, and Ctrl+K in the field deletes to the end of the line.
 
@@ -156,6 +161,10 @@ Project-author guide: `doc/input_api.md`.
 - A line of spaces in a text or Markdown file is saved as typed.
 - **Ctrl+T from a file reached with Ctrl+J comes back to the whole chain** of files,
   each where it was left and with its undo history; Escape then returns to the caller.
+- **`tidy()` keeps a `#!` first line and the file's line ends**, as Ctrl+Shift+F does;
+  it emptied the one and rewrote the others as LF.
+- **Text pasted with Windows (CRLF) or old Mac (CR) line breaks** is split into lines
+  as typed text is: in a CRLF file it no longer writes an extra empty line.
 - Multi-line string content now writes — `show{text = "a\nb"}` / `set_text("a\nb")`
   previously wrote nothing silently — and the two spellings of the text shape now agree.
 - Non-text content is refused with a readable message that names the failing call.

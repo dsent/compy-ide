@@ -796,8 +796,7 @@ function UserInputController:keypressed(k, sc, isr)
   local function modify()
     if Key.ctrl() then
       if k == 'd' then
-        local line = input:get_current_line()
-        input:insert_text_line(line)
+        input:duplicate_line()
       end
     end
   end

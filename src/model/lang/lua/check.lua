@@ -221,6 +221,23 @@ function M.formatted(lines, width, keep_empty)
   return text, formatted
 end
 
+--- A whole file formatted, as Ctrl+Shift+F and `tidy()`
+--- format it: a `#!` first line is no Lua, and stays as it is
+--- above the rest
+--- @param lines string[]
+--- @param width integer
+--- @return string[] text --- as given when it does not format
+--- @return boolean formatted
+function M.tidied(lines, width)
+  local head = shebang(lines) and { lines[1] } or {}
+  local rest = {}
+  for i = #head + 1, #lines do rest[#rest + 1] = lines[i] end
+  local out, formatted = format.format(rest, width)
+  if not formatted then return lines, false end
+  for _, l in ipairs(out) do head[#head + 1] = l end
+  return head, true
+end
+
 --- @param lines string[]
 --- @return table? --- {l, len}: the first line over the limit
 local function long_line(lines)
@@ -254,8 +271,11 @@ end
 --- @param max_block integer? --- a Compy's limit by default
 --- @param keep_empty boolean? --- a draft's submission: every
 --- empty line between statements stays (IS3.7)
+--- @param at_head boolean? --- the draft lands as the file's
+--- first lines, where a `#!` line opens a file as LuaJIT
+--- reads it
 --- @return GateVerdict
-function M.gate(lines, width, max_block, keep_empty)
+function M.gate(lines, width, max_block, keep_empty, at_head)
   width = width or display.columns
   max_block = max_block or MAX_BLOCK_LINES
   local text, formatted = M.formatted(lines, width, keep_empty)
@@ -271,7 +291,7 @@ function M.gate(lines, width, max_block, keep_empty)
   }
   --- syntax comes before size: the line check counts
   --- formatted lines (IS3.2), which a failed parse has none of
-  local draft = M.draft_parser
+  local draft = at_head and get_parser() or M.draft_parser
   local parses, failure = draft.parse(lines)
   if not parses then
     verdict.failure = draft.failure(lines, failure)

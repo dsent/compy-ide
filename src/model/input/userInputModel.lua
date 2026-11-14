@@ -106,6 +106,16 @@ local function sanitize_utf8(s)
   return r
 end
 
+--- Text as it enters a field: valid UTF-8, its line breaks
+--- each a newline, whichever spelling it came with (CRLF, or
+--- a lone CR, as a clipboard may hold), so that no line of a
+--- draft holds a carriage return
+--- @param s string
+--- @return string
+local function entered_text(s)
+  return (sanitize_utf8(s):gsub('\r\n?', '\n'))
+end
+
 ----------------
 --  entered   --
 ----------------
@@ -168,7 +178,9 @@ end
 
 function UserInputModel:add_text(text)
   if type(text) == 'string' then
-    text = sanitize_utf8(text)
+    text = entered_text(text)
+    --- nothing to add (an empty clipboard): no step (IS6.6)
+    if text == '' then return end
     local single = string.ulen(text) == 1
     if single then
       --- a whitespace starts a new step, so undo eats
@@ -215,22 +227,34 @@ end
 
 --- Normalise either spelling of the content shape -- a string,
 --- or a list of line strings -- to one list of lines, so the
---- caller has a single path. Sanitise for UTF-8, then split on
---- newlines; string.lines takes either spelling, and over a
+--- caller has a single path. Sanitise for UTF-8 and the line
+--- breaks (entered_text), then split on newlines;
+--- string.lines takes either spelling, and over a
 --- list it keeps empty elements, so a blank line survives.
 --- Anything else yields nil, which leaves content standing.
 --- @param text str
 --- @return string[]?
 local function normalized_lines(text)
   if type(text) == 'string' then
-    return string.lines(sanitize_utf8(text))
+    return string.lines(entered_text(text))
   end
   if type(text) ~= 'table' then return end
   local clean = {}
   for i, l in ipairs(text) do
-    clean[i] = sanitize_utf8(l)
+    clean[i] = entered_text(l)
   end
   return string.lines(clean)
+end
+
+--- @param a string[]
+--- @param b string[]
+--- @return boolean --- the same lines
+local function same_lines(a, b)
+  if #a ~= #b then return false end
+  for i = 1, #a do
+    if a[i] ~= b[i] then return false end
+  end
+  return true
 end
 
 --- The draft canonically formatted, as one change to it: what
@@ -240,6 +264,8 @@ end
 function UserInputModel:reformat(text)
   local lines = normalized_lines(text)
   if not lines then return end
+  --- the same text is no change, and no step (IS6.6)
+  if same_lines(lines, self:get_text()) then return end
   self:_record_edit('format', true)
   --- the cursor follows the text element it stood at (IS3.9)
   local cl, cc = self:get_cursor_pos()
@@ -352,6 +378,14 @@ function UserInputModel:insert_text_line(text, li)
   self:text_change()
 end
 
+--- Duplicate the cursor's line below it, the cursor on the
+--- copy: one change to the draft (Ctrl+D)
+function UserInputModel:duplicate_line()
+  self:_record_edit('duplicate', true)
+  self:insert_text_line(self:get_current_line() or '')
+  self:_note_edit()
+end
+
 --- Swap to lines of text, second param defaults to cursor line
 --- @param ln_that integer
 --- @param ln_this integer?
@@ -372,11 +406,14 @@ function UserInputModel:swap_lines(ln_that, ln_this)
         ln_this < 1 or ln_that < 1 then
       return false
     end
+    --- one change to the draft, unless the lines are the same
+    if this ~= that then self:_record_edit('swap', true) end
 
     self:_set_text_line(that, ln_this, true)
     self:_set_text_line(this, ln_that, true)
     self:set_cursor(Cursor(ln_that, self:get_cursor_x()))
     self:text_change()
+    self:_note_edit()
     return true
   end
 end
@@ -445,6 +482,12 @@ function UserInputModel:paste(text)
 end
 
 function UserInputModel:backspace()
+  --- nothing before the cursor and nothing selected: no
+  --- change, and no step (IS6.6)
+  local l0, c0 = self:get_cursor_pos()
+  if l0 == 1 and c0 == 1 and not self:has_selection() then
+    return
+  end
   self:_record_edit('remove')
   self:pop_selected_text()
   local line = self:get_current_line()
@@ -498,6 +541,12 @@ end
 --- Delete the word before the cursor; at the line's
 --- start it falls back to joining lines
 function UserInputModel:backspace_word()
+  --- at a line's start it joins lines, as Backspace does, in
+  --- one step of its own
+  local _, c0 = self:get_cursor_pos()
+  if c0 == 1 and not self:has_selection() then
+    return self:backspace()
+  end
   self:_record_edit('remove_word', true)
   self:pop_selected_text()
   local line = self:get_current_line()
@@ -514,6 +563,14 @@ function UserInputModel:backspace_word()
 end
 
 function UserInputModel:delete()
+  --- nothing after the cursor and nothing selected: no
+  --- change, and no step (IS6.6)
+  local l0, c0 = self:get_cursor_pos()
+  local last = string.ulen(self:get_current_line() or '') + 1
+  if l0 == self:get_n_text_lines() and c0 == last
+      and not self:has_selection() then
+    return
+  end
   self:_record_edit('remove')
   self:pop_selected_text()
   local line = self:get_current_line()

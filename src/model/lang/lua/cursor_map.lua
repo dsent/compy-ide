@@ -335,6 +335,8 @@ end
 --- @param at integer --- byte offset in `old`, 0 at its start
 --- @return integer --- byte offset in `new`
 function M.map(old, new, at)
+  --- text that did not change keeps its cursor (IS3.9)
+  if old == new then return at end
   if at <= 0 then return 0 end
   if at >= #old then return #new end
   local a, b = M.elements(old), M.elements(new)
