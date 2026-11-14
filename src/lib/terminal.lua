@@ -174,7 +174,7 @@ local function terminal_update(terminal, dt)
             local x, y = char_or_command.x or 1, char_or_command.y or 1
             local w, h =
                 char_or_command.w or terminal.width,
-                char_or_command.h or terminal.h
+                char_or_command.h or terminal.height
             for y = y, y + h - 1 do
                 for x = x, x + w - 1 do
                     terminal_update_character(terminal, x, y, " ")

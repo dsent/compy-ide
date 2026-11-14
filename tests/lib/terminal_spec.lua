@@ -203,3 +203,18 @@ describe("terminal reverse", function()
       seen)
   end)
 end)
+
+--- terminal:clear() always says where; a clear command that
+--- says nothing clears the whole grid
+describe("terminal clear command", function()
+  it("clears every row when it names no height", function()
+    local t = new_term()
+    t:print(string.rep("x", t.width * t.height - 1))
+    t:update(1000)
+    table.insert(t.stdin, { type = "clear" })
+    t:update(1000)
+    for y = 1, t.height do
+      assert.equal(" ", t.buffer[y][1], "row " .. y)
+    end
+  end)
+end)
