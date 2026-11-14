@@ -94,6 +94,21 @@ describe('history #history', function()
     assert.same({ { 'x = = 1' } }, h:_get_entries())
   end)
 
+  it('skips a line equal to the newest entry, compared '
+    .. 'exactly, and ends the walk all the same', function()
+    local h = History()
+    assert.is_true(h:remember({ 'a', 'b' }))
+    h:history_back({ 'draft' })
+    assert.is_false(h:remember({ 'a', 'b' }))
+    assert.is_nil(h.index)
+    assert.is_nil(h.line_typed)
+    assert.is_true(h:remember({ 'a', 'b ' }))
+    assert.is_true(h:remember({ 'a' }))
+    assert.is_true(h:remember({ 'a', 'b ' }))
+    assert.same({ { 'a', 'b' }, { 'a', 'b ' }, { 'a' }, { 'a', 'b ' } },
+      h:_get_entries())
+  end)
+
   it('recalls nothing when empty', function()
     assert.is_false(History():history_back({ 'draft' }))
   end)

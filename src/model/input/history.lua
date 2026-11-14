@@ -43,18 +43,32 @@ local function copy(lines)
   return t
 end
 
---- Store a line that ran, which ends the walk; an empty one
---- is not stored
+--- @param a string[]
+--- @param b string[]?
+--- @return boolean --- the same lines, compared exactly
+local function same(a, b)
+  if not b or #a ~= #b then return false end
+  for i, l in ipairs(a) do
+    if l ~= b[i] then return false end
+  end
+  return true
+end
+
+--- Store a line that ran, which ends the walk. An empty one
+--- is not stored, nor one equal to the newest entry (the
+--- ruling "The history skips a repeated line").
 --- @param input string[]?
---- @return boolean
+--- @return boolean --- stored
 function History:remember(input)
   self:reset_index()
-  if string.is_non_empty_string_array(input) then
-    self:append(copy(input))
-    self:_trim()
-    return true
+  if not string.is_non_empty_string_array(input) then
+    return false
   end
-  return false
+  local line = copy(input)
+  if same(line, self[#self]) then return false end
+  self:append(line)
+  self:_trim()
+  return true
 end
 
 --- Evict oldest entries past the limit

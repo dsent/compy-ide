@@ -15,6 +15,7 @@ local F = require("tests.helpers.input_fixture")
 
 local RULING = "rulings.md: The console's history is the "
     .. "classic shell's"
+local REPEAT = "rulings.md: The history skips a repeated line"
 
 --- Run each line in the console
 --- @param ... string
@@ -122,15 +123,16 @@ describe("the console's history #editor #spec #history", function()
         .. "every edit made on the walk, and each entry is again "
         .. "the line that ran", RULING, function()
       K.reset()
-      run("a = 1", "b = 2")
+      run("a = 1", "b = 2", "c = 3")
       K.keys("up")
       K.keys("up")
       K.keys("backspace")
       K.type("5")
-      K.keys("down")
-      assert.same("b = 2", K.console_draft())
+      K.keys("up")
+      assert.same("a = 1", K.console_draft())
       K.keys("return")
-      assert.same({ "b = 2", "b = 2", "a = 1" }, walk("up", 3))
+      assert.same({ "a = 1", "c = 3", "b = 2", "a = 1" },
+        walk("up", 4))
     end)
 
     spec_deviation("IS7.8 Recall an instruction: Escape clears "
@@ -158,6 +160,7 @@ describe("the console's history #editor #spec #history", function()
         .. "syntax refuses is no entry, and the line corrected "
         .. "and run is", RULING, function()
       K.reset()
+      run("z = 0")
       K.type("x = = 1")
       K.keys("return")
       assert.is_true(K.cc.input:has_error())
@@ -174,7 +177,7 @@ describe("the console's history #editor #spec #history", function()
       K.keys("backspace")
       assert.same("y = 1", K.console_draft())
       K.keys("return")
-      assert.same({ "y = 1", "y = 1" }, walk("up", 2))
+      assert.same({ "y = 1", "z = 0", "z = 0" }, walk("up", 3))
     end)
 
     spec_deviation("IS7.8 Recall an instruction: Up from a "
@@ -250,6 +253,62 @@ describe("the console's history #editor #spec #history", function()
       assert.same("precious = 42", K.console_draft())
       K.keys("up")
       assert.same("a = 1+\n", K.console_draft())
+    end)
+
+    spec_deviation("IS7.8 Recall an instruction: a line run "
+        .. "again is no second entry", REPEAT, function()
+      K.reset()
+      run("z = 0", "a = 1", "a = 1", "a = 1")
+      assert.same({ "a = 1", "z = 0" }, walk("up", 2))
+    end)
+
+    spec_deviation("IS7.8 Recall an instruction: the newest line "
+        .. "recalled and run unchanged adds no entry, and edited "
+        .. "and run adds one", REPEAT, function()
+      K.reset()
+      run("z = 0", "a = 1")
+      K.keys("up")
+      K.keys("return")
+      assert.same({ "a = 1", "z = 0" }, walk("up", 2))
+      K.keys("escape")
+      K.keys("up")
+      K.keys("backspace")
+      K.type("2")
+      K.keys("return")
+      assert.same({ "a = 2", "a = 1", "z = 0" }, walk("up", 3))
+    end)
+
+    spec_deviation("IS7.8 Recall an instruction: only the newest "
+        .. "entry is compared: A, B, A is three entries", REPEAT,
+      function()
+        K.reset()
+        run("a = 1", "b = 2", "a = 1")
+        assert.same({ "a = 1", "b = 2", "a = 1", "a = 1" },
+          walk("up", 4))
+      end)
+
+    spec_deviation("IS7.8 Recall an instruction: a multi-line "
+        .. "command run again is no second entry, and one that "
+        .. "differs in a line is", REPEAT, function()
+      K.reset()
+      local function command(body)
+        K.type("function f()")
+        K.keys("return")
+        K.type(body)
+        K.keys("return")
+        K.type("end")
+        K.keys("return")
+      end
+      run("z = 0")
+      command("return 1")
+      command("return 1")
+      local whole = "function f()\nreturn 1\nend"
+      -- Up rises through the command's rows before it recalls
+      assert.same({ whole, whole, whole, "z = 0" }, walk("up", 4))
+      K.keys("escape")
+      command("return 2")
+      local other = "function f()\nreturn 2\nend"
+      assert.same({ other, other, other, whole }, walk("up", 4))
     end)
 
     spec_it("IS7.8 Recall an instruction: an empty or blank "

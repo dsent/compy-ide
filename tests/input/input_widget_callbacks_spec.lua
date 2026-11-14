@@ -662,6 +662,11 @@ describe('input surface: widget callbacks #input', function()
         F.session.press('return')
         assert.same({ { 'good' } },
           F.widget.model.history:_get_entries())
+        -- the same line again is no second entry
+        input.set_text('good')
+        F.session.press('return')
+        assert.same({ { 'good' } },
+          F.widget.model.history:_get_entries())
       end)
 
     -- And the cancel side, which seats NOTHING: Escape neither

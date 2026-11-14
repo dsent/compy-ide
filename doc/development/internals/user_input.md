@@ -540,8 +540,9 @@ binding to apply, deliberately not a rule the tier enforces.
   once its validator takes the line. Storing a line, or a cleared field (Escape, a successful
   run), ends the walk and forgets the kept line and every edit. A line the syntax refuses, or a
   draft it continues on a new line, is not stored and leaves the walk as it was. A recalled line
-  shows with the cursor at its end. An empty or blank line is no entry; a line equal to the newest
-  is stored again.
+  shows with the cursor at its end. An empty or blank line is no entry, nor is a line equal to the
+  newest entry, every line of it compared exactly (the ruling "The history skips a repeated
+  line"); it ends the walk all the same.
 - **Enter** (no shift): submit → `evaluate_input()`
 - **Ctrl+L**: clear terminal output
 - **Shift+Enter**: insert newline in input (multiline expression)
