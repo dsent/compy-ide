@@ -128,6 +128,11 @@ Project-author guide: `doc/input_api.md`.
   the end of the line. With an empty field Home goes to the first block and End to the
   end of the file, where new text is added.
 - **Formatting the file is Alt+F.** Ctrl+F is kept free for a search to come.
+- **Ctrl+G goes back to the block being replaced.** While replacing, it brings the
+  highlight back to the block loaded with F2 and shows it; the field's text stays. In
+  the other states it does nothing.
+- **The status line shows a block's lines as `L2-21`**, without the count that
+  followed in brackets.
 - **PageDown and PageUp page through the file.** PageDown brings the first block hidden
   below the view to its top, PageUp the last one hidden above to its bottom, and the
   highlight goes with it; at the file's end or start they go to the end position or the

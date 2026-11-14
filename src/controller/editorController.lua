@@ -961,6 +961,15 @@ local ACTIONS = {
     ec.view:get_current_buffer():follow_selection()
     ec:update_status()
   end,
+  --- while replacing: the browsing position to the target,
+  --- shown as browsing to it shows it; the draft stays
+  to_target = function(ec)
+    local buf = ec:get_active_buffer()
+    if buf:get_selection() == buf.loaded then return end
+    buf:set_selection(buf.loaded)
+    ec.view:get_current_buffer():follow_selection()
+    ec:update_status()
+  end,
   page = function(ec, k)
     ec:_page(k == 'pageup' and 'up' or 'down')
   end,

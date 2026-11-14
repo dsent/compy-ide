@@ -273,6 +273,58 @@ describe("paging, formatting, removed keys #editor #spec",
       end)
     end)
 
+    describe("Ctrl+G", function()
+      spec_it("IS2.3 Browse during edit: while replacing, Ctrl+G "
+          .. "browses to the replacement target and shows it; the "
+          .. "draft, its cursor and the target stay", function()
+        K.reset({ ["notes.txt"] = lines_file(60) })
+        K.open("notes.txt")
+        K.browse_to(30)
+        K.keys("f2")
+        K.type("x")
+        K.browse_to(1)
+        assert.is_false(K.in_view(30))
+        local draft, cursor = K.draft(), { K.cursor() }
+        K.keys("lctrl", "g")
+        assert.same(30, K.position())
+        assert.is_true(K.in_view(30))
+        assert.same("replacing", K.state())
+        assert.same(30, K.target())
+        assert.same(draft, K.draft())
+        assert.same(cursor, { K.cursor() })
+        assert.is_nil(K.message())
+      end)
+
+      spec_it("IS2.3 Browse during edit: on the target already, "
+          .. "Ctrl+G changes nothing on the screen", function()
+        K.reset({ ["notes.txt"] = lines_file(60) })
+        K.open("notes.txt")
+        K.browse_to(30)
+        K.keys("f2")
+        local before = K.screen()
+        K.keys("lctrl", "g")
+        assert.same(before, K.screen())
+      end)
+
+      for _, st in ipairs({ "browsing", "inserting" }) do
+        spec_it("IS2.3 Browse during edit: while " .. st .. ", "
+            .. "Ctrl+G does nothing and says nothing", function()
+          K.reset({ ["notes.txt"] = lines_file(60) })
+          K.open("notes.txt")
+          K.browse_to(30)
+          if st == "inserting" then K.type("ab") end
+          K.browse_to(1)
+          assert.same(st, K.state())
+          local before = { K.position(), K.view_rows(), K.draft(),
+            { K.cursor() }, K.app_state() }
+          K.keys("lctrl", "g")
+          assert.same(before, { K.position(), K.view_rows(),
+            K.draft(), { K.cursor() }, K.app_state() })
+          assert.is_nil(K.message())
+        end)
+      end
+    end)
+
     describe("removed keys", function()
       for label, keys in pairs({
         ["Alt+PgUp"] = { "lalt", "pageup" },

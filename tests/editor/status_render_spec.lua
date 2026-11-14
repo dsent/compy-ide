@@ -357,17 +357,19 @@ describe("status line, notice and key card drawn #editor",
     K.browse_to(5)
     assert.same("inserting", K.state())
     local f = field(K.screen())
-    -- 64 columns hold all of it beside `B5 L5-11(7)`
-    assert.truthy(f:find("L5-11(7)", 1, true))
+    -- 64 columns hold all of it beside `B5 L5-11`, the range
+    -- with no count after it
+    assert.truthy(f:find("L5-11", 1, true))
+    assert.is_nil(f:find("L5-11(", 1, true))
     assert.truthy(f:find("scratchpad", 1, true))
     assert.truthy(f:find("main.lua", 1, true))
     assert.truthy(f:find("inserting", 1, true))
     -- a name too long for the line gives way, alone
     K.cc.model.projects.current.name = string.rep("p", 40)
     f = field(K.screen())
-    -- up to two columns before the position: 13 and the mark
-    assert.truthy(f:find(string.rep("p", 13) .. "…", 1, true))
-    assert.is_nil(f:find(string.rep("p", 14), 1, true))
+    -- up to two columns before the position: 16 and the mark
+    assert.truthy(f:find(string.rep("p", 16) .. "…", 1, true))
+    assert.is_nil(f:find(string.rep("p", 17), 1, true))
     assert.truthy(f:find("main.lua", 1, true))
     assert.truthy(f:find("inserting", 1, true))
   end)

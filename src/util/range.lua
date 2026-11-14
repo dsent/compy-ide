@@ -39,7 +39,7 @@ function Range:ln_label()
   if s == e then
     return string.format('L%d', s, 1)
   else
-    return string.format('L%d-%d(%d)', s, e, self:len())
+    return string.format('L%d-%d', s, e)
   end
 end
 

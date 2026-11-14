@@ -188,7 +188,7 @@ describe("every chord is its own key #input", function()
       { EditorKeys, { "return", "kpenter", "escape", "f2",
         "shift+insert", "ctrl+insert", "ctrl+delete",
         "alt+up", "alt+down", "alt+f", "home", "end", "ctrl+j",
-        "f1", "f5" } },
+        "ctrl+g", "f1", "f5" } },
       { ConsoleKeys, { "return", "escape", "ctrl+l", "f1" } },
       { FieldKeys, { "return", "kpenter", "escape" } },
     }

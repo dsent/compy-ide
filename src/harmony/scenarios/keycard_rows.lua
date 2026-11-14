@@ -285,6 +285,14 @@ EDITOR.replacing['Esc'] = { 'drop the edit', function(wait)
   D.eq(P.target(), nil, 'dropped')
   D.in_state('editor')
 end }
+EDITOR.replacing['Ctrl+G'] = { 'go to the edit', function(wait)
+  D.key(wait, 'C-up')
+  D.eq(P.position(), 1, 'browsed away')
+  D.key(wait, 'C-g')
+  D.eq(P.position(), 2, 'back on the target')
+  D.eq(P.target(), 2, 'the target stays')
+  D.eq(P.draft(), 'b = 2', 'and the draft')
+end }
 
 --- the card's admitted rows, the keys now, as the card lists
 --- them

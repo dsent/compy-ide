@@ -80,6 +80,10 @@ local DEFS = {
   --- November 14, 2026). In a draft they are the field's.
   { chords = { 'home', 'end' }, card = 'Home/End',
     browsing = { act = 'file_edge', words = 'file start/end' } },
+  --- while replacing, the browsing position to the target
+  --- (the maintainer's ruling of November 14, 2026)
+  { chords = { 'ctrl+g' }, card = 'Ctrl+G',
+    replacing = { act = 'to_target', words = 'go to the edit' } },
   --- a page at a time, the position with it (the
   --- maintainer's ruling of November 14, 2026); trivial, off
   --- the card

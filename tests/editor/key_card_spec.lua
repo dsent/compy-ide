@@ -65,6 +65,13 @@ describe("the key card #editor", function()
     local rep, rep_other = group("replacing", false)
     assert.is_string(rep["F2"])
     assert.is_string(rep_other["Alt+Up/Down"])
+    -- Ctrl+G acts while replacing alone
+    assert.same("go to the edit", rep["Ctrl+G"])
+    assert.is_nil(ins["Ctrl+G"])
+    assert.same("go to the edit", ins_other["Ctrl+G"])
+    local br, br_other = group("browsing", true)
+    assert.is_nil(br["Ctrl+G"])
+    assert.same("go to the edit", br_other["Ctrl+G"])
   end)
 
   it("says what a key does in the state", function()
@@ -108,7 +115,7 @@ describe("the key card #editor", function()
       end
       -- the editor's own keys, the field's, and the reserved
       -- chords that act in the editor
-      assert.same(24, keys)
+      assert.same(25, keys)
     end
   end)
 
@@ -150,7 +157,7 @@ describe("the key card #editor", function()
 
   it("takes one column where two do not fit", function()
     local lines = KeyCard.lines("browsing", true, 40, 40)
-    assert.same(26, #lines)
+    assert.same(27, #lines)
     assert.same(" Keys now, browsing:", lines[1])
   end)
 end)
