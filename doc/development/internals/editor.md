@@ -44,7 +44,7 @@ The workflow is:
 
 Text typed without a target is inserted: `Enter` puts it before the block at the browsing position, or at the end of the file from the end position. `Esc` aborts an edit (the draft and the target are dropped), and from the browsing state steps back from the file. `Ctrl+Insert` copies the viewed block into the input, `Ctrl+Delete` cuts it there, and `Alt+Up`/`Alt+Down` move it (`src/controller/editorReuse.lua`).
 
-A refused action never asks a question: `EditorController:refuse(msg)` knocks and shows a notice, wrapped between words, in a band directly above the status line (`EditorView:draw_message`). The band covers the document view's last rows; the status line, the input and the view stay where they are. A syntax failure's message shows the same way. The next key press dismisses the message and does its ordinary work, `Esc` included; a modifier or a lock key alone leaves it showing. `F1`, while held, shows the keys the current state admits (`src/model/editor/keyCard.lua`).
+A refused action never asks a question: `EditorController:refuse(msg)` knocks and shows a notice, wrapped between words, in a band directly above the status line (`EditorView:draw_message`). The band covers the document view's last rows; the status line, the input and the view stay where they are. A syntax failure's message shows the same way, as kind `'error'` (`refuse(msg, 'error')`): the band, which has no frame, writes an error in the input's error colour and a notice in the status line theme's `warning` colour, the one the console's status line uses for `[no sd card]`; `EditorController:message_kind()` tells the view which it is. The next key press dismisses the message and does its ordinary work, `Esc` included; a modifier or a lock key alone leaves it showing. `F1`, while held, shows the keys the current state admits (`src/model/editor/keyCard.lua`).
 
 The `LuaEditorEval` evaluator (`src/model/interpreter/eval/evaluator.lua:168`) is set on the editor input for Lua files. It adds a 64-character line length validator — the same limit as the code conventions — enforced live as you type.
 
@@ -58,7 +58,7 @@ The block size limit is `input_max`: `bufv:get_max_size()` returns it, and the e
 
 `BufferModel.loaded` records which block index was most recently loaded into the input. This prevents a specific foot-gun: if you load block 3, then navigate the selection to block 7 (the highlight moves), then press Enter, you don't want to overwrite block 7 with what you loaded from block 3.
 
-A submission with a replacement target replaces that block, wherever the browsing position stands by then (`EditorController:_land`). Browsing during a replacement moves the highlight only; the target keeps its own mark, and `Esc` drops it.
+A submission with a replacement target replaces that block, wherever the browsing position stands by then (`EditorController:_land`). Browsing during a replacement moves the highlight only; the target keeps its own mark, and `Esc` drops it. The document view draws the browsed block white and the target yellow, each the screen's whole width; a block that is both is yellow with a strip of white one character cell wide at each side (`BufferView:draw`).
 
 ---
 
@@ -136,7 +136,7 @@ The `WrappedText` base class (`src/util/wrapped_text.lua`) provides the three-ta
 
 The only transitions are `nav` to `search` and back. This is enforced in `set_mode`.
 
-The whole-editor exits (`Ctrl+T`, `Ctrl+Q`, `Ctrl+Shift+R`, `Ctrl+Alt+R`, and the deprecated `Ctrl+Shift+S`) leave from the browsing state. During an edit `EditorController:refuse_to_leave` refuses them with a notice, because the input may hold the only copy of a cut block.
+The whole-editor exits (`Ctrl+T`, `Ctrl+Q`, `Ctrl+Alt+R`, and the deprecated `Ctrl+Shift+S`) leave from the browsing state. `Ctrl+Q` returns to the console with every buffer closed and the project still open (`reserved_stop` in `controller.lua`, which calls `ConsoleController:finish_edit`). During an edit `EditorController:refuse_to_leave` refuses them with a notice, because the input may hold the only copy of a cut block.
 
 ---
 
@@ -160,9 +160,9 @@ This gives the editor two capabilities:
 
 `EditorModel.buffers` is a `Dequeue<BufferModel>` used as a stack (front = active). `EditorView.buffers` is a parallel table keyed by buffer ID (the Lua table address as a string — not the filename). The two stay in sync manually.
 
-Opening a file (`EditorController:open`) pushes a new buffer to the front and tells the view to create a new `BufferView` for it. Ctrl+S (`close_buffer`) pops the front buffer and activates the next one. If only one buffer remains, Ctrl+S closes the editor entirely and returns to the console.
+Opening a file (`EditorController:open`) pushes a new buffer to the front and tells the view to create a new `BufferView` for it. Escape in the browsing state (`close_buffer`) pops the front buffer and activates the next one. If only one buffer remains, it closes the editor entirely and returns to the console.
 
-Ctrl+O (`follow_require`) calls `self.console:edit(name)` which triggers a full new `open` call, pushing another buffer. This creates a chain: file A → file B → file C, navigable back with Ctrl+S.
+Ctrl+J (`follow_require`) calls `self.console:edit(name)` which triggers a full new `open` call, pushing another buffer. This creates a chain: file A → file B → file C, navigable back with Escape, one file at a time; Ctrl+Q leaves the whole chain for the console.
 
 The buffer ID ensures the view can retrieve the right `BufferView` even after the model stack changes order. `EditorView.buffers` is never pruned during a session — views for closed buffers remain in the table but are unreachable via the controller once the model buffer is popped.
 

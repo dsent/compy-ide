@@ -27,6 +27,31 @@ local function yellow(s)
   return K.screen_rows(s, "highlight_loaded")
 end
 
+--- Where the rows filled in a highlight's colour start and
+--- how wide they are: every such row alike.
+local function spans(s, name)
+  local colour = K.cc.view.cfg.view.colors.editor[name]
+  local out
+  for _, f in ipairs(s.fills) do
+    local hit = true
+    for i = 1, 3 do
+      local d = math.abs((f.colour[i] or 0) - colour[i])
+      hit = hit and d < 0.001
+    end
+    if hit then
+      out = out or {
+        f.x,
+        f.w
+      }
+      assert.same(out, {
+        f.x,
+        f.w
+      })
+    end
+  end
+  return out
+end
+
 --- `text` is among what was drawn in the field or on its
 --- status line.
 local function in_field(s, text)
@@ -156,10 +181,42 @@ describe("render smoke #editor", function()
     assert.same(3, yellow(s))
     assert.same(3, white(s))
     assert.same(3, s.field_rows)
+    -- the block is both: white the screen's whole width,
+    -- the yellow on it leaving one character cell of white
+    -- at each side
+    local v = K.cc.view.cfg.view
+    local wide = love.graphics.getWidth()
+    assert.same({
+      {
+        0,
+        wide
+      },
+      {
+        v.fw,
+        wide - 2 * v.fw
+      }
+    }, {
+      spans(s, "highlight"),
+      spans(s, "highlight_loaded")
+    })
+    -- apart, each is the screen's whole width
     K.keys("lctrl", "up")
     s = K.screen()
     assert.same(3, yellow(s))
     assert.same(1, white(s))
+    assert.same({
+      {
+        0,
+        wide
+      },
+      {
+        0,
+        wide
+      }
+    }, {
+      spans(s, "highlight"),
+      spans(s, "highlight_loaded")
+    })
   end)
 
   it("replacing, the target scrolled out of view", function()

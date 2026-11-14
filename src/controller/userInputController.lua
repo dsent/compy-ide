@@ -614,7 +614,9 @@ function UserInputController:keypressed(k, sc, isr)
   self:update_view()
   -- _G.web: web/love.js build flag. On web, space may not emit
   -- textinput, so synthesise it here.
-  if _G.web and k == 'space' then
+  -- This text does not pass the event gate, so a chord's
+  -- space is held back here (Key.chord_text).
+  if _G.web and k == 'space' and not Key.chord_text(' ') then
     self:textinput(' ')
   end
   local input = self.model

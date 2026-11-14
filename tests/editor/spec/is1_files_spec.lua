@@ -543,10 +543,11 @@ describe("IS1 files #editor #spec", function()
     -- implementation, does on Ctrl+Q (the lead's call, pending
     -- the maintainer's confirmation): the exit is refused with
     -- a notice and the state kept, as Ctrl+J is above.
+    -- Ctrl+Shift+R left this list on 2026-11-14, when the key
+    -- was dropped.
     for _, exit in ipairs({
       { "Ctrl+T", { "lctrl", "t" } },
       { "Ctrl+Q", { "lctrl", "q" } },
-      { "Ctrl+Shift+R", { "lctrl", "lshift", "r" } },
       { "Ctrl+Alt+R", { "lctrl", "lalt", "r" } },
       { "Ctrl+Shift+S", { "lctrl", "lshift", "s" } }
     }) do
@@ -605,6 +606,105 @@ describe("IS1 files #editor #spec", function()
       K.keys("lctrl", "lshift", "s")
       assert.same("ready", K.app_state())
     end)
+
+    -- Ctrl+Q in the file editor (the reserved map of
+    -- 2026-11-14; this reading of it for the editor is the
+    -- lead's, pending the maintainer's confirmation): from the
+    -- browsing state it returns to the console, every file on
+    -- the editor's stack closed, and the project stays open.
+    spec_it("IS1.6 Step back from a file with Escape: Ctrl+Q "
+        .. "from the browsing state leaves the editor for the "
+        .. "console, the project still open", function()
+      K.open()
+      K.browse_to(2)
+      K.keys("lctrl", "q")
+      assert.same("ready", K.app_state())
+      assert.is_nil(K.cc.editor:get_active_buffer())
+      assert.same("", K.console_draft())
+      assert.same(K.PROJECT, K.cc.model.projects.current.name)
+    end)
+
+    spec_it("IS1.6 Step back from a file with Escape: Ctrl+Q "
+        .. "with two files on the stack leaves both for the " ..
+        "console", function()
+      K.open()
+      K.browse_to(1)
+      K.keys("lctrl", "j")
+      assert.same("mod.lua", K.file_name())
+      assert.same(2, K.cc.editor.model.buffers:length())
+      K.keys("lctrl", "q")
+      assert.same("ready", K.app_state())
+      assert.is_nil(K.cc.editor:get_active_buffer())
+      assert.same(0, K.cc.editor.model.buffers:length())
+      assert.same(K.PROJECT, K.cc.model.projects.current.name)
+    end)
+
+    spec_it("IS1.6 Step back from a file with Escape: Ctrl+Q "
+        .. "in the console with no program running does " ..
+        "nothing", function()
+      K.type("x = 1")
+      K.keys("lctrl", "q")
+      assert.same("ready", K.app_state())
+      assert.same("x = 1", K.console_draft())
+      assert.same(K.PROJECT, K.cc.model.projects.current.name)
+    end)
+
+    -- A program that finished its code idles behind the
+    -- console, not stopped; Ctrl+Q stops it, and the console's
+    -- key card lists the key only then.
+    spec_it("IS3.16 Show the key card: the console's card " ..
+        "lists Ctrl+Q only while a program is not stopped, " ..
+        "and the key is suspended while the card shows",
+        function()
+      local function card_has_ctrl_q()
+        K.hold("f1")
+        local card = table.concat(K.key_card() or { }, "\n")
+        K.release("f1")
+        return card:find("Ctrl+Q", 1, true) ~= nil
+      end
+      K.reset({ ["main.lua"] = "x = 1\n" })
+      assert.is_false(card_has_ctrl_q())
+      -- run the project from the editor: it ends idle
+      K.open()
+      K.keys("lctrl", "t")
+      assert.same("ready", K.app_state())
+      assert.is_true(K.cc.run_live)
+      assert.is_true(card_has_ctrl_q())
+      K.hold("f1")
+      K.keys("lctrl", "q")
+      K.release("f1")
+      assert.is_true(K.cc.run_live)
+      K.keys("lctrl", "q")
+      assert.is_false(K.cc.run_live)
+      assert.same("ready", K.app_state())
+      assert.same(K.PROJECT, K.cc.model.projects.current.name)
+      assert.is_false(card_has_ctrl_q())
+    end)
+
+    -- keys the map reserves no longer: in the editor they do
+    -- nothing, with or without an edit in progress
+    for _, key in ipairs({
+      { "Ctrl+S", { "lctrl", "s" } },
+      { "Ctrl+Shift+R", { "lctrl", "lshift", "r" } }
+    }) do
+      spec_it("IS3.11 Preserve state on refusal: " .. key[1] ..
+          " does nothing in the editor", function()
+        K.open()
+        K.browse_to(2)
+        K.keys(unpack(key[2]))
+        assert.same("editor", K.app_state())
+        assert.same("main.lua", K.file_name())
+        assert.same("browsing", K.state())
+        assert.same(2, K.position())
+        K.type("w = 4")
+        K.keys(unpack(key[2]))
+        assert.same("editor", K.app_state())
+        assert.same("inserting", K.state())
+        assert.same("w = 4", K.draft())
+        assert.is_nil(K.message())
+        assert.same(K.PROJECT, K.cc.model.projects.current.name)
+      end)
+    end
 
     spec_it(
         "IS1.5 Follow a file reference: a file that cannot " ..

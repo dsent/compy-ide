@@ -5,6 +5,7 @@ require("controller.projectInputController")
 
 
 local class = require('util.class')
+local Blink = require('view.input.cursorBlink')
 local LANG = require("util.eval")
 local FS = require('util.filesystem')
 local format = require('model.lang.lua.format')
@@ -1813,6 +1814,8 @@ end
 ---@param dt number
 function ConsoleController:pass_time(dt)
   self.time = self.time + dt
+  --- the text cursor blinks on the frames' time
+  Blink.pass_time(dt)
   self.model.output.terminal:update(dt)
 end
 
@@ -1861,11 +1864,6 @@ end
 
 function ConsoleController:_reset_executor_env()
   self:_set_project_env(table.clone(self.base_env))
-end
-
-function ConsoleController:reset()
-  self:quit_project()
-  self.input:reset(true) -- clear history
 end
 
 function ConsoleController:restart()
@@ -2055,11 +2053,12 @@ end
 
 --- Once at a time: a before_exit hook that closes or switches
 --- the project reaches here again, and returns at once.
---- The editor closes first: the gate's project shortcuts
---- (Ctrl+Q, Ctrl+Shift+R, Ctrl+Alt+R) reach here before the
---- editor sees their key, and its buffers belong to the
---- project they were opened in. Ctrl+T keeps its way back,
---- which closing the project then forgets.
+--- The editor closes first: the gate's restart (Ctrl+Alt+R)
+--- reaches here before the editor sees its key, and so does
+--- a console command that closes the project; the editor's
+--- buffers belong to the project they were opened in. Ctrl+T
+--- keeps its way back, which closing the project then
+--- forgets.
 function ConsoleController:stop_project_run()
   if self.stopping then return end
   if love.state.app_state == 'editor'
@@ -2277,7 +2276,7 @@ function ConsoleController:key_card()
   if love.state.app_state ~= 'ready' then return nil end
   local KeyCard = require('model.editor.keyCard')
   if not KeyCard.held() then return nil end
-  return self.view.editor.key_card:console_lines()
+  return self.view.editor.key_card:console_lines(self.run_live)
 end
 
 --- @param t string
@@ -2292,11 +2291,9 @@ function ConsoleController:textinput(t)
     local input = self.input
     --- a glyph typed over an error closes it and lands on
     --- the line under it; on the device it may come before
-    --- its key press
+    --- its key press. A chord's own glyph never comes here:
+    --- the event gate stops it (Key.chord_text)
     input:clear_error()
-    if Key.ctrl() and Key.shift() then
-      return
-    end
     input:textinput(t)
   end
 end

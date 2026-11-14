@@ -63,10 +63,25 @@ Project-author guide: `doc/input_api.md`.
 - **Refusals are one-line notices over the field.** A notice says what was refused and
   what would work, and the next key dismisses it. A failed save names the file and the
   reason and keeps your text in the field.
-- **Leaving waits for the edit to end.** Ctrl+T, Ctrl+Q, Ctrl+Shift+R, Ctrl+Alt+R and
-  the deprecated Ctrl+Shift+S are refused with a notice while there is text in the
-  field or a block is being replaced; submit it or drop it first. Ctrl+J is refused the
-  same way.
+- **The text cursor is a blinking block.** In the file editor, the console and a
+  project's input alike, the cursor is a block on the character it stands before,
+  which stays readable on it, and on the empty cell at a line's end. It blinks as
+  the `blink` setting says and stays shown for a moment after every key press.
+- **A notice is orange, the parser's message red.** The message above the status
+  line has no frame.
+- **Leaving waits for the edit to end.** Ctrl+T, Ctrl+Q, Ctrl+Alt+R and the
+  deprecated Ctrl+Shift+S are refused with a notice while there is text in the field
+  or a block is being replaced; submit it or drop it first. Ctrl+J is refused the same
+  way.
+- **Ctrl+Q stops the program and returns to the console; the project stays open.**
+  It stops a program that runs, one that is paused, and one that has finished and
+  still shows its picture behind the console. In the file editor it leaves the editor
+  for the console, with every file you had opened. In the console with no program it
+  does nothing. It takes the place of Ctrl+S.
+- **No key closes the project any more.** `close_project()` in the console does, and
+  so does opening another project.
+- **Ctrl+S reaches your program.** It is no longer a reserved key, so a program can
+  use it, for example to save.
 - **Blocks are reused through the field.** Ctrl+Insert copies the highlighted block
   into the field, Ctrl+Delete cuts it there, Shift+Insert submits and keeps the text,
   and Alt+Up / Alt+Down move the block. Ctrl+Z and Ctrl+Y undo and redo both typing and
@@ -89,6 +104,8 @@ Project-author guide: `doc/input_api.md`.
 
 ### Removed
 
+- **Ctrl+Shift+R, the reset.** The key does nothing in the console and the editor, and
+  a running program receives it. Nothing clears the console's history in its place.
 - **The editor's navigation, editing and block-reorder modes**, with their keys: Enter
   no longer opens a block (F2 does), Ctrl+Enter and Ctrl+Shift+Enter no longer open
   an empty block, Ctrl+M no longer starts a move (Alt+Up / Alt+Down move a block), and

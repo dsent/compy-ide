@@ -252,11 +252,10 @@ describe('input surface: inbound events — dispatch #input',
     -- doc/development/decisions/input.md, D-COMBO-TABLES: each
     -- channel has its OWN combo sub-table and keys normalise on
     -- assignment ('Ctrl+J' -> 'ctrl+j'). The trigger is
-    -- deliberately NOT 's': the gateway's own power shortcuts
-    -- poll the device, and Ctrl+S stops a running project
-    -- before the route is ever reached, so a project binding on
-    -- it cannot fire. Normalisation is the subject here, not
-    -- who wins.
+    -- deliberately NOT 'q': the gateway's own reservations run
+    -- first, and Ctrl+Q stops a running project before the
+    -- route is ever reached, so a project binding on it cannot
+    -- fire. Normalisation is the subject here, not who wins.
     it('a keypressed combo fires on the normalised combo',
       function()
         local fired = false

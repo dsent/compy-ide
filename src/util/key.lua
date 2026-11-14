@@ -182,8 +182,54 @@ local function alt()
   return love.keyboard.isDown(unpack(alt_k))
 end
 
+--- AltGr, the key that types a layout's third-level
+--- characters, is the right Alt key. Linux and Android report
+--- it as `ralt` alone; Windows reports it as left Ctrl plus
+--- right Alt. With the left Alt or the right Ctrl down as well,
+--- the keys are a chord of their own.
+--- @return boolean
+local function altgr()
+  local down = love.keyboard.isDown
+  if not down('ralt') or down('lalt') or down('rctrl') then
+    return false
+  end
+  if not down('lctrl') then return true end
+  local sys = love.system
+  return sys ~= nil and sys.getOS ~= nil
+      and sys.getOS() == 'Windows'
+end
+
+--- A key's own glyph, which is all a chord can leak: one
+--- ASCII letter, digit or space. No layout composes these
+--- through AltGr.
+--- @param t string
+--- @return boolean
+local function own_glyph(t)
+  return string.match(t, '^[%w ]$') ~= nil
+end
+
+--- Whether text that arrives now is a modifier chord's own
+--- glyph and no typed text. With Ctrl or Alt held, a key makes
+--- a chord; on the device its glyph is sent as text all the
+--- same, before or after the key press (the Compy input
+--- quirks 1 and 3). Shift alone composes text. AltGr composes
+--- text too, so what arrives with it is text unless it is the
+--- key's own glyph.
+---
+--- This is the one statement of the rule; the event gate
+--- asks it for every text event (controller.lua,
+--- handlers.textinput), so no text field has to.
+--- @param t string
+--- @return boolean
+local function chord_text(t)
+  if not (ctrl() or alt()) then return false end
+  if altgr() then return own_glyph(t) end
+  return true
+end
+
 Key = {
   mod_triples = mod_triples,
+  chord_text  = chord_text,
   normalize_combo = normalize_combo,
   new_handler_table = new_handler_table,
   is_enter    = is_enter,

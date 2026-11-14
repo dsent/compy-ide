@@ -29,7 +29,10 @@ local function editor()
     wait(.1)
     h.love_key('return')
     wait(1)
-    h.love_key('C-q')
+    -- no key closes a project: the console command does
+    h.love_text('close_project()')
+    wait(.1)
+    h.love_key('return')
     wait(.2)
 
     hm_done('edit')

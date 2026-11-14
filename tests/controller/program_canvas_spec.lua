@@ -128,11 +128,12 @@ describe('a program\'s canvas after it stops #canvas', function()
     end
   end)
 
-  it('Ctrl+S clears it', function()
+  -- no reserved key since 2026-11-14: the program runs on
+  it('Ctrl+S leaves it', function()
     run_drawing()
     press({ 'lctrl', 's' })
-    assert.equal('ready', love.state.app_state)
-    assert.is_false(shown())
+    assert.equal('running', love.state.app_state)
+    assert.is_true(shown())
   end)
 
   it('Ctrl+T clears it', function()
@@ -142,25 +143,28 @@ describe('a program\'s canvas after it stops #canvas', function()
     assert.is_false(shown())
   end)
 
-  -- Ctrl+Q closes the open project, then opens the default
-  -- one; the fixture has none open, so one is set here, with
-  -- the close and the open stood in for.
-  it('Ctrl+Q clears it', function()
+  -- Ctrl+Q stops the program and keeps its project open; the
+  -- fixture has none open, so one is set here, and a close
+  -- would show.
+  it('Ctrl+Q clears it, the project still open', function()
     local undo = project(function() end)
     local P = F.cc.model.projects
+    local open = P.current
     local close = P.close
-    local open_project = F.cc.open_project
-    P.close = function() P.current = nil return true end
-    F.cc.open_project = function() return true end
+    local closed = false
+    P.close = function() closed = true return true end
     local ok, err = pcall(function()
       run_drawing()
       press({ 'lctrl', 'q' })
     end)
+    local still_open = P.current == open
     P.close = close
-    F.cc.open_project = open_project
     undo()
     assert(ok, err)
+    assert.equal('ready', love.state.app_state)
     assert.is_false(shown())
+    assert.is_false(closed)
+    assert.is_true(still_open)
   end)
 
   it('the program\'s stop() clears it', function()
@@ -222,7 +226,7 @@ describe('a program\'s canvas after it stops #canvas', function()
   it('what a before_exit hook draws is cleared too', function()
     run_drawing()
     F.cc:get_project_env().compy.before_exit = paint
-    press({ 'lctrl', 's' })
+    press({ 'lctrl', 'q' })
     assert.is_false(shown())
   end)
 
@@ -231,7 +235,7 @@ describe('a program\'s canvas after it stops #canvas', function()
       function()
         run_drawing()
         F.cc:get_project_env().compy.before_exit = restrict
-        press({ 'lctrl', 's' })
+        press({ 'lctrl', 'q' })
         assert.is_false(shown())
       end)
 
@@ -481,10 +485,11 @@ describe('a program\'s canvas after it stops #canvas', function()
     assert.is_true(shown())
   end)
 
-  -- Ready with a handler live: Ctrl+S stops a running program
-  -- only, so this one keeps its picture until it stops.
+  -- Ready with a handler live: the program idles behind the
+  -- console, not stopped. Ctrl+S is no reserved key, so its
+  -- picture stays; Ctrl+Q stops it as it stops a running one.
   it('a run in ready with a live handler keeps it through'
-    .. ' Ctrl+S', function()
+    .. ' Ctrl+S, until Ctrl+Q stops it', function()
       F.run_project(function()
         draw()
         F.cc:get_project_env().love.mousepressed = function() end
@@ -492,7 +497,16 @@ describe('a program\'s canvas after it stops #canvas', function()
       assert.equal('ready', love.state.app_state)
       press({ 'lctrl', 's' })
       assert.is_true(shown())
-      F.cc:get_project_env().stop()
+      press({ 'lctrl', 'q' })
+      assert.equal('ready', love.state.app_state)
+      assert.is_false(shown())
+    end)
+
+  it('a run that finished with nothing live keeps its picture'
+    .. ' until Ctrl+Q stops it', function()
+      F.run_project(draw)
+      assert.is_true(shown())
+      press({ 'lctrl', 'q' })
       assert.is_false(shown())
     end)
 end)

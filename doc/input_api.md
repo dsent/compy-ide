@@ -433,7 +433,9 @@ ranges from `1`, before the first character, to one past the last, at the
 end of the line. So on `"lemon"`, `set_cursor(1, 3)` puts the caret between
 `e` and `m` — typing inserts there (`"leXmon"`) and Backspace deletes the
 character before it (`"lmon"`). Out-of-range values clamp to that range
-rather than failing.
+rather than failing. On the screen the caret is a block on the character
+it stands before, here on `m`, and on the empty cell after the last
+character at the end of a line.
 
 **Characters, not bytes.** The line `"привет"` is six characters, so its
 caret positions are `1 .. 7` — not `1 .. 13`, which is what its length in
@@ -697,6 +699,17 @@ key before the widget sees it, and the user cannot type — not even Enter
 to submit. A project with no widget is unaffected: nothing sits below the
 hook for it to shield, which is why plain LÖVE code keeps working.
 
+**A chord's own character is not typed.** With Ctrl or Alt held, a key
+makes a chord, and on a Compy its character still arrives on the
+`textinput` channel, before or after the key press. That character walks
+tiers ① and ② like any other text event, so `shortcuts.textinput['ctrl+j']`,
+`'alt+*'` and your `textinput` hook all see it with its modifiers. It stops
+there: the widget never types it, and it does not fall through to the
+console's prompt either. Shift alone composes text, and so does AltGr, the
+right Alt key: `@`, `ł` or `€` typed through it reach the widget. The one
+thing AltGr does not type is the key's own letter, digit or space, which is
+what a chord with the right Alt key would send.
+
 ### Why the widget sits at tier 3
 
 Placing shortcuts and hooks *above* the widget gives your project full control to intercept events flexibly (blocking or bypassing them using filter-like functions) before they reach the text surface. The input widget itself is a stateful component that consumes events without the ability to pass them further down in pipeline style. Placing it after shortcuts and hooks ensures that a shown widget does not lock out your project's custom hotkeys or event guards unless your handlers explicitly allow them to fall through.
@@ -823,15 +836,17 @@ yourself.
 | `ctrl+escape` (on **release**) | stops the run; quits when there is nothing to go back to | always |
 | `ctrl+alt+r` | restarts the project | always |
 | `ctrl+t` | switches between running and the editor | development only |
-| `ctrl+s` | stops a running project | development only |
-| `ctrl+q` | quits the project | development only |
+| `ctrl+q` | stops the run and returns to the console; the project stays open | development only |
 | `ctrl+pause` | suspends the run | development only |
-| `ctrl+shift+r` | resets: quits and wipes the console | development only |
 | `ctrl+alt+p` / `ctrl+alt+shift+p` | starts / stops the profiler | profiling builds |
 | `f10` | cycles the FPS overlay corner | profiling builds |
 
 "Development only" means the combo is inert in a packaged build, where the
-console it returns you to is not there to return to. Note `f10` is the one
+console it returns you to is not there to return to.
+
+`ctrl+s` and `ctrl+shift+r` were reserved until 2026-11-14 and are yours now:
+a project receives them like any other chord, so `ctrl+s` can save. No key
+closes the project; the console's `close_project()` does. Note `f10` is the one
 reservation with no modifier at all: bare F10 is the platform's in a profiling
 build, and F10 with any modifier is yours.
 
@@ -854,9 +869,11 @@ that is the editor's own handling, not a reservation: it applies when you are
 editing, not while your project runs. Bare Ctrl+S does nothing there; the
 editor keeps it for itself.
 
-Ctrl+Shift+S, Ctrl+Q, Ctrl+Shift+R and Ctrl+Alt+R leave the editor too, and so
-does Ctrl+T while you browse the file; in search, Ctrl+T does nothing. None of
-them asks a question. While there is text in the editor's field, or a block is
+Ctrl+Q leaves the editor for the console, with every file you had opened in
+it, and the project stays open. Ctrl+Shift+S and Ctrl+Alt+R leave the editor
+too, and so does Ctrl+T while you browse the file; in search, Ctrl+T does
+nothing. Ctrl+Shift+R does nothing in the editor. None of the exits asks a
+question. While there is text in the editor's field, or a block is
 loaded to be replaced, each is refused with a notice: submit the text with
 Enter or drop it with Escape first, and the exit works. A text whose save
 failed stays in the field, so it holds the exit back the same way. Ctrl+Esc

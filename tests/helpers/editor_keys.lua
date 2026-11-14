@@ -532,6 +532,12 @@ function K.message()
   return table.concat(out, " ")
 end
 
+--- What the message shown is: "notice" for a refusal's,
+--- "error" for the parser's, nil when none shows.
+function K.message_kind()
+  return K.ed:message_kind()
+end
+
 --- The console's draft, its lines joined.
 function K.console_draft()
   local t = F.console:get_text()
@@ -749,17 +755,44 @@ end
 
 local screen = { }
 
-local function scr_rectangle(mode, _, y, _, h)
-  if mode == "fill" and not screen.in_canvas then
-    screen.fills[#(screen.fills) + 1] = {
-      y = y,
-      h = h,
-      colour = rec.colour
-    }
-  end
+--- What is drawn in the field, in the order drawn: each
+--- fill and each text with its place and colour.
+local function field_log(entry)
+  entry.colour = rec.colour
+  screen.field_log[#(screen.field_log) + 1] = entry
 end
 
-local function scr_print(text, _, y)
+local function scr_rectangle(mode, x, y, w, h)
+  if screen.in_canvas then
+    if mode == "fill" then
+      field_log({
+        fill = true,
+        x = x,
+        y = y,
+        w = w,
+        h = h
+      })
+    end
+    return
+  end
+  local to = mode == "fill" and screen.fills or screen.frames
+  to[#to + 1] = {
+    x = x,
+    y = y,
+    w = w,
+    h = h,
+    colour = rec.colour
+  }
+end
+
+local function scr_print(text, x, y)
+  if screen.in_canvas then
+    field_log({
+      text = tostring(text),
+      x = x or 0,
+      y = y or 0
+    })
+  end
   local to = screen.in_canvas and screen.field
        or screen.texts
   to[#to + 1] = {
@@ -811,28 +844,40 @@ local function complete_cfg()
   v.drawableWidth = v.drawableWidth or v.w
 end
 
-local function draw_all()
+--- @param also function?  drawn after the screen
+local function draw_all(also)
   -- as love.draw does through View.draw (view/view.lua),
   -- which the fixture stubs
   local cc = K.cc
   cc.view:draw(cc:get_terminal(), cc:get_canvas(), nil)
+  if also then
+    also()
+  end
 end
 
 --- Draw the whole screen as love.draw does, through the real
 --- draw functions, with recording calls in place of
---- love.graphics'. A draw error is raised.
---- @return { fills: table[], texts: table[], field: table[],
----   field_rows: integer? }  the filled rectangles and the
----   texts drawn on the screen, the texts drawn in the input
----   field with its status line, and the rows the field takes
----   under its status line
-function K.screen()
+--- love.graphics'. A draw error is raised. `also`, when
+--- given, is drawn after the screen and recorded with it, as
+--- love.draw draws a project's input field.
+--- @param also function?
+--- @return { fills: table[], frames: table[], texts: table[],
+---   field: table[], field_log: table[],
+---   field_rows: integer? }  the filled rectangles, the
+---   outlined ones and the texts drawn on the screen, the
+---   texts drawn in the input field with its status line,
+---   every fill and text drawn in the field in the order
+---   drawn, and the rows the field takes under its status
+---   line
+function K.screen(also)
   complete_cfg()
   local lg = love.graphics
   screen = {
     fills = { },
+    frames = { },
     texts = { },
     field = { },
+    field_log = { },
     canvas = lg.newCanvas()
   }
   local saved = swap_in(lg, SCREEN)
@@ -844,7 +889,9 @@ function K.screen()
     end
   })
   rawset(screen.canvas, "renderTo", scr_render_to)
-  local ok, e = xpcall(draw_all, debug.traceback)
+  local ok, e = xpcall(function()
+    draw_all(also)
+  end, debug.traceback)
   rawset(screen.canvas, "renderTo", nil)
   setmetatable(lg, mt)
   for name in pairs(SCREEN) do

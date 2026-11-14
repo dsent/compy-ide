@@ -37,7 +37,7 @@ local function keys(state, empty)
   local enter = pick('add empty line', 'insert text',
     'replace block')
   --- with no draft to keep, Shift+Ins is Enter (IS6.4)
-  local keep = pick('same as Enter', 'insert, keep',
+  local keep = pick('add empty line', 'insert, keep',
     'replace, keep')
   local edit = pick('edit the block', 'edit the block',
     'reload/switch')
@@ -49,6 +49,7 @@ local function keys(state, empty)
     { 'Shift/Alt+Enter', 'break the line', true },
     { 'F2', edit, not inserting },
     { 'Esc', esc, true },
+    { 'Ctrl+Q', 'to the console', browsing },
     { 'Ctrl+Up/Down', 'browse blocks', true },
     { 'Up/Down', rows, true },
     { 'Left/Right', 'a character', not browsing },
@@ -89,9 +90,12 @@ function KeyCard.cells(state, empty)
 end
 
 --- The console's card: the keys of the console input context.
+--- Ctrl+Q is on it only while a program idles behind the
+--- console: with none it does nothing there.
+--- @param live boolean? --- a program is not stopped
 --- @return table[]
-function KeyCard.console_cells()
-  return {
+function KeyCard.console_cells(live)
+  local cells = {
     { heading = 'Keys now, console:' },
     { key = 'Enter', what = 'run the line' },
     { key = 'Shift/Alt+Enter', what = 'break the line' },
@@ -102,9 +106,14 @@ function KeyCard.console_cells()
     { key = 'Home/End', what = 'row start/end' },
     { key = 'Ctrl+Home/End', what = 'text start/end' },
     { key = 'Bksp/Delete', what = 'remove a char' },
-    { key = 'Ctrl+Q', what = 'close project' },
-    { key = 'F1 (hold)', what = 'this card' },
   }
+  if live then
+    cells[#cells + 1] = {
+      key = 'Ctrl+Q', what = 'stop program',
+    }
+  end
+  cells[#cells + 1] = { key = 'F1 (hold)', what = 'this card' }
+  return cells
 end
 
 --- The cells laid out in as few columns as fit `rows`, each

@@ -72,6 +72,43 @@ local function red(s)
   return table.concat(out)
 end
 
+local function same_colour(a, b)
+  for i = 1, 3 do
+    if 0.001 <= math.abs((a[i] or 0) - (b[i] or 0)) then
+      return false
+    end
+  end
+  return true
+end
+
+--- The band on the screen `s` as a person sees it: the colour
+--- its rows are written in and its background's. It has no
+--- frame: nothing on the screen is outlined.
+local function band_colours(s)
+  local rows = band(s)
+  assert(0 < #rows, "a message shows")
+  for _, r in ipairs(rows) do
+    assert(same_colour(r.colour, rows[1].colour),
+      "the band's rows are of one colour")
+  end
+  assert(#s.frames == 0, "the band has no frame")
+  return {
+    text = rows[1].colour,
+    bg = s.fills[#s.fills].colour
+  }
+end
+
+--- The theme's colours a message is drawn in.
+local function theme()
+  local colors = K.ed.view.cfg.colors
+  return {
+    -- as the console's status line has '[no sd card]'
+    warning = colors.statusline.console.warning,
+    error = colors.input.error,
+    bg = colors.input.error_bg
+  }
+end
+
 --- a valid Lua line of 70 characters: it wraps in the field
 local WIDE = "x = " .. string.rep("1", 66)
 
@@ -210,6 +247,113 @@ describe("status line, notice and key card drawn #editor",
       local texts, fills = under_band(s)
       assert.same(placed(before.texts), placed(texts))
       assert.same(before.fills, fills)
+    end)
+  end)
+
+  describe("a message's colour says what it is", function()
+    --- A refusal's notice: the warning colour, no frame,
+    --- the background as it is.
+    local function is_notice()
+      assert.is_truthy(K.message())
+      assert.same("notice", K.message_kind())
+      local c, t = band_colours(K.screen()), theme()
+      assert.is_true(same_colour(t.warning, c.text))
+      assert.is_true(same_colour(t.bg, c.bg))
+      assert.is_false(same_colour(t.error, c.text))
+    end
+
+    it("a refusal at the end position is a notice", function()
+      K.browse_to_end()
+      K.keys("f2")
+      is_notice()
+    end)
+
+    it("a refusal that asks to finish first is a notice",
+        function()
+      K.browse_to(1)
+      K.type("r")
+      K.keys("f2")
+      assert.truthy(K.message():find("first", 1, true))
+      is_notice()
+    end)
+
+    it("a line over the limit is refused with a notice",
+        function()
+      K.browse_to_end()
+      K.type(string.rep("x", 66) .. " = 1")
+      K.keys("return")
+      assert.truthy(K.message():find("limit", 1, true))
+      is_notice()
+    end)
+
+    it("a block over the limit is refused with a notice",
+        function()
+      K.browse_to_end()
+      local lines = K.block_lines(15)
+      K.type_lines(lines)
+      K.keys("return")
+      assert.same(table.concat(lines, "\n"), K.draft())
+      assert.truthy(K.message():find("limit is 14", 1, true))
+      is_notice()
+    end)
+
+    it("a write that failed is told in a notice", function()
+      K.browse_to_end()
+      K.type("z = 3")
+      K.fail_writes("the card is full")
+      K.keys("return")
+      assert.truthy(K.message():find("card is full", 1, true))
+      is_notice()
+    end)
+
+    it("a file changed from outside is told in a notice",
+        function()
+      K.browse_to_end()
+      K.type("z = 3")
+      K.write_outside("main.lua", "q = 9\n")
+      K.keys("return")
+      assert.same("q = 9\n", K.file())
+      local said = K.message()
+      assert.truthy(said:find("changed outside", 1, true))
+      is_notice()
+    end)
+
+    it("the parser's message is an error, in red", function()
+      K.browse_to_end()
+      K.type("x = = 1")
+      K.keys("return")
+      assert.truthy(K.message():find("expression", 1, true))
+      assert.same("error", K.message_kind())
+      local c, t = band_colours(K.screen()), theme()
+      assert.is_true(same_colour(t.error, c.text))
+      assert.is_true(same_colour(t.bg, c.bg))
+      assert.is_false(same_colour(t.warning, c.text))
+    end)
+
+    it("no message has no kind", function()
+      K.browse_to_end()
+      K.keys("f2")
+      K.keys("left")
+      assert.is_nil(K.message())
+      assert.is_nil(K.message_kind())
+    end)
+
+    it("the console's error stays in the error colour",
+        function()
+      K.reset({ ["main.lua"] = "x = 1\n" })
+      K.type("x = = 1")
+      K.keys("return")
+      local s = K.screen()
+      local colors = K.cc.view.cfg.view.colors
+      local found = false
+      for _, t in ipairs(s.field) do
+        if t.text:find("expression", 1, true) then
+          found = true
+          assert.is_true(same_colour(colors.input.error,
+            t.colour))
+        end
+      end
+      assert.is_true(found)
     end)
   end)
 

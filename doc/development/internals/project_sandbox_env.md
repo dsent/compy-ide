@@ -84,7 +84,7 @@ slot is then reset to the default in the same function, so the next project star
 inherit the previous one's teardown.
 
 Every stop path that runs a project reaches `stop_project_run`, so the hook fires on all of them:
-`Ctrl+Q`, `Ctrl+S` and `Ctrl+T` into the editor (the gate's `RESERVED` table, `controller.lua`), and
+`Ctrl+Q`, `Ctrl+Alt+R` and `Ctrl+T` into the editor (the gate's `RESERVED` table, `controller.lua`), and
 the `Ctrl+Esc` / `love.quit` path (`Controller.set_love_quit`, which stops the project instead of
 quitting whenever one is running or the console is still interactive). The only exit that runs no project code
 is quitting with **no** project running, where there is nothing to tear down.

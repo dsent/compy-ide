@@ -30,9 +30,7 @@ a project must be selected first.
 | Command                                                           | Combination                                   |
 | :---------------------------------------------------------------- | :-------------------------------------------- |
 | Clear terminal                                                    | <kbd>Ctrl</kbd>+<kbd>L</kbd>                  |
-| Stop project                                                      | <kbd>Ctrl</kbd>+<kbd>S</kbd>                  |
-| Quit project (stop and close)                                     | <kbd>Ctrl</kbd>+<kbd>Q</kbd>                  |
-| Reset application to initial state                                | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> |
+| Stop the program and return to the console (the project stays open) | <kbd>Ctrl</kbd>+<kbd>Q</kbd>                  |
 | Restart project                                                   | <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>R</kbd>   |
 | Exit application                                                  | <kbd>Ctrl</kbd>+<kbd>Esc</kbd>                |
 | Pause project                                                     | <kbd>Ctrl</kbd>+<kbd>Pause</kbd>              |
@@ -67,6 +65,7 @@ a project must be selected first.
 | Insert or replace, and keep the text in the field                 | <kbd>Shift</kbd>+<kbd>Insert</kbd>            |
 | Break a line in the field                                         | <kbd>Shift</kbd>+<kbd>Enter ⏎</kbd> / <kbd>Alt</kbd>+<kbd>Enter ⏎</kbd> |
 | Dismiss a notice; drop the field's text or the replacement; step back from the file (empty field) | <kbd>Esc</kbd>                                |
+| Leave the editor for the console, every open file with it (empty field) | <kbd>Ctrl</kbd>+<kbd>Q</kbd>                  |
 | Copy the highlighted block into the field                         | <kbd>Ctrl</kbd>+<kbd>Insert</kbd>             |
 | Cut the highlighted block into the field (empty field)            | <kbd>Ctrl</kbd>+<kbd>Delete</kbd> / <kbd>Shift</kbd>+<kbd>Delete</kbd> |
 | Move the highlighted block up / down                              | <kbd>Alt</kbd>+<kbd>⇧</kbd>/<kbd>Alt</kbd>+<kbd>⇩</kbd> |
@@ -87,8 +86,9 @@ a project must be selected first.
 
 A _project_ is a folder in the application's storage which
 contains at least a `main.lua` file. Projects can be loaded and
-ran. At any time, pressing <kbd>Ctrl-Q</kbd> quits and
-returns to the console
+ran. At any time, pressing <kbd>Ctrl-Q</kbd> stops the program and
+returns to the console. The project stays open: no key closes it,
+and `close_project()` does.
 
 There is always a project open: the application starts on the
 default `scratchpad` project, which can be used to persist files.
@@ -199,8 +199,10 @@ notice over the field that says why and what would work. The
 next key dismisses it. The editor asks no questions.
 
 Happy with the modifications now, we can leave the editor by
-pressing <kbd>Esc</kbd> with an empty field. <kbd>Ctrl-Shift-S</kbd> also
-leaves, but it is **deprecated** and will be removed.
+pressing <kbd>Esc</kbd> with an empty field, which steps back one
+file at a time, or <kbd>Ctrl-Q</kbd>, which returns to the console
+from any file. <kbd>Ctrl-Shift-S</kbd> also leaves, but it is
+**deprecated** and will be removed.
 While there is text in the field or a block is being replaced,
 leaving is refused with a notice: submit the text with
 <kbd>Enter ⏎</kbd> or drop it with <kbd>Esc</kbd> first.

@@ -95,7 +95,9 @@ describe('the editor across files #input', function()
   end)
 
   describe('a write that fails', function()
-    local stubbed = { 'quit_project', 'reset', 'restart', 'run_project' }
+    --- what an exit may reach; quit_project is here to show
+    --- that no key closes the project
+    local stubbed = { 'quit_project', 'restart', 'run_project' }
     local took
 
     before_each(function()
@@ -159,10 +161,12 @@ describe('the editor across files #input', function()
     --- the exit is refused with a notice, the draft kept; once
     --- the edit is aborted the exit is taken (IS1.7: the draft
     --- is kept until the user submits, aborts or leaves)
+    --- Ctrl+Q leaves the editor for the console and calls
+    --- nothing of the project's (the reserved map of
+    --- 2026-11-14)
     for _, c in ipairs({
       { 'Ctrl+T', { 'lctrl', 't' }, 'run_project' },
-      { 'Ctrl+Q', { 'lctrl', 'q' }, 'quit_project' },
-      { 'Ctrl+Shift+R', { 'lctrl', 'lshift', 'r' }, 'reset' },
+      { 'Ctrl+Q', { 'lctrl', 'q' } },
       { 'Ctrl+Alt+R', { 'lctrl', 'lalt', 'r' }, 'restart' },
     }) do
       it(c[1] .. ' waits for the edit to end, and asks nothing',
@@ -185,8 +189,29 @@ describe('the editor across files #input', function()
           assert.same('editor', love.state.app_state)
           chord(unpack(c[2]))
           assert.same({ c[3] }, took)
+          if not c[3] then
+            assert.same('ready', love.state.app_state)
+            assert.is_nil(ed:get_active_buffer())
+          end
         end)
     end
+
+    --- dropped from the map on 2026-11-14: the key reaches
+    --- the editor, where nothing acts on it
+    it('Ctrl+Shift+R does nothing, with an edit or without',
+      function()
+        open()
+        draft('x = 99')
+        chord('lctrl', 'lshift', 'r')
+        assert.same({}, took)
+        assert.is_false(ed.input:has_error())
+        assert.same('x = 99', field())
+        chord('escape')
+        chord('lctrl', 'lshift', 'r')
+        assert.same({}, took)
+        assert.same('editor', love.state.app_state)
+        assert.same('main.lua', ed:get_active_buffer().name)
+      end)
 
     it('Escape lets the file go and asks nothing', function()
       open()
@@ -209,7 +234,8 @@ describe('the editor across files #input', function()
 
         --- the notice blocks no exit
         chord('lctrl', 'q')
-        assert.same({ 'quit_project' }, took)
+        assert.same('ready', love.state.app_state)
+        assert.same({}, took)
       end)
   end)
 
@@ -223,13 +249,10 @@ describe('the editor across files #input', function()
     }
     for _, e in ipairs(exits) do
       it('keeps ' .. e[1] .. ' from leaving', function()
-        local keep = { run = cc.run_project, quit = cc.quit_project }
-        undo[#undo + 1] = function()
-          cc.run_project, cc.quit_project = keep.run, keep.quit
-        end
+        local run = cc.run_project
+        undo[#undo + 1] = function() cc.run_project = run end
         local took = false
         cc.run_project = function() took = true end
-        cc.quit_project = function() took = true end
         files['main.lua'] = 'x = 1\ny = 2\n'
         love.state.prev_state = 'ready'
         open()

@@ -19,8 +19,9 @@ describe("the key card #editor", function()
   it("lists the browsing state's keys first", function()
     local now, other = group("browsing", true)
     for _, k in ipairs({
-      "Enter", "F2", "Esc", "Ctrl+Up/Down", "Ctrl+Ins",
-      "Ctrl+Delete", "Alt+Up/Down", "Ctrl+Z", "Ctrl+Y", "Ctrl+J"
+      "Enter", "F2", "Esc", "Ctrl+Q", "Ctrl+Up/Down",
+      "Ctrl+Ins", "Ctrl+Delete", "Alt+Up/Down", "Ctrl+Z",
+      "Ctrl+Y", "Ctrl+J"
     }) do
       assert.is_string(now[k], k)
     end
@@ -35,6 +36,9 @@ describe("the key card #editor", function()
     assert.is_nil(ins["F2"])
     assert.is_string(ins_other["F2"])
     assert.is_string(ins_other["Ctrl+Delete"])
+    -- leaving waits for the edit to end
+    assert.is_nil(ins["Ctrl+Q"])
+    assert.same("to the console", ins_other["Ctrl+Q"])
     local rep, rep_other = group("replacing", false)
     assert.is_string(rep["F2"])
     assert.is_string(rep_other["Alt+Up/Down"])
@@ -45,7 +49,8 @@ describe("the key card #editor", function()
       return (group(state, empty)).Enter
     end
     assert.same("add empty line", enter("browsing", true))
-    assert.same("same as Enter",
+    -- with no draft to keep it does what Enter does
+    assert.same("add empty line",
       (group("browsing", true))["Shift+Ins"])
     assert.same("insert, keep",
       (group("inserting", false))["Shift+Ins"])
@@ -75,7 +80,7 @@ describe("the key card #editor", function()
           assert.truthy(text:find(c.what, 1, true), c.what)
         end
       end
-      assert.same(20, keys)
+      assert.same(21, keys)
     end
   end)
 
@@ -94,9 +99,24 @@ describe("the key card #editor", function()
     end
   end)
 
+  it("lists Ctrl+Q in the console only while a program is "
+      .. "not stopped", function()
+    local function has(cells)
+      for _, c in ipairs(cells) do
+        if c.key == "Ctrl+Q" then
+          return c.what
+        end
+      end
+    end
+    assert.is_nil(has(KeyCard.console_cells()))
+    assert.is_nil(has(KeyCard.console_cells(false)))
+    assert.same("stop program",
+      has(KeyCard.console_cells(true)))
+  end)
+
   it("takes one column where two do not fit", function()
     local lines = KeyCard.lines("browsing", true, 30, 40)
-    assert.same(22, #lines)
+    assert.same(23, #lines)
     assert.same(" Keys now, browsing:", lines[1])
   end)
 end)

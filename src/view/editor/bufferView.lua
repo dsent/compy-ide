@@ -409,8 +409,9 @@ function BufferView:draw(special)
     end
 
     --- white on the browsed block; yellow, which stays, on
-    --- the replacement target, inside the white where the
-    --- two are one block
+    --- the replacement target. Where the two are one block,
+    --- the white shows as a strip one character cell wide at
+    --- each side of the yellow.
     local sel = self.buffer:get_selection()
     local target = self.buffer.loaded
     local browsed = self:_block_rows(sel)
@@ -419,7 +420,7 @@ function BufferView:draw(special)
     else
       fill(browsed, colors.highlight, 0)
       if target then
-        local inset = target == sel and fw / 2 or 0
+        local inset = target == sel and fw or 0
         fill(self:_block_rows(target),
           colors.highlight_loaded, inset)
       end

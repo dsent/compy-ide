@@ -75,6 +75,20 @@ function EditorView:message_rows()
   return rows
 end
 
+--- The colour of a message's text: the parser's message in
+--- the error colour, a notice in the
+--- status line's warning colour, as the console's status line
+--- has its '[no sd card]'.
+--- @private
+--- @return RGB
+function EditorView:_message_color()
+  local colors = self.cfg.colors
+  if self.controller:message_kind() == 'notice' then
+    return colors.statusline.editor.warning
+  end
+  return colors.input.error
+end
+
 --- A message, a notice or an error's, in the band directly
 --- above the status line, over the document view's last rows
 --- (IS3.14). It is a hint that blocks nothing: neither the
@@ -101,9 +115,7 @@ function EditorView:draw_message(bv)
   gfx.setFont(cf.font)
   gfx.setColor(colors.error_bg)
   gfx.rectangle('fill', 0, from, width, bottom - from)
-  gfx.setColor(colors.error)
-  gfx.rectangle('line', 1, from + 1,
-    width - 2, bottom - from - 2)
+  gfx.setColor(self:_message_color())
   for i, row in ipairs(rows) do
     gfx.print(row, 0, top + (i - 1) * fh)
   end

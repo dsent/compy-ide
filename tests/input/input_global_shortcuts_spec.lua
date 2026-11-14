@@ -20,14 +20,15 @@
 local F    = require('tests.helpers.input_fixture')
 local mock = require('tests.mock')
 
--- restart/reset reach real project execution (run_project) or
--- console history teardown -- machinery this file's fixture
--- does not stand up. A minimal stub records which of the two
--- the raw gate invoked, isolating the modifier-exactness
--- question from project loading (doc/development/decisions/
--- input.md, D-BEHAVIOUR-TEST's named-seam exception; same
--- technique as input_shortcuts_click_spec.lua's play-mode
--- case).
+-- restart reaches real project execution (run_project) --
+-- machinery this file's fixture does not stand up. A minimal
+-- stub records what the raw gate invoked, isolating the
+-- modifier-exactness question from project loading
+-- (doc/development/decisions/input.md, D-BEHAVIOUR-TEST's
+-- named-seam exception; same technique as
+-- input_shortcuts_click_spec.lua's play-mode case). `reset`
+-- is the method Ctrl+Shift+R called until the key was dropped
+-- (2026-11-14): the stub keeps it to show nothing calls it.
 -- @param combo string  mock.keystroke syntax, e.g. 'C-M-r'
 -- @return table  {restart = true?, reset = true?}
 local function drive_stub(combo)
@@ -75,13 +76,13 @@ describe('input surface: inbound events — global platform'
           assert.is_true(project_ran)
         end)
 
-      -- Route-destroying: quit tears the project route down
+      -- Route-destroying: the stop tears the project route down
       -- (stop_project_run reinstalls the console's handlers)
       -- BEFORE the gateway forwards the event, so the project's
       -- own binding never runs. That is the route disappearing,
       -- not the platform suppressing it — the project could
-      -- not have blocked the quit either way.
-      it('ctrl+q quits despite a project claiming it',
+      -- not have blocked the stop either way.
+      it('ctrl+q stops the run despite a project claiming it',
         function()
           local project_ran = false
           local input = F.activate_project()
@@ -95,6 +96,140 @@ describe('input surface: inbound events — global platform'
           assert.is_false(project_ran)
         end)
     end)
+
+  -- The reserved map of 2026-11-14 (doc/development/decisions/
+  -- input.md, D-RESERVE-TABLE's note of that date): Ctrl+Q
+  -- returns to the console and the project stays open; no key
+  -- closes the project; Ctrl+S and Ctrl+Shift+R are reserved
+  -- no longer. Ctrl+Q in the file editor is covered where the
+  -- editor's other exits are, tests/editor/spec/
+  -- is1_files_spec.lua and input_editor_keys_spec.lua.
+  describe('ctrl+q returns to the console', function()
+    local P, closed, stops, orig_close, orig_stop
+
+    before_each(function()
+      P = F.cc.model.projects
+      closed, stops = 0, 0
+      orig_close = F.cc._close_project
+      orig_stop = F.cc.stop_project_run
+      F.cc._close_project = function(...)
+        closed = closed + 1
+        return orig_close(...)
+      end
+      F.cc.stop_project_run = function(...)
+        stops = stops + 1
+        return orig_stop(...)
+      end
+    end)
+
+    after_each(function()
+      F.cc._close_project = orig_close
+      F.cc.stop_project_run = orig_stop
+    end)
+
+    local function ctrl_q()
+      F.session.press('lctrl')
+      F.session.press('q')
+      F.session.release('q')
+      F.session.release('lctrl')
+    end
+
+    it('stops a running program and keeps the project open',
+      function()
+        F.activate_project()
+        local open = { name = 'p' }
+        P.current = open
+        finally(function() P.current = nil end)
+        ctrl_q()
+        assert.equal('ready', love.state.app_state)
+        assert.equal(1, stops)
+        assert.equal(0, closed)
+        assert.equal(open, P.current)
+      end)
+
+    it('stops a paused program and keeps the project open',
+      function()
+        F.activate_project()
+        local open = { name = 'p' }
+        P.current = open
+        finally(function() P.current = nil end)
+        love.state.app_state = 'inspect'
+        ctrl_q()
+        assert.equal('ready', love.state.app_state)
+        assert.equal(1, stops)
+        assert.equal(0, closed)
+        assert.equal(open, P.current)
+      end)
+
+    -- A program that finished its top-level code is idle, not
+    -- stopped: its picture and its handlers are still there
+    -- behind the console (ConsoleController.run_live).
+    it('stops a program that idles behind the console',
+      function()
+        F.run_project(function() end)
+        assert.equal('ready', love.state.app_state)
+        assert.is_true(F.cc.run_live)
+        local open = P.current
+        ctrl_q()
+        assert.equal('ready', love.state.app_state)
+        assert.equal(1, stops)
+        assert.is_false(F.cc.run_live)
+        assert.equal(0, closed)
+        assert.equal(open, P.current)
+      end)
+
+    it('does nothing in the console with no program running',
+      function()
+        local open = P.current
+        assert.is_falsy(F.cc.run_live)
+        F.session.type('x = 1')
+        ctrl_q()
+        assert.equal('ready', love.state.app_state)
+        assert.equal(0, stops)
+        assert.equal(0, closed)
+        assert.equal(open, P.current)
+        assert.same('x = 1',
+          string.unlines(F.cc.input:get_text()))
+      end)
+  end)
+
+  describe('keys the map no longer reserves', function()
+    for _, c in ipairs({
+      { 'ctrl+s', { 'lctrl' }, 's' },
+      { 'ctrl+shift+r', { 'lctrl', 'lshift' }, 'r' },
+    }) do
+      it(c[1] .. ' reaches a running program, which goes on',
+        function()
+          local bound, seen = false, nil
+          local input = F.activate_project({
+            keypressed = function(k) seen = k end,
+          })
+          input.shortcuts.keypressed[c[1]] = function()
+            bound = true
+          end
+          for _, m in ipairs(c[2]) do F.session.press(m) end
+          F.session.press(c[3])
+          assert.equal('running', love.state.app_state)
+          assert.is_true(bound)
+          assert.equal(c[3], seen)
+        end)
+
+      it(c[1] .. ' does nothing in the console', function()
+        local stops, orig = 0, F.cc.stop_project_run
+        F.cc.stop_project_run = function(...)
+          stops = stops + 1
+          return orig(...)
+        end
+        finally(function() F.cc.stop_project_run = orig end)
+        local open = F.cc.model.projects.current
+        for _, m in ipairs(c[2]) do F.session.press(m) end
+        F.session.press(c[3])
+        assert.equal('ready', love.state.app_state)
+        assert.equal(0, stops)
+        assert.equal(open, F.cc.model.projects.current)
+      end)
+    end
+  end)
 
   -- A reservation matches its modifier set exactly
   -- (doc/development/decisions/input.md, D-EXACT-RESERVE): the
@@ -167,7 +302,7 @@ describe('input surface: inbound events — global platform'
           assert.is_true(project_ran)
         end)
 
-      it('ctrl+shift+q no longer quits; the project'
+      it('ctrl+shift+q does not stop the run; the project'
         .. ' binding runs instead', function()
           local project_ran = false
           local input = F.activate_project()
@@ -180,45 +315,15 @@ describe('input surface: inbound events — global platform'
           assert.is_true(project_ran)
         end)
 
-      -- The gate's run-stop reservation is exact; the editor's
-      -- own Ctrl+S pair lives in EditorController and is
-      -- exercised by the two editor cases below.
-      it('ctrl+s still stops a running project', function()
-        F.activate_project()
-        love.state.app_state = 'running'
-        F.session.press('lctrl')
-        F.session.press('s')
-        assert.equal('ready', love.state.app_state)
-      end)
-
-      it('ctrl+alt+s no longer stops the run; the project'
+      it('ctrl+alt+q does not stop the run; the project'
         .. ' binding runs instead', function()
           local project_ran = false
           local input = F.activate_project()
-          input.shortcuts.keypressed['ctrl+alt+s'] =
+          input.shortcuts.keypressed['ctrl+alt+q'] =
               function() project_ran = true; return true end
-          love.state.app_state = 'running'
           F.session.press('lctrl')
           F.session.press('lalt')
-          F.session.press('s')
-          assert.equal('running', love.state.app_state)
-          assert.is_true(project_ran)
-        end)
-
-      -- The one behaviour P-23-02 changes: the run-stop
-      -- reservation becomes exact (only_mods), so Shift now
-      -- takes this combo out of it. Was 'still stops', like
-      -- ctrl+s above, before the move.
-      it('ctrl+shift+s no longer stops the run; the'
-        .. ' project binding runs instead', function()
-          local project_ran = false
-          local input = F.activate_project()
-          input.shortcuts.keypressed['ctrl+shift+s'] =
-              function() project_ran = true; return true end
-          love.state.app_state = 'running'
-          F.session.press('lctrl')
-          F.session.press('lshift')
-          F.session.press('s')
+          F.session.press('q')
           assert.equal('running', love.state.app_state)
           assert.is_true(project_ran)
         end)
@@ -312,21 +417,14 @@ describe('input surface: inbound events — global platform'
         assert.is_nil(calls.restart)
       end)
 
-      it('ctrl+shift+r still resets', function()
+      -- Ctrl+Shift+R was the reset until 2026-11-14; the key
+      -- is dropped, and its extension stays nobody's.
+      it('ctrl+shift+r no longer resets', function()
         local calls = drive_stub('C-S-r')
-        assert.is_true(calls.reset)
-      end)
-
-      it('ctrl+alt+shift+r no longer resets', function()
-        local calls = drive_stub('C-M-S-r')
         assert.is_nil(calls.reset)
+        assert.is_nil(calls.restart)
       end)
 
-      -- The defect this closes (blast-radius review, rows 5/6):
-      -- pre-fix, ctrl+alt+shift+r satisfied both the tolerant
-      -- reset gate (ctrl+shift) and the tolerant restart gate
-      -- (ctrl+alt), so ONE event ran BOTH. Exactness makes the
-      -- two gates mutually exclusive by construction.
       it('ctrl+alt+shift+r fires neither restart nor reset',
         function()
           local calls = drive_stub('C-M-S-r')
@@ -359,15 +457,6 @@ describe('input surface: inbound events — global platform'
       -- only "with no modifier".
       pending('f10 cycles the FPS-corner overlay'
         .. ' (love.PROFILE gated)')
-      -- The description said "or saves/closes an editor
-      -- buffer, depending on app_state" until 2026-09-09.
-      -- That half is behaviour the contract denies and
-      -- T-CTRL-S-UNCLAIMED retired: bare Ctrl+S is unclaimed
-      -- in the editor, and the two cases above pin it. Only
-      -- the run-stop half is a real gap, and only there.
-      pending('ctrl+s stops a run; nothing else claims it')
-      pending('ctrl+shift+r resets: quits and wipes console'
-        .. ' history')
       pending('ctrl+escape (release) asks love to quit')
     end)
 end)

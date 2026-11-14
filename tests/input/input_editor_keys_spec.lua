@@ -281,10 +281,12 @@ describe('editor key contract #input', function()
 
   describe('the project boundary', function()
     -- The editor's buffers belong to the project they were
-    -- opened in. The gate's project shortcuts reach the
-    -- console before the editor sees the key, so they must
-    -- close it themselves, or its buffers outlive the project
-    -- and write into the next one.
+    -- opened in. The gate's shortcuts reach the console
+    -- before the editor sees the key, so they must close it
+    -- themselves, or its buffers outlive the run they start.
+    -- Ctrl+Q leaves the editor for the console and keeps the
+    -- project open; Ctrl+Shift+R is dropped (the reserved map
+    -- of 2026-11-14).
     local stubbed = { 'close_project', 'run_project' }
     local orig = {}
 
@@ -303,7 +305,6 @@ describe('editor key contract #input', function()
 
     local chords = {
       ['Ctrl+Q']       = { 'lctrl', 'q' },
-      ['Ctrl+Shift+R'] = { 'lctrl', 'lshift', 'r' },
       ['Ctrl+Alt+R']   = { 'lctrl', 'lalt', 'r' },
     }
     for name, keys in pairs(chords) do
@@ -314,6 +315,40 @@ describe('editor key contract #input', function()
         assert.is_nil(ed:get_active_buffer())
       end)
     end
+
+    it('Ctrl+Q leaves from search for the console', function()
+      F.session.press('lctrl')
+      F.session.press('f')
+      F.session.release('f')
+      assert.same('search', ed:get_mode())
+      F.session.press('q')
+
+      assert.same('ready', love.state.app_state)
+      assert.is_nil(ed:get_active_buffer())
+      assert.same('nav', ed:get_mode())
+    end)
+
+    it('Ctrl+Q closes no project', function()
+      local closed = false
+      F.cc.close_project = function() closed = true end
+      local P = F.cc.model.projects
+      local open = P.current
+      F.session.press('lctrl')
+      F.session.press('q')
+
+      assert.same('ready', love.state.app_state)
+      assert.is_false(closed)
+      assert.equal(open, P.current)
+    end)
+
+    it('Ctrl+Shift+R leaves the editor open', function()
+      F.session.press('lctrl')
+      F.session.press('lshift')
+      F.session.press('r')
+
+      assert.same('editor', love.state.app_state)
+      assert.same('main.lua', ed:get_active_buffer().name)
+    end)
 
     it('Ctrl+Alt+R keeps the way back for Ctrl+T', function()
       F.session.press('lctrl')

@@ -1496,6 +1496,11 @@ the proposal.
 
 ## D-EXACT-RESERVE — a framework reservation matches its modifier set exactly
 
+**Note, 2026-11-14 — the reserved keys changed, the rule did not.** `ctrl+s` and `ctrl+shift+r`
+are no longer reservations, so the examples below that lean on them describe the map as it was;
+the new map is in D-RESERVE-TABLE's note of the same date. Every reservation that remains still
+matches its modifier set exactly.
+
 **Owner ruling, 2026-08-16.** Amends nothing; it states for the **gate** the rule
 D-COMBO-SHAPE already states for everyone else. D-COMBO-SHAPE, D-ASK-THE-DEVICE and D-THREE-MODS
 stand unchanged — D-COMBO-SHAPE rules that a combo *is* its modifier set exactly, D-ASK-THE-DEVICE
@@ -1563,6 +1568,22 @@ gate's `ctrl+s` reservation is unchanged — it stops a *running* project and ha
 editor branch. See `technical_debt/input.md`, `T-CTRL-S-UNCLAIMED`.
 
 ## D-RESERVE-TABLE — the gate's reservations are combo strings in a privileged table
+
+**Note, 2026-11-14 — the map in the table changed, by the product owner's decision.** *"What does
+not change"* below held for the change of representation it describes; this is a later change of
+behaviour. The table now holds:
+
+- `ctrl+q` returns to the console and keeps the project open. It stops a run that is running,
+  paused, or idle behind the console; from the file editor it leaves the editor with every file
+  on its stack, and is refused during an edit; in the console with no run it does nothing. It
+  takes the place of `ctrl+s`.
+- `ctrl+s` and `ctrl+shift+r` are reserved no longer: a project receives them. No key closes the
+  project, and nothing replaces the reset.
+- `ctrl+escape` (on release), `ctrl+alt+r`, `ctrl+t`, `ctrl+pause`, the profiler pair and `f10`
+  are as they were.
+
+The table's contract is unchanged: privileged, exact, consulted before any route, and never
+consuming.
 
 **Owner ruling, 2026-08-16.** **Amends D-ASK-THE-DEVICE point 3**, which named this
 table, declined to commit to it, and required that if it were ever built it be
@@ -2460,6 +2481,12 @@ lives.)*
 ---
 
 ## D-EDITOR-KEYS — the editor's key contract is the product's, and this is the record of it
+
+**Note, 2026-11-14 — the keys this entry records have since changed.** The editor was rebuilt on
+three states (browsing, inserting, replacing) with no questions asked, and the gate's reserved map
+changed (D-RESERVE-TABLE's note of this date): `Ctrl+Q` leaves the editor for the console,
+`Ctrl+S` and `Ctrl+Shift+R` are reserved no longer. The entry below stands as the record of the
+contract of 2026-09-06; `doc/EDITOR.md` has the keys as built.
 
 **Status: RETROFITTED, 2026-09-06.** This entry records a design that was decided and built outside
 this ledger, and it exists because we were reasoning about those keys without a written statement of

@@ -1,6 +1,7 @@
 require("view.input.statusline")
 
 local class = require('util.class')
+local Blink = require('view.input.cursorBlink')
 require("util.debug")
 require("util.view")
 
@@ -116,6 +117,9 @@ function UserInputView:render_input(input, status, time)
   self.start_h = vpH - (inLines + 1) * fh
 
   local function drawCursor()
+    --- the cursor blinks (H-NFR4.4): in its hidden phase
+    --- nothing is drawn for it
+    if not self.cursor_shown then return end
     --- the line's end is on its last row, also when that row
     --- is full: the cursor then stands past the last column
     local rows = wrap_forward[cl] or { 1 }
@@ -126,17 +130,26 @@ function UserInputView:render_input(input, status, time)
 
     local ch = vcl * fh
     local x_offset = acc - (yi - 1) * w
-    local x = (x_offset - .5) * fw
 
     gfx.push('all')
     gfx.setColor(cf_colors.input.cursor)
-    gfx.print('|', x, ch)
-    --- at either edge of the field half the bar is cut off:
-    --- a second one stands inside it
-    if x_offset == 0 then
-      gfx.print('|', x + 4, ch)
-    elseif x_offset >= w then
+    if x_offset >= w then
+      --- past the last column of a full row there is no
+      --- cell: a bar at the field's right edge, where half of
+      --- it is cut off, and a second one inside it
+      local x = (x_offset - .5) * fw
+      gfx.print('|', x, ch)
       gfx.print('|', x - 4, ch)
+    else
+      --- a block on the cursor's cell, the character under
+      --- it in the text's colour, so that it stays readable
+      local x = x_offset * fw
+      gfx.rectangle('fill', x, ch, fw, fh)
+      local under = string.usub(text[cl] or '', cc, cc)
+      if string.is_non_empty_string(under) then
+        gfx.setColor(colors.fg)
+        gfx.print(under, x, ch)
+      end
     end
     gfx.pop()
   end
@@ -301,6 +314,8 @@ end
 --- @param status Status
 function UserInputView:render(input, status, time)
   local gfx = love.graphics
+  --- what this render shows of the cursor's blink
+  self.cursor_shown = Blink.shown(self.cfg.blink)
   --- @diagnostic disable-next-line: undefined-field
   if gfx.mock then return end
   local err_text = input.wrapped_error or {}
@@ -327,7 +342,12 @@ end
 -- update before drawing. See the identity-redraw debt entry for
 -- the migration constraint.
 function UserInputView:draw()
-  if self.controller ~= love.state.user_input_controller then
+  --- a project's field renders when it changes, and when its
+  --- cursor's blink turns over
+  local project = love.state.user_input_controller
+  local shown = Blink.shown(self.cfg.blink)
+  local turned = shown ~= self.cursor_shown
+  if self.controller ~= project or turned then
     self.controller:update_view()
   end
   local b = self.cfg.statusline_border / 2

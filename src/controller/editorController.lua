@@ -71,9 +71,9 @@ function EditorController:_leave_keys(k)
   return false
 end
 
---- A whole-editor exit (Ctrl+Shift+S here; Ctrl+T and the
---- project's Ctrl+Q, Ctrl+Shift+R and Ctrl+Alt+R at the
---- gate) is taken from the browsing state. During an edit it
+--- A whole-editor exit (Ctrl+Shift+S here; Ctrl+T, Ctrl+Q
+--- and Ctrl+Alt+R at the gate) is taken from the browsing
+--- state. During an edit it
 --- is refused with a notice, and no question is asked
 --- (H-NFR4.6): the field may hold a cut block's only copy
 --- (IS6.2), so the edit is submitted or aborted first
@@ -308,11 +308,12 @@ end
 --- notice too (IS3.14): it names what was refused and the
 --- action that would work.
 --- @param msg (string|string[])? --- the notice's words
-function EditorController:refuse(msg)
+--- @param kind MessageKind? --- 'error': the parser's message
+function EditorController:refuse(msg, kind)
   --- required here, not at the top: util.audio builds
   --- its sources on load and needs love.audio ready
   require("util.audio").knock()
-  if msg then self:notice(msg) end
+  if msg then self:notice(msg, kind) end
 end
 
 --- `text` in rows of at most `w` columns, broken between
@@ -336,11 +337,19 @@ local function wrap_words(text, w)
   return rows
 end
 
---- Show a notice in the message band (IS3.14). It blocks
---- no input and changes no state; the next key press
---- dismisses it (_held_back).
+--- What a message in the band is: a notice says why an
+--- action was refused and what would work; an error is the
+--- parser's message for a draft that is not valid Lua. The
+--- band draws each in its own colour.
+--- @alias MessageKind 'notice'|'error'
+
+--- Show a message in the message band (IS3.14): a notice,
+--- unless `kind` says it is an error. It blocks no input and
+--- changes no state; the next key press dismisses it
+--- (_held_back).
 --- @param msg string|string[]
-function EditorController:notice(msg)
+--- @param kind MessageKind?
+function EditorController:notice(msg, kind)
   local model = self.input.model
   local w = model.visible and model.visible.wrap_w or 64
   local rows = { }
@@ -351,7 +360,20 @@ function EditorController:notice(msg)
     end
   end
   model:set_error(rows)
-  if model.error then model.error.notice = true end
+  if model.error then
+    model.error.notice = true
+    model.error.kind = kind or 'notice'
+  end
+end
+
+--- The kind of the message the band shows, nil when none
+--- shows. A message shown another way than through `notice`
+--- is an error.
+--- @return MessageKind?
+function EditorController:message_kind()
+  local e = self.input.model.error
+  if type(e) ~= 'table' or #e == 0 then return nil end
+  return e.kind or 'error'
 end
 
 --- A key that does nothing on its own: a modifier, a lock or
@@ -387,12 +409,12 @@ function EditorController:_held_back(k)
     self._gate_key = nil
     return true
   end
-  --- a modifier or a lock on its own leaves it showing, and
-  --- so does the glyph a modifier chord leaks on the device
-  --- (compy-input-quirks, quirk 3), which types nothing
-  local leaked = not k and (Key.ctrl() or Key.alt())
+  --- a modifier or a lock on its own leaves it showing. The
+  --- glyph a modifier chord leaks on the device leaves it
+  --- showing too, because it never comes here: the event gate
+  --- stops it (Key.chord_text)
   local lone = k and lone_key(k)
-  if self.input:has_error() and not lone and not leaked then
+  if self.input:has_error() and not lone then
     self.input:clear_error()
   end
   return false
@@ -588,15 +610,9 @@ function EditorController:textinput(t)
   if self:_held_back() then return end
   self.view:update_input()
   if is_normal(self.mode) then
-    local input = self.model.input
-    if Key.ctrl() or Key.alt() then
-      --- modifier chords leak glyphs on the device
-      --- (compy-input-quirks, quirk 3); only Shift
-      --- composes real input
-      return
-    end
     --- typing prepares a draft in the field and opens no
-    --- block (IS3.1)
+    --- block (IS3.1). A chord's own glyph never comes here:
+    --- the event gate stops it (Key.chord_text)
     self.input:textinput(t)
   elseif self.mode == 'search' then
     self.search:textinput(t)
@@ -693,7 +709,7 @@ function EditorController:_handle_submit(go)
         --- IS3.4: the cursor goes before the failing character,
         --- where the red text starts, and the parser's message
         --- shows (NFR4.3)
-        self:refuse({ tostring(failure) })
+        self:refuse({ tostring(failure) }, 'error')
         inter.model:move_cursor(failure.l, failure.c or 1)
         inter:update_view()
         return false

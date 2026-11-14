@@ -8,6 +8,7 @@ require("util.lua")
 local LANG = require("util.eval")
 local FS = require("util.filesystem")
 local Application = require("util.application")
+local Blink = require("view.input.cursorBlink")
 
 local messages = {
   user_break = "BREAK into program",
@@ -1045,26 +1046,25 @@ Controller = {
       CC:suspend_run(messages.user_break)
     end
 
-    local function reserved_quit()
+    -- Ctrl+Q returns to the console, and the project stays
+    -- open. From the file editor it leaves the editor with
+    -- every file on its stack. Otherwise it stops the program:
+    -- one that runs, one that is paused, and one that idles
+    -- behind the console with its picture or its handlers
+    -- still there (run_live). In the console with no program
+    -- it does nothing. No key closes the project
+    -- (doc/development/decisions/input.md, D-RESERVE-TABLE,
+    -- the 2026-11-14 note).
+    local function reserved_stop()
       if playback then return end
-      if refused() then return end
-      CC:quit_project()
-    end
-
-    -- Bare Ctrl+S must not gain an editor branch: the key
-    -- is UNCLAIMED there, and the rework's checkpoint is
-    -- Ctrl+K (technical_debt/input.md, T-CTRL-S-UNCLAIMED).
-    local function reserved_stop_run()
-      if playback then return end
-      if love.state.app_state == 'running' then
+      local st = love.state.app_state
+      if st == 'editor' then
+        if refused() then return end
+        CC:finish_edit()
+      elseif st == 'running' or st == 'inspect'
+          or (st == 'ready' and CC.run_live) then
         CC:stop_project_run()
       end
-    end
-
-    local function reserved_reset()
-      if playback then return end
-      if refused() then return end
-      CC:reset()
     end
 
     -- Restart stays live in playback too (matches the old
@@ -1103,9 +1103,7 @@ Controller = {
       keypressed = {
         ['ctrl+t']           = reserved_quickswitch,
         ['ctrl+pause']       = reserved_suspend,
-        ['ctrl+q']           = reserved_quit,
-        ['ctrl+s']           = reserved_stop_run,
-        ['ctrl+shift+r']     = reserved_reset,
+        ['ctrl+q']           = reserved_stop,
         ['ctrl+alt+r']       = reserved_restart,
         ['ctrl+alt+p']       = reserved_profile_start,
         ['ctrl+alt+shift+p'] = reserved_profile_stop,
@@ -1120,6 +1118,8 @@ Controller = {
     }
 
     handlers.keypressed = function(k, sc, isr)
+      --- a key press shows the text cursor (H-NFR4.4)
+      Blink.restart()
       -- Not a reservation: this fires on ANY key in playback
       -- while shutting down, not on one combo, so it cannot be
       -- a table entry.
@@ -1153,10 +1153,29 @@ Controller = {
       return handled
     end
 
+    -- A modifier chord's own glyph is no typed text, and on
+    -- the device it arrives as text all the same, before or
+    -- after the key press (Key.chord_text). It is stopped
+    -- here, at the one entry every text event has, so that it
+    -- reaches no text field: not the console's, not the file
+    -- editor's, not a project's input widget. A project's
+    -- shortcuts and hook sit above its widget and are promised
+    -- every text event, so the project route still offers it
+    -- to them, and it goes no further: no fall-through to the
+    -- console either.
+    local chord_text = with_canvas_and_errors(CC, function(t)
+      return Controller.project_input:chord_text(t)
+    end)
+
     handlers.textinput = function(t)
-      if love.textinput then
-        return love.textinput(t)
+      Blink.restart()
+      if not love.textinput then return end
+      if Key.chord_text(t) then
+        local console = Controller._defaults.textinput
+        if love.textinput == console then return end
+        return chord_text(t)
       end
+      return love.textinput(t)
     end
 
     handlers.keyreleased = function(k, sc)
@@ -1176,6 +1195,7 @@ Controller = {
     -- the slot. Under a project run that is the project
     -- route's chain; otherwise the console's own handler.
     handlers.mousepressed = function(x, y, btn, touch, presses)
+      Blink.restart()
       if btn == 1 then
         press_pos, press_dragged = { x = x, y = y }, false
       end

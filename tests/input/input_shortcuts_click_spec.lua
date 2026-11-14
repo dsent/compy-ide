@@ -41,7 +41,7 @@ describe('input surface: inbound events — shortcuts and clicks'
       -- framework runs on an end device for a player, 'dev'
       -- that a developer runs it to work on it. 'play' narrows
       -- the shortcut set so a player cannot manage projects:
-      -- restart/profile stay live, quit/stop/quickswitch do not
+      -- restart/profile stay live, stop/quickswitch do not
       -- (doc/development/decisions/input.md, D-ROUTE-OWNS;
       -- doc/development/internals/user_input.md, "Dispatch
       -- chain"). The shared fixture is built in dev mode, so
@@ -52,8 +52,8 @@ describe('input surface: inbound events — shortcuts and clicks'
           local stub = {
             cfg = { mode = 'play' },
             restart = function() calls.restart = true end,
-            quit_project = function() calls.quit = true end,
-            stop_project_run = function() end,
+            stop_project_run = function() calls.stop = true end,
+            finish_edit = function() calls.leave = true end,
             keypressed = function() end,
           }
           local saved    = table.clone(love.handlers)
@@ -67,7 +67,8 @@ describe('input surface: inbound events — shortcuts and clicks'
           for k, v in pairs(saved) do love.handlers[k] = v end
           love.keypressed = saved_kp
           assert.is_true(calls.restart)
-          assert.is_nil(calls.quit)
+          assert.is_nil(calls.stop)
+          assert.is_nil(calls.leave)
         end)
     end)
 

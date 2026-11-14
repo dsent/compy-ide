@@ -49,8 +49,9 @@ function ConsoleView:draw(terminal, canvas, snapshot)
     --- the key card over the output and the field alike,
     --- the status line beneath it (IS3.16)
     if self.controller:key_card() then
+      local c = self.controller
       return self.editor.key_card:draw_console(
-        self.input.statusline, self.controller.input:get_status())
+        self.input.statusline, c.input:get_status(), c.run_live)
     end
     local tc = self.controller.model.output.term_canvas
     self.canvas:draw(
