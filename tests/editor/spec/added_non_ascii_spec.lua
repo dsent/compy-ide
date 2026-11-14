@@ -5,6 +5,7 @@
 -- through tests/helpers/editor_keys.lua.
 
 local K = require("tests.helpers.editor_keys")
+local F = require("tests.helpers.input_fixture")
 local marks = require("tests.helpers.spec_marks")
 local spec_it = marks.spec_it
 
@@ -140,11 +141,11 @@ describe("IS3.4 letters outside ASCII #editor #spec", function()
     assert.same(FILE .. 'x = "ж"\n', K.file())
   end)
 
-  spec_it("IS3.4 Locate a syntax failure: a pasted byte that "
-      .. "is not UTF-8 raises nothing", function()
+  spec_it("IS3.4 Locate a syntax failure: a byte that is not "
+      .. "UTF-8, arriving as text, raises nothing", function()
     open_file()
-    love.system.setClipboardText("\255 = 1")
-    K.keys("lctrl", "v")
+    F.session.type("\255 = 1")
+    K.frame()
     assert.is_true(valid(K.draft()))
     local ok, err = pcall(K.keys, "return")
     assert.is_true(ok, err)

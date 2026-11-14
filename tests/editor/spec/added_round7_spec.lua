@@ -271,19 +271,6 @@ describe("round seven #editor #spec", function()
   end)
 
   describe("a #! first line", function()
-    spec_it("IS3.14 Explain a refusal: Edit on a header line is "
-        .. "refused with a notice that names what still works",
-      function()
-        K.reset({ ["main.lua"] = "#!x\na = 1\n" })
-        K.open()
-        K.browse_to(1)
-        K.keys("f2")
-        assert.is_nil(K.target())
-        local msg = K.message() or ""
-        assert.truthy(msg:find("#! header", 1, true))
-        assert.truthy(msg:find("lines below it are edited as usual",
-          1, true))
-      end)
 
     -- a guard: the header is a Lua file's alone
     spec_it("IS8.2 Submit text: a #! first line of a text file "

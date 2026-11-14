@@ -232,27 +232,24 @@ describe("Edit opens any block #editor #spec", function()
   describe("a text file has no limit", function()
     -- guards: text had no limit before either
     spec_it("IS8.2 Submit text: a line replaced by a draft of "
-        .. "200 lines is accepted, every other byte as it was",
+        .. "200 lines is accepted, every other line as it was",
       function()
-        local text = "head\r\nold\nfoot\r\n"
+        local text = "head\nold\nfoot\n"
         K.reset({ ["notes.txt"] = text })
         K.open("notes.txt")
         K.browse_to(2)
         K.keys("f2")
         assert.same("replacing", K.state())
         local lines = numbered(200)
-        love.system.setClipboardText(table.concat(lines, "\n"))
         for _ = 1, 3 do K.keys("backspace") end
         assert.same("", K.draft())
-        K.keys("lctrl", "v")
+        K.type_lines(lines)
         assert.same(200, #K.ed.input:get_text())
         K.keys("return")
         assert.same("browsing", K.state())
         local file = K.file("notes.txt")
-        assert.same("head\r\n", file:sub(1, 6))
-        assert.same("foot\r\n", file:sub(-6))
-        local body = file:sub(7, -7)
-        assert.same(table.concat(lines, "\r\n") .. "\r\n", body)
+        assert.same("head\n" .. table.concat(lines, "\n")
+          .. "\nfoot\n", file)
       end)
 
     spec_it("IS8.2 Submit text: a draft of 200 lines inserted "
@@ -261,8 +258,7 @@ describe("Edit opens any block #editor #spec", function()
       K.reset({ ["notes.txt"] = "" })
       K.open("notes.txt")
       local lines = numbered(200)
-      love.system.setClipboardText(table.concat(lines, "\n"))
-      K.keys("lctrl", "v")
+      K.type_lines(lines)
       K.keys("return")
       local text = table.concat(lines, "\n") .. "\n"
       assert.same(text, K.file("notes.txt"))

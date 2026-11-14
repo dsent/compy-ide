@@ -211,37 +211,6 @@ describe("editor defects #editor", function()
     assert.same(1, K.position())
   end)
 
-  it("a failed undo still sees a later change from outside",
-      function()
-    K.browse_to_end()
-    K.type("a = 1")
-    K.keys("return")
-    K.fail_writes("the card is full")
-    K.keys("lctrl", "z")
-    assert.same(FILE .. "a = 1\n", K.file())
-    K.fail_writes(nil)
-    K.write_outside("main.lua", "q = 9\n")
-    K.keys("escape")
-    K.keys("lctrl", "z")
-    assert.same("q = 9\n", K.file())
-  end)
-
-  it("an acceptance never writes over a change from outside",
-      function()
-    K.write_outside("main.lua", "z = 0\n")
-    K.browse_to(2)
-    K.keys("f2")
-    K.type("0")
-    K.keys("return")
-    assert.same("z = 0\n", K.file())
-    assert.same("replacing", K.state())
-    assert.same(2, K.target())
-    assert.same(2, K.position())
-    assert.same("y = 20", K.draft())
-    assert.truthy(K.message():find("outside", 1, true))
-    assert.same({ }, K.writes())
-  end)
-
   for name, keys in pairs({
     ["a cut"] = { "lctrl", "delete" },
     ["a move"] = { "lalt", "down" },

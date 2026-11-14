@@ -6,6 +6,13 @@ require("model.input.cursor")
 local class = require('util.class')
 local lua = require('model.editor.luaLayer')
 local KeyCard = require('model.editor.keyCard')
+local HeldKeys = require('model.input.heldKeys')
+
+--- A write refused because the file changed outside the
+--- editor (_refuse_stale), and a file that changed while
+--- hidden to text the editor does not take
+local OUTSIDE_NOTICE =
+    'The file changed outside the editor, so nothing is saved.'
 
 --- @param M EditorModel
 --- @oaram CC ConsoleController
@@ -402,56 +409,44 @@ function EditorController:key_card()
 end
 
 --- A run of the project hides the editor (IS1.4): its
---- files stay as they are, and the system clipboard is kept
---- from the program. The key that hides it acts, so it
+--- files stay as they are. The key that hides it acts, so it
 --- dismisses the message (IS3.14).
 function EditorController:hide()
   self.input:clear_error()
-  self.clipboard = love.system.getClipboardText()
 end
 
 --- The editor as a run left it, its front file as storage
 --- holds it (IS1.4)
 function EditorController:show()
-  local clip = self.clipboard
-  if string.is_non_empty_string(clip) then
-    love.system.setClipboardText(clip)
-  end
   self:_take_outside_change()
   self:update_status()
   self.input:update_view()
 end
 
 --- @private
---- The front file, come to the front in the browsing state
---- (shown after a run, or stepped back to with Escape), shows
---- the text storage holds (_baseline). Changed from outside,
---- it is read anew and its timeline goes (IS6.6); the
---- browsing position keeps its block number while the file
---- has that block, else it goes to the end position. When it
---- cannot be read, nothing changes: the next key that needs
---- storage says so (_refuse_unread).
+--- The front file, come to the front (shown after a run, or
+--- stepped back to with Escape), shows the text storage holds
+--- (_baseline): changed, it is read anew and its timeline
+--- starts afresh; the browsing position keeps its block
+--- number while the file has that block, else it goes to the
+--- end position. A file is left only in the browsing state,
+--- so no edit is in progress here. Text that is not UTF-8 is
+--- not taken (IS1.2), and one that cannot be read is left as
+--- it is: the guard refuses the next write (_refuse_stale).
 function EditorController:_take_outside_change()
   local buf = self:get_active_buffer()
   if not buf then return end
   --- the text the change is told by is the text taken
   local seen, text = self:_baseline(buf)
   if seen ~= 'changed' then return end
-  --- an edit in progress would go with the old text: none
-  --- reaches here, since a file is left only in the browsing
-  --- state (refuse_to_leave, follow_require). Text that is
-  --- not UTF-8 is not admitted (IS1.2). Either way the file
-  --- stays as it was, and the notice says it changed.
-  if self:state_name() ~= 'browsing'
-      or (type(text) == 'string' and not utf8.len(text)) then
-    self:notice({ self:_outside_notice() })
+  if type(text) == 'string' and not utf8.len(text) then
+    self:notice({ OUTSIDE_NOTICE })
     return
   end
   local last = buf:get_content_length()
   local sel = buf:get_selection()
   buf:reload(text or nil)
   self:_note_read(buf, text or nil)
-  buf.outdated = nil
   self:timeline_forget(buf)
   self.input.model.edit_history:reset()
   if sel > last then sel = buf:get_content_length() + 1 end
@@ -570,28 +565,6 @@ end
 ---------------------------
 ---  keyboard handlers  ---
 ---------------------------
-
---- The notice of an action on a Lua file's header line, or
---- before it
-EditorController.HEADER_NOTICE = 'The first line is the'
-    .. " file's #! header and stays as it is."
-    .. ' The lines below it are edited as usual.'
-
---- @private
---- A Lua file's `#!` first line, which the language skips
---- (luaLayer.is_header), is its header: a block of its own (the chunker's line nothing
---- claims), kept as it is. No action edits, cuts or moves it,
---- or puts anything before it; each is refused with
---- HEADER_NOTICE.
---- @param buf BufferModel
---- @param i integer --- the block acted on, or before which
---- something lands
---- @return boolean --- block `i` is the header
-function EditorController:_is_header(buf, i)
-  if i ~= 1 or buf.content_type ~= 'lua' then return false end
-  local first = buf:block_lines(1) or {}
-  return lua.is_header(first[1])
-end
 
 --- @private
 --- The language layer's gate gives the verdict, as
@@ -745,10 +718,10 @@ function EditorController:format_file()
       .. ' so it stays as it is.'
     })
   end
-  if self:_refuse_stale(buf, 'tidied') then return end
+  if self:_refuse_stale(buf) then return end
   local snap = buf:snapshot()
   local before = snap.lines
-  local after, formatted = lua.tidied(before,
+  local after, formatted = lua.format(before,
     self.model.cfg.view.drawableChars)
   if not formatted then
     return self:refuse({
@@ -885,9 +858,6 @@ function EditorController:_editable_lines(bn)
     return nil, 'End of file: no block to edit here.'
         .. ' Move up onto one.'
   end
-  if self:_is_header(buf, bn) then
-    return nil, EditorController.HEADER_NOTICE
-  end
   local lines = buf:block_lines(bn)
   if not lines then
     return nil, 'An empty line has nothing to edit.'
@@ -949,39 +919,23 @@ function EditorController:cancel_edit()
   self:_action_done('abort')
 end
 
---- A file is written only over what the editor last read or
---- wrote there (_baseline): a file changed from outside, or
---- one that cannot be read just now, is not written over,
---- and the action is refused with a notice and state stays
---- (IS3.11). The change ends the timeline where it is seen,
---- so that an abort after it undoes (_outdate).
+--- The guard every write passes: the file is written only
+--- when it can be read and holds what the editor last read
+--- or wrote there (_baseline). Otherwise the action is
+--- refused with a notice, and nothing changes (IS3.11).
 --- @param buf BufferModel
---- @param undone string --- what did not happen: 'saved'
 --- @return boolean refused
-function EditorController:_refuse_stale(buf, undone)
+function EditorController:_refuse_stale(buf)
   local seen = self:_baseline(buf)
   if seen == 'same' then return false end
   if seen == 'unknown' then
-    self:_refuse_unread(buf, undone)
-    return true
+    self:refuse({ string.format(
+      'Could not read %s, so nothing is saved.'
+      .. ' Check the SD card.', buf.name) })
+  else
+    self:refuse({ OUTSIDE_NOTICE })
   end
-  self:_outdate(buf)
-  self:refuse({ self:_outside_notice() })
   return true
-end
-
---- @private
---- What a file changed from outside means for the state:
---- reopening is leaving, which drops the field, and with text
---- there, possibly a cut block's only copy, the notice says so
---- @return string
-function EditorController:_outside_notice()
-  if self:state_name() == 'browsing' then
-    return 'The file changed outside the editor.'
-        .. ' Reopen it to go on.'
-  end
-  return 'The file changed outside the editor, so nothing is'
-      .. ' saved. Reopening it drops the text in the field.'
 end
 
 --- @private
@@ -1004,11 +958,7 @@ function EditorController:_land(lines, kind, n)
   local sel = buf:get_selection()
   local count = buf:get_content_length() - (target and 1 or 0)
   local before = buf:snapshot()
-  if not target and self:_is_header(buf, sel) then
-    self:refuse({ EditorController.HEADER_NOTICE })
-    return false
-  end
-  if self:_refuse_stale(buf, 'saved') then return false end
+  if self:_refuse_stale(buf) then return false end
   local whole = self:_reads_whole()
   --- the buffer goes back to what the file holds, and the
   --- edit stays open
@@ -1134,10 +1084,11 @@ end
 --- @private
 --- The keys of the browsing, inserting and replacing states
 --- @param k string
-function EditorController:_normal_mode_keys(k)
+--- @param isrepeat boolean?
+function EditorController:_normal_mode_keys(k, isrepeat)
   local bare = not Key.ctrl() and not Key.alt()
       and not Key.shift()
-  if self:_reuse_keys(k) then return end
+  if self:_reuse_keys(k, isrepeat) then return end
   if Key.is_enter(k) then
     if bare then
       self:submit()
@@ -1148,10 +1099,6 @@ function EditorController:_normal_mode_keys(k)
     if Key.ctrl() then return end
   end
   if bare and k == 'escape' then
-    --- the press acts once: held, it would abort the edit and
-    --- then leave the file, which ends the timeline that
-    --- holds the abort (IS6.6)
-    if self.key_repeat then return end
     if self:state_name() == 'browsing' then
       --- stepping back from a file (IS1.6)
       self:close_buffer()
@@ -1179,13 +1126,14 @@ end
 --- @param _ string? --- LÖVE's scancode, unused
 --- @param isrepeat boolean? --- the key is held
 function EditorController:keypressed(k, _, isrepeat)
-  --- the undo timeline stops a held key at a boundary
-  self.key_repeat = isrepeat or false
-  --- a key repeats where its press acted: one held since
-  --- before the editor came to the front does nothing in it
-  if isrepeat and not self.pressed[k] then return end
+  --- a held key repeats only if it changes nothing beyond
+  --- the draft and the view (HeldKeys), and only where its
+  --- press acted: one held since before the editor came to
+  --- the front, a program's, does nothing in it
+  local repeats = self.pressed[k] and HeldKeys.editor(k)
+  if isrepeat and not repeats then return end
   if self:_held_back(k) then return end
-  if not isrepeat then self.pressed[k] = true end
+  self.pressed[k] = true
   --- its press brings up the card (KeyCard.shows)
   if k == KeyCard.KEY then return end
   self.input:update_view()
@@ -1200,7 +1148,7 @@ function EditorController:keypressed(k, _, isrepeat)
     if self:_leave_keys(k) then return end
   end
 
-  self:_normal_mode_keys(k)
+  self:_normal_mode_keys(k, isrepeat)
 
   --- Escape on the last buffer has closed the editor by
   --- now, so the buffer is asked for only on the key

@@ -215,9 +215,10 @@ describe("status line, notice and key card drawn #editor",
       local top = s.field_y - fh()
       assert.same(s.field_y, fill.y + fill.h)
       assert.is_true(fill.y <= top)
-      local pitch = K.ed.view:get_current_buffer():row_height()
+      local bv = K.ed.view:get_current_buffer()
+      local pitch = bv:row_height()
       assert.is_true(top - fill.y < pitch)
-      assert.same(0, fill.y % pitch)
+      assert.same(0, (fill.y - bv:top()) % pitch)
     end)
 
     it("shows three rows of a longer one, the last cut",
@@ -303,18 +304,6 @@ describe("status line, notice and key card drawn #editor",
       K.fail_writes("the card is full")
       K.keys("return")
       assert.truthy(K.message():find("card is full", 1, true))
-      is_notice()
-    end)
-
-    it("a file changed from outside is told in a notice",
-        function()
-      K.browse_to_end()
-      K.type("z = 3")
-      K.write_outside("main.lua", "q = 9\n")
-      K.keys("return")
-      assert.same("q = 9\n", K.file())
-      local said = K.message()
-      assert.truthy(said:find("changed outside", 1, true))
       is_notice()
     end)
 

@@ -16,6 +16,7 @@ require("util.key")
 require("util.table")
 local TerminalTest = require("util.test_terminal")
 local KeyCard = require('model.editor.keyCard')
+local HeldKeys = require('model.input.heldKeys')
 
 local messages = {
   file_does_not_exist = function(name)
@@ -344,12 +345,9 @@ end
 
 --- Format a project file the way the editor's Ctrl+Shift+F
 --- formats it, at a Compy's width: the REPL's `tidy(name)`.
---- A `#!` first line stays. A line outside the change keeps
---- its ending, and so does one inside it that is paired with
---- the line it replaces (BufferModel's carry_ends, which
---- looks eight lines ahead); every other line takes the
---- file's main ending. It writes only when the text
---- changes, and says why when it leaves the file alone.
+--- The file is written with LF line ends (BufferModel:save).
+--- It writes only when the text changes, and says why when
+--- it leaves the file alone.
 --- @param name string
 --- @return boolean tidy --- the file is formatted now
 function ConsoleController:tidy(name)
@@ -368,7 +366,7 @@ function ConsoleController:tidy(name)
     return self:_writefile(name, out)
   end)
   local lines = buf:snapshot().lines
-  local out, formatted = lua.tidied(lines, display.columns)
+  local out, formatted = lua.format(lines, display.columns)
   if not formatted then
     local parsed, err = lua.parser().parse(lines)
     if not parsed and err and err.l then
@@ -1859,6 +1857,19 @@ function ConsoleController:get_timestamp()
   return self.time
 end
 
+--- Shift+Ins: run the line as Enter does, and keep it in the
+--- field, the cursor where it was (a submission that retains
+--- the draft). A line that fails stays as Enter leaves it.
+function ConsoleController:run_and_keep()
+  local input = self.input
+  local kept = string.unlines(input:get_text())
+  local l, c = input:get_cursor_pos()
+  self:evaluate_input()
+  if input:has_error() or not input:is_empty() then return end
+  input:set_text(kept)
+  input:set_cursor_pos(l, c)
+end
+
 function ConsoleController:evaluate_input()
   local inter = self.input
 
@@ -2243,14 +2254,6 @@ function ConsoleController:edit(name, must_exist)
       filename, invalid))
     return
   end
-  --- a file missing from a folder that is itself gone (the
-  --- SD card is out) cannot be read just now: opened as a new
-  --- one, it would show no text where there is some
-  if not ex and not FS.exists(p.path) then
-    refuse(string.format(
-      '%s could not be read, so it cannot be opened.', filename))
-    return
-  end
   local text
   if ex then
     --- a file that is there and cannot be read stays shut
@@ -2434,17 +2437,18 @@ function ConsoleController:keypressed(k, sc, isrepeat)
   if love.state.app_state == 'editor' then
     self.editor:keypressed(k, sc, isrepeat)
   else
-    --- a key repeats where its press acted: one held since
-    --- the editor or a program had it does nothing here
-    if isrepeat and not self.pressed[k] then return end
+    --- a held key repeats only if it changes nothing beyond
+    --- the line (HeldKeys), and only where its press acted:
+    --- one held since the editor or a program had it does
+    --- nothing here
+    local repeats = self.pressed[k] and HeldKeys.console(k)
+    if isrepeat and not repeats then return end
     --- the help key's press brings the card up; a press the
     --- card holds back is not the console's, so neither are
     --- its repeats (IS3.16)
-    if k == KeyCard.KEY and not isrepeat then
-      self.pressed[k] = true
-    end
+    if k == KeyCard.KEY then self.pressed[k] = true end
     if self:key_card() then return end
-    if not isrepeat then self.pressed[k] = true end
+    self.pressed[k] = true
     if love.state.testing == 'running' then
       return
     end
@@ -2459,6 +2463,8 @@ function ConsoleController:keypressed(k, sc, isrepeat)
     -- error; any other key closes it and does its usual work.
     -- A modifier alone leaves it up; a held Shift then anchors
     -- its selection when the next key closes it.
+    local run_keep = k == 'insert' and Key.shift()
+        and not Key.ctrl() and not Key.alt()
     if input:has_error() then
       if Key.is_mod(k) then
         return
@@ -2467,7 +2473,7 @@ function ConsoleController:keypressed(k, sc, isrepeat)
       if Key.shift() then
         input:keypressed('lshift')
       end
-      if Key.is_enter(k) or k == 'escape'
+      if Key.is_enter(k) or k == 'escape' or run_keep
           or k == "up" or k == "down" then
         return
       end
@@ -2492,6 +2498,7 @@ function ConsoleController:keypressed(k, sc, isrepeat)
         self:evaluate_input()
       end
     end
+    if run_keep then self:run_and_keep() end
 
     -- Ctrl held
     if Key.ctrl() then

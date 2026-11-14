@@ -306,8 +306,10 @@ end
 --- @param y number
 --- @return integer? ln
 function BufferView:line_at(y)
-  local fh = self.cfg.fh
-  local row = math.floor(y / fh) + 1
+  --- the space above the first row is that row's
+  local pitch = self:row_height()
+  local row = math.floor((y - self:top()) / pitch) + 1
+  row = math.max(1, row)
   local wrapped = self.content.offset + row
   if not self.content.range:inc(wrapped) then
     return nil
@@ -335,10 +337,22 @@ end
 ---  draw  ---
 --------------
 
---- The height of one row of the view, in pixels.
+--- The height of one row of the view, in pixels: the field's,
+--- so that the rows of the view and of the field sit on one
+--- grid and a row the field takes from the view is one of its
+--- own.
 --- @return number
 function BufferView:row_height()
-  return self.cfg.fh * 1.032 -- magic constant
+  return self.cfg.fh
+end
+
+--- Where the view's first row starts, in pixels, as last
+--- drawn on the screen: its rows end where the status line's
+--- band starts, and what they leave of the area lies above
+--- the first.
+--- @return number
+function BufferView:top()
+  return self.drawn_top or 0
 end
 
 --- @param special boolean
@@ -354,35 +368,35 @@ function BufferView:draw(special, bottom)
   local vc = self.content
   --- @type VisibleContent|VisibleStructuredContent
   local content_text = vc:get_visible()
-  local last_line_n = #content_text
   local width, height = gfx.getDimensions()
   local range = vc.range
-  --- The rows' pitch does not divide the area: the strip
-  --- left under the last row is that row's, which goes on
-  --- under the status line.
-  local edge = (range.fin - vc.offset) * fh
-  local strip = 0
-  if bottom then
-    strip = math.max(0, math.min(fh, bottom - edge))
+  local off = vc.offset
+  local rows_n = self:get_height()
+  --- The view draws whole rows only, the last one against the
+  --- status line, on the field's grid; the space the rows
+  --- leave above the first is that row's, highlight and all.
+  local top = bottom and bottom - rows_n * fh or 0
+  if bottom then self.drawn_top = top end
+
+  --- @param v integer --- a wrapped row of the content
+  --- @return number
+  local function row_y(v)
+    return top + (v - off - 1) * fh
   end
-  local text_edge = range.fin <= vc:get_text_length()
 
   local draw_background = function()
     gfx.push('all')
     gfx.setColor(colors.bg)
     gfx.rectangle("fill", 0, 0, width, height)
     gfx.setColor(Color.with_alpha(colors.fg, .0625))
-    local bh = math.min(last_line_n, self.cfg.lines) * fh
-    if text_edge then
-      bh = bh + strip
+    local n = math.min(#content_text, rows_n)
+    if 0 < n then
+      gfx.rectangle("fill", 0, 0, width, top + n * fh)
     end
-    gfx.rectangle("fill", 0, 0, width, bh)
     gfx.pop()
   end
 
   local draw_highlight = function()
-    local off = self.content.offset
-
     --- @param rows integer[]
     --- @param color RGB
     --- @param inset number
@@ -390,13 +404,12 @@ function BufferView:draw(special, bottom)
       gfx.setColor(color)
       for _, v in ipairs(rows) do
         if range:inc(v) then
-          local l_y = (v - off - 1) * fh
+          local y = row_y(v)
           local h = fh
-          if v == range.fin then
-            h = fh + strip
+          if v == range.start then
+            y, h = 0, y + fh
           end
-          gfx.rectangle('fill', inset, l_y,
-            width - 2 * inset, h)
+          gfx.rectangle('fill', inset, y, width - 2 * inset, h)
         end
       end
     end
@@ -420,55 +433,69 @@ function BufferView:draw(special, bottom)
     end
   end
 
+  --- Rows of highlighted text, each on its row of the view
+  --- when it is one; a row beyond the view's is not drawn.
+  --- @param text string[]
+  --- @param hl table?
+  --- @param to_row fun(l: integer): integer --- the content's
+  --- wrapped row of text's row `l`
+  --- @param ctf fun(c: Cursor): Cursor?
+  local draw_rows = function(text, hl, to_row, ctf)
+    local color = colors.fg
+    for l, line in ipairs(text) do
+      local len = string.ulen(line)
+      local v = to_row(l)
+      if not len or range.fin < v then return end
+      local shown = range.start <= v
+      for c = 1, len do
+        local tlc = hl and ctf(Cursor(l, c))
+        local ci = tlc and hl[tlc.l] and hl[tlc.l][tlc.c]
+        if ci then
+          color = Color[ci] or colors.fg
+        end
+        if shown then
+          local char = string.usub(line, c, c)
+          gfx.setColor(color)
+          ViewUtils.write_token(row_y(v), (c - 1) * fw, char,
+            color, colors.bg, false)
+        end
+      end
+    end
+  end
+
   local draw_text = function()
     gfx.setFont(font)
+    local same = function(a) return a end
     if self.content_type == 'lua' then
-      local vbl = vc:get_visible_blocks()
-      for _, block in ipairs(vbl) do
+      for _, block in ipairs(vc:get_visible_blocks()) do
         local rs = block.app_pos.start
         --- @type WrappedText
         local wt = block.wrapped
-        local text = wt:get_text()
-        local highlight = { hl = block.highlight }
-        local ltf = function(l)
-          return l + rs - 1 - self.content.offset
-        end
-        local ctf = function(a) return a end
-        local limit = self.cfg.lines
-
-        ViewUtils.draw_hl_text(text, highlight, {
-          colors = { text = colors }, fw = fw, fh = fh
-        }, {
-          ltf = ltf, ctf = ctf, limit = limit,
-        })
-      end -- for
+        draw_rows(wt:get_text(), block.highlight,
+          function(l) return l + rs - 1 end, same)
+      end
 
       if love.DEBUG then
         --- phantom text
         gfx.setColor(Color.with_alpha(colors.fg, 0.3))
         local text = string.unlines(content_text)
-        gfx.print(text)
+        gfx.print(text, 0, top)
       end
     elseif self.content_type == 'md' then
-      local text      = vc:get_visible()
-      local highlight = { hl = self.hl }
-      local ltf       = function(l) return l end
-      local ctf       = function(a)
-        --- @diagnostic disable-next-line: param-type-mismatch
-        return vc:translate_from_visible(a)
-      end
-      local limit     = self.cfg.lines
-
-      ViewUtils.draw_hl_text(text, highlight, {
-        colors = { text = colors }, fw = fw, fh = fh
-      }, {
-        ltf = ltf, ctf = ctf, limit = limit,
-      })
+      draw_rows(content_text, self.hl,
+        function(l) return l + off end,
+        function(a)
+          --- @diagnostic disable-next-line: param-type-mismatch
+          return vc:translate_from_visible(a)
+        end)
     elseif self.content_type == 'plain' then
       gfx.setColor(colors.fg)
-      local text = string.unlines(content_text)
-
-      gfx.print(text)
+      for l, line in ipairs(content_text) do
+        local v = l + off
+        if range:inc(v) then
+          gfx.print(line, 0, row_y(v))
+        end
+      end
     end
   end
 
@@ -481,9 +508,9 @@ function BufferView:draw(special, bottom)
     gfx.setColor(lnvc)
     gfx.rectangle("fill", x, 0, 2, self.cfg.h)
     local seen = {}
-    for ln = 1, self.LINES do
-      local l_y = (ln - 1) * fh
-      local vln = ln + self.content.offset
+    for ln = 1, rows_n do
+      local vln = ln + off
+      local l_y = row_y(vln)
       local ln_w = self.content.wrap_reverse[vln]
       if ln_w then
         local l = string.format('%3d', ln_w)

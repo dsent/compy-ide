@@ -1,7 +1,7 @@
 -- The fourth review round's findings, each as the keys that
 -- showed it: a program idling behind the editor, a notice
 -- that outlives its key, the cursor of a retained draft,
--- pasted line breaks, a card taken out before a file opens,
+-- line breaks arriving as text, a card taken out before a file opens,
 -- keys that change nothing, the draft's own steps, a `#!`
 -- line put back, guards no test held, the files below the
 -- front one, and the browsing position kept by line when a
@@ -9,10 +9,10 @@
 -- tests/helpers/editor_keys.lua.
 
 local K = require("tests.helpers.editor_keys")
+local F = require("tests.helpers.input_fixture")
 local marks = require("tests.helpers.spec_marks")
 local spec_it = marks.spec_it
 
-local UNREAD = "could not be read"
 local EDITING = "Already editing a block"
 
 --- a program whose Escape hook closes its project
@@ -229,20 +229,21 @@ describe("round four #editor #spec", function()
     end)
   end)
 
-  describe("pasted line breaks", function()
+  -- one text event may carry several lines
+  describe("line breaks arriving as text", function()
     for _, ext in ipairs({ "txt", "md" }) do
       local name = "notes." .. ext
       for label, sep in pairs({ CRLF = "\r\n", CR = "\r" }) do
         spec_it("FR3.1 Preserve file structure: in a CRLF ." .. ext
-            .. " file, text pasted with " .. label .. " line "
-            .. "breaks is written with the file's own", function()
+            .. " file, text with " .. label .. " line "
+            .. "breaks carries no CR into a line", function()
           K.reset({ ["main.lua"] = "", [name] = "existing\r\n" })
           K.open(name)
-          love.system.setClipboardText("first" .. sep .. "second")
-          K.keys("lctrl", "v")
+          F.session.type("first" .. sep .. "second")
+          K.frame()
           assert.same("first\nsecond", K.draft())
           K.keys("return")
-          assert.same("existing\r\nfirst\r\nsecond\r\n", K.file(name))
+          assert.same("existing\nfirst\nsecond\n", K.file(name))
           K.keys("escape")
           K.open(name)
           assert.same(3, K.blocks())
@@ -251,44 +252,15 @@ describe("round four #editor #spec", function()
     end
 
     spec_it("IS3.15 Break a line in the field: the console takes "
-        .. "pasted CRLF as line breaks", function()
+        .. "CRLF and CR in text as line breaks", function()
       K.reset()
-      love.system.setClipboardText("a\r\nb\rc")
-      K.keys("lctrl", "v")
+      F.session.type("a\r\nb\rc")
+      K.frame()
       assert.same("a\nb\nc", K.console_draft())
     end)
   end)
 
-  describe("the SD card out when a file opens", function()
-    spec_it("IS1.2 Admit or refuse a file: with the card out, "
-        .. "edit() refuses the file it cannot read", function()
-      K.reset({ ["main.lua"] = "x = 1\n" })
-      K.remove_card()
-      K.open()
-      assert.same("ready", K.app_state())
-      assert.is_nil(K.buffer())
-      assert.truthy(K.console_text():find(
-        "main.lua " .. UNREAD, 1, true))
-      K.insert_card()
-      K.open()
-      assert.same("editor", K.app_state())
-      assert.same(1, K.blocks())
-    end)
-
-    spec_it("IS1.5 Follow a file reference: with the card out, "
-        .. "Ctrl+J says the file cannot be read", function()
-      K.reset({
-        ["main.lua"] = "require('lib')\n",
-        ["lib.lua"] = "l = 1\n",
-      })
-      K.open()
-      K.browse_to(1)
-      K.remove_card()
-      K.keys("lctrl", "j")
-      assert.same("main.lua", K.file_name())
-      assert.truthy((K.message() or ""):find(
-        "lib.lua " .. UNREAD, 1, true))
-    end)
+  describe("a file missing when it opens", function()
 
     spec_it("IS1.2 Admit or refuse a file: a file missing from a "
         .. "folder that can be read opens as a new one", function()
@@ -305,7 +277,7 @@ describe("round four #editor #spec", function()
       Backspace = { "backspace" },
       Delete = { "delete" },
       ["Ctrl+Backspace"] = { "lctrl", "backspace" },
-      ["Ctrl+V with nothing to paste"] = { "lctrl", "v" },
+      ["Ctrl+V"] = { "lctrl", "v" },
     }) do
       spec_it("IS6.6 Undo and redo: " .. label .. " in an empty "
           .. "field keeps what can be redone", function()
@@ -393,24 +365,6 @@ describe("round four #editor #spec", function()
       assert.same(1, K.target())
     end)
 
-    spec_it("IS5.6 Switch the replacement target: a draft "
-        .. "changed before a change from outside is still "
-        .. "modified", function()
-      K.reset({ ["main.lua"] = "x = 1\ny = 2\n" })
-      K.open()
-      K.browse_to(1)
-      K.keys("f2")
-      K.type(" + 40 + 2")
-      K.write_outside("main.lua", "x = 1\ny = 2\nz = 3\n")
-      K.keys("lctrl", "z")
-      assert.same("x = 1 + 40 + 2", K.draft())
-      K.browse_to(2)
-      K.keys("f2")
-      assert.truthy((K.message() or ""):find(EDITING, 1, true))
-      assert.same("x = 1 + 40 + 2", K.draft())
-      assert.same(1, K.target())
-    end)
-
     spec_it("IS5.6 Switch the replacement target: a draft typed "
         .. "into and back is not modified", function()
       K.reset({ ["main.lua"] = "x = 1\ny = 2\n" })
@@ -426,72 +380,22 @@ describe("round four #editor #spec", function()
     end)
   end)
 
-  describe("a #! first line", function()
-    spec_it("IS6.2 Cut a block: Ctrl+Delete on a #! first line "
-        .. "is refused with a notice, and the line stays",
-      function()
-        local original = "#!/usr/bin/lua\nx = 1\n"
-        K.reset({ ["main.lua"] = original })
-        K.open()
-        K.browse_to(1)
-        K.keys("lctrl", "delete")
-        assert.same("", K.draft())
-        assert.same(original, K.file())
-        assert.truthy((K.message() or ""):find("#! header", 1,
-          true))
-      end)
-
-    spec_it("IS6.5 Move a block: a #! first line does not move, "
-        .. "and no block moves above it", function()
-      local original = "#!/usr/bin/lua\nx = 1\ny = 2\n"
-      K.reset({ ["main.lua"] = original })
-      K.open()
-      K.browse_to(1)
-      K.keys("lalt", "down")
-      assert.same(original, K.file())
-      assert.truthy((K.message() or ""):find("#! header", 1,
-        true))
-      K.browse_to(2)
-      K.keys("lalt", "up")
-      assert.same(original, K.file())
-      assert.same(2, K.position())
-      assert.truthy((K.message() or ""):find("#! header", 1,
-        true))
-      -- below it, blocks move as ever
-      K.browse_to(3)
-      K.keys("lalt", "up")
-      assert.same("#!/usr/bin/lua\ny = 2\nx = 1\n", K.file())
-    end)
-
-    spec_it("IS3.4 Locate a syntax failure: a #! draft below the "
-        .. "first line is refused", function()
-      local original = "#!/usr/bin/lua\nx = 1\n"
-      K.reset({ ["main.lua"] = original })
-      K.open()
-      K.type("#!/x")
-      K.keys("return")
-      assert.same(original, K.file())
-      assert.same("#!/x", K.draft())
-      assert.same("error", K.message_kind())
-    end)
-  end)
-
   describe("tidy() in the console", function()
     spec_it("FR3.1 Preserve file structure: tidy() keeps a #! "
-        .. "first line and the file's line ends, as Ctrl+Shift+F "
+        .. "first line and writes LF line ends, as Ctrl+Shift+F "
         .. "does", function()
       K.reset({
         ["main.lua"] = "#!/usr/bin/lua\r\nx   =   1\r\ny = 2\n",
       })
       K.type("tidy(\"main.lua\")")
       K.keys("return")
-      assert.same("#!/usr/bin/lua\r\nx = 1\r\ny = 2\n", K.file())
+      assert.same("#!/usr/bin/lua\nx = 1\ny = 2\n", K.file())
       K.reset({
         ["main.lua"] = "#!/usr/bin/lua\r\nx   =   1\r\ny = 2\n",
       })
       K.open()
       K.keys("lctrl", "lshift", "f")
-      assert.same("#!/usr/bin/lua\r\nx = 1\r\ny = 2\n", K.file())
+      assert.same("#!/usr/bin/lua\nx = 1\ny = 2\n", K.file())
     end)
 
     spec_it("FR3.1 Preserve file structure: tidy() writes nothing "
@@ -529,23 +433,6 @@ describe("round four #editor #spec", function()
         end)
     end
 
-    spec_it("IS6.6 Undo and redo: after a write that landed "
-        .. "between two changes from outside, Ctrl+Z writes "
-        .. "nothing over the second", function()
-      K.reset({ ["main.lua"] = "x = 1\n" })
-      K.open()
-      K.write_outside("main.lua", "changed\n")
-      K.keys("lctrl", "z")
-      K.write_outside("main.lua", "x = 1\n")
-      K.type("y = 2")
-      K.keys("return")
-      assert.same("x = 1\ny = 2\n", K.file())
-      K.write_outside("main.lua", "other\n")
-      K.keys("lctrl", "z")
-      K.keys("lctrl", "z")
-      assert.same("other\n", K.file())
-    end)
-
     spec_it("IS1.2 Admit or refuse a file: a Lua line of spaces "
         .. "between statements keeps the file in blocks",
       function()
@@ -559,40 +446,8 @@ describe("round four #editor #spec", function()
         assert.is_nil(K.message())
       end)
 
-    spec_it("FR3.1 Preserve file structure: a move redone in a "
-        .. "file of mixed endings writes each line's own",
-      function()
-        K.reset({ ["main.lua"] = "a = 1\r\nb = 2\nc = 3\r\n" })
-        K.open()
-        K.browse_to(1)
-        K.keys("lalt", "down")
-        local moved = K.file()
-        assert.same("b = 2\na = 1\r\nc = 3\r\n", moved)
-        K.keys("lctrl", "z")
-        K.keys("lctrl", "y")
-        assert.same(moved, K.file())
-      end)
-
-    spec_it("FR3.1 Preserve file structure: a replacement keeps "
-        .. "the endings of its first and last lines when they "
-        .. "stay", function()
-      local original = "function f()\r\n  a = 1\nend\r\n"
-          .. "x = 1\ny = 2\nz = 3\n"
-      K.reset({ ["main.lua"] = original })
-      K.open()
-      K.browse_to(1)
-      K.keys("f2")
-      K.keys("up")
-      K.keys("end")
-      K.keys("backspace")
-      K.type("2")
-      K.keys("return")
-      assert.same("function f()\r\n  a = 2\nend\r\n"
-          .. "x = 1\ny = 2\nz = 3\n", K.file())
-    end)
-
     spec_it("FR3.1 Preserve file structure: a change refused for "
-        .. "a failed write puts each line's ending back",
+        .. "a failed write leaves the file as it was",
       function()
         local original = "a = 1\r\nb = 2\nc = 3\nd = 4\n"
         K.reset({ ["main.lua"] = original })
@@ -605,7 +460,7 @@ describe("round four #editor #spec", function()
         K.browse_to_end()
         K.type("e = 5")
         K.keys("return")
-        assert.same(original .. "e = 5\n", K.file())
+        assert.same("a = 1\nb = 2\nc = 3\nd = 4\ne = 5\n", K.file())
       end)
   end)
 

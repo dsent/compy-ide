@@ -1,10 +1,9 @@
--- The document view's rows have their own pitch, which does
--- not divide the area above the status line: under the last
--- row a strip of a few pixels is left, and it is that row's.
--- A highlighted block at the view's edge runs on to the edge,
--- and under the status line; no strip of the view's
+-- The document view's rows sit on the field's grid, the last
+-- against the status line; what they leave of the area above
+-- the first row is that row's. A highlighted block at the
+-- view's edge runs on to the edge; no strip of the view's
 -- background shows between it and the status line, or the
--- view's top (the maintainer's ruling on the browsed block
+-- screen's top (the maintainer's ruling on the browsed block
 -- cut at the bottom edge).
 
 local K = require("tests.helpers.editor_keys")

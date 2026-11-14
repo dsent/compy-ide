@@ -98,20 +98,18 @@ Project-author guide: `doc/input_api.md`.
   the console and opens nothing.
 - **Two statements sharing a line are one block.** Editing elsewhere in such a file no
   longer breaks it.
-- **A file keeps its line ends.** Its lines are shown and edited without them. A line
-  keeps the line end it had when it is moved, and when undo or redo puts it back; a
-  line that comes from the field takes the one most of the file's lines have (Windows
-  CRLF, LF or CR), the first in the file when two are as common.
+- **A file is written with LF line ends.** LF, Windows CRLF and old Mac CR each end a
+  line when a file opens, and opening writes nothing; the first change saved writes
+  the whole file with LF, as Lua and every other tool on the Compy read it.
 - **A Lua file the editor cannot split into blocks opens, so you can fix it:** one with
   a syntax error, or Lua the editor does not read, such as `goto`. Each of its lines
   is a block until the editor can read the file: you can add text, and F2 or
   Ctrl+Delete takes a line into the field to repair it.
   Once the file parses, its blocks are statements again, and the browsing position
   stays on the one that holds the line it was on.
-- **An SD card that cannot be read refuses the key, and forgets nothing.** Enter, a
-  cut, a move, Ctrl+Z and Ctrl+Y say the file could not be read; the same key works
-  once it can. With the card out, `edit()` and Ctrl+J say the file could not be read
-  and open nothing.
+- **A file that cannot be read is not written.** Enter, a cut, a move, Ctrl+Shift+F,
+  Ctrl+Z and Ctrl+Y say the file could not be read, save nothing, and keep the text in
+  the field.
 - **A run keeps the editor's files, and `edit()` starts afresh.** Ctrl+T back from
   a run shows every file as you left it, with its place and undo history. A file
   that the run or a console command such as `tidy()` changed meanwhile shows what
@@ -124,6 +122,14 @@ Project-author guide: `doc/input_api.md`.
   the editor or close its files.
 - Ctrl+Up / Ctrl+Down browse blocks in every state, PageUp / PageDown browse ten
   blocks, and Ctrl+K in the field deletes to the end of the line.
+- **Held down, a key repeats only if it writes nothing and changes no state**, in the
+  file editor and the console: typing, moving the cursor, browsing, deleting in the
+  field, Shift+Enter, and Ctrl+Z and Ctrl+Y through the field's own changes. Enter,
+  Escape, F2, Shift+Insert, Ctrl+Insert, Alt+Up and Alt+Down, Ctrl+J, Ctrl+Shift+F and
+  the other commands act once per press: a held Enter adds one empty line, not one per
+  repeat. A program's own input keeps its repeats.
+- **Shift+Insert in the console runs the line and keeps it in the field**, as it
+  submits and keeps the text in the file editor.
 
 ### Removed
 
@@ -138,6 +144,9 @@ Project-author guide: `doc/input_api.md`.
 - **The editor's search (Ctrl+F)**: Ctrl+F does nothing in the editor now. Search is
   not in the editor's specification and needs a design of its own, which it may get
   later.
+- **The system clipboard in the text field**: Ctrl+C, Ctrl+X and Ctrl+V do nothing in
+  the console, the file editor or a program's input, and Ctrl+Insert and Shift+Insert
+  keep only the editor's own meanings; like search, it needs a design of its own.
 - A draft is no longer carried along when Ctrl+J opens another file: Ctrl+J waits for
   the edit to end.
 - **Polling user input is gone entirely.** The idiom of reading input by checking a
@@ -174,21 +183,17 @@ Project-author guide: `doc/input_api.md`.
 - A line of spaces in a text or Markdown file is saved as typed.
 - **Ctrl+T from a file reached with Ctrl+J comes back to the whole chain** of files,
   each where it was left and with its undo history; Escape then returns to the caller.
-- **`tidy()` keeps a `#!` first line and the file's line ends**, as Ctrl+Shift+F does;
-  it emptied the one and rewrote the others as LF. In a file of mixed line ends, both
-  keep the ending of every line outside the part they change, and inside it of an
-  unchanged line found within eight lines of where it stood; any other line takes the
-  file's most common line end.
+- **`tidy()` keeps a `#!` first line**, as Ctrl+Shift+F does; it emptied it.
 - **Holding F1 shows a key card only where its press went to the console or the
   editor.** Over a program that takes the keys, with its input field, a key hook or a
   shortcut, the card showed while the program kept them; there F1 is the program's
   now, and Ctrl+Q stops the program while F1 is held, with or without other keys
   pressed since. A card that shows stays until F1 is released, and so does the pause
   of Ctrl+Q and the other keys.
-- **A `#!` first line stays as it is.** F2, Ctrl+Delete and Alt+Up or Alt+Down on it
-  are refused with a notice, and nothing goes above it; typed in the field, a `#!` line
-  is a syntax error wherever it would land. Formatting a file that holds the `#!` line
-  alone leaves it as it is.
+- **A `#!` first line is kept, and edited like any line.** Ctrl+Shift+F and `tidy()`
+  keep it, F2 loads it, and a cut takes it out; a change that would leave a `#!` line
+  anywhere but first, or put anything above it, is refused, since Lua could not run
+  the file after it.
 - **Alt+Up and Alt+Down in a field move the cursor's line, the cursor with it**, and
   Ctrl+Z puts the cursor back where it was. At the first or last line nothing moves;
   the keys swapped the two lines below or above.
@@ -197,13 +202,14 @@ Project-author guide: `doc/input_api.md`.
   one held a moment too long after `edit()` in the console added one per repeat; the
   Ctrl+T that came back to a file changed outside the editor dismissed the notice
   saying so.
+- **A held Enter submits a program's input once.** Its repeats called
+  `before_submit` and `on_text_entered` again; a program's own hooks and shortcuts
+  still see them.
 - **A held key repeats only where its press went.** A held Ctrl+T runs the program
   once instead of going back and forth between the program and the editor, and a held
   Escape that leaves the last file no longer clears the console's line.
-- **An Escape after a file changed outside the editor is undone by Ctrl+Z**, as any
-  other Escape is, unless the file could not be read when Escape was pressed.
-- **Text pasted with Windows (CRLF) or old Mac (CR) line breaks** is split into lines
-  as typed text is: in a CRLF file it no longer writes an extra empty line.
+- **Text with Windows (CRLF) or old Mac (CR) line breaks** that a program puts in a
+  field is split into lines, and no carriage return reaches a line.
 - Multi-line string content now writes — `show{text = "a\nb"}` / `set_text("a\nb")`
   previously wrote nothing silently — and the two spellings of the text shape now agree.
 - Non-text content is refused with a readable message that names the failing call.

@@ -259,11 +259,9 @@ describe("IS1 files #editor #spec", function()
       end)
     end)
 
-    -- A file with CRLF line ends keeps them: its lines are
-    -- handled without the carriage return, and every line is
-    -- written back with CRLF. The spec names no rule; Luditor,
-    -- its reference implementation, reads CRLF the same way
-    -- but writes LF, so keeping the ending is the IDE's own.
+    -- A file with CRLF line ends is read as its lines, without
+    -- the carriage return, and written with LF (the ruling "A
+    -- file is written with LF line ends"), as Luditor does.
     describe("a file with CRLF line ends", function()
       before_each(function()
         K.reset({
@@ -285,22 +283,21 @@ describe("IS1 files #editor #spec", function()
         K.type("0")
         K.keys("return")
         assert.same("browsing", K.state())
-        assert.same("x = 10\r\ny = 2\r\n", K.file("crlf.lua"))
+        assert.same("x = 10\ny = 2\n", K.file("crlf.lua"))
       end)
 
       spec_it("IS1.2 Admit or refuse a file: an insertion in "
-          .. "a CRLF Lua file writes CRLF on every line", function()
+          .. "a CRLF Lua file writes LF on every line", function()
         K.open("crlf.lua")
         K.browse_to(2)
         K.type("w = 4")
         K.keys("return")
-        assert.same("x = 1\r\nw = 4\r\ny = 2\r\n",
-          K.file("crlf.lua"))
+        assert.same("x = 1\nw = 4\ny = 2\n", K.file("crlf.lua"))
       end)
 
       spec_it("IS1.2 Admit or refuse a file: a text file with "
-          .. "CRLF line ends keeps them, with no carriage " ..
-          "return in its text", function()
+          .. "CRLF line ends is written with LF, with no " ..
+          "carriage return in its text", function()
         K.open("crlf.txt")
         assert.same(2, K.blocks())
         K.browse_to(2)
@@ -309,12 +306,11 @@ describe("IS1 files #editor #spec", function()
         K.keys("end")
         K.type("0")
         K.keys("return")
-        assert.same("one\r\ntwo0\r\n", K.file("crlf.txt"))
+        assert.same("one\ntwo0\n", K.file("crlf.txt"))
         K.browse_to_end()
         K.type("three")
         K.keys("return")
-        assert.same("one\r\ntwo0\r\nthree\r\n",
-          K.file("crlf.txt"))
+        assert.same("one\ntwo0\nthree\n", K.file("crlf.txt"))
       end)
     end)
 

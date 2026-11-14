@@ -39,7 +39,7 @@ end
 
 --- Record the state before a mutation
 --- @param snapshot table --- {text: string[], cursor: {l,c}}
---- @param kind string --- 'insert'|'remove'|'paste'|...
+--- @param kind string --- 'insert'|'remove'|'text'|...
 --- @param boundary boolean --- force a new step
 function EditHistory:record(snapshot, kind, boundary)
   local c = snapshot.cursor

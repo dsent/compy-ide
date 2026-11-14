@@ -13,7 +13,6 @@ local K = require("tests.helpers.editor_keys")
 local marks = require("tests.helpers.spec_marks")
 local spec_it = marks.spec_it
 
-local UNREAD = "Could not read"
 local TYPES = { "lua", "txt", "md" }
 
 --- the file of a test in a file of type `ext`
@@ -153,60 +152,8 @@ describe("a run and a visit #editor #spec", function()
         assert.same(original, K.file(name))
       end)
 
-      spec_it("IS1.4 Resume after running a project: in a ."
-          .. ext .. " file, with the SD card out at the return, "
-          .. "the file comes back and its cut undoes once the "
-          .. "card is in", function()
-        local name = named(ext)
-        local original = "precious = 123\nx = 1\n"
-        K.reset({ ["main.lua"] = "", [name] = original })
-        K.open(name)
-        K.browse_to(1)
-        K.keys("lctrl", "delete")
-        K.keys("escape")
-        K.keys("lctrl", "t")
-        K.remove_card()
-        K.keys("lctrl", "t")
-        assert.same("editor", K.app_state())
-        assert.same(name, K.file_name())
-        assert.same(1, K.blocks())
-        K.keys("lctrl", "z")
-        assert.same("", K.draft())
-        assert.truthy((K.message() or ""):find(UNREAD, 1, true))
-        K.insert_card()
-        K.keys("lctrl", "z")
-        assert.same("precious = 123", K.draft())
-        K.keys("lctrl", "z")
-        assert.same(original, K.file(name))
-      end)
     end
 
-    spec_it("IS1.4 Resume after running a project: a caller "
-        .. "that cannot be read at the return keeps its timeline "
-        .. "through the next run", function()
-      local original = "precious = 123\ndofile(\"notes.txt\")\n"
-      K.reset({ ["main.lua"] = original, ["notes.txt"] = "n\n" })
-      K.open()
-      K.browse_to(1)
-      K.keys("lctrl", "delete")
-      K.keys("escape")
-      K.browse_to(1)
-      K.keys("lctrl", "j")
-      K.keys("lctrl", "t")
-      K.fail_reads("main.lua")
-      K.keys("lctrl", "t")
-      assert.same("notes.txt", K.file_name())
-      TRIPS.run()
-      K.keys("escape")
-      assert.same("main.lua", K.file_name())
-      K.keys("lctrl", "z")
-      assert.truthy((K.message() or ""):find(UNREAD, 1, true))
-      K.mend_reads()
-      K.keys("lctrl", "z")
-      assert.same("precious = 123", K.draft())
-      K.keys("lctrl", "z")
-      assert.same(original, K.file())
-    end)
   end)
 
   describe("what a new action drops", function()
@@ -270,33 +217,6 @@ describe("a run and a visit #editor #spec", function()
         TRIPS[trip]()
         K.keys("lctrl", "y")
         assert.same("y = 2\ndofile(\"notes.txt\")\n", K.file())
-      end)
-    end
-  end)
-
-  describe("line endings", function()
-    for _, ext in ipairs(TYPES) do
-      spec_it("FR3.1 Preserve file structure: in a ." .. ext
-          .. " file, a new line redone after a run keeps the "
-          .. "ending it was written with", function()
-        local name = named(ext)
-        local original = "a = 1\r\nb = 2\n"
-        K.reset({ ["main.lua"] = "", [name] = original })
-        K.open(name)
-        K.type("c = 3")
-        K.keys("return")
-        local accepted = K.file(name)
-        assert.same(original .. "c = 3\r\n", accepted)
-        K.browse_to(1)
-        K.keys("lctrl", "delete")
-        K.keys("escape")
-        TRIPS.run()
-        K.keys("lctrl", "z")
-        K.keys("lctrl", "z")
-        K.keys("lctrl", "z")
-        assert.same(original, K.file(name))
-        K.keys("lctrl", "y")
-        assert.same(accepted, K.file(name))
       end)
     end
   end)

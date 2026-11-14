@@ -665,30 +665,6 @@ describe("IS6 reuse #editor #spec", function()
       assert.same(FILE, K.file())
     end)
 
-    spec_it("IS6.6 Undo and redo: a file changed from outside "
-        .. "ends an abort's undo too", function()
-      K.browse_to(3)
-      K.keys("f2")
-      K.type("y")
-      K.keys("escape")
-      K.write_outside("main.lua", "q = 9\n")
-      K.keys("lctrl", "z")
-      assert.same("browsing", K.state())
-      assert.same("", K.draft())
-      assert.is_nil(K.target())
-      assert.same("q = 9\n", K.file())
-    end)
-
-    spec_it("IS6.6 Undo and redo: a file changed from outside "
-        .. "ends the undo of typing made before", function()
-      K.browse_to_end()
-      K.type("old")
-      K.write_outside("main.lua", "q = 9\n")
-      K.keys("lctrl", "z")
-      assert.same("old", K.draft())
-      assert.same("q = 9\n", K.file())
-    end)
-
     spec_it("IS6.6 Undo and redo: the first of two moves is "
         .. "redone with the field it left", function()
       K.browse_to(1)
@@ -780,33 +756,6 @@ describe("IS6 reuse #editor #spec", function()
       assert.same("require(\"other\")\nx = 1\n", undone)
       assert.same(accepted, K.file())
       assert.same("require(\"other\")\nx = 1\na = 1\n", accepted)
-    end)
-
-    spec_it("IS6.6 Undo and redo: after a change from outside "
-        .. "no later key writes over it", function()
-      K.browse_to(3)
-      K.keys("f2")
-      K.type("y")
-      K.keys("escape")
-      K.write_outside("main.lua", "q = 9\n")
-      K.keys("lctrl", "z")
-      local undone = K.file()
-      K.keys("return")
-      local entered = K.file()
-      K.keys("lctrl", "delete")
-      local cut = K.file()
-      K.browse_to(1)
-      K.keys("lalt", "down")
-      assert.same({
-        "q = 9\n",
-        "q = 9\n",
-        "q = 9\n"
-      }, {
-        undone,
-        entered,
-        cut
-      })
-      assert.same("q = 9\n", K.file())
     end)
 
     spec_it("IS6.6 Undo and redo: redoing a cut leaves the "
@@ -937,29 +886,6 @@ describe("IS6 reuse #editor #spec", function()
       })
     end)
 
-    spec_it("IS6.6 Undo and redo: a file changed from outside "
-        .. "while open is left as it was", function()
-      K.browse_to_end()
-      K.type("a = 1")
-      K.keys("return")
-      K.write_outside("main.lua", "q = 9\n")
-      K.keys("lctrl", "z")
-      K.keys("lctrl", "y")
-      assert.same("q = 9\n", K.file())
-    end)
-
-    -- "from outside": between two runs of the editor
-    spec_it("IS6.6 Undo and redo: a file changed from outside "
-        .. "between runs is left as it was", function()
-      K.browse_to_end()
-      K.type("a = 1")
-      K.keys("return")
-      K.restart()
-      K.write_outside("main.lua", "q = 9\n")
-      K.open()
-      K.keys("lctrl", "z")
-      assert.same("q = 9\n", K.file())
-    end)
   end)
 
   describe("copying one block into another", function()

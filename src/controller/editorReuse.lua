@@ -215,11 +215,6 @@ end
 function EditorController:_timeline_state_step(kind)
   local buf = self:get_active_buffer()
   if not buf then return end
-  --- a change from outside not seen yet ends the timeline
-  --- before this step, so that Ctrl+Z takes it back
-  if not buf.outdated and self:_baseline(buf) == 'changed' then
-    self:_outdate(buf)
-  end
   table.insert(buf.history, {
     kind = kind,
     field = self:_field_snapshot(),
@@ -308,11 +303,9 @@ end
 
 --- @private
 --- @param buf BufferModel
---- @return string|false|nil --- the file's text as the card
---- holds it; false when the file is missing from its
---- project's folder; nil when it cannot be read just now: it
---- is there and gives no text, or the folder itself is gone
---- (the SD card is out)
+--- @return string|false|nil --- the file's text as storage
+--- holds it; false when the file is missing; nil when it is
+--- there and cannot be read
 --- @return boolean asked --- there is a project to ask
 function EditorController:_disk_text(buf)
   local con = self.console
@@ -322,10 +315,7 @@ function EditorController:_disk_text(buf)
   local ok, text = p:readfile(buf.name)
   if ok and type(text) == 'string' then return text, true end
   local FS = require('util.filesystem')
-  if FS.exists(p:get_path(buf.name)) or not FS.exists(p.path)
-  then
-    return nil, true
-  end
+  if FS.exists(p:get_path(buf.name)) then return nil, true end
   return false, true
 end
 
@@ -339,30 +329,26 @@ function EditorController:_note_read(buf, text)
 end
 
 --- @private
---- Called after each successful save: the card holds what the
---- editor wrote, and the timeline goes on from there
+--- Called after each successful save: storage holds what the
+--- editor wrote
 --- @param buf BufferModel
 function EditorController:_note_saved(buf)
   buf.disk_seen = buf.stored
-  buf.outdated = nil
 end
 
---- What the card holds, against what the editor last read or
+--- What storage holds, against what the editor last read or
 --- wrote there (`disk_seen`), a missing file included:
 --- * 'same': the editor goes on;
 --- * 'changed': other text, or none where there was some, or
----   some where there was none: a change from outside, so no
----   write goes over it and the timeline's actions end (IS6.6);
---- * 'unknown': it cannot be read just now. Nothing is
----   written, nothing is forgotten, and the action is refused
----   (_refuse_unread): the same key works once it can be read.
+---   some where there was none: no write goes over it;
+--- * 'unknown': it cannot be read, and nothing is written.
 --- With no project to ask, it is 'same'.
 --- @alias Baseline 'same'|'changed'|'unknown'
 
 --- @private
 --- @param buf BufferModel
 --- @return Baseline
---- @return string|false|nil --- with 'changed', what the card
+--- @return string|false|nil --- with 'changed', what storage
 --- holds now, read in the same reading: its text, or false
 --- for a missing file
 function EditorController:_baseline(buf)
@@ -371,17 +357,6 @@ function EditorController:_baseline(buf)
   if now == nil then return 'unknown' end
   if now == buf.disk_seen then return 'same' end
   return 'changed', now
-end
-
---- @private
---- Refuse an action because the file could not be read
---- @param buf BufferModel
---- @param undone string --- what did not happen: 'undone'
-function EditorController:_refuse_unread(buf, undone)
-  self:refuse({ string.format(
-    'Could not read %s, so nothing is %s.'
-    .. ' Check the SD card, then try again.', buf.name, undone
-  ) })
 end
 
 --- @private
@@ -401,42 +376,13 @@ function EditorController:_unsaved_notice(outcome)
 end
 
 --- @private
---- Whether Ctrl+Z or Ctrl+Y may go on (_baseline). A file
---- changed from outside ends every action on its timeline,
---- the draft's changes, which are later, included: none
---- matches the file any more, and the key does nothing
---- (IS6.6).
+--- Whether Ctrl+Z or Ctrl+Y may go on: an undo or a redo may
+--- write, so it passes the guard every write passes
+--- (_refuse_stale)
 --- @param buf BufferModel
---- @param forward boolean
 --- @return boolean go
-function EditorController:_timeline_ready(buf, forward)
-  local seen = self:_baseline(buf)
-  if seen == 'same' then return true end
-  if seen == 'unknown' then
-    self:_refuse_unread(buf, forward and 'redone' or 'undone')
-    return false
-  end
-  --- the actions after the change was first seen undo
-  --- again: changes to the draft and aborts made since then
-  --- (those before it end here with the rest), none of which
-  --- writes, since every write is refused until the file is
-  --- opened again (the baseline stays) or a write lands
-  --- (_note_saved)
-  if buf.outdated then return true end
-  self:_outdate(buf)
-  return false
-end
-
---- @private
---- A change from outside, seen for the first time: every
---- action on the timeline ends there, the draft's changes
---- included, and what follows is recorded after it (IS6.6)
---- @param buf BufferModel
-function EditorController:_outdate(buf)
-  if buf.outdated then return end
-  buf.outdated = true
-  self:timeline_forget(buf)
-  self.input.model.edit_history:reset()
+function EditorController:_timeline_ready(buf)
+  return not self:_refuse_stale(buf)
 end
 
 --- @private
@@ -519,7 +465,7 @@ end
 function EditorController:timeline_undo(isrepeat)
   local buf = self:get_active_buffer()
   local im = self.input.model
-  if not self:_timeline_ready(buf, false) then return end
+  if not self:_timeline_ready(buf) then return end
   self:_timeline_sync(buf)
   if #im.edit_history.steps > 0 then
     local found = self:_field_snapshot()
@@ -548,7 +494,7 @@ end
 --- @param isrepeat boolean?
 function EditorController:timeline_redo(isrepeat)
   local buf = self:get_active_buffer()
-  if not self:_timeline_ready(buf, true) then return end
+  if not self:_timeline_ready(buf) then return end
   self:_timeline_sync(buf)
   local n = #buf.redo_history
   local step = buf.redo_history[n]
@@ -676,10 +622,7 @@ function EditorController:cut_block(isrepeat)
     if isrepeat then return end
     return self:refuse({ NOTICE.cut_end })
   end
-  if self:_is_header(buf, sel) then
-    return self:refuse({ self.HEADER_NOTICE })
-  end
-  if self:_refuse_stale(buf, 'cut') then return end
+  if self:_refuse_stale(buf) then return end
   local lines = block_lines(buf, sel)
   local before = buf:snapshot()
   local back = {
@@ -735,13 +678,9 @@ function EditorController:move_block(dir)
     return self:refuse({ NOTICE.move_end })
   end
   local to = dir == 'up' and i - 1 or i + 1
-  --- the header neither moves nor has a block put above it
-  if self:_is_header(buf, i) or self:_is_header(buf, to) then
-    return self:refuse({ self.HEADER_NOTICE })
-  end
   --- toward the edge, nothing changes
   if to < 1 or to > n then return end
-  if self:_refuse_stale(buf, 'moved') then return end
+  if self:_refuse_stale(buf) then return end
   local before = buf:snapshot()
   local back = {
     before = before,
@@ -851,12 +790,13 @@ end
 
 --- @private
 --- The keys of IS6. Called from keypressed before the mode's
---- own keys.
+--- own keys. Of these, a repeat reaches Ctrl+Z, Ctrl+Y and
+--- the cuts alone (HeldKeys.editor), which stop where their
+--- rules say.
 --- @param k string
 --- @param isrepeat boolean?
 --- @return boolean handled
 function EditorController:_reuse_keys(k, isrepeat)
-  if isrepeat == nil then isrepeat = self.key_repeat end
   local ctrl, shift, alt = Key.ctrl(), Key.shift(), Key.alt()
   if ctrl and not shift and not alt then
     if k == 'z' then
@@ -878,14 +818,12 @@ function EditorController:_reuse_keys(k, isrepeat)
   end
   if alt and not ctrl and not shift then
     if k == 'up' or k == 'down' then
-      --- one move per press: a held key would push the
-      --- timeline's older steps out, a step per repeat
-      if not isrepeat then self:move_block(k) end
+      self:move_block(k)
       return true
     end
   end
   if shift and not ctrl and not alt and k == 'insert' then
-    if not isrepeat then self:submit_and_retain() end
+    self:submit_and_retain()
     return true
   end
   --- Shift+Delete cuts as well, in the browsing state only:

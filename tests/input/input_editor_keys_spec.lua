@@ -57,14 +57,6 @@ describe('editor key contract #input', function()
   before_each(function()
     F.reset()
     love.state.app_state = 'editor'
-    -- A run from the editor keeps the clipboard
-    -- (EditorController:hide), and the input fixture's love
-    -- has no `system` — the same stub editor_spec.lua sets per
-    -- case.
-    love.system = {
-      getClipboardText = function() return '' end,
-      setClipboardText = function() end,
-    }
     ed = open_file()
   end)
 

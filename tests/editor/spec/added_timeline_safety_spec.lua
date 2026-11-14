@@ -1,9 +1,9 @@
 -- The paths that keep a person's text and its undo timeline:
--- storage that cannot be read just now forgets nothing, a
+-- no write goes over storage the editor did not write, a
 -- file the user did not leave keeps its draft's changes, the
--- retained draft is the accepted text, each line keeps its
--- own ending, and a file the editor cannot split into blocks
--- can be repaired. Keys only, through
+-- retained draft is the accepted text, a file is written with
+-- LF line ends, and a file the editor cannot split into
+-- blocks can be repaired. Keys only, through
 -- tests/helpers/editor_keys.lua.
 
 local K = require("tests.helpers.editor_keys")
@@ -18,104 +18,57 @@ describe("timeline safety #editor #spec", function()
   teardown(K.teardown)
   after_each(K.cleanup)
 
-  describe("storage that cannot be read just now", function()
-    for _, ext in ipairs({ "lua", "txt", "md" }) do
-      spec_it("IS6.6 Undo and redo: in a ." .. ext .. " file, "
-          .. "Ctrl+Z while the file cannot be read says so and "
-          .. "forgets nothing", function()
-        local name = "notes." .. ext
-        K.reset({ [name] = "a = 1\n" })
-        K.open(name)
-        K.type("precious = 123")
-        K.keys("escape")
-        K.fail_reads()
-        K.keys("lctrl", "z")
-        assert.same("", K.draft())
-        assert.truthy((K.message() or ""):find(UNREAD, 1, true))
-        K.mend_reads()
-        K.keys("lctrl", "z")
-        assert.same("precious = 123", K.draft())
-        assert.same("a = 1\n", K.file(name))
-      end)
-    end
-
-    spec_it("IS6.6 Undo and redo: an accepted change and its "
-        .. "redo outlast a failed read", function()
+  -- the ruling "A lost SD card is the IDE's failure to
+  -- handle": one guard before a write, and a file that changed
+  -- while the editor was hidden read anew
+  describe("storage the editor did not write", function()
+    spec_it("IS3.11 Preserve state on refusal: a write over a "
+        .. "file changed outside the editor is refused, and the "
+        .. "draft stays", function()
       K.reset({ ["main.lua"] = "a = 1\n" })
       K.open()
       K.type("b = 2")
+      K.write_outside("main.lua", "z = 9\n")
       K.keys("return")
-      K.fail_reads()
-      K.keys("lctrl", "z")
-      assert.same("a = 1\nb = 2\n", K.file())
-      K.mend_reads()
-      K.keys("lctrl", "z")
-      assert.same("a = 1\n", K.file())
-      K.fail_reads()
-      K.keys("lctrl", "y")
-      assert.same("a = 1\n", K.file())
-      assert.truthy((K.message() or ""):find(UNREAD, 1, true))
-      K.mend_reads()
-      K.keys("lctrl", "y")
-      assert.same("a = 1\nb = 2\n", K.file())
+      assert.same("z = 9\n", K.file())
+      assert.same("b = 2", K.draft())
+      assert.truthy((K.message() or ""):find(
+        "changed outside the editor", 1, true))
     end)
 
-    spec_it("IS6.6 Undo and redo: with the SD card out, nothing "
-        .. "is cut and nothing forgotten; back in, the cut and "
-        .. "its undo work", function()
+    spec_it("IS3.11 Preserve state on refusal: a write to a file "
+        .. "that cannot be read is refused, and the draft stays",
+      function()
+        K.reset({ ["main.lua"] = "a = 1\n" })
+        K.open()
+        K.type("b = 2")
+        K.fail_reads()
+        K.keys("return")
+        K.mend_reads()
+        assert.same("a = 1\n", K.file())
+        assert.same("b = 2", K.draft())
+        assert.truthy((K.message() or ""):find(UNREAD, 1, true))
+      end)
+
+    spec_it("IS1.4 Resume after running a project: a file "
+        .. "changed while the editor was hidden comes back as "
+        .. "storage holds it, its timeline afresh", function()
       K.reset({ ["main.lua"] = "x = 1\ny = 2\n" })
       K.open()
-      K.browse_to(1)
-      K.keys("lctrl", "delete")
-      K.keys("escape")
-      K.remove_card()
-      K.keys("lctrl", "z")
-      assert.truthy((K.message() or ""):find(UNREAD, 1, true))
-      K.keys("lctrl", "delete")
-      assert.truthy((K.message() or ""):find(
-        "nothing is cut", 1, true))
-      K.insert_card()
-      K.keys("lctrl", "z")
-      assert.same("x = 1", K.draft())
-      K.keys("lctrl", "z")
-      assert.same("x = 1\ny = 2\n", K.file())
-    end)
-
-    spec_it("IS1.4 Resume after running a project: a return "
-        .. "while the file cannot be read comes back to it, and "
-        .. "its timeline waits for the read", function()
-      K.reset({ ["main.lua"] = "a = 1\n" })
-      K.open()
-      K.type("precious = 123")
-      K.keys("escape")
+      K.type("z = 3")
+      K.keys("return")
+      local rewritten = "p = 1\nq = 2\nr = 3\n"
       K.keys("lctrl", "t")
-      K.fail_reads()
+      K.write_outside("main.lua", rewritten)
       K.keys("lctrl", "t")
-      assert.same("editor", K.app_state())
       assert.same("main.lua", K.file_name())
+      assert.same({ "p = 1", "q = 2", "r = 3" }, K.view_rows())
       K.keys("lctrl", "z")
-      assert.same("", K.draft())
-      assert.truthy((K.message() or ""):find(UNREAD, 1, true))
-      K.mend_reads()
-      K.keys("lctrl", "z")
-      assert.same("precious = 123", K.draft())
+      assert.same(rewritten, K.file())
+      K.type("s = 4")
+      K.keys("return")
+      assert.same(rewritten .. "s = 4\n", K.file())
     end)
-
-    spec_it("IS6.6 Undo and redo: a run that rewrote the file "
-        .. "ends its timeline, and Ctrl+Z then writes nothing",
-      function()
-        K.reset({ ["main.lua"] = "x = 1\ny = 2\n" })
-        K.open()
-        K.type("z = 3")
-        K.keys("return")
-        local rewritten = "p = 1\nq = 2\nr = 3\ns = 4\n"
-        K.keys("lctrl", "t")
-        K.write_outside("main.lua", rewritten)
-        K.keys("lctrl", "t")
-        assert.same("main.lua", K.file_name())
-        K.keys("lctrl", "z")
-        assert.same(rewritten, K.file())
-      end)
   end)
 
   describe("a file the user did not leave", function()
@@ -213,65 +166,41 @@ describe("timeline safety #editor #spec", function()
     end)
   end)
 
+  -- the ruling "A file is written with LF line ends": LF,
+  -- CRLF and a lone CR each end a line on opening, opening
+  -- writes nothing, and the first save writes LF throughout
   describe("line endings", function()
-    local MIXED = "a = 1\r\nb = 2\nc = 3\r\n"
+    local FILES = {
+      { "CRLF", "a = 1\r\nb = 2\r\nc = 3\r\n" },
+      { "CR", "a = 1\rb = 2\rc = 3\r" },
+      { "mixed", "a = 1\r\nb = 2\nc = 3\r" },
+    }
     for _, ext in ipairs({ "lua", "txt", "md" }) do
       local name = "notes." .. ext
-
-      spec_it("FR3.1 Preserve file structure: in a ." .. ext
-          .. " file, a cut line comes back by undo with its own "
-          .. "ending", function()
-        K.reset({ [name] = MIXED })
-        K.open(name)
-        K.browse_to(2)
-        K.keys("lctrl", "delete")
-        assert.same("a = 1\r\nc = 3\r\n", K.file(name))
-        K.keys("lctrl", "z")
-        K.keys("lctrl", "z")
-        assert.same(MIXED, K.file(name))
-        K.keys("lctrl", "y")
-        K.keys("lctrl", "y")
-        assert.same("a = 1\r\nc = 3\r\n", K.file(name))
-      end)
-
-      spec_it("FR3.1 Preserve file structure: in a ." .. ext
-          .. " file, a moved line keeps its ending, and so does "
-          .. "the move's undo", function()
-        K.reset({ [name] = MIXED })
-        K.open(name)
-        K.browse_to(2)
-        K.keys("lalt", "up")
-        assert.same("b = 2\na = 1\r\nc = 3\r\n", K.file(name))
-        K.keys("lctrl", "z")
-        assert.same(MIXED, K.file(name))
-      end)
-
-      spec_it("FR3.1 Preserve file structure: in a ." .. ext
-          .. " file, a new line takes the ending most lines "
-          .. "have, the first in the file of two as frequent",
-        function()
-          local even = "a = 1\r\nb = 2\nc = 3\nd = 4\r\n"
-          K.reset({ [name] = even })
+      for _, f in ipairs(FILES) do
+        spec_it("FR3.1 Preserve file structure: a ." .. ext
+            .. " file with " .. f[1] .. " line ends opens as its "
+            .. "lines and stays as it is until a submission, "
+            .. "which writes it with LF; undo gives the lines "
+            .. "back", function()
+          K.reset({ [name] = f[2] })
           K.open(name)
-          K.type("e = 5")
+          assert.same(3, K.blocks())
+          K.browse_to(2)
+          K.keys("f2")
+          assert.same("b = 2", K.draft())
+          K.keys("escape")
+          assert.same(f[2], K.file(name))
+          assert.same({ }, K.writes())
+          K.browse_to_end()
+          K.type("d = 4")
           K.keys("return")
-          assert.same(even .. "e = 5\r\n", K.file(name))
+          assert.same("a = 1\nb = 2\nc = 3\nd = 4\n", K.file(name))
+          K.keys("lctrl", "z")
+          assert.same("a = 1\nb = 2\nc = 3\n", K.file(name))
         end)
+      end
     end
-
-    spec_it("FR3.1 Preserve file structure: identical lines "
-        .. "keep their own endings through a cut and its undo",
-      function()
-        local same = "a\r\na\na\r\n"
-        K.reset({ ["notes.txt"] = same })
-        K.open("notes.txt")
-        K.browse_to(1)
-        K.keys("lctrl", "delete")
-        assert.same("a\na\r\n", K.file("notes.txt"))
-        K.keys("lctrl", "z")
-        K.keys("lctrl", "z")
-        assert.same(same, K.file("notes.txt"))
-      end)
   end)
 
   describe("a file the editor cannot split into blocks", function()
@@ -328,30 +257,6 @@ describe("timeline safety #editor #spec", function()
         assert.same("error", K.message_kind())
       end)
 
-    spec_it("IS3.4 Locate a syntax failure: a #! draft is no "
-        .. "file's first line, and is refused", function()
-      K.reset({ ["main.lua"] = "x = 1\n" })
-      K.open()
-      K.type("#!/usr/bin/lua")
-      K.keys("return")
-      assert.same("x = 1\n", K.file())
-      assert.same("#!/usr/bin/lua", K.draft())
-      assert.same("error", K.message_kind())
-    end)
-
-    spec_it("IS3.4 Locate a syntax failure: a refused #! draft "
-        .. "is red from the failing character, the cursor before "
-        .. "it", function()
-      K.reset({ ["main.lua"] = "x = 1\n" })
-      K.open()
-      K.type("#!/usr/bin/lua")
-      local _, red = K.field_highlight()
-      K.keys("return")
-      assert.same({ 1, 2 }, red)
-      assert.same({ 1, 2 }, { K.cursor() })
-      assert.truthy(K.message():find("`!'", 1, true))
-    end)
-
     -- a guard: the file read so before
     spec_it("IS1.2 Admit or refuse a file: a file of a #! line "
         .. "alone is read as a block, and text goes after it",
@@ -373,30 +278,6 @@ describe("timeline safety #editor #spec", function()
       assert.same("#!/usr/bin/lua\nx = 1\n", K.file())
     end)
 
-    spec_it("FR3.1 Preserve file structure: nothing goes above "
-        .. "a #! first line, and the notice says why", function()
-      local text = "#!/usr/bin/lua\nx = 1\n"
-      K.reset({ ["main.lua"] = text })
-      K.open()
-      K.browse_to(1)
-      -- an empty line, with Enter and with Shift+Ins
-      K.keys("return")
-      K.keys("lshift", "insert")
-      assert.same(text, K.file())
-      K.type("y = 2")
-      K.keys("return")
-      assert.same(text, K.file())
-      assert.same("y = 2", K.draft())
-      assert.truthy((K.message() or ""):find("#! header", 1,
-        true))
-      K.keys("lshift", "insert")
-      assert.same(text, K.file())
-      assert.same("y = 2", K.draft())
-      -- one block down it goes in
-      K.browse_to(2)
-      K.keys("return")
-      assert.same("#!/usr/bin/lua\ny = 2\nx = 1\n", K.file())
-    end)
   end)
 
   describe("the draft's own changes", function()

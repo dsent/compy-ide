@@ -1,4 +1,5 @@
 require('util.string.string')
+require('util.table')
 
 --- Formatting: Lua source rewritten the way the editor writes
 --- it. It rewrites and never refuses; the editor's refusals
@@ -84,15 +85,11 @@ end
 --- it until its output stops changing
 local MAX_PASSES = 4
 
---- Format Lua source. Text that does not parse comes back as
---- it is; so does text the printer would change the meaning
---- of, drop a comment from, or never settle on, which no
---- caller may write.
 --- @param lines string[]
---- @param width integer --- the line width to wrap at
---- @return string[] formatted --- the input when not ok
---- @return boolean ok --- the text parsed and was formatted
-function M.format(lines, width)
+--- @param width integer
+--- @return string[] formatted
+--- @return boolean ok
+local function format_code(lines, width)
   local p = get_parser()
   local ok, ast = p.parse(lines)
   if not ok then return lines, false end
@@ -118,6 +115,32 @@ function M.format(lines, width)
       and not is_blank(out[#out]) then
     table.insert(out, '')
   end
+  return out, true
+end
+
+--- Format Lua source. Text that does not parse comes back as
+--- it is; so does text the printer would change the meaning
+--- of, drop a comment from, or never settle on, which no
+--- caller may write. A `#!` first line, which LuaJIT and the
+--- parser skip, is no program the printer prints: it stays
+--- as it is, and the rest is formatted.
+--- @param lines string[]
+--- @param width integer --- the line width to wrap at
+--- @return string[] formatted --- the input when not ok
+--- @return boolean ok --- the text parsed and was formatted
+function M.format(lines, width)
+  local header = lines[1]
+  if not (header and string.match(header, '^#!')) then
+    return format_code(lines, width)
+  end
+  --- the whole text is what must parse: below its first
+  --- line, a `#!` line is no Lua
+  if not get_parser().parse(lines) then return lines, false end
+  if #lines == 1 then return lines, true end
+  local out, ok = format_code(table.slice(lines, 2, #lines),
+    width)
+  if not ok then return lines, false end
+  table.insert(out, 1, header)
   return out, true
 end
 

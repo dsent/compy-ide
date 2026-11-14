@@ -16,10 +16,6 @@ K.PROJECT = "demo"
 local files, writes, restore
 -- a write fails with this reason while it is set
 local write_failure, read_failure
--- reads that still succeed before read_failure takes hold
-local read_grace
--- the SD card is out: no file and no project folder is there
-local card_out = false
 -- Caps Lock, a device state its key toggles
 local caps = false
 
@@ -48,7 +44,7 @@ local function write(_, f, text)
   if not valid then
     return false, invalid
   end
-  if write_failure or card_out then
+  if write_failure then
     return false, write_failure
   end
   writes[#writes + 1] = f
@@ -72,11 +68,11 @@ end
 local function exists_over(exists)
   return function(path)
     if path == ROOT or path == ROOT:sub(1, -2) then
-      return not card_out
+      return true
     end
     local f = path:match("^/memory%-k/(.+)$")
     if f then
-      return not card_out and files[f] ~= nil
+      return files[f] ~= nil
     end
     return exists(path)
   end
@@ -90,14 +86,8 @@ local function read_over(combined_read)
     if not f then
       return combined_read(path)
     end
-    if card_out then
-      return nil
-    end
     if read_failure == true or read_failure == f then
-      if not read_grace or read_grace < 1 then
-        return nil
-      end
-      read_grace = read_grace - 1
+      return nil
     end
     return files[f]
   end
@@ -225,7 +215,7 @@ function K.reset(contents)
   K.cc, K.ed = F.cc, nil
   files = contents or { ["main.lua"] = "x = 1\n" }
   writes, write_failure, caps = { }, nil, false
-  read_failure, read_grace, card_out = nil, nil, false
+  read_failure = nil
   local back = use_memory_project()
   -- what the console prints reaches its terminal, as the
   -- running IDE wires it (model.io.redirect)
@@ -292,28 +282,9 @@ function K.fail_reads(name)
   read_failure = name or true
 end
 
---- As K.fail_reads, once `n` more reads have succeeded: a
---- read that fails just after one that did.
---- @param n integer
---- @param name string?
-function K.fail_reads_after(n, name)
-  read_failure, read_grace = name or true, n
-end
-
 --- From now on, reads succeed again.
 function K.mend_reads()
-  read_failure, read_grace = nil, nil
-end
-
---- Take the SD card out: the project's folder and its files
---- are not there, and nothing can be read.
-function K.remove_card()
-  card_out = true
-end
-
---- Put the SD card back: everything is as it was.
-function K.insert_card()
-  card_out = false
+  read_failure = nil
 end
 
 --- From now on, project("<name>") typed in the console closes
@@ -1065,8 +1036,7 @@ end
 --- @return { white: integer[], yellow: integer[], rows: table }
 function K.highlights()
   local bv = doc_view()
-  -- the row height the view draws with (bufferView.lua)
-  local fh = bv.cfg.fh * 1.032
+  local fh = bv:row_height()
   local out = new_highlights()
   for _, f in ipairs(record_draw()) do
     local kind = kind_of(f.colour, bv.cfg.colors.editor)

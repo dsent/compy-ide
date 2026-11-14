@@ -2,11 +2,9 @@
 --- editor's own rules on Lua text, around the language
 --- layer's parser, formatter and gate (model.lang.lua), which
 --- decide what is Lua and what a block may hold. Here are the
---- editor's: a draft is no file's top, so a `#!` line in it
---- is no Lua; a draft's empty lines stay (IS3.7); a whole file
---- keeps its `#!` first line through formatting; where a failure
---- shows (IS3.4, IS3.5); which reason a refusal names; and the
---- files a block names (IS1.5).
+--- editor's: a draft's empty lines stay (IS3.7); where a
+--- failure shows (IS3.4, IS3.5); which reason a refusal
+--- names; and the files a block names (IS1.5).
 
 require('util.string.string')
 require('model.lang.lua.error')
@@ -202,41 +200,6 @@ local function is_blank(l)
   return string.match(l, '^%s*$') ~= nil
 end
 
---- @param lines string[]
---- @return string[] --- the lines below an empty one
-local function below_a_line(lines)
-  local below = { '' }
-  for i, l in ipairs(lines) do below[i + 1] = l end
-  return below
-end
-
---- A draft read as Lua reads it where it lands, below the
---- file's first line: a `#!` line, which the parser skips at
---- a file's top, is no Lua in it. The parser
---- the editor's field checks and colors with, so that the red
---- text and a refused submission agree (IS3.4).
---- @type table
-M.draft_parser = setmetatable({
-  --- @param lines string[]
-  parse = function(lines)
-    if type(lines) ~= 'table' or not M.is_header(lines[1]) then
-      return get_parser().parse(lines)
-    end
-    return get_parser().parse(below_a_line(lines))
-  end,
-  --- @param lines string[]
-  --- @param err Error --- as parse above returned it
-  --- @return Error
-  failure = function(lines, err)
-    if type(lines) ~= 'table' or not M.is_header(lines[1]) then
-      return M.failure(lines, err)
-    end
-    local failure = M.failure(below_a_line(lines), err)
-    failure.l = failure.l - 1
-    return failure
-  end,
-}, { __index = function(_, k) return get_parser()[k] end })
-
 --- The runs of blank lines among lines `from` to `to`
 --- @param lines string[]
 --- @param from integer
@@ -313,31 +276,19 @@ function M.format(lines, width)
 end
 
 --- A draft as the editor writes it: formatted, or as given
---- when it does not format or is no Lua where it lands. A
---- draft's empty lines between statements stay when
---- `keep_empty` asks (IS3.7).
+--- when it does not format. A draft's empty lines between
+--- statements stay when `keep_empty` asks (IS3.7).
 --- @param lines string[]
 --- @param width integer
 --- @param keep_empty boolean?
 --- @return string[] text
 --- @return boolean formatted
 function M.formatted(lines, width, keep_empty)
-  if not M.draft_parser.parse(lines) then return lines, false end
   local text, formatted = format.format(lines, width)
   if formatted and keep_empty then
     text = keep_empty_lines(lines, text)
   end
   return text, formatted
-end
-
---- Whether a file's first line is a header the language
---- skips: a `#!` line, as the parser and LuaJIT skip it. The
---- one answer the editor's header rules, whole-file
---- formatting and the reading of a draft share.
---- @param line string?
---- @return boolean
-function M.is_header(line)
-  return line ~= nil and string.match(line, '^#!') ~= nil
 end
 
 --- A file's blocks, or a draft's (`single`), as the language
@@ -357,25 +308,6 @@ function M.chunker(text, width, single)
   return get_parser().chunker(text, width, single)
 end
 
---- A whole file formatted, as Ctrl+Shift+F and `tidy()`
---- format it: a header line (is_header) stays as it is above
---- the rest, and the rest is formatted as a draft is
---- @param lines string[]
---- @param width integer
---- @return string[] text --- as given when it does not format
---- @return boolean formatted
-function M.tidied(lines, width)
-  local head = M.is_header(lines[1]) and { lines[1] } or {}
-  local rest = {}
-  for i = #head + 1, #lines do rest[#rest + 1] = lines[i] end
-  --- a header alone has nothing below it to format
-  if #rest == 0 then return lines, true end
-  local out, formatted = M.formatted(rest, width)
-  if not formatted then return lines, false end
-  for _, l in ipairs(out) do head[#head + 1] = l end
-  return head, true
-end
-
 --- @class SubmissionVerdict: GateVerdict
 --- @field failure Error? --- the parse failure, at the failing
 --- character, or `at_end` when the draft is only unfinished
@@ -393,10 +325,9 @@ end
 --- @param max_block integer
 --- @return SubmissionVerdict
 function M.submission(lines, width, max_block)
-  local draft = M.draft_parser
-  local parses, err = draft.parse(lines)
+  local parses, err = get_parser().parse(lines)
   if not parses then
-    local failure = draft.failure(lines, err)
+    local failure = M.failure(lines, err)
     return {
       ok = false,
       failure = failure,

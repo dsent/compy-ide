@@ -169,106 +169,6 @@ describe("text safety #editor #spec", function()
       end)
   end)
 
-  -- The file is written only while storage holds exactly what
-  -- the editor last read or wrote there, a missing file
-  -- included
-  describe("storage that changed under the editor", function()
-    local OUTSIDE = "precious = 1\nmore = 2\n"
-    local STALE = "The file changed outside the editor"
-
-    before_each(function()
-      K.reset({ ["main.lua"] = "x = 1\n" })
-    end)
-
-    spec_it("IS1.2 Admit or refuse a file: a file that is there "
-        .. "and gives no text is not opened, and nothing is "
-        .. "written", function()
-      K.fail_reads()
-      K.open()
-      assert.same("ready", K.app_state())
-      assert.truthy(K.console_text():find("could not be read", 1,
-        true))
-      K.type("a = 1")
-      K.keys("return")
-      assert.same("x = 1\n", K.file())
-      assert.same({ }, K.writes())
-    end)
-
-    spec_it("IS3.11 Preserve state on refusal: a missing file "
-        .. "that appears before the first Enter is not written "
-        .. "over", function()
-      K.open("new.lua")
-      K.write_outside("new.lua", OUTSIDE)
-      K.type("a = 1")
-      K.keys("return")
-      assert.same(OUTSIDE, K.file("new.lua"))
-      assert.same("a = 1", K.draft())
-      assert.truthy(K.message():find(STALE, 1, true))
-      assert.same({ }, K.writes())
-    end)
-
-    spec_it("IS3.11 Preserve state on refusal: a file removed "
-        .. "from outside is not written by a cut, nor one put "
-        .. "back by an undo", function()
-        K.open("new.lua")
-        K.type("a = 1")
-        K.keys("return")
-        assert.same("a = 1\n", K.file("new.lua"))
-        K.write_outside("new.lua", nil)
-        K.browse_to(1)
-        K.keys("lctrl", "delete")
-        assert.is_nil(K.file("new.lua"))
-        assert.truthy(K.message():find(STALE, 1, true))
-        K.write_outside("new.lua", OUTSIDE)
-        K.keys("lctrl", "z")
-        assert.same(OUTSIDE, K.file("new.lua"))
-      end)
-
-    spec_it("IS3.14 Explain a refusal: with a cut block in the "
-        .. "field, the outside-change notice says reopening drops "
-        .. "it", function()
-      K.reset({ ["main.lua"] = "x = 1\ny = 2\n" })
-      K.open()
-      K.browse_to(1)
-      K.keys("lctrl", "delete")
-      K.write_outside("main.lua", OUTSIDE)
-      K.keys("return")
-      assert.same("x = 1", K.draft())
-      assert.truthy(K.message():find(
-        "Reopening it drops the text in the field", 1, true))
-      K.keys("escape", "lctrl", "delete")
-      assert.truthy(K.message():find("Reopen it to go on", 1, true))
-    end)
-
-    spec_it("IS3.11 Preserve state on refusal: a file that can "
-        .. "no longer be read is not written", function()
-      K.open()
-      K.fail_reads()
-      K.type("a = 1")
-      K.keys("return")
-      assert.same("a = 1", K.draft())
-      -- no change from outside: the notice says what happened
-      assert.truthy(K.message():find(
-        "Could not read main.lua, so nothing is saved", 1, true))
-      assert.same({ }, K.writes())
-      -- read again as it was, the file takes the text
-      K.mend_reads()
-      K.keys("return")
-      assert.same("x = 1\na = 1\n", K.file())
-    end)
-
-    spec_it("IS3.11 Preserve state on refusal: a file removed "
-        .. "from outside is not written again", function()
-      K.open()
-      K.write_outside("main.lua", nil)
-      K.type("a = 1")
-      K.keys("return")
-      assert.is_nil(K.file())
-      assert.same("a = 1", K.draft())
-      assert.truthy(K.message():find(STALE, 1, true))
-    end)
-  end)
-
   -- Shift+Ins on a replacement left as it was changes no
   -- file; the draft it retains is still a step of its own
   spec_it("IS6.6 Undo and redo: a draft retained from an "
@@ -442,37 +342,17 @@ describe("text safety #editor #spec", function()
         assert.same("x = 1\n  \ny = 2\nz = 3\n", K.file())
       end)
 
-    -- A line the change left as it was keeps its own line
-    -- ending; a new one takes the ending most lines have, the
-    -- first one in the file on a tie
-    spec_it("FR3.1 Preserve file structure: mixed line endings "
-        .. "stay on the lines that have them", function()
-      for _, case in ipairs({
-        { "one\r\ntwo\nthree\r", "one\r\ntwo\nthree\rfour\r\n" },
-        { "one\rtwo\r", "one\rtwo\rthree\r" },
-        { "one\ntwo\r\nthree\n", "one\ntwo\r\nthree\nfour\n" },
-      }) do
-        K.reset({ ["a.txt"] = case[1] })
-        K.open("a.txt")
-        K.type(case[2]:match("([^\r\n]+)[\r\n]+$"))
-        K.keys("return")
-        assert.same(case[2], K.file("a.txt"))
-        K.keys("lctrl", "z")
-        assert.same(case[1], K.file("a.txt"))
-        K.keys("escape")
-      end
-    end)
-
     spec_it("FR3.1 Preserve file structure: a replaced line in "
-        .. "a CRLF file keeps the file's ending", function()
-      K.reset({ ["main.lua"] = "x = 1\r\ny = 2\ny = 3\r\n" })
-      K.open()
-      K.browse_to(2)
-      K.keys("f2", "backspace")
-      K.type("9")
-      K.keys("return")
-      assert.same("x = 1\r\ny = 9\r\ny = 3\r\n", K.file())
-    end)
+        .. "a CRLF file is written with the others, all with LF",
+      function()
+        K.reset({ ["main.lua"] = "x = 1\r\ny = 2\ny = 3\r\n" })
+        K.open()
+        K.browse_to(2)
+        K.keys("f2", "backspace")
+        K.type("9")
+        K.keys("return")
+        assert.same("x = 1\ny = 9\ny = 3\n", K.file())
+      end)
   end)
 
   -- Back from a text file, the Lua file's draft is read as

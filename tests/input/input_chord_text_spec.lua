@@ -85,20 +85,30 @@ describe("a chord's own glyph is no text #input", function()
       assert.same("abc", K.console_draft())
     end)
 
-    in_both_orders("Ctrl+C copies the selection and leaves it",
+    -- the system clipboard has left the field
+    in_both_orders("Ctrl+C types no c and copies nothing",
         function(order)
+      love.system.setClipboardText("kept")
       K.keys("lshift", "home")
       chord(order, { "lctrl" }, "c", "c")
       assert.same("abc", K.console_draft())
-      assert.same("abc", K.clipboard())
+      assert.same("kept", K.clipboard())
     end)
 
-    in_both_orders("Ctrl+V pastes and types no v", function(
-      order
-    )
+    in_both_orders("Ctrl+X types no x and cuts nothing",
+        function(order)
+      love.system.setClipboardText("kept")
+      K.keys("lshift", "home")
+      chord(order, { "lctrl" }, "x", "x")
+      assert.same("abc", K.console_draft())
+      assert.same("kept", K.clipboard())
+    end)
+
+    in_both_orders("Ctrl+V types no v and pastes nothing",
+        function(order)
       love.system.setClipboardText("xyz")
       chord(order, { "lctrl" }, "v", "v")
-      assert.same("abcxyz", K.console_draft())
+      assert.same("abc", K.console_draft())
     end)
 
     in_both_orders("Ctrl+Z types no z", function(order)
@@ -162,13 +172,12 @@ describe("a chord's own glyph is no text #input", function()
       assert.same("x = = 1", K.console_draft())
     end)
 
-    in_both_orders("Ctrl+V pastes and types no v", function(
-      order
-    )
+    in_both_orders("Ctrl+V types no v and pastes nothing",
+        function(order)
       love.system.setClipboardText("9")
       F.console.model:jump_end()
       chord(order, { "lctrl" }, "v", "v")
-      assert.same("x = = 19", K.console_draft())
+      assert.same("x = = 1", K.console_draft())
     end)
   end)
 
@@ -727,7 +736,7 @@ describe("a key pressed under AltGr makes no chord #input",
     end)
 
     in_both_orders("in a project's field, AltGr+V types and "
-        .. "pastes nothing (Ctrl+V pastes)", function(order)
+        .. "pastes nothing", function(order)
       K.reset()
       F.activate_project()
       local widget = F.show_widget({ text = "hey" })

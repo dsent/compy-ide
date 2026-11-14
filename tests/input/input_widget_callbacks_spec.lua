@@ -669,6 +669,47 @@ describe('input surface: widget callbacks #input', function()
         assert.same({ 'a' }, F.widget:get_text())
       end)
 
+    -- editor spec API2.2: "Key-repeat events from holding
+    -- Enter do not trigger another submission"
+    it('a held Enter submits once, before_submit included',
+      function()
+        local input = F.activate_project()
+        local before, sent = 0, 0
+        input.callbacks.before_submit = function()
+          before = before + 1
+        end
+        input.callbacks.on_text_entered = function()
+          sent = sent + 1
+        end
+        input.show({ text = 'a', clear_on_submit = false })
+        F.session.press('return')
+        F.session.repeat_press('return')
+        F.session.repeat_press('return')
+        F.session.release('return')
+        assert.same(1, before)
+        assert.same(1, sent)
+        F.session.press('return')
+        F.session.release('return')
+        assert.same(2, sent)
+      end)
+
+    -- the rule is the field's: a program that reads the key
+    -- itself still gets every repeat
+    it("a held Enter's repeats still reach the program's hook",
+      function()
+        local input = F.activate_project()
+        local seen = { }
+        input.hooks.keypressed = function(k, _, isr)
+          if k == 'return' then seen[#seen + 1] = isr end
+        end
+        input.show({ text = 'a', clear_on_submit = false })
+        F.session.press('return')
+        F.session.repeat_press('return')
+        F.session.repeat_press('return')
+        F.session.release('return')
+        assert.same({ false, true, true }, seen)
+      end)
+
     -- The pair of the case above, and the one that keeps the
     -- new default honest: hiding on Escape is still available,
     -- it is just asked for now. Without this, "cancel does

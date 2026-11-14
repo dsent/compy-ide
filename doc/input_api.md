@@ -466,8 +466,11 @@ Everything the widget calls back about: a submission, a cancel, a boundary, a va
 
 ### Submit lifecycle
 
-Enter submits; Shift+Enter inserts a newline. On a non-empty submission the
-order is:
+Enter submits, once however long it is held: its repeats run no callback,
+though a hook or shortcut of yours still sees them. Shift+Enter inserts a
+newline. The widget has no clipboard:
+Ctrl+C, Ctrl+X, Ctrl+V, Ctrl+Insert and Shift+Insert change nothing in it. On a
+non-empty submission the order is:
 
 1. `before_submit(text)`, if assigned. A truthy return vetoes the
    submit: steps 2-4 do not run and the text stays.

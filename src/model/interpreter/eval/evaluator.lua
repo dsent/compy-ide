@@ -179,7 +179,7 @@ LuaEditorEval = (function()
   }
   --- a draft is read as the editor's submission reads it
   local tools = {
-    parser = luaLayer.draft_parser,
+    parser = luaParser,
     highlighter = luaParser.highlighter,
   }
   return Evaluator('lua', tools, ft)

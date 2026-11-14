@@ -280,9 +280,9 @@ describe("input model spec #input", function()
       assert.same({ 'abc(' }, model:get_text())
     end)
 
-    it('paste drops invalid bytes across lines', function()
+    it('add_text drops invalid bytes across lines', function()
       local model = UserInputModel(mockConf, luaEval)
-      model:paste('abc\ndef' .. invalid)
+      model:add_text('abc\ndef' .. invalid)
       assert.same({ 'abc', 'defabc(' }, model:get_text())
     end)
 
@@ -322,8 +322,8 @@ describe("input model spec #input", function()
       assert.same({ 'a', 'b', '', 'c' }, model:get_text())
     end)
 
-    -- A clipboard or a program may spell a break CRLF or a
-    -- lone CR: each is a break, and no line keeps a CR.
+    -- A program may spell a break CRLF or a lone CR: each is
+    -- a break, and no line keeps a CR.
     it('take CRLF and a lone CR as line breaks', function()
       local model = UserInputModel(mockConf, luaEval)
       model:set_text('a\r\nb\rc')

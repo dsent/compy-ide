@@ -108,7 +108,7 @@ end
 
 --- Text as it enters a field: valid UTF-8, its line breaks
 --- each a newline, whichever spelling it came with (CRLF, or
---- a lone CR, as a clipboard may hold), so that no line of a
+--- a lone CR, as a program may pass), so that no line of a
 --- draft holds a carriage return
 --- @param s string
 --- @return string
@@ -179,7 +179,7 @@ end
 function UserInputModel:add_text(text)
   if type(text) == 'string' then
     text = entered_text(text)
-    --- nothing to add (an empty clipboard): no step (IS6.6)
+    --- nothing to add: no step (IS6.6)
     if text == '' then return end
     local single = string.ulen(text) == 1
     if single then
@@ -188,7 +188,7 @@ function UserInputModel:add_text(text)
       self:_record_edit('insert',
         string.match(text, '^%s$') ~= nil)
     else
-      self:_record_edit('paste', true)
+      self:_record_edit('text', true)
     end
     self:pop_selected_text()
     local sl, cc    = self:get_cursor_pos()
@@ -476,22 +476,6 @@ end
 function UserInputModel:get_current_line()
   local cl = self:get_cursor_y() or 1
   return self:get_text():get(cl)
-end
-
---- @param text string
-function UserInputModel:paste(text)
-  local sel = self:get_selection()
-  local start = sel.start
-  local fin = sel.fin
-  if start and start.l and fin and fin.l and fin.c then
-    local from, to = self:diff_cursors(start, fin)
-    self:get_text():traverse(from, to, { delete = true })
-    if from and to then
-      self:move_cursor(from.l, from.c)
-    end
-  end
-  self:add_text(text)
-  self:clear_selection()
 end
 
 function UserInputModel:backspace()
@@ -1529,11 +1513,6 @@ function UserInputModel:get_ordered_selection()
   ret.text = sel.text
   ret.held = sel.held
   return ret
-end
-
---- @return string[]
-function UserInputModel:get_selected_text()
-  return self.selection.text
 end
 
 --- @return string[]?

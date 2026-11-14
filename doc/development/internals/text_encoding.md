@@ -75,7 +75,7 @@ arithmetic first adds `1` to a `nil`, somewhere else entirely.
 
 So when you add a way for text to enter a subsystem, the question is not "is this input trusted"
 but **"does this path pass through the same sanitiser as the others"**. Sources worth treating as
-hostile: clipboard paste, file reads, anything a project computes and hands back, and any string
+hostile: file reads, anything a project computes and hands back, and any string
 assembled from bytes.
 
 ## Which helpers count what

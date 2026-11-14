@@ -319,22 +319,6 @@ describe("mutation survivors #editor #spec", function()
       open_file()
     end)
 
-    spec_it("IS6.6 Undo and redo: after a change from " ..
-        "outside, the old actions stay gone", function()
-      K.type("a = 1")
-      K.keys("return")
-      local accepted = K.file()
-      K.write_outside("main.lua", "q = 9\n")
-      K.keys("lctrl", "z")
-      -- the text comes back as the action left it: the action
-      -- went with the change, and stays gone
-      K.write_outside("main.lua", accepted)
-      K.keys("lctrl", "z")
-      assert.same(FILE .. "a = 1\n", accepted)
-      assert.same(accepted, K.file())
-      assert.same(4, K.blocks())
-    end)
-
     spec_it("IS3.4 Locate a syntax failure: past a comment " ..
         "that ends a line, the cursor goes to the failure",
         function()

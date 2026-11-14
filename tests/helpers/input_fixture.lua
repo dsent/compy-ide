@@ -86,11 +86,8 @@ local function mock_runtime()
     -- The console prepares serial support at build time and asks
     -- love.system.getOS() to pick a backend; the mock love has no
     -- `system`, so stub it (a desktop OS -> the null backend).
-    -- Leaving the editor saves the clipboard with its state.
     system     = {
       getOS            = function() return 'Linux' end,
-      getClipboardText = function() return '' end,
-      setClipboardText = function() end,
     },
   })
 end

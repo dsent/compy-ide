@@ -414,18 +414,6 @@ describe("IS4 and IS5, added #editor #spec", function()
       assert.same(LOOSE, K.file())
     end)
 
-    spec_it("IS5.1 Begin a replacement: Edit on a #! first line "
-        .. "is refused with a notice, and the line stays",
-      function()
-        open_file("#!/usr/bin/lua\nx=1\n")
-        edit(1)
-        assert.same("browsing", K.state())
-        assert.same("", K.draft())
-        assert.truthy((K.message() or ""):find("#! header", 1,
-          true))
-        assert.same("#!/usr/bin/lua\nx=1\n", K.file())
-      end)
-
     spec_it("IS5.6 Switch the replacement target: a block "
         .. "loaded formatted is unmodified, so Edit switches",
         function()

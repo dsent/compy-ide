@@ -120,6 +120,7 @@ end
 function KeyCard.console_cells(live)
   return split('console', {
     { 'Enter', 'run the line', true },
+    { 'Shift+Ins', 'run it, keep it', true },
     { 'Shift/Alt+Enter', 'break the line', true },
     { 'Esc', 'clear the line', true },
     { 'Ctrl+Q', 'exit program', live },

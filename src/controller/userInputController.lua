@@ -590,10 +590,9 @@ end
 ----------------
 
 --- LÖVE's own argument list, like every other consumer on the
---- chain (doc/development/decisions/input.md, D-LOVE-ARGS). The
---- tail is unread here and named anyway: this widget is where a
---- repeat-aware edit would land, and the position has to be the
---- right one when it does.
+--- chain (doc/development/decisions/input.md, D-LOVE-ARGS).
+--- The scancode is unread; a repeat edits as its press does,
+--- and submits nothing (API2.2).
 --- @param k string
 --- @param sc string?    scancode
 --- @param isr boolean?  key repeat
@@ -660,26 +659,6 @@ function UserInputController:keypressed(k, sc, isr)
       input:clear_error()
     end
     return
-  end
-
-  -- utility functions
-  local function paste()
-    input:paste(love.system.getClipboardText())
-    input:clear_selection()
-  end
-  local function copy()
-    local t = string.unlines(input:get_selected_text())
-    if string.is_non_empty_string(t) then
-      love.system.setClipboardText(t)
-    end
-  end
-  local function cut()
-    local t = string.unlines(
-      input:pop_selected_text() or { '' }
-    )
-    if string.is_non_empty_string(t) then
-      love.system.setClipboardText(t)
-    end
   end
 
   -- action categories
@@ -785,27 +764,6 @@ function UserInputController:keypressed(k, sc, isr)
       end
     end
   end
-  local function copypaste()
-    if Key.ctrl() then
-      if k == "v" then
-        paste()
-      end
-      if k == "c" or k == "insert" then
-        copy()
-      end
-      if k == "x" then
-        cut()
-      end
-    end
-    if Key.shift() then
-      if k == "insert" then
-        paste()
-      end
-      if k == "delete" then
-        cut()
-      end
-    end
-  end
   local function selection()
     local en = not self.disable_selection
     if en and Key.shift() then
@@ -821,7 +779,6 @@ function UserInputController:keypressed(k, sc, isr)
   horizontal()
   newline()
   if self.allow_duplicate_line then modify() end
-  copypaste()
   selection()
 
   -- The widget's own submit/cancel flow (D-EDIT-LIFECYCLE): plain
@@ -830,8 +787,10 @@ function UserInputController:keypressed(k, sc, isr)
   -- (newline() above); Ctrl+Escape is not a cancel.
   -- Editor/console callers that must not run these consume the
   -- key upstream (editor) or set no callbacks (console no-op).
+  -- A held Enter submits once: its repeats reach no callback
+  -- (API2.2).
   if Key.is_enter(k) and not Key.shift() and not Key.alt() then
-    self:submit_flow()
+    if not isr then self:submit_flow() end
   elseif k == 'escape' and not Key.ctrl() then
     self:cancel_flow()
   end

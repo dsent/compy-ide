@@ -232,41 +232,6 @@ describe("round five #editor #spec", function()
       return at
     end
 
-    spec_it("IS3.4 Locate a syntax failure: a #! line typed "
-        .. "into an empty file, Lua below it, is red and refused "
-        .. "as a syntax failure", function()
-      K.reset({ ["main.lua"] = "" })
-      K.open()
-      K.type("#!/usr/bin/lua")
-      K.keys("lshift", "return")
-      K.type("x=1")
-      assert.same({ 1, 2 }, red())
-      K.keys("lshift", "insert")
-      assert.same("", K.file())
-      assert.same("#!/usr/bin/lua\nx=1", K.draft())
-      assert.same("error", K.message_kind())
-      assert.same({ 1, 2 }, { K.cursor() })
-      K.keys("return")
-      assert.same("", K.file())
-      assert.same("error", K.message_kind())
-    end)
-
-    spec_it("IS3.4 Locate a syntax failure: a #! draft is red "
-        .. "wherever the browsing position is, and Enter refuses "
-        .. "it on the first block too", function()
-      K.reset({ ["main.lua"] = "x = 1\n" })
-      K.open()
-      K.type("#!/usr/bin/lua")
-      assert.same({ 1, 2 }, red())
-      K.browse_to(1)
-      assert.same({ 1, 2 }, red())
-      K.keys("return")
-      assert.same("x = 1\n", K.file())
-      assert.same("#!/usr/bin/lua", K.draft())
-      assert.same("error", K.message_kind())
-      assert.same({ 1, 2 }, { K.cursor() })
-    end)
-
     spec_it("IS3.3 Check Lua submission: a draft refused for a "
         .. "line's length is not red", function()
       K.reset({ ["main.lua"] = "" })
@@ -352,106 +317,6 @@ describe("round five #editor #spec", function()
     end)
   end)
 
-  describe("a file changed while hidden, read once", function()
-    for _, ext in ipairs({ "lua", "txt", "md" }) do
-      spec_it("IS1.4 Resume after running a project: in a ."
-          .. ext .. " file changed while the editor was "
-          .. "hidden, the text "
-          .. "Ctrl+T finds changed is the text it shows, and a "
-          .. "read failing after it changes nothing", function()
-        local name = ext == "lua" and "main.lua" or "notes." .. ext
-        K.reset({ ["main.lua"] = "x = 1\n", [name] = "x = 1\n" })
-        K.open(name)
-        K.type("q")
-        K.keys("backspace")
-        K.keys("lctrl", "t")
-        assert.are_not.same("editor", K.app_state())
-        K.write_outside(name, "x = 2\n")
-        K.fail_reads_after(1, name)
-        K.keys("lctrl", "t")
-        assert.same("editor", K.app_state())
-        assert.same(name, K.file_name())
-        assert.same(1, K.blocks())
-        assert.same("x = 2", K.view_rows()[1])
-        assert.same("x = 2\n", K.file(name))
-      end)
-    end
-  end)
-
-  describe("the line endings formatting keeps", function()
-    local MIXED = "a=1\r\nb = 2\nc=3\r\n"
-    local TIDY = "a = 1\r\nb = 2\nc = 3\r\n"
-
-    spec_it("FR3.1 Preserve file structure: tidy() keeps the "
-        .. "ending of a line it leaves as it is between lines "
-        .. "it changes", function()
-      K.reset({ ["main.lua"] = MIXED })
-      K.type('tidy("main.lua")')
-      K.keys("return")
-      assert.same(TIDY, K.file())
-    end)
-
-    spec_it("FR3.1 Preserve file structure: Ctrl+Shift+F keeps "
-        .. "the ending of a line it leaves as it is between "
-        .. "lines it changes, and undoes and redoes", function()
-      K.reset({ ["main.lua"] = MIXED })
-      K.open()
-      K.keys("lctrl", "lshift", "f")
-      assert.same(TIDY, K.file())
-      K.keys("lctrl", "z")
-      assert.same(MIXED, K.file())
-      K.keys("lctrl", "y")
-      assert.same(TIDY, K.file())
-    end)
-  end)
-
-  describe("a change from outside and the keys after it",
-    function()
-      spec_it("IS3.14 Explain a refusal: the notice that a file "
-          .. "changed while hidden to text the editor cannot take "
-          .. "stays after the Ctrl+T that brings it back, until "
-          .. "the next key", function()
-        K.reset({ ["main.lua"] = "x = 1\n" })
-        K.open()
-        K.keys("lctrl", "t")
-        assert.are_not.same("editor", K.app_state())
-        K.write_outside("main.lua", "x = '\255'\n")
-        K.keys("lctrl", "t")
-        assert.same("editor", K.app_state())
-        assert.truthy((K.message() or ""):find(
-          "changed outside the editor", 1, true))
-        assert.same("x = 1", K.view_rows()[1])
-        K.keys("up")
-        assert.is_nil(K.message())
-      end)
-
-      local ABORTS = {
-        ["after a refused Enter"] = true,
-        ["with no key between"] = false,
-      }
-      for label, enter in pairs(ABORTS) do
-        spec_it("IS6.6 Undo and redo: an abort after a change "
-            .. "from outside undoes, " .. label, function()
-          K.reset({ ["main.lua"] = "a = 1\nb = 2\n" })
-          K.open()
-          K.browse_to(1)
-          K.keys("lctrl", "delete")
-          assert.same("a = 1", K.draft())
-          K.write_outside("main.lua", "c = 3\n")
-          if enter then
-            K.keys("return")
-            assert.truthy((K.message() or ""):find(
-              "changed outside the editor", 1, true))
-          end
-          K.keys("escape")
-          assert.same("", K.draft())
-          K.keys("lctrl", "z")
-          assert.same("a = 1", K.draft())
-          assert.same("c = 3\n", K.file())
-        end)
-      end
-    end)
-
   describe("the key the editor comes to the front on", function()
     for _, key in ipairs({ "return", "escape" }) do
       spec_it("FR1.2 Resolve each edit: the " .. key .. " a "
@@ -477,37 +342,6 @@ describe("round five #editor #spec", function()
   end)
 
   describe("a file read anew after a run", function()
-    spec_it("IS1.4 Resume after running a project: a file read "
-        .. "anew after a run keeps the line endings the SD card "
-        .. "holds", function()
-      K.reset({ ["main.lua"] = "a = 1\nb = 2\n" })
-      K.open()
-      K.keys("lctrl", "t")
-      K.write_outside("main.lua", "a = 1\r\nb = 2\r\nc = 3\r\n")
-      K.keys("lctrl", "t")
-      K.type("d = 4")
-      K.keys("return")
-      assert.same("a = 1\r\nb = 2\r\nc = 3\r\nd = 4\r\n",
-        K.file())
-    end)
-
-    spec_it("IS1.4 Resume after running a project: a file read "
-        .. "anew after a run that broke it is a line per block",
-      function()
-        K.reset({ ["main.lua"] = "a = 1\nb = 2\n" })
-        K.open()
-        K.keys("lctrl", "t")
-        K.write_outside("main.lua",
-          "a = = 1\nfunction f()\n  b = 2\nend\n")
-        K.keys("lctrl", "t")
-        assert.same(4, K.blocks())
-        -- Edit opens the one line (the maintainer's ruling of
-        -- November 14, 2026)
-        K.browse_to(2)
-        K.keys("f2")
-        assert.same(2, K.target())
-        assert.same("function f()", K.draft())
-      end)
 
     spec_it("IS1.2 Admit or refuse a file: a file made "
         .. "non-UTF-8 while hidden is not taken", function()
@@ -523,17 +357,5 @@ describe("round five #editor #spec", function()
       assert.same("c = 3", K.draft())
     end)
 
-    spec_it("IS1.5 Follow a file reference: a file read anew "
-        .. "after a run follows the reference it now holds",
-      function()
-        K.reset({ ["main.lua"] = "a = 1\n", ["lib.lua"] = "l = 1\n" })
-        K.open()
-        K.keys("lctrl", "t")
-        K.write_outside("main.lua", "require('lib')\n")
-        K.keys("lctrl", "t")
-        K.browse_to(1)
-        K.keys("lctrl", "j")
-        assert.same("lib.lua", K.file_name())
-      end)
   end)
 end)

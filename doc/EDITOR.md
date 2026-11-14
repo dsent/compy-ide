@@ -11,14 +11,14 @@
   editor was away comes back with its new text when you return with
   <kbd>Ctrl</kbd>+<kbd>T</kbd>, and its undo history starts again;
   so does a file you return to with <kbd>Escape</kbd>. A file
-  changed while the editor shows it keeps the text it had: the
-  next <kbd>Enter</kbd>, cut, move or
-  <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> says it changed
-  and saves nothing, and <kbd>Ctrl</kbd>+<kbd>Z</kbd> and
-  <kbd>Ctrl</kbd>+<kbd>Y</kbd> no longer reach what you did before
-  the change. To see what the SD card holds then, leave the editor
-  (<kbd>Ctrl</kbd>+<kbd>Q</kbd>) and open the file again with
-  `edit()`.
+  changed while the editor shows it keeps the text it had: each
+  key that would write it (<kbd>Enter</kbd>, a cut, a move,
+  <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd>,
+  <kbd>Ctrl</kbd>+<kbd>Z</kbd>, <kbd>Ctrl</kbd>+<kbd>Y</kbd>) says
+  it changed and saves nothing, and so does each when the file
+  cannot be read. To see what the SD card holds then, leave the
+  editor (<kbd>Ctrl</kbd>+<kbd>Q</kbd>) and open the file again
+  with `edit()`.
 - `edit()` in the console starts the editor afresh: the files a
   run came from close, and the file opens alone, at its end.
   <kbd>Ctrl</kbd>+<kbd>T</kbd> is the way back to them.
@@ -32,6 +32,18 @@
     moved since; any other text is inserted as new blocks.
 - The editor asks no questions. A refused action shows a notice
   and changes nothing.
+- Held down, a key repeats only if it writes nothing and changes
+  no state: typing, moving the cursor, browsing and scrolling,
+  deleting in the field, <kbd>Shift</kbd>+<kbd>Enter</kbd>, and
+  <kbd>Ctrl</kbd>+<kbd>Z</kbd> and <kbd>Ctrl</kbd>+<kbd>Y</kbd>
+  through the field's own changes. Every other key acts once per
+  press: <kbd>Enter</kbd>, <kbd>Escape</kbd>, <kbd>F2</kbd>,
+  <kbd>Shift</kbd>+<kbd>Insert</kbd>,
+  <kbd>Ctrl</kbd>+<kbd>Insert</kbd>, moving a block, formatting
+  the file, following a `require`. A held
+  <kbd>Ctrl</kbd>+<kbd>Delete</kbd> cuts the empty lines it meets
+  and stops at the first block with text. The console keeps the
+  same rule: a held <kbd>Enter</kbd> runs the line once.
 
 ### Keys
 
@@ -55,14 +67,12 @@
 | Jump to the end of the row                                        | <kbd>End</kbd>                                |
 | Insert newline                                                    | <kbd>Shift</kbd>+<kbd>Enter ⏎</kbd>           |
 | Delete current line                                               | <kbd>Ctrl</kbd>+<kbd>Y</kbd>                  |
-| Copy                                                              | <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>Insert</kbd> |
-| Cut                                                               | <kbd>Ctrl</kbd>+<kbd>X</kbd> / <kbd>Shift</kbd>+<kbd>Delete</kbd> |
-| Paste                                                             | <kbd>Ctrl</kbd>+<kbd>V</kbd> / <kbd>Shift</kbd>+<kbd>Insert</kbd> |
 | Select text                                                       | <kbd>Shift</kbd>+<kbd>⇦</kbd>/<kbd>⇨</kbd>/<kbd>⇧</kbd>/<kbd>⇩</kbd> |
 | Evaluate input                                                    | <kbd>Enter ⏎</kbd>                            |
+| Evaluate input and keep it in the field                           | <kbd>Shift</kbd>+<kbd>Insert</kbd>            |
 | **Editor**                                                        |                                               |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; _same as Input in the field, except for:_ |                                               |
-| No text selection: Shift with an arrow moves the cursor, and Ctrl+C and Ctrl+X do nothing | <kbd>Shift</kbd>+<kbd>⇦</kbd>/<kbd>⇨</kbd>/<kbd>⇧</kbd>/<kbd>⇩</kbd>, <kbd>Ctrl</kbd>+<kbd>C</kbd>, <kbd>Ctrl</kbd>+<kbd>X</kbd> |
+| No text selection: Shift with an arrow moves the cursor           | <kbd>Shift</kbd>+<kbd>⇦</kbd>/<kbd>⇨</kbd>/<kbd>⇧</kbd>/<kbd>⇩</kbd> |
 | Browse the file block by block                                    | <kbd>Ctrl</kbd>+<kbd>⇧</kbd>/<kbd>Ctrl</kbd>+<kbd>⇩</kbd> |
 | Browse block by block (empty field) / move the cursor a row (text in the field) | <kbd>⇧</kbd>/<kbd>⇩</kbd>                     |
 | Browse ten blocks                                                 | <kbd>PageUp</kbd>/<kbd>PageDown</kbd>         |

@@ -137,25 +137,6 @@ describe('the editor on Lua text #editor', function()
       assert.is_true(lua.empty_blocks({ '', ' ' })[2]:is_empty())
     end)
 
-  it('reads a #! line in a draft as no Lua, wherever it is',
-    function()
-      for _, lines in ipairs({
-        { '#!/usr/bin/lua', 'a = 1' },
-        { '# note', 'a = 1' },
-        { '', '#!x', 'a = 1' },
-        { 'a = 1', '#!x' },
-      }) do
-        local verdict = lua.submission(lines, 64, 14)
-        assert.is_false(verdict.ok)
-        assert.is_not_nil(verdict.failure)
-        assert.same(lines, (lua.formatted(lines, 64)))
-      end
-      local verdict = lua.submission({ '', '#!x', 'a = 1' }, 64, 14)
-      assert.same(2, verdict.failure.l)
-      verdict = lua.submission({ '#!x', 'a = 1' }, 64, 14)
-      assert.same({ 1, 2 }, { verdict.failure.l, verdict.failure.c })
-    end)
-
   it('keeps a draft of two lines that opens with # as typed',
     function()
       local lines = { '#speed = 5', 'speed = 10' }
@@ -169,15 +150,6 @@ describe('the editor on Lua text #editor', function()
     assert.is_false(verdict.ok)
     assert.same(2, verdict.long_line.l)
   end)
-
-  it('formats a whole file below a # first line, kept as it is',
-    function()
-      assert.same({ '#!/usr/bin/lua', 'a = 1' },
-        (lua.tidied({ '#!/usr/bin/lua', 'a=1' }, 64)))
-      assert.same({ '#!x' }, (lua.tidied({ '#!x' }, 64)))
-      assert.same({ '# note', 'a=1' },
-        (lua.tidied({ '# note', 'a=1' }, 64)))
-    end)
 
   it('names the files of require and dofile written out',
     function()

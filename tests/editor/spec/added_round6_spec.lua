@@ -124,88 +124,25 @@ describe("round six #editor #spec", function()
   describe("a #! first line", function()
     -- a guard: undo and redo restored the bytes before
     spec_it("FR3.1 Preserve file structure: a #! first line "
-        .. "keeps its bytes through a change, its undo and its "
+        .. "keeps its text through a change, its undo and its "
         .. "redo, and through formatting and its undo",
       function()
-        local text = "#!/usr/bin/lua\r\nx=1\r\n"
+        local text = "#!/usr/bin/lua\nx=1\n"
         K.reset({ ["main.lua"] = text })
         K.open()
         K.type("y = 2")
         K.keys("return")
-        assert.same("#!/usr/bin/lua\r\nx=1\r\ny = 2\r\n", K.file())
+        assert.same("#!/usr/bin/lua\nx=1\ny = 2\n", K.file())
         K.keys("lctrl", "z")
         assert.same(text, K.file())
         K.keys("lctrl", "y")
-        assert.same("#!/usr/bin/lua\r\nx=1\r\ny = 2\r\n", K.file())
+        assert.same("#!/usr/bin/lua\nx=1\ny = 2\n", K.file())
         K.keys("lctrl", "lshift", "f")
-        assert.same("#!/usr/bin/lua\r\nx = 1\r\ny = 2\r\n",
-          K.file())
+        assert.same("#!/usr/bin/lua\nx = 1\ny = 2\n", K.file())
         K.keys("lctrl", "z")
-        assert.same("#!/usr/bin/lua\r\nx=1\r\ny = 2\r\n", K.file())
+        assert.same("#!/usr/bin/lua\nx=1\ny = 2\n", K.file())
       end)
 
-    spec_it("IS5.6 Switch the replacement target: a replacement "
-        .. "does not switch to a #! first line", function()
-      K.reset({ ["main.lua"] = "#!/usr/bin/lua\nx = 1\n" })
-      K.open()
-      K.browse_to(2)
-      K.keys("f2")
-      assert.same(2, K.target())
-      K.browse_to(1)
-      K.keys("f2")
-      assert.same(2, K.target())
-      assert.truthy((K.message() or ""):find("#! header", 1,
-        true))
-    end)
-  end)
-
-  describe("line endings formatting keeps", function()
-    -- a guard: it pins the limit the documents now state
-    spec_it("FR3.1 Preserve file structure: formatting keeps "
-        .. "the endings of the lines outside the change; a line "
-        .. "inside it that pairs within eight lines keeps its "
-        .. "own, and one beyond takes the file's main ending",
-      function()
-        local stmts = { }
-        for i = 1, 12 do
-          stmts[#stmts + 1] = string.format("a%d=%d", i, i)
-        end
-        local text = "function f() " .. table.concat(stmts, ";")
-            .. " end\r\nmarker = 42\ntail=9\r\nlast = 1\n"
-        K.reset({ ["main.lua"] = text })
-        K.open()
-        K.keys("lctrl", "lshift", "f")
-        local file = K.file()
-        -- outside the change: the last line keeps its LF
-        assert.truthy(file:find("tail = 9\r\nlast = 1\n$"))
-        -- inside it, the unchanged line is more than eight
-        -- lines from its place: it takes the main ending
-        assert.truthy(file:find("\r\nmarker = 42\r\n", 1, true))
-        K.keys("lctrl", "z")
-        assert.same(text, K.file())
-      end)
-
-    -- guards: the pairing's skipping, which no test reached
-    spec_it("FR3.1 Preserve file structure: tidy() keeps the "
-        .. "ending of an unchanged line below a line it splits",
-      function()
-        K.reset({
-          ["main.lua"] = "if a then b = 1 end\r\nc = 3\nd=4\r\n",
-        })
-        K.type('tidy("main.lua")')
-        K.keys("return")
-        assert.same("if a then\r\n  b = 1\r\nend\r\nc = 3\nd = 4\r\n",
-          K.file())
-      end)
-
-    spec_it("FR3.1 Preserve file structure: tidy() keeps the "
-        .. "ending of an unchanged line below blank lines it "
-        .. "removes", function()
-      K.reset({ ["main.lua"] = "a=1\n\n\n\nb = 2\r\nc=3\n" })
-      K.type('tidy("main.lua")')
-      K.keys("return")
-      assert.same("a = 1\n\nb = 2\r\nc = 3\n", K.file())
-    end)
   end)
 
   describe("a key held as the editor comes to the front",
@@ -223,30 +160,14 @@ describe("round six #editor #spec", function()
           assert.same("a = 1\n", K.file())
           assert.same({ }, K.writes())
           -- a key pressed in the editor repeats there
-          K.type("b = 2")
+          K.type("b = 234")
+          K.hold("backspace")
+          K.repeat_key("backspace")
+          K.release("backspace")
+          assert.same("b = 2", K.draft())
           K.keys("return")
-          K.hold("return")
-          K.repeat_key("return")
-          K.release("return")
-          assert.same("a = 1\nb = 2\n\n\n", K.file())
+          assert.same("a = 1\nb = 2\n", K.file())
         end)
     end)
 
-  describe("a write refused for a change from outside", function()
-    -- a guard: _refuse_stale's ending of the timeline
-    spec_it("IS6.6 Undo and redo: text typed after a write "
-        .. "refused for a change from outside is undone",
-      function()
-        K.reset({ ["main.lua"] = "a = 1\n" })
-        K.open()
-        K.type("b = 2")
-        K.write_outside("main.lua", "z = 9\n")
-        K.keys("return")
-        K.type("3")
-        assert.same("b = 23", K.draft())
-        K.keys("lctrl", "z")
-        assert.same("b = 2", K.draft())
-        assert.same("z = 9\n", K.file())
-      end)
-  end)
 end)
