@@ -2,6 +2,8 @@ require("view.editor.visibleStructuredContent")
 
 local class = require("util.class")
 local Layout = require("view.layout")
+local Cue = require("view.continuationCue")
+local WrapBar = require("view.wrapBar")
 require("util.scrollable")
 require("util.table")
 -- local B = require("util.block")
@@ -524,8 +526,60 @@ function BufferView:draw(special, bottom)
     end
   end
 
+  local draw_bars = function()
+    WrapBar.draw(WrapBar.strokes(vc.wrap_forward, vc.wrap_reverse,
+      range.start, range.fin, row_y, fh), colors.wrap_bar)
+  end
+
+  --- The continuation cue (FR4.8, IS2.2) at an edge of the view
+  --- beyond which rows of the browsed block or of the
+  --- replacement target lie; a block the view merely cuts has
+  --- none. The edge row fades into its own highlight.
+  local draw_cues = function()
+    local sel = self.buffer:get_selection()
+    local target = self.buffer.loaded
+    local white = special and colors.highlight_special
+        or colors.highlight
+    local yellow = colors.highlight_loaded
+    local paint = {
+      browsed = { { x = 0, w = width, color = white } },
+      target = { { x = 0, w = width, color = yellow } },
+      both = {
+        { x = 0, w = fw, color = white },
+        { x = fw, w = width - 2 * fw, color = yellow },
+        { x = width - fw, w = fw, color = white },
+      },
+    }
+    local cut = { }
+    local function look(b, kind)
+      local rows = b and self:_block_rows(b) or { }
+      if #rows == 0 then return end
+      local s, e = rows[1], rows[#rows]
+      if s < range.start and range.start <= e then
+        cut.top = cut.top or kind
+      end
+      if range.fin < e and s <= range.fin then
+        cut.bottom = cut.bottom or kind
+      end
+    end
+    if target and not special then
+      look(target, target == sel and 'both' or 'target')
+    end
+    look(sel, 'browsed')
+    for edge, kind in pairs(cut) do
+      local v = edge == 'top' and range.start or range.fin
+      Cue.draw({
+        edge = edge, y = row_y(v), h = fh, width = width,
+        fw = fw, font = font, theme = colors.cue,
+        paint = paint[kind],
+      })
+    end
+  end
+
   draw_background()
   draw_highlight()
+  draw_bars()
   draw_text()
+  draw_cues()
   draw_debuginfo()
 end

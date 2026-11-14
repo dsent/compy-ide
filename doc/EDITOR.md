@@ -143,6 +143,13 @@ any block, one longer than 14 lines or with a line longer than
 to those limits. In a text or Markdown file every line is a
 block, and a line is accepted as written.
 
+A block taller than the screen shows a faint `^` or `v` in the
+last column of the row at the edge it goes on beyond, and that
+row fades toward the edge; the field does the same when its text
+has more rows than it shows. A line too long for one row goes on
+in the next, with a gray bar at its left from its first row to
+its last.
+
 When the editor cannot do what a key asks, it shows a notice
 just above the status line that says why and what would work.
 A text that is not valid Lua gets the parser's message there,

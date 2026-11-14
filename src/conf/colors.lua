@@ -17,6 +17,20 @@ require("util.color")
 --- @field highlight_loaded RGB
 --- @field highlight_special RGB
 --- @field results BaseColors
+--- @field cue CueColors
+--- @field wrap_bar RGB
+
+--- The continuation cue (FR4.8): the edge row's own background
+--- laid over it, `fade` opaque at the edge and clear at the
+--- row's other side, and in the row's last column the mark,
+--- `^` or `v`, `mark_alpha` opaque on a box `box_alpha` opaque
+--- (the maintainer's ruling of November 15, 2026)
+--- @class CueColors
+--- @field fade number
+--- @field mark RGB
+--- @field mark_alpha number
+--- @field box RGB
+--- @field box_alpha number
 
 --- @class InputColors
 --- @field console BaseColors
@@ -71,6 +85,15 @@ return {
       fg = Color[Color.black],
       bg = Color[Color.white],
     },
+    cue = {
+      fade = .75,
+      mark = Color[Color.black],
+      mark_alpha = .5,
+      box = Color[Color.gray],
+      box_alpha = .25,
+    },
+    --- the bar beside a line that takes more than one row
+    wrap_bar = Color[Color.gray],
   },
   input = {
     console = {

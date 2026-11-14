@@ -1,7 +1,8 @@
 -- R4 Submission and orientation across input contexts:
 -- NFR4.1, FR4.2, NFR4.3-NFR4.5, FR4.6, FR4.7 and FR4.9
--- (editor principles, ratified). FR4.8 has no test: it
--- permits a continuation cue and requires none. NFR4.1's
+-- (editor principles, ratified). FR4.8's continuation cue,
+-- which it permits and the editor has, is tested in
+-- added_cue_spec.lua. NFR4.1's
 -- "identify ... the destination of any edit" is a person's
 -- judgement of the screen: a device check, with FR4.6's
 -- status line tested here.

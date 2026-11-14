@@ -130,7 +130,7 @@ Project-author guide: `doc/input_api.md`.
 - **Formatting the file is Alt+F.** Ctrl+F is kept free for a search to come.
 - **Ctrl+R runs the project anew**, in the console, the editor and over a running
   program; Ctrl+Alt+R does nothing now. The `r` a Compy sends as text with the chord
-  reaches no field and no program. The terminal example restarts the micro:bit with Alt+R.
+  reaches no field and no program. The terminal example restarts the micro:bit with Ctrl+M.
 - **Ctrl+G goes back to the block being replaced.** While replacing, it brings the
   highlight back to the block loaded with F2 and shows it; the field's text stays. In
   the other states it does nothing.
@@ -138,6 +138,13 @@ Project-author guide: `doc/input_api.md`.
   followed in brackets.
 - **The status line is 37 pixels high**, a row's 33 and two pixels above and below its
   text, and a strip of two pixels stays under the field at the screen's bottom.
+- **A block that goes on beyond the editor's edge is marked there.** While the
+  highlighted block or the block being replaced has rows above or below the view, the
+  edge row fades toward the edge and its last column carries a translucent `^` or `v`;
+  the field's edges are marked the same way while the text in it has rows out of sight.
+- **A line that takes more than one row has a gray bar at its left**, from the middle
+  of its first row to the middle of its last, in the editor's view and in every text
+  field; the text does not move.
 - **PageDown and PageUp page through the file.** PageDown brings the first block hidden
   below the view to its top, PageUp the last one hidden above to its bottom, and the
   highlight goes with it; at the file's end or start they go to the end position or the
@@ -184,7 +191,8 @@ Project-author guide: `doc/input_api.md`.
   the line that ran, and Escape no longer stores the line it clears. The line being typed
   waits below the newest line and comes back on Down, which no longer empties the field.
   An edit to a recalled line stays while you move away and back, until Enter runs it as
-  a new line; a recalled line run unchanged is stored again as the newest.
+  a new line. A line that repeats the newest one, typed again or recalled and run
+  unchanged, is not stored again.
 - **Ctrl+Z and Ctrl+Y undo and redo the typing in every input**, the console's and a
   program's as well as the editor's. Ctrl+Y no longer deletes the line.
 - **F1 holds back Ctrl+Q and the other reserved keys in the file editor only.** In the

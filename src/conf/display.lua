@@ -28,4 +28,8 @@ return {
   --- November 14, 2026: four and two)
   status_extra = 4,
   bottom_strip = 2,
+  --- the width, in pixels, of the bar at the left edge beside a
+  --- line that takes more than one row (the ruling of November
+  --- 15, 2026)
+  wrap_bar = 3,
 }

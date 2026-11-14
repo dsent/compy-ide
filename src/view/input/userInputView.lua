@@ -2,6 +2,8 @@ require("view.input.statusline")
 
 local class = require('util.class')
 local Layout = require("view.layout")
+local Cue = require("view.continuationCue")
+local WrapBar = require("view.wrapBar")
 local Blink = require('view.input.cursorBlink')
 require("util.debug")
 require("util.view")
@@ -222,6 +224,12 @@ function UserInputView:render_input(input, status, time)
   self.statusline:draw(status, 0)
   gfx.pop()
 
+  local shown = vc:get_range()
+  local function row_y(r) return self:row_y(field_row(r)) end
+  WrapBar.draw(WrapBar.strokes(vc.wrap_forward, vc.wrap_reverse,
+    vc.offset + 1, vc.offset + inLines, row_y, fh),
+    cf_colors.editor.wrap_bar)
+
   if highlight then
     gfx.push('all')
     local hl = highlight.hl
@@ -306,9 +314,24 @@ function UserInputView:render_input(input, status, time)
     gfx.pop()
   end
 
-  if true then
-    drawCursor()
+  --- the continuation cue (FR4.8, IS3.13) at an edge of the
+  --- field beyond which rows of the draft lie
+  local function cue(edge, r)
+    Cue.draw({
+      edge = edge, y = self:row_y(r), h = fh,
+      width = drawableWidth, fw = fw, font = cfg.font,
+      theme = cf_colors.editor.cue,
+      paint = { { x = 0, w = drawableWidth, color = colors.bg } },
+    })
   end
+  if 1 < shown.start then
+    cue('top', 1)
+  end
+  if shown.fin < vc:get_content_length() then
+    cue('bottom', inLines)
+  end
+
+  drawCursor()
 end
 
 --- @param err_text string[]

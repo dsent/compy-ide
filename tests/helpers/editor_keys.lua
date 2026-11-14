@@ -790,10 +790,14 @@ local function record_draw()
   return rec.fills
 end
 
+--- Whether two colours are one, opacity included: a
+--- translucent fill in a highlight's colour, such as the
+--- continuation cue's fade, is not the highlight.
 local function same_colour(a, b)
-  for i = 1, 3 do
-    local near = math.abs((a[i] or 0) - (b[i] or 0)) < 0.001
-    if not near then
+  for i = 1, 4 do
+    local opaque = i == 4 and 1 or 0
+    local x, y = a[i] or opaque, b[i] or opaque
+    if math.abs(x - y) >= 0.001 then
       return false
     end
   end
@@ -829,12 +833,14 @@ local function scr_rectangle(mode, x, y, w, h)
     return
   end
   local to = mode == "fill" and screen.fills or screen.frames
+  screen.seq = (screen.seq or 0) + 1
   to[#to + 1] = {
     x = x,
     y = y,
     w = w,
     h = h,
-    colour = rec.colour
+    colour = rec.colour,
+    seq = screen.seq
   }
 end
 
@@ -848,10 +854,13 @@ local function scr_print(text, x, y)
   end
   local to = screen.in_canvas and screen.field
        or screen.texts
+  screen.seq = (screen.seq or 0) + 1
   to[#to + 1] = {
     text = tostring(text),
+    x = x or 0,
     y = y or 0,
-    colour = rec.colour
+    colour = rec.colour,
+    seq = screen.seq
   }
 end
 
@@ -920,7 +929,8 @@ end
 ---   texts drawn in the input field with its status line,
 ---   every fill and text drawn in the field in the order
 ---   drawn, and the rows the field takes under its status
----   line
+---   line; each fill, frame and text has `seq`, its place in
+---   the order of the whole draw
 function K.screen(also)
   complete_cfg()
   local lg = love.graphics
