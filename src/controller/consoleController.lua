@@ -2024,7 +2024,7 @@ end
 --- Once at a time: a before_exit hook that closes or switches
 --- the project reaches here again, and returns at once.
 --- The editor steps aside first, its files kept for Ctrl+T:
---- the gate's restart (Ctrl+Alt+R) reaches here from it.
+--- the gate's restart (Ctrl+R) reaches here from it.
 function ConsoleController:stop_project_run()
   if self.stopping then return end
   if love.state.app_state == 'editor' then

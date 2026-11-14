@@ -180,13 +180,13 @@ describe('a program\'s canvas after it stops #canvas', function()
     assert.is_false(shown())
   end)
 
-  it('Ctrl+Alt+R starts the program again on a blank canvas',
+  it('Ctrl+R starts the program again on a blank canvas',
     function()
       local seen
       local undo = project(function() seen = shown() end)
       local ok, err = pcall(function()
         run_drawing()
-        press({ 'lctrl', 'lalt', 'r' })
+        press({ 'lctrl', 'r' })
       end)
       undo()
       assert(ok, err)

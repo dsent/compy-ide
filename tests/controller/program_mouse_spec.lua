@@ -224,12 +224,12 @@ describe('a program\'s mouse after it stops #input', function()
       assert.same(CONSOLE, mouse())
     end)
 
-  it('Ctrl+Alt+R starts the program again on the console\'s'
+  it('Ctrl+R starts the program again on the console\'s'
     .. ' mouse', function()
       local seen
       local undo = project(function() seen = mouse() end)
       run_capturing()
-      press({ 'lctrl', 'lalt', 'r' })
+      press({ 'lctrl', 'r' })
       undo()
       assert.same(CONSOLE, seen)
     end)

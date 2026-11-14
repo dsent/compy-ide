@@ -199,7 +199,7 @@ describe("every chord is its own key #input", function()
       { FieldKeys, { "shift+return", "alt+return", "left",
         "ctrl+right", "home", "ctrl+end", "up", "backspace",
         "shift+backspace", "delete", "ctrl+backspace", "ctrl+w",
-        "alt+backspace", "ctrl+k", "alt+shift+up", "ctrl+z",
+        "ctrl+k", "alt+shift+up", "ctrl+z",
         "ctrl+y" } },
     }
     it("say which keys act once and which repeat", function()

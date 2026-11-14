@@ -250,12 +250,14 @@ save what the user had typed.
 Several call sites manipulate the cursor programmatically (i.e., not as a direct
 response to a cursor-movement keypress). The editor has the most, all through
 **`input.model` directly, bypassing the controller**: `EditorController:_handle_submit`
-(`move_cursor` to the position before the failing character when a submission does not parse),
+(`move_cursor` to the position before the failing character when a submission does not parse, and
+`reformat` with the syntax's cursor when the syntax returns the draft to show),
 `edit_block` (`jump_end` after a block is loaded or reloaded), and in
 `src/controller/editorReuse.lua` the undo timeline's restore of a saved draft and its cursor, the
 copy and cut of a block into the draft, and the reformat of a kept draft, which maps the cursor
 onto the formatted text (`model.input.cursorMap`). One more is in the model itself,
-`_apply_eval`, which seats the caret on the error position when an evaluation is rejected, and
+`_apply_eval`, which seats the caret on the error position when an evaluation is rejected, or
+shows the draft and cursor its parser's syntax returns for a draft that goes on (`unparsed`), and
 the last is the project-facing `compy.input.set_cursor`/`set_text` above. The console never
 touches it programmatically.
 
@@ -369,7 +371,7 @@ consumed"*; the regression it pays is [`../technical_debt/input.md`](../technica
 
 `app_state == 'starting'` is never observed by any input path: `main.lua`'s `love.load()` sets it, then flips it to `'ready'` a few lines later — both synchronously, before LÖVE's event pump runs, so no `love.handlers.*` entry point can ever see the `'starting'` value.
 
-Global shortcuts are answered in `love.handlers.keypressed` before anything reaches the active route's controller. They live in `RESERVED` (`controller.lua`, in `setup_callback_handlers`): a **second, privileged combo table** keyed per event, structurally separate from a project's `compy.input.shortcuts` — same shape, consulted before any route exists, never overridable by one, and never consuming (`decisions/input.md`, D-RESERVE-TABLE). Its keys are canonical combo strings: `ctrl+pause` suspends, `ctrl+q` stops the run and returns to the console with the project still open (from the file editor it leaves the editor; in the console with no run it does nothing), `ctrl+alt+r` restarts the project, `ctrl+t` quick-switches between run and edit, `ctrl+alt+p` / `ctrl+alt+shift+p` start and stop the profiler, and bare `f10` cycles the FPS-overlay corner. `ctrl+escape` (quit) is the one reservation living on the release side, in `RESERVED.keyreleased`, not keypressed. Each entry is a function that also checks the state it applies in — the project- and console-management ones no-op in playback (`cfg.mode == 'play'`), the profiler three require a profiling build — which is why the project guide's table carries a "when" column.
+Global shortcuts are answered in `love.handlers.keypressed` before anything reaches the active route's controller. They live in `RESERVED` (`controller.lua`, in `setup_callback_handlers`): a **second, privileged combo table** keyed per event, structurally separate from a project's `compy.input.shortcuts` — same shape, consulted before any route exists, never overridable by one, and never consuming (`decisions/input.md`, D-RESERVE-TABLE). Its keys are canonical combo strings: `ctrl+pause` suspends, `ctrl+q` stops the run and returns to the console with the project still open (from the file editor it leaves the editor; in the console with no run it does nothing), `ctrl+r` restarts the project, `ctrl+t` quick-switches between run and edit, `ctrl+alt+p` / `ctrl+alt+shift+p` start and stop the profiler, and bare `f10` cycles the FPS-overlay corner. `ctrl+escape` (quit) is the one reservation living on the release side, in `RESERVED.keyreleased`, not keypressed. The glyph of a reserved chord, which the device sends as text before or after the press (`Ctrl+R`'s `r`), reaches no route: `handlers.textinput` drops it before the project's shortcuts and hooks are offered a chord's glyph. Each entry is a function that also checks the state it applies in — the project- and console-management ones no-op in playback (`cfg.mode == 'play'`), the profiler three require a profiling build — which is why the project guide's table carries a "when" column.
 
 Each of these matches its modifier set **exactly** — the modifiers it names held, and no other (`decisions/input.md`, D-EXACT-RESERVE). Since a reservation is looked up by the canonical combo string built for the event, that exactness is a property of the representation: a string equality cannot tolerate an unnamed modifier. "Intercepted" describes what the gate may *claim*, not what passes through it: every keypress enters here, and one the gate does not claim is forwarded to the route unchanged, exactly as a claimed one is (the gate consumes nothing — see below).
 
@@ -616,7 +618,7 @@ and does nothing for a chord it does not name, whichever route drives it (consol
 project widget), one table for all three (the maintainer's ruling of 2026-11-14): moves
 (Left/Right, Ctrl+Left/Right by word, Home/End to the ends of the cursor's row, Ctrl+Home/End to the
 ends of the text, Up/Down), Alt+Shift+Up/Down moving the cursor's line, Backspace (with Shift too,
-held from a capital) and Delete, Ctrl+Backspace, Alt+Backspace and Ctrl+W deleting what Ctrl+Left
+held from a capital) and Delete, Ctrl+Backspace and Ctrl+W deleting what Ctrl+Left
 would cross (at a line's start, the break and the word before it), Ctrl+K the rest of its line,
 Shift+Enter and Alt+Enter breaking the line, Ctrl+Z and Ctrl+Y undoing and redoing the draft
 (D-UNDO-KEYS), bare Enter submitting and bare Escape cancelling. Every owner gets the same keys.

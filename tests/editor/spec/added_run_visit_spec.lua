@@ -1,4 +1,4 @@
--- A run of the project (Ctrl+T, Ctrl+Alt+R) and a visit to
+-- A run of the project (Ctrl+T, Ctrl+R) and a visit to
 -- another file (Ctrl+J, then Escape) are no leaving of a file
 -- (IS1.4, IS1.5, IS6.6): each file comes back as it was, its
 -- timeline, its draft's changes and what can be redone
@@ -72,7 +72,7 @@ local function view_offset()
   return K.ed.view:get_current_buffer():get_offset()
 end
 
---- Out and back: a run with Ctrl+T, a run with Ctrl+Alt+R,
+--- Out and back: a run with Ctrl+T, a run with Ctrl+R,
 --- or a visit to the file the browsed block names
 local TRIPS = {
   run = function()
@@ -80,7 +80,7 @@ local TRIPS = {
     K.keys("lctrl", "t")
   end,
   restart = function()
-    K.keys("lctrl", "lalt", "r")
+    K.keys("lctrl", "r")
     K.keys("lctrl", "t")
   end,
   visit = function()

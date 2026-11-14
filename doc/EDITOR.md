@@ -41,7 +41,8 @@
   <kbd>Ctrl</kbd>+<kbd>Q</kbd> and the other reserved keys
   included; only <kbd>Ctrl</kbd>+<kbd>Esc</kbd> acts. In the
   console the card holds back the console's own keys alone, and
-  in your program F1 holds back nothing.
+  in your program F1 holds back nothing. While a card shows, in
+  the editor or in the console, the mouse does nothing.
 - A click in the field places the cursor, as in the console and
   in your program's input; a click on the file does nothing. No
   field selects text: Shift with an arrow does nothing, and
@@ -65,7 +66,7 @@
 | :---------------------------------------------------------------- | :-------------------------------------------- |
 | Clear terminal                                                    | <kbd>Ctrl</kbd>+<kbd>L</kbd>                  |
 | Stop the program and return to the console (the project stays open) | <kbd>Ctrl</kbd>+<kbd>Q</kbd>                  |
-| Restart project                                                   | <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>R</kbd>   |
+| Restart project                                                   | <kbd>Ctrl</kbd>+<kbd>R</kbd>               |
 | Exit application                                                  | <kbd>Ctrl</kbd>+<kbd>Esc</kbd>                |
 | Pause project                                                     | <kbd>Ctrl</kbd>+<kbd>Pause</kbd>              |
 | Toggle edit/run                                                   | <kbd>Ctrl</kbd>+<kbd>T</kbd>                  |
@@ -79,7 +80,7 @@
 | Jump to the end of the row                                        | <kbd>End</kbd>                                |
 | Insert newline                                                    | <kbd>Shift</kbd>+<kbd>Enter ⏎</kbd>           |
 | Undo / redo the typing                                            | <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> |
-| Delete the previous word                                          | <kbd>Ctrl</kbd>+<kbd>Backspace</kbd> / <kbd>Ctrl</kbd>+<kbd>W</kbd> / <kbd>Alt</kbd>+<kbd>Backspace</kbd> |
+| Delete the previous word                                          | <kbd>Ctrl</kbd>+<kbd>Backspace</kbd> / <kbd>Ctrl</kbd>+<kbd>W</kbd> |
 | Delete to the end of the line                                     | <kbd>Ctrl</kbd>+<kbd>K</kbd>                  |
 | Move the cursor's line up / down                                  | <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>⇧</kbd>/<kbd>⇩</kbd> |
 | Place the cursor                                                  | click in the field                            |

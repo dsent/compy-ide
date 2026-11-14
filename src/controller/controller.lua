@@ -1166,7 +1166,9 @@ Controller = {
     -- shortcuts and hook sit above its widget and are promised
     -- every text event, so the project route still offers it
     -- to them, and it goes no further: no fall-through to the
-    -- console either.
+    -- console either. The glyph of a reserved chord (Ctrl+R's
+    -- r) reaches no one: the chord is the gate's, before or
+    -- after its key press.
     local chord_text = with_canvas_and_errors(CC, function(t)
       return Controller.project_input:chord_text(t)
     end)
@@ -1175,6 +1177,7 @@ Controller = {
       Blink.restart()
       if not love.textinput then return end
       if Key.chord_text(t) then
+        if RESERVED.keypressed[combo_string(t)] then return end
         local console = Controller._defaults.textinput
         if love.textinput == console then return end
         return chord_text(t)
@@ -1198,11 +1201,27 @@ Controller = {
     --- @param btn integer
     --- @param touch boolean
     --- @param presses number
+    -- While a key card shows, the mouse does nothing, as the
+    -- keys do nothing (the maintainer's ruling of November
+    -- 14, late): no press, release, move, wheel or derived
+    -- click reaches the console, the editor or a program
+    -- behind the console's card. A button's release goes
+    -- where its press went: a press held back under the card
+    -- holds back its release, after the card too, and a
+    -- press that went through gets its release under the
+    -- card, so that no route is left with half a click.
+    local held_press = { }
+
     -- The gateway entry: hand the event to whoever occupies
     -- the slot. Under a project run that is the project
     -- route's chain; otherwise the console's own handler.
     handlers.mousepressed = function(x, y, btn, touch, presses)
       Blink.restart()
+      if CC:card_shows() then
+        held_press[btn] = true
+        return
+      end
+      held_press[btn] = nil
       if btn == 1 then
         press_pos, press_dragged = { x = x, y = y }, false
       end
@@ -1217,6 +1236,10 @@ Controller = {
     --- @param touch boolean
     --- @param presses number
     handlers.mousereleased = function(x, y, btn, touch, presses)
+      if held_press[btn] then
+        held_press[btn] = nil
+        return
+      end
       local result
       if love.mousereleased then
         result = love.mousereleased(x, y, btn, touch, presses)
@@ -1232,6 +1255,7 @@ Controller = {
     --- @param touch boolean
     handlers.mousemoved = function(x, y, dx, dy, touch)
       track_click_motion(x, y)
+      if CC:card_shows() then return end
       if love.mousemoved then
         return love.mousemoved(x, y, dx, dy, touch)
       end
@@ -1247,6 +1271,7 @@ Controller = {
     --- @param x number
     --- @param y number
     handlers.wheelmoved = function(x, y)
+      if CC:card_shows() then return end
       if love.wheelmoved then
         return love.wheelmoved(x, y)
       end
@@ -1259,6 +1284,7 @@ Controller = {
     -- on those routes the slot is simply empty.
     for _, name in ipairs(_derived) do
       handlers[name] = function(x, y)
+        if CC:card_shows() then return end
         if love[name] then return love[name](x, y) end
       end
     end

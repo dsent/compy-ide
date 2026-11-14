@@ -66,8 +66,6 @@ local DEFS = {
   with(key('backspace_word', 'delete a word'),
     { chords = { 'ctrl+backspace', 'ctrl+w' },
       card = 'Ctrl+Bksp/W', repeats = true }),
-  with(key('backspace_word'),
-    { chords = { 'alt+backspace' }, repeats = true }),
   with(key('kill', 'delete to end'),
     { chords = { 'ctrl+k' }, card = 'Ctrl+K', repeats = true }),
   --- the cursor's line moves past its neighbor

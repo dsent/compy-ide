@@ -566,7 +566,7 @@ describe("IS1 files #editor #spec", function()
     for _, exit in ipairs({
       { "Ctrl+T", { "lctrl", "t" } },
       { "Ctrl+Q", { "lctrl", "q" } },
-      { "Ctrl+Alt+R", { "lctrl", "lalt", "r" } },
+      { "Ctrl+R", { "lctrl", "r" } },
     }) do
       spec_it("IS3.11 Preserve state on refusal: " .. exit[1] ..
           " during an insertion is refused with a notice",

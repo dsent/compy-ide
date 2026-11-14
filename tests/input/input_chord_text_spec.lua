@@ -721,7 +721,7 @@ describe("a key pressed under AltGr makes no chord #input",
     end)
 
     in_both_orders("in the console, AltGr+R types and starts "
-        .. "no program (Ctrl+Alt+R does)", function(order)
+        .. "no program (Ctrl+R does)", function(order)
       K.reset()
       chord(order, WINDOWS_ALTGR, "r", "®")
       assert.same("®", K.console_draft())
@@ -764,14 +764,20 @@ describe("a key pressed under AltGr makes no chord #input",
     end)
 
     it("left Ctrl and right Alt with the left Alt too are "
-        .. "still Ctrl+Alt+R", function()
+        .. "still Ctrl+Alt+R: a project's shortcut fires", function()
       K.reset()
+      local input = F.activate_project()
+      local fired = 0
+      input.shortcuts.keypressed["ctrl+alt+r"] = function()
+        fired = fired + 1
+        return true
+      end
       chord(ORDERS[2], {
         "lctrl",
         "lalt",
         "ralt"
       }, "r")
-      assert.is_true(K.cc.run_live)
+      assert.same(1, fired)
     end)
   end)
 
@@ -806,11 +812,17 @@ describe("a key pressed under AltGr makes no chord #input",
       assert.same("b\na", K.console_draft())
     end)
 
-    it("left Ctrl with the right Alt and R is Ctrl+Alt+R",
-        function()
+    it("left Ctrl with the right Alt and R is Ctrl+Alt+R: a "
+        .. "project's shortcut fires", function()
       K.reset()
+      local input = F.activate_project()
+      local fired = 0
+      input.shortcuts.keypressed["ctrl+alt+r"] = function()
+        fired = fired + 1
+        return true
+      end
       chord(ORDERS[2], WINDOWS_ALTGR, "r", "r")
-      assert.is_true(K.cc.run_live)
+      assert.same(1, fired)
     end)
   end)
 end)

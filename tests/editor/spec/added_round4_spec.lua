@@ -164,7 +164,7 @@ describe("round four #editor #spec", function()
   describe("a notice and the key that hides the editor", function()
     local RUNS = {
       ["Ctrl+T"] = { "lctrl", "t" },
-      ["Ctrl+Alt+R"] = { "lctrl", "lalt", "r" },
+      ["Ctrl+R"] = { "lctrl", "r" },
     }
     for run, keys in pairs(RUNS) do
       spec_it("IS3.14 Explain a refusal: a notice shown before "
@@ -488,7 +488,7 @@ describe("round four #editor #spec", function()
     local LEAVES = {
       ["Ctrl+J"] = { "lctrl", "j" },
       ["Ctrl+T"] = { "lctrl", "t" },
-      ["Ctrl+Alt+R"] = { "lctrl", "lalt", "r" },
+      ["Ctrl+R"] = { "lctrl", "r" },
       ["Ctrl+Q"] = { "lctrl", "q" },
     }
 

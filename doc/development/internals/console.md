@@ -46,7 +46,7 @@ This is the most non-obvious architectural decision in the console. There are th
 
 **`project_env`** — the mutable environment in which a project's code runs. Started as a clone of `base_env`, then the project's own `require`/`dofile` calls and global assignments accumulate here. Reset to `base_env` on `_reset_executor_env()`.
 
-The reason for `base_env` vs `project_env`: restarting a project (`Ctrl+Alt+R`) should give it a clean global table, but reopening the project should not — the distinction allows "reset project state" without "close and reopen".
+The reason for `base_env` vs `project_env`: restarting a project (`Ctrl+R`) should give it a clean global table, but reopening the project should not — the distinction allows "reset project state" without "close and reopen".
 
 Sources: `prepare_env` and `prepare_project_env` (consoleController.lua:341 and 482), `_set_base_env`, `_reset_executor_env`.
 

@@ -73,7 +73,7 @@ Project-author guide: `doc/input_api.md`.
   after a project moves it with `compy.input`.
 - **A notice is orange, the parser's message red.** The message above the status
   line has no frame.
-- **Leaving waits for the edit to end.** Ctrl+T, Ctrl+Q and Ctrl+Alt+R are refused
+- **Leaving waits for the edit to end.** Ctrl+T, Ctrl+Q and Ctrl+R are refused
   with a notice while there is text in the field or a block is being replaced; submit
   it or drop it first. Ctrl+J is refused the same way.
 - **Ctrl+Q stops the program and returns to the console; the project stays open.**
@@ -128,6 +128,9 @@ Project-author guide: `doc/input_api.md`.
   the end of the line. With an empty field Home goes to the first block and End to the
   end of the file, where new text is added.
 - **Formatting the file is Alt+F.** Ctrl+F is kept free for a search to come.
+- **Ctrl+R runs the project anew**, in the console, the editor and over a running
+  program; Ctrl+Alt+R does nothing now. The `r` a Compy sends with the chord reaches no
+  field and no program. The terminal example restarts the micro:bit with Alt+R.
 - **Ctrl+G goes back to the block being replaced.** While replacing, it brings the
   highlight back to the block loaded with F2 and shows it; the field's text stays. In
   the other states it does nothing.
@@ -141,7 +144,7 @@ Project-author guide: `doc/input_api.md`.
   first block. A block taller than the screen is paged through first. They work in
   every state, and repeat while held.
 - **One text field, the same everywhere.** The console, the file editor and a program's
-  input field take the same keys: Ctrl+Backspace, Alt+Backspace and Ctrl+W delete what
+  input field take the same keys: Ctrl+Backspace and Ctrl+W delete what
   Ctrl+Left moves over (at a line's start, the line break and the word before it),
   Ctrl+K the rest of the line, and Alt+Shift+Up and
   Alt+Shift+Down move the cursor's line, in every field. Alt+Up and Alt+Down move a
@@ -170,7 +173,7 @@ Project-author guide: `doc/input_api.md`.
   Ctrl+Enter no longer submits in the console or a program's input, Ctrl+Up and
   Ctrl+Down no longer move or recall in the console, and Shift+Escape no longer cancels
   a program's input. The F1 key card is drawn from the same key tables and lists every
-  key the editor or the console takes, the reserved ones (Ctrl+T, Ctrl+Q, Ctrl+Alt+R,
+  key the editor or the console takes, the reserved ones (Ctrl+T, Ctrl+Q, Ctrl+R,
   Ctrl+Esc) included, but the trivial ones: the arrows, Home and End within a draft,
   Backspace, Delete and paging. Ctrl+Home and Ctrl+End, to the text's start and end,
   are on it. Only a bare F1 brings it up.
@@ -261,7 +264,9 @@ Project-author guide: `doc/input_api.md`.
   shortcut, the card showed while the program kept them; there F1 is the program's
   now, and Ctrl+Q stops the program while F1 is held, with or without other keys
   pressed since. A card that shows stays until F1 is released, and so does the pause
-  of the keys it holds back.
+  of the keys it holds back. While a card shows the mouse does nothing: a click no
+  longer moves the hidden draft's cursor, and no pointer event reaches a program
+  behind the console's card.
 - **A `#!` first line is kept, and edited like any line.** Alt+F and `tidy()`
   keep it, F2 loads it, and a cut takes it out; a change that would leave a `#!` line
   anywhere but first, or put anything above it, is refused, since Lua could not run

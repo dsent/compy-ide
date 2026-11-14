@@ -243,7 +243,7 @@ describe('editor key contract #input', function()
     -- opened in. The gate's shortcuts reach the console
     -- before the editor sees the key. Ctrl+Q leaves the
     -- editor for the console and keeps the project open; a
-    -- run (Ctrl+Alt+R) keeps the buffers for Ctrl+T, and
+    -- run (Ctrl+R) keeps the buffers for Ctrl+T, and
     -- closing the project drops them; Ctrl+Shift+R is dropped
     -- (the reserved map of 2026-11-14).
     local stubbed = { 'close_project', 'run_project' }
@@ -292,9 +292,8 @@ describe('editor key contract #input', function()
       assert.same('main.lua', ed:get_active_buffer().name)
     end)
 
-    it('Ctrl+Alt+R keeps the way back for Ctrl+T', function()
+    it('Ctrl+R keeps the way back for Ctrl+T', function()
       F.session.press('lctrl')
-      F.session.press('lalt')
       F.session.press('r')
 
       assert.is_not.equal('editor', love.state.app_state)

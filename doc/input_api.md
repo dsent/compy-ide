@@ -472,8 +472,8 @@ and only a bare Escape cancels: each chord is a key of its own, and a chord the
 widget does not name does nothing in it (Ctrl+Enter, Shift+Escape, Ctrl+Up).
 Shift+Enter and Alt+Enter insert a newline. Ctrl+Z and Ctrl+Y undo and redo
 the user's typing; setting or clearing the text forgets what there was to
-undo. The widget's keys are the console's and the file editor's: Ctrl+Backspace,
-Alt+Backspace and Ctrl+W delete what Ctrl+Left moves over (a word is a run of
+undo. The widget's keys are the console's and the file editor's: Ctrl+Backspace
+and Ctrl+W delete what Ctrl+Left moves over (a word is a run of
 letters, digits and underscores; at a line's start, the line break and the word
 before it), Ctrl+K the rest of its line, and Alt+Shift+Up and Alt+Shift+Down
 move its line; Home and End go to
@@ -719,7 +719,8 @@ makes a chord, and on a Compy its character still arrives on the
 tiers ① and ② like any other text event, so `shortcuts.textinput['ctrl+j']`,
 `'alt+*'` and your `textinput` hook all see it with its modifiers. It stops
 there: the widget never types it, and it does not fall through to the
-console's prompt either. Shift alone composes text. On a Compy the right Alt
+console's prompt either. The character of a reserved combo (the table below),
+such as Ctrl+R's `r`, reaches nothing at all. Shift alone composes text. On a Compy the right Alt
 key is an Alt like the left one, so what it sends is a chord's character
 too, whatever the character. On a computer running the IDE, the right Alt
 key is AltGr and composes text in the keyboard layout set there: whatever
@@ -853,7 +854,7 @@ yourself.
 | Combo | What the platform does | When |
 |---|---|---|
 | `ctrl+escape` (on **release**) | exits the whole IDE at once: the run is not stopped first, and `compy.before_exit` does not run | always |
-| `ctrl+alt+r` | restarts the project | always |
+| `ctrl+r` | restarts the project | always |
 | `ctrl+t` | switches between running and the editor | development only |
 | `ctrl+q` | stops the run and returns to the console; the project stays open. From the editor, leaves it for the console | development only |
 | `ctrl+pause` | suspends the run | development only |
@@ -884,7 +885,7 @@ overlay uses Alt+H (`doc/development/keyboard.md` is the per-key availability
 table, measured on a stock Compy).
 
 Ctrl+Q leaves the editor for the console, with every file you had opened in
-it, and the project stays open. Ctrl+Alt+R leaves the editor too, and so does Ctrl+T while you browse the file. Ctrl+Shift+R does nothing
+it, and the project stays open. Ctrl+R leaves the editor too, and so does Ctrl+T while you browse the file. Ctrl+Shift+R does nothing
 in the editor. None of the exits asks a
 question. While there is text in the editor's field, or a block is
 loaded to be replaced, each is refused with a notice: submit the text with

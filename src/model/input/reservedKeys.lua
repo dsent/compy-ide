@@ -18,7 +18,9 @@ return {
     --- with no program it does nothing
     console = { live = 'exit program' },
   },
-  { chord = 'ctrl+alt+r', name = 'restart', card = 'Ctrl+Alt+R',
+  --- run anew (the maintainer's ruling of November 14, late:
+  --- Ctrl is the family of the global keys)
+  { chord = 'ctrl+r', name = 'restart', card = 'Ctrl+R',
     editor = { browsing = 'run anew' },
     console = { idle = 'run anew', live = 'run anew' },
   },

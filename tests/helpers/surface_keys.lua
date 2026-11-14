@@ -20,7 +20,6 @@ S.EXEMPT = {
   ["shift+kpenter"] = "alias of Shift+Enter",
   ["alt+kpenter"] = "alias of Alt+Enter",
   ["shift+backspace"] = "alias of Backspace",
-  ["alt+backspace"] = "alias of Ctrl+Backspace",
   f5 = "debug build",
   ["ctrl+f5"] = "debug build",
   ["ctrl+alt+t"] = "debug build",

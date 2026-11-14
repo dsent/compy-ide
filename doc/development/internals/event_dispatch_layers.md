@@ -34,7 +34,7 @@ The function body grabs the table LÖVE itself exposes — `local handlers = lov
 Each raw handler does exactly two jobs, in order:
 
 1. **Route-independent framework concerns** that must run no matter which route is currently
-   active: the global power hotkeys — Ctrl+T quickswitch (`controller.lua:879-900`), Ctrl+Alt+R
+   active: the global power hotkeys — Ctrl+T quickswitch (`controller.lua:879-900`), Ctrl+R
    restart (`:928-932`), Ctrl+Alt+P / F10 profiler toggle (`:933-955`), Ctrl+Esc quit (on the
    *release* side, `handlers.keyreleased`, `:997-998`), and on that side the end of a press the
    console or the file editor recorded, which ends the key card (`CC:key_released`). The raw

@@ -74,7 +74,6 @@ describe("one text field everywhere #input", function()
     { { "lshift", "backspace" }, "one two\nthreefour", { 2, 6 } },
     { { "delete" }, "one two\nthree our", { 2, 7 } },
     { { "lctrl", "backspace" }, "one two\nfour", { 2, 1 } },
-    { { "lalt", "backspace" }, "one two\nfour", { 2, 1 } },
     { { "lctrl", "w" }, "one two\nfour", { 2, 1 } },
     { { "lctrl", "k" }, "one two\nthree ", { 2, 7 } },
     { { "lshift", "return" }, "one two\nthree \nfour", { 3, 1 } },
@@ -104,7 +103,7 @@ describe("one text field everywhere #input", function()
     { "lshift", "delete" }, { "lctrl", "delete" },
     { "lalt", "left" }, { "lalt", "home" }, { "lalt", "end" },
     -- removed on November 14, 2026, late
-    { "lctrl", "d" },
+    { "lctrl", "d" }, { "lalt", "backspace" },
   }
   for _, keys in ipairs(UNBOUND) do
     it(table.concat(keys, "+") .. " does nothing in any field",
@@ -117,6 +116,22 @@ describe("one text field everywhere #input", function()
         end
       end)
   end
+
+  -- dropped (the maintainer's ruling of November 14, late):
+  -- Ctrl+Backspace and Ctrl+W delete a word
+  it("Alt+Backspace does nothing in any field and shows no "
+      .. "notice", function()
+    for _, owner in ipairs(ORDER) do
+      local f = field_of(owner)
+      local before = state(f)
+      K.keys("lalt", "backspace")
+      assert.same(before, state(f), owner)
+      if owner == "editor" then assert.is_nil(K.message()) end
+      if owner == "console" then
+        assert.same("one two\nthree four", K.console_draft())
+      end
+    end
+  end)
 
   it("Alt+Up and Alt+Down do nothing in the console or a "
       .. "program's field", function()
@@ -177,7 +192,7 @@ describe("one text field everywhere #input", function()
       { "x = ёлка", { "x = " }, { 1, 5 } },
     }
     for _, keys in ipairs({ { "lctrl", "backspace" },
-      { "lalt", "backspace" }, { "lctrl", "w" } }) do
+      { "lctrl", "w" } }) do
       local name = table.concat(keys, "+")
       for _, case in ipairs(CASES) do
         it(name .. " on " .. case[1] .. " deletes what Ctrl+Left "

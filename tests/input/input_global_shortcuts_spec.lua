@@ -29,7 +29,7 @@ local mock = require('tests.mock')
 -- input_shortcuts_click_spec.lua's play-mode case). `reset`
 -- is the method Ctrl+Shift+R called until the key was dropped
 -- (2026-11-14): the stub keeps it to show nothing calls it.
--- @param combo string  mock.keystroke syntax, e.g. 'C-M-r'
+-- @param combo string  mock.keystroke syntax, e.g. 'C-r'
 -- @return table  {restart = true?, reset = true?}
 local function drive_stub(combo)
   local calls = { }
@@ -408,9 +408,16 @@ describe('input surface: inbound events — global platform'
           assert.is_true(project_ran)
         end)
 
-      it('ctrl+alt+r still restarts', function()
-        local calls = drive_stub('C-M-r')
+      -- run anew is Ctrl+R since the ruling of November 14,
+      -- late; Ctrl+Alt+R, the teacher's family, is nobody's
+      it('ctrl+r restarts', function()
+        local calls = drive_stub('C-r')
         assert.is_true(calls.restart)
+      end)
+
+      it('ctrl+alt+r no longer restarts', function()
+        local calls = drive_stub('C-M-r')
+        assert.is_nil(calls.restart)
       end)
 
       it('ctrl+alt+shift+r no longer restarts', function()
@@ -448,7 +455,7 @@ describe('input surface: inbound events — global platform'
   describe('reserved combos, own effect not yet asserted',
     function()
 
-      pending('ctrl+alt+r restarts the current project')
+      pending('ctrl+r restarts the current project')
       pending('ctrl+alt+p / ctrl+alt+shift+p start/stop the'
         .. ' oneshot profiler (love.PROFILE gated)')
       -- Disagreement with the enumeration read off the source

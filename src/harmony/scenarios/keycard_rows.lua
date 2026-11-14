@@ -150,8 +150,8 @@ local EDITOR = {
     ['Ctrl+T'] = { 'run the project', function(wait)
       runs(wait, 'C-t')
     end },
-    ['Ctrl+Alt+R'] = { 'run anew', function(wait)
-      runs(wait, 'C-A-r')
+    ['Ctrl+R'] = { 'run anew', function(wait)
+      runs(wait, 'C-r')
     end },
     ['Ctrl+Esc'] = { 'quit the IDE', quits },
     ['Alt+F'] = { 'format the file', function(wait)
@@ -406,9 +406,9 @@ local CONSOLE = {
     D.in_state('editor')
     D.leave(wait)
   end },
-  ['Ctrl+Alt+R'] = { 'run anew', function(wait)
+  ['Ctrl+R'] = { 'run anew', function(wait)
     D.key(wait, 'escape')
-    runs(wait, 'C-A-r')
+    runs(wait, 'C-r')
   end },
   ['Ctrl+L'] = { 'clear screen', function(wait)
     D.key(wait, 'escape')

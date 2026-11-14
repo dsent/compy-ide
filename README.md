@@ -31,7 +31,7 @@ a project must be selected first.
 | :---------------------------------------------------------------- | :-------------------------------------------- |
 | Clear terminal                                                    | <kbd>Ctrl</kbd>+<kbd>L</kbd>                  |
 | Stop the program and return to the console (the project stays open) | <kbd>Ctrl</kbd>+<kbd>Q</kbd>                  |
-| Restart project                                                   | <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>R</kbd>   |
+| Restart project                                                   | <kbd>Ctrl</kbd>+<kbd>R</kbd>               |
 | Exit application                                                  | <kbd>Ctrl</kbd>+<kbd>Esc</kbd>                |
 | Pause project                                                     | <kbd>Ctrl</kbd>+<kbd>Pause</kbd>              |
 | Toggle edit/run                                                   | <kbd>Ctrl</kbd>+<kbd>T</kbd>                  |
@@ -45,7 +45,7 @@ a project must be selected first.
 | Jump to the end of the row                                        | <kbd>End</kbd>                                |
 | Insert newline                                                    | <kbd>Shift</kbd>+<kbd>Enter ⏎</kbd>           |
 | Undo / redo the typing                                            | <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> |
-| Delete the previous word                                          | <kbd>Ctrl</kbd>+<kbd>Backspace</kbd> / <kbd>Ctrl</kbd>+<kbd>W</kbd> / <kbd>Alt</kbd>+<kbd>Backspace</kbd> |
+| Delete the previous word                                          | <kbd>Ctrl</kbd>+<kbd>Backspace</kbd> / <kbd>Ctrl</kbd>+<kbd>W</kbd> |
 | Delete to the end of the line                                     | <kbd>Ctrl</kbd>+<kbd>K</kbd>                  |
 | Move the cursor's line up / down                                  | <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>⇧</kbd>/<kbd>⇩</kbd> |
 | Place the cursor                                                  | click in the field                            |
@@ -237,7 +237,7 @@ Paths will be searched in the following order:
 
 | Command          | Combination                                 |
 | :--------------- | :------------------------------------------ |
-| Restart project  | <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>R</kbd> |
+| Restart project  | <kbd>Ctrl</kbd>+<kbd>R</kbd>             |
 | Exit application | <kbd>Ctrl</kbd>+<kbd>Esc</kbd>              |
 
 #

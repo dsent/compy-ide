@@ -59,7 +59,7 @@ local function field_keys(wait, which)
 end
 
 --- The word deletions, in field `which`, starting empty:
---- Ctrl+Backspace, Alt+Backspace and Ctrl+W remove exactly
+--- Ctrl+Backspace and Ctrl+W remove exactly
 --- what Ctrl+Left moves over (IS3.8, the ruling on word
 --- deletion), the non-word characters before the cursor, then
 --- the word; at the start of a line, the line break and the
@@ -74,7 +74,7 @@ local function word_keys(wait, which, clear)
     { 'f(x)', 'f(' },
     { 'a.b', 'a.' },
   }
-  for _, k in ipairs({ 'C-backspace', 'A-backspace', 'C-w' }) do
+  for _, k in ipairs({ 'C-backspace', 'C-w' }) do
     for _, c in ipairs(cases) do
       D.type(wait, c[1])
       D.key(wait, k)

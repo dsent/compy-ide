@@ -64,7 +64,7 @@ describe('input surface: inbound events — shortcuts and clicks'
           love.state.app_state = 'running'
           Controller.setup_callback_handlers(stub)
           local kp = love.handlers.keypressed
-          mock.keystroke('C-M-r', kp, false)
+          mock.keystroke('C-r', kp, false)
           mock.keystroke('C-q', kp, false)
           for k, v in pairs(saved) do love.handlers[k] = v end
           love.keypressed = saved_kp
