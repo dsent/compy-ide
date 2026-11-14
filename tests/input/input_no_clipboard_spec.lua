@@ -40,9 +40,6 @@ describe("no system clipboard in the field #input", function()
       K.reset()
       K.type("abc")
       love.system.setClipboardText("ZZ")
-      if label ~= "Shift+Ins" then
-        K.keys("lshift", "home")
-      end
       K.keys(unpack(keys))
       assert.same("abc", K.console_draft())
       assert.same("ZZ", K.clipboard())
@@ -56,18 +53,5 @@ describe("no system clipboard in the field #input", function()
     K.keys("lctrl", "v")
     assert.same("", K.draft())
     assert.same("browsing", K.state())
-  end)
-
-  -- a selection stays: typing replaces it, and Shift+Delete
-  -- deletes it as Delete does, through no clipboard
-  it("in the console, Shift+Delete deletes the selection and "
-      .. "copies nothing", function()
-    K.reset()
-    K.type("abc")
-    love.system.setClipboardText("ZZ")
-    K.keys("lshift", "home")
-    K.keys("lshift", "delete")
-    assert.same("", K.console_draft())
-    assert.same("ZZ", K.clipboard())
   end)
 end)

@@ -81,15 +81,12 @@ local DEFS = {
     repeats = true }),
   --- the terminal cleared
   with(both('clear_terminal'), { chords = { 'ctrl+l' } }),
-  --- Shift with a move selects; a selection, or a character
-  --- with Shift still held, is deleted; Alt+Up and Alt+Down
-  --- move the cursor's line
-  with(both('field'), { chords = { 'shift+left', 'shift+right',
-    'shift+up', 'shift+down', 'shift+home', 'shift+end',
-    'ctrl+shift+left', 'ctrl+shift+right', 'ctrl+shift+home',
-    'ctrl+shift+end', 'shift+backspace', 'shift+delete',
-    'alt+up', 'alt+down', 'alt+shift+up', 'alt+shift+down' },
-    repeats = true }),
+  --- the field's own keys, as in every field: the word
+  --- deletions, the rest of the line, the cursor's line moved
+  --- past its neighbor, and a Backspace with Shift still held
+  with(both('field'), { chords = { 'ctrl+backspace',
+    'alt+backspace', 'ctrl+w', 'ctrl+k', 'alt+shift+up',
+    'alt+shift+down', 'shift+backspace' }, repeats = true }),
   --- with love.DEBUG: the terminal test
   with(both('terminal_test'), { chords = { 'ctrl+alt+t' } }),
 }

@@ -1,5 +1,5 @@
 require("model.editor.content")
-local lua = require('model.editor.luaLayer')
+local Syntax = require('model.syntax')
 local bsi = require("model.editor.bufferSemanticInfo")
 
 local class = require('util.class')
@@ -56,14 +56,14 @@ end
 --- Blocks that would not give back every line as read come
 --- the same way: a line lost on opening is lost on the next
 --- save.
---- @param chunker Chunker
+--- @param syntax table --- the file's syntax (model.syntax)
 --- @param lines string[]
 --- @return Dequeue<Block> blocks
---- @return boolean invalid --- the text did not parse, or
---- its blocks would not keep it
-local function file_blocks(chunker, lines)
-  local ok, blocks = chunker(lines)
-  if ok then
+--- @return boolean invalid --- the syntax could not split the
+--- text, or its blocks would not keep it
+local function file_blocks(syntax, lines)
+  local blocks = syntax.blocks(lines)
+  if blocks then
     for _, b in ipairs(blocks) do
       local l = b:is_empty() and b.pos and lines[b.pos.start]
       if l and l ~= '' then b.text = l end
@@ -84,24 +84,20 @@ end
 --- Todo: convert to class, store revmap
 --- @alias Content Dequeue<string>|Dequeue<Block>
 
+--- The editor's former names of the three syntaxes, which the
+--- views not moved to the syntax yet still read
+local CONTENT_TYPE = { lua = 'lua', markdown = 'md', text = 'plain' }
+
 --- @param name string
 --- @param content str --- the file's text, or its lines
 --- @param save function
---- @param chunker Chunker?
---- @param highlighter Highlighter?
---- @param printer Printer?
---- @param truncer function?
+--- @param syntax table? --- the file's syntax (model.syntax);
+--- by the name's extension when not given
 --- @return BufferModel?
-local function new(
-    name,
-    content,
-    save,
-    chunker,
-    highlighter,
-    printer,
-    truncer)
-  local _content, sel, ct, semantic
-  local invalid = false
+local function new(name, content, save, syntax)
+  if type(syntax) ~= 'table' or not syntax.blocks then
+    syntax = Syntax.for_name(name)
+  end
   --- lines are held without their line ends (textfile.lines
   --- reads LF, CRLF and a lone CR); the first save writes the
   --- file with LF ends (textfile.text). `stored`
@@ -115,42 +111,18 @@ local function new(
     lines = type(content) == 'table' and string.lines(content)
         or textfile.lines(content)
   end
-
-  local function plaintext()
-    ct = 'plain'
-    --- a block per line (IS8)
-    _content = Dequeue(lines, 'string')
-    sel = 1
-  end
-  --- only passing this around so the linter shuts up about nil
-  --- @param chk function
-  local function luacontent(chk)
-    ct = 'lua'
-    _content, invalid = file_blocks(chk, lines)
-    sel = 1
-  end
-
-  if type(chunker) == "function" then
-    luacontent(chunker)
-  elseif type(highlighter) == 'function' then
-    plaintext()
-    ct = 'md'
-  else
-    plaintext()
-  end
+  local blocks, invalid = file_blocks(syntax, lines)
 
   local self = {
     name = name or 'untitled',
-    content = _content,
-    content_type = ct,
+    content = blocks,
+    syntax = syntax,
+    content_type = CONTENT_TYPE[syntax.name] or syntax.name,
     save_file = save,
-    chunker = chunker,
-    highlighter = highlighter,
-    printer = printer,
-    truncer = truncer,
+    --- the views still color a Lua block by itself
+    highlighter = function(t) return syntax.highlight(t) end,
     revmap = {},
-    semantic = semantic,
-    selection = sel,
+    selection = 1,
     active_line = 1,
     invalid = invalid,
     stored = stored,
@@ -177,15 +149,13 @@ end
 --- @field loaded integer?
 --- @field key string? --- the file's identity, project and name
 --- @field input UserInputModel --- the file's own editor field
---- @field invalid boolean --- a Lua file whose text does not
---- parse: its blocks are its lines, until it parses again
+--- @field syntax table --- the file's syntax (model.syntax)
+--- @field invalid boolean --- a file whose syntax cannot split
+--- it: its blocks are its lines, until the syntax can again
 --- @field semantic BufferSemanticInfo?
 --- @field revmap table?
 ---
---- @field chunker Chunker
 --- @field highlighter Highlighter
---- @field printer Printer
---- @field truncer function
 --- @field move_selection function
 --- @field get_selection function
 --- @field get_selected_text function
@@ -288,11 +258,7 @@ function BufferModel:_splice(start, n_out, lines_in)
   local at = carry((self:_span_of(self.selection)))
   for _ = 1, n_out do table.remove(lines, start) end
   for i = n_in, 1, -1 do table.insert(lines, start, lines_in[i]) end
-  if self.content_type == 'lua' then
-    self.content, self.invalid = file_blocks(self.chunker, lines)
-  else
-    self.content = Dequeue(lines)
-  end
+  self.content, self.invalid = file_blocks(self.syntax, lines)
   self:set_selection(self:_position_of_line(at))
 end
 
@@ -320,7 +286,7 @@ local READ_FIELDS = {
 --- @param content string? --- nil: the file is missing
 function BufferModel:reload(content)
   local fresh = BufferModel(self.name, content, self.save_file,
-    self.chunker, self.highlighter, self.printer, self.truncer)
+    self.syntax)
   for _, k in ipairs(READ_FIELDS) do
     self[k] = fresh[k]
   end
@@ -351,14 +317,12 @@ function BufferModel:redo()
   return step
 end
 
+--- The files the text names (IS1.5), each with its block
 function BufferModel:analyze()
-  if self.content_type ~= 'lua' then return end
-  local lines = string.lines(self:get_text_content())
-  local ok, blocks, ast = self.chunker(lines)
-  if not ok then return end
-  local anaok, refs = pcall(lua.references, ast)
+  local lines = self:snapshot().lines
+  local anaok, refs = pcall(self.syntax.references, lines)
   if not anaok then return end
-  for bi, v in ipairs(blocks) do
+  for bi, v in ipairs(self.content) do
     if (v.pos) then
       for _, l in ipairs(v.pos:enumerate()) do
         self.revmap[l] = bi
@@ -369,9 +333,8 @@ function BufferModel:analyze()
 end
 
 function BufferModel:rechunk()
-  if self.content_type ~= 'lua' then return end
-  local content = self:get_text_content()
-  self.content, self.invalid = file_blocks(self.chunker, content)
+  local content = self:snapshot().lines
+  self.content, self.invalid = file_blocks(self.syntax, content)
 end
 
 --- A file is written as its lines, each with an LF line
@@ -386,10 +349,7 @@ function BufferModel:save()
 end
 
 function BufferModel:highlight()
-  if self.highlighter then
-    local text = self:get_text_content()
-    self.hl = self.highlighter(text)
-  end
+  self.hl = self.syntax.highlight(self:snapshot().lines)
 end
 
 --- @return Dequeue
@@ -402,20 +362,13 @@ end
 function BufferModel:get_text_content()
   --- TODO require
   require = _G.o_require or _G.require
-  if self.content_type == 'lua'
-  then
-    return render_blocks(self.content)
-  else
-    return self.content:items()
-  end
+  return render_blocks(self.content)
 end
 
 --- @return SyntaxColoring? hl
 function BufferModel:get_highlight()
-  if self.highlighter
-  then
-    return self.hl
-  end
+  if self.hl == nil then self:highlight() end
+  return self.hl
 end
 
 --- Returns number of lines/blocks
@@ -488,8 +441,6 @@ end
 --- @private
 --- @return Block?
 function BufferModel:_get_selected_block()
-  if self.content_type == 'plain' then return end
-
   local sel = self.selection
   if sel == self:get_content_length() + 1 then
     local last = self.content:last()
@@ -502,23 +453,16 @@ end
 --- Get the line number of selection first line
 --- @return integer
 function BufferModel:get_selection_start_line()
-  if self.content_type == 'lua' then
-    local b = self:_get_selected_block()
-    if b then
-      local ln = b.pos.start
-      return ln
-    end
-  end
+  local b = self:_get_selected_block()
+  if b and b.pos then return b.pos.start end
   return self.selection
 end
 
 --- Source-line span of the selected block
 --- @return Range
 function BufferModel:get_selection_lines()
-  if self.content_type == 'lua' then
-    local b = self:_get_selected_block()
-    if b and b.pos then return b.pos end
-  end
+  local b = self:_get_selected_block()
+  if b and b.pos then return b.pos end
   return Range.singleton(self.selection)
 end
 
@@ -531,12 +475,6 @@ end
 --- @param ln integer
 --- @return integer? block index
 function BufferModel:block_at_line(ln)
-  if self.content_type ~= 'lua' then
-    if ln >= 1 and ln <= self:get_content_length() then
-      return ln
-    end
-    return nil
-  end
   for i, b in ipairs(self.content) do
     if b.pos and b.pos:inc(ln) then return i end
   end
@@ -607,18 +545,12 @@ end
 --- Return the selection as string array
 --- @return string[]
 function BufferModel:get_selected_text()
-  local sel = self.selection
-  if self.content_type == 'lua' then
-    --- @type Block
-    local s = self.content[sel]
-    if table.is_instance(s, 'chunk') then
-      return table.clone(s.lines)
-    else
-      return {}
-    end
-  else
-    return self.content[sel] or {}
+  --- @type Block
+  local s = self.content[self.selection]
+  if table.is_instance(s, 'chunk') then
+    return table.clone(s.lines)
   end
+  return {}
 end
 
 ------------------
@@ -627,14 +559,9 @@ end
 
 --- @param rechunk boolean?
 function BufferModel:_text_change(rechunk)
-  if self.content_type == 'lua' then
-    if rechunk then
-      self:rechunk()
-      self:rechunk()
-    end
-  else
-    self:highlight()
-  end
+  if rechunk then self:rechunk() end
+  --- colored again when asked (get_highlight)
+  self.hl = nil
 end
 
 function BufferModel:delete_selected_text()
@@ -651,178 +578,6 @@ function BufferModel:delete_selected_text()
   --- just removed; left stale it drags the cursor
   --- outside whatever is opened next
   self:clamp_active_line()
-end
-
---- @param t string[]|Block[]
---- @param coord integer?
---- @return boolean insert
---- @return integer? inserted_lines
-function BufferModel:replace_content(t, coord)
-  if self.content_type == 'lua' then
-    local chunks = t
-    local n = #chunks
-    if n == 0 then
-      return false
-    end
-    local blocknum = coord or self:get_selection()
-    local rechunk = false
-    --- content start and original length
-    local cs, ol = (function()
-      local current = self.content[blocknum]
-      if current then
-        return current.pos.start, self.content[blocknum].pos:len()
-      end
-      local last = self.content:last()
-      if last then
-        return self.content:last().pos.fin + 1, 0
-      else --- empty file
-        return 1, 0
-      end
-    end)()
-
-    if n == 1 then
-      local c = chunks[1]
-      local nr = c.pos:translate(cs - 1)
-      c.pos = nr
-      self.content[blocknum] = chunks[1]
-    else
-      --- remove old chunk
-      self.content:remove(blocknum)
-      --- insert new version of the chunk(s)
-      for i = #chunks, 1, -1 do
-        local c = chunks[i]
-        local nr = c.pos:translate(cs - 1)
-        c.pos = nr
-        self.content:insert(c, blocknum)
-      end
-      rechunk = true
-    end
-    --- move subsequent chunks down
-    local diff = chunks[n].pos:len() - ol
-    if diff ~= 0 then
-      for i = blocknum + 1, self:get_content_length() do
-        local b = self.content[i]
-        b.pos = b.pos:translate(diff)
-      end
-    end
-
-    self:_text_change(rechunk)
-    return true, n
-  else
-    local linenum = coord or self:get_selection()
-    local clen = #(self.content)
-    local ti = linenum
-    if #t == 1 then
-      self.content[ti] = t[1]
-      if ti > clen then
-        self:_text_change()
-        return true, 1
-      end
-    else
-      self.content:remove(ti)
-      for i = #t, 1, -1 do
-        self.content:insert(t[i], ti)
-      end
-      self:_text_change()
-      return true, #t
-    end
-    return false
-  end
-end
-
---- Insert a new line or empty block _before_ the selection
---- Returns true if a block/line was inserted
---- @param i integer?
---- @return boolean?
-function BufferModel:insert_newline(i)
-  --- block or line number
-  local bln = i or self:get_selection()
-  if self.content_type == 'lua' then
-    local b = self.content[bln]
-    if not b then return end
-
-    local prev_b = self.content[bln - 1]
-    -- disallow consecutive empties
-    local prev_empty = prev_b and prev_b:is_empty()
-    local sel_empty = b:is_empty()
-    local cons = prev_empty or sel_empty
-    if cons then return end
-
-    local ln = self:get_selection_start_line()
-    self.content:insert(Empty(ln), bln)
-    self:_text_change(true)
-    return true
-  else
-    self.content:insert('', bln)
-    self:_text_change()
-    return true
-  end
-end
-
---- Insert new lines or blocks
---- Returns success flag and number of inserted
---- @param t string[]|Block[]
---- @param lbn integer?
---- @return boolean?
---- @return integer? inserted_lines
-function BufferModel:insert_content(t, lbn)
-  local num = lbn or self:get_selection()
-  local len = self:get_content_length() + 1
-  if num < 1 or num > len then
-    return false
-  end
-  if self.content_type == 'lua' then
-    local chunks = t
-    local n = #chunks
-    if n == 0 then
-      return false
-    end
-    --- content start and original length
-    local cs, ol = (function()
-      local current = self.content[num]
-      if current then
-        return current.pos.start,
-            self.content[num].pos:len()
-      end
-      local last = self.content:last()
-      if last then
-        return self.content:last().pos.fin + 1, 0
-      else --- empty file
-        return 1, 0
-      end
-    end)()
-
-    local oldlen = self:get_content_length()
-
-    for i = #chunks, 1, -1 do
-      local c = chunks[i]
-      local nr = c.pos:translate(cs - 1)
-      c.pos = nr
-      self.content:insert(c, num)
-    end
-
-    --- move subsequent chunks down
-    local diff = chunks[n].pos:len() - ol
-    if diff ~= 0 then
-      for i = num + 1, self:get_content_length() do
-        local b = self.content[i]
-        b.pos = b.pos:translate(diff)
-      end
-    end
-
-    self:_text_change(true)
-    -- rechunk in #text_change may erase some new empty blocks
-    -- so factual n of blocks added should be recalculated
-    local newlen = self:get_content_length()
-    return true, (newlen - oldlen)
-  else
-    local ti = num
-    for i = #t, 1, -1 do
-      self.content:insert(t[i], ti)
-    end
-    self:_text_change()
-    return true, #t
-  end
 end
 
 --- Block `i` goes to place `npos`, its lines and the
@@ -877,10 +632,6 @@ end
 --- @return integer len --- its lines, 0 at the end position
 function BufferModel:_span_of(bn)
   local n = self:get_content_length()
-  if self.content_type ~= 'lua' then
-    if bn > n then return n + 1, 0 end
-    return bn, 1
-  end
   local b = self.content[bn]
   if b then return b.pos.start, b.pos:len() end
   local last = self.content[n]
@@ -896,15 +647,16 @@ function BufferModel:_position_of_line(ln)
       or self:get_content_length() + 1
 end
 
---- @return boolean --- the file's text loads as a Lua chunk:
---- blocks that each parse may still not run together, as
---- with code after a final `return`
---- @return string? err --- Lua's reason when it does not
+--- Whether the file holds together as its syntax reads it:
+--- for Lua, blocks that each parse may still not run
+--- together, as with code after a final `return`
+--- @return boolean ok
+--- @return string? why --- the syntax's notice when it does
+--- not
+--- @return boolean? merges --- it does not because two blocks
+--- now read as one
 function BufferModel:loads()
-  if self.content_type ~= 'lua' then return true end
-  local text = table.concat(self:get_text_content(), '\n')
-  local chunk, err = loadstring(text)
-  return chunk ~= nil, err
+  return self.syntax.loads(self:snapshot().lines)
 end
 
 --- The lines of the block at `bn`; nil for an empty line
@@ -913,10 +665,6 @@ end
 --- @return string[]?
 function BufferModel:block_lines(bn)
   local b = self.content[bn]
-  if self.content_type ~= 'lua' then
-    if b == nil or b == '' then return nil end
-    return { b }
-  end
   if b == nil or b:is_empty() then return nil end
   return table.clone(b.lines)
 end

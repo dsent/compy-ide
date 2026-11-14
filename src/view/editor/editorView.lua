@@ -36,9 +36,7 @@ function EditorView:draw()
   if ViewUtils.conditional_draw('show_buffer') then
     --- the view's area ends where the status line's band
     --- starts
-    local band = self.input:status_y(rows)
-        - self.cfg.statusline_border / 2
-    bv:draw(false, band)
+    bv:draw(false, self.input:status_y(rows))
   end
   if ViewUtils.conditional_draw('show_input') then
     gfx.push('all')
@@ -100,12 +98,13 @@ function EditorView:draw_message(bv)
   local colors = cf.colors.input
   local fh = cf.fh
   local width = gfx.getWidth()
-  local bottom = self.input.start_h - cf.statusline_border / 2
+  local bottom = self.input.start_h
   local top = bottom - #rows * fh
   --- from the top of the view's row the band reaches into,
   --- so that no row of the view shows cut
-  local pitch = bv:row_height()
-  local from = math.floor(top / pitch) * pitch
+  local pitch, origin = bv:row_height(), bv:top()
+  local from = origin
+      + math.floor((top - origin) / pitch) * pitch
 
   gfx.push('all')
   gfx.setFont(cf.font)

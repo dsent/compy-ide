@@ -108,8 +108,8 @@ TextEval = Evaluator.plain('text')
 
 --- the language layer's parser, with the file editor's
 --- account of where a parse fails (IS3.4) beside it
-local luaLayer = require('model.editor.luaLayer')
-local luaParser = luaLayer.parser()
+local luaSyntax = require('model.syntax.lua')
+local luaParser = luaSyntax.parser()
 local luaTools = {
   parser = luaParser,
   highlighter = luaParser.highlighter

@@ -1,14 +1,12 @@
--- The document view draws whole rows only, from the screen's
--- top at the console's pitch: a row hidden beyond either
--- edge leaves no part of itself on the screen, the last row
--- shown reaches under the status line's border at most, as
--- the console's last row does, and a text file's rows sit on
+-- Every row of the screen is one height, on one grid from the
+-- top: the console's output rows, the document view's, the
+-- status line's and the field's. The document view draws
+-- whole rows only: a row hidden beyond either edge leaves no
+-- part of itself on the screen, and a text file's rows sit on
 -- the same rows as a Lua file's.
 
 local K = require("tests.helpers.editor_keys")
-
---- the line height main.lua gives the font on a Compy
-local LINE_HEIGHT = 1.0468
+local Layout = require("view.layout")
 
 local function view_cfg()
   return K.cc.view.cfg.view
@@ -19,17 +17,16 @@ local function pitch()
 end
 
 --- What the view's draw leaves wrong of its texts in screen
---- `s`: each text off the rows counted from the screen's top,
---- above the screen, more than one row, or in a row that
---- reaches under the status line beyond its border.
+--- `s`: each text off the grid, above the view or under the
+--- status line, or more than one row.
 local function off_rows(s)
   local fh, band = pitch(), s.field_y
-  local border = view_cfg().statusline_border / 2
+  local top = Layout(view_cfg()).top
   local wrong = { }
   for _, t in ipairs(s.texts) do
-    local k = t.y / fh
+    local k = (t.y - top) / fh
     local on_row = math.abs(k - math.floor(k + 0.5)) < 1e-6
-    local inside = 0 <= t.y and t.y + fh <= band + border
+    local inside = top <= t.y and t.y + fh <= band
     if not (on_row and inside) or t.text:find("\n") then
       wrong[#wrong + 1] = string.format("%q at %.3f", t.text, t.y)
     end
@@ -60,20 +57,32 @@ describe("the document view's rows #editor", function()
       ["notes.txt"] = lines(20, 64),
       ["notes.md"] = lines(20, 64),
     })
-    view_cfg().lh = LINE_HEIGHT
   end)
 
-  it("have the console's pitch, and 16 of them fill the space "
-      .. "above the status line", function()
-    K.open("tall.lua")
-    local s = K.screen()
+  it("have the screen's one height: the console's output and "
+      .. "the view take 16, the status line follows", function()
     local cfg = view_cfg()
-    assert.same(cfg.fh * cfg.lh, pitch())
-    local band = s.field_y
-    local rows = K.ed.view:get_current_buffer():get_height()
-    assert.same(16, rows)
-    assert.is_true(math.abs(rows * pitch() - band)
-      <= cfg.statusline_border / 2)
+    local l = Layout(cfg)
+    -- the console
+    local s = K.screen()
+    assert.same(1, s.field_rows)
+    assert.same(16 * cfg.fh, K.cc.view.drawable_height)
+    assert.same(l.top + 16 * cfg.fh, s.field_y)
+    -- the editor: no strip above the status line
+    K.open("tall.lua")
+    s = K.screen()
+    assert.same(cfg.fh, pitch())
+    local bv = K.ed.view:get_current_buffer()
+    assert.same(16, bv:get_height())
+    assert.same(l.top + 16 * cfg.fh, s.field_y)
+    -- a taller field takes whole rows of the view
+    K.browse_to(2)
+    K.keys("f2")
+    s = K.screen()
+    assert.is_true(1 < s.field_rows)
+    assert.same(l.top + bv:get_height() * cfg.fh, s.field_y)
+    assert.same(cfg.h - l.bottom,
+      s.field_y + l.status_h + s.field_rows * cfg.fh)
   end)
 
   it("a target taller than the view above a taller field "

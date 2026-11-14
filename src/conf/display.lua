@@ -15,4 +15,14 @@ return {
   columns = width / char_width,
   --- lines the input shows: the most one block may have
   input_lines = 14,
+  --- the height of every row of the screen, in pixels: the
+  --- output's, the document view's, the status line's and the
+  --- field's, on one grid from the top. 18 of them take 594
+  --- of the screen's 600.
+  row_height = 33,
+  --- where the pixels the rows leave go: 'status' makes the
+  --- status line that much taller, its text centred in it;
+  --- 'top' or 'bottom' keeps them as a strip at that edge of
+  --- the screen, reserved for indicators
+  spare = 'status',
 }

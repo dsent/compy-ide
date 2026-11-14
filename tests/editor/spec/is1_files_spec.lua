@@ -561,13 +561,12 @@ describe("IS1 files #editor #spec", function()
     -- implementation, does on Ctrl+Q (the lead's call, pending
     -- the maintainer's confirmation): the exit is refused with
     -- a notice and the state kept, as Ctrl+J is above.
-    -- Ctrl+Shift+R left this list on 2026-11-14, when the key
-    -- was dropped.
+    -- Ctrl+Shift+R and Ctrl+Shift+S left this list on
+    -- 2026-11-14, when the keys were dropped.
     for _, exit in ipairs({
       { "Ctrl+T", { "lctrl", "t" } },
       { "Ctrl+Q", { "lctrl", "q" } },
       { "Ctrl+Alt+R", { "lctrl", "lalt", "r" } },
-      { "Ctrl+Shift+S", { "lctrl", "lshift", "s" } }
     }) do
       spec_it("IS3.11 Preserve state on refusal: " .. exit[1] ..
           " during an insertion is refused with a notice",
@@ -612,17 +611,29 @@ describe("IS1 files #editor #spec", function()
     end)
 
     spec_it("IS3.11 Preserve state on refusal: once the edit " ..
-        "is aborted, Ctrl+Shift+S leaves the editor", function()
+        "is aborted, Ctrl+Q leaves the editor", function()
       K.open()
       K.type("w = 4")
-      K.keys("lctrl", "lshift", "s")
+      K.keys("lctrl", "q")
       assert.same("editor", K.app_state())
       -- one Escape: the notice goes and the edit with it
       K.keys("escape")
       assert.same("browsing", K.state())
       assert.same("editor", K.app_state())
-      K.keys("lctrl", "lshift", "s")
+      K.keys("lctrl", "q")
       assert.same("ready", K.app_state())
+    end)
+
+    spec_it("IS3.11 Preserve state on refusal: Ctrl+Shift+S, "
+        .. "dropped on 2026-11-14, does nothing", function()
+      K.open()
+      K.keys("lctrl", "lshift", "s")
+      assert.same("editor", K.app_state())
+      K.type("w = 4")
+      K.keys("lctrl", "lshift", "s")
+      assert.same("editor", K.app_state())
+      assert.same("w = 4", K.draft())
+      assert.is_nil(K.message())
     end)
 
     -- Ctrl+Q in the file editor (the reserved map of

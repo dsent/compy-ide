@@ -3,6 +3,7 @@ require("view.editor.visibleContent")
 require("view.editor.visibleStructuredContent")
 
 local class = require("util.class")
+local Layout = require("view.layout")
 require("util.scrollable")
 require("util.table")
 -- local B = require("util.block")
@@ -302,11 +303,66 @@ function BufferView:scroll_block(dir)
   return false
 end
 
+--- Where PgDn or PgUp goes (the maintainer's ruling of
+--- November 14, 2026), as browsing. While rows of the browsed
+--- block are hidden beyond the view's edge in `dir`, the view
+--- moves a page further into it, to the block's own edge at
+--- most, and the browsing position stays (as IS2.2 does a row
+--- at a time). Otherwise PgDn goes to the first block not
+--- wholly visible below, shown from the view's top, and PgUp
+--- to the last block not wholly visible above, shown to the
+--- view's bottom; with none, PgDn goes to the end position
+--- and PgUp to the first block, the view following.
+--- @param dir VerticalDir
+--- @return integer? b --- the block to browse to, nil while
+--- the view moves through the browsed block
+--- @return integer? top --- the view's first row, nil to
+--- follow the browsing position
+function BufferView:page(dir)
+  --- the view as the person sees it: following the position
+  --- first would move it by its row of context
+  local top = self.content:get_range().start
+  local h = self:get_height()
+  local bottom = top + h - 1
+  local s, e = self:_browsed_rows()
+  if s <= e and dir == 'down' and bottom < e then
+    return nil, math.min(bottom + 1, e - h + 1)
+  end
+  if s <= e and dir == 'up' and s < top then
+    return nil, math.max(top - h, s)
+  end
+  local n = self.buffer:get_content_length()
+  if dir == 'down' then
+    for b = 1, n do
+      local rows = self:_block_rows(b)
+      if 0 < #rows and bottom < rows[#rows] then
+        return b, rows[1]
+      end
+    end
+    return n + 1, nil
+  end
+  for b = n, 1, -1 do
+    local rows = self:_block_rows(b)
+    if 0 < #rows and rows[1] < top then
+      return b, math.max(1, rows[#rows] - h + 1)
+    end
+  end
+  return 1, nil
+end
+
+--- Show the view from row `top`, as far as the file allows
+--- @param top integer
+function BufferView:show_from(top)
+  self:_show_from(top)
+end
+
 --- Source line at a vertical pixel position, if any
 --- @param y number
 --- @return integer? ln
 function BufferView:line_at(y)
-  local row = math.max(1, math.floor(y / self:row_height()) + 1)
+  local pitch = self:row_height()
+  local row = math.floor((y - self:top()) / pitch) + 1
+  row = math.max(1, row)
   local wrapped = self.content.offset + row
   if not self.content.range:inc(wrapped) then
     return nil
@@ -335,13 +391,18 @@ end
 --------------
 
 --- The height of one row of the view, in pixels: the
---- console's, the font's height at the configured line
---- height, so that the view's rows are where the console's
---- output rows are and 16 of them fill the space above the
---- status line.
+--- screen's one row height, so that the view's rows are where
+--- the console's output rows and the field's rows are.
 --- @return number
 function BufferView:row_height()
-  return self.cfg.fh * self.cfg.lh
+  return self.cfg.fh
+end
+
+--- Where the view's first row starts: under the strip the
+--- screen may reserve at its top.
+--- @return number
+function BufferView:top()
+  return Layout(self.cfg).top
 end
 
 --- @param special boolean
@@ -361,10 +422,13 @@ function BufferView:draw(special, bottom)
   local range = vc.range
   local off = vc.offset
   local rows_n = self:get_height()
-  --- The view draws whole rows only, from the screen's top.
-  --- What its rows leave above the status line is the last
-  --- row's: its background and highlight run on to the line.
-  local edge = rows_n * fh
+  --- The view draws whole rows only, on the screen's grid.
+  --- What its rows leave above the status line, if anything,
+  --- is the last row's: its background and highlight run on
+  --- to the line. A strip reserved at the screen's top takes
+  --- the first row's.
+  local top = self:top()
+  local edge = top + rows_n * fh
   local strip = 0
   if bottom then
     strip = math.max(0, bottom - edge)
@@ -373,7 +437,7 @@ function BufferView:draw(special, bottom)
   --- @param v integer --- a wrapped row of the content
   --- @return number
   local function row_y(v)
-    return (v - off - 1) * fh
+    return top + (v - off - 1) * fh
   end
 
   local draw_background = function()
@@ -383,7 +447,7 @@ function BufferView:draw(special, bottom)
     gfx.setColor(Color.with_alpha(colors.fg, .0625))
     local n = math.min(#content_text, rows_n)
     if 0 < n then
-      local bh = n * fh
+      local bh = top + n * fh
       if n == rows_n then
         bh = bh + strip
       end
@@ -400,12 +464,14 @@ function BufferView:draw(special, bottom)
       gfx.setColor(color)
       for _, v in ipairs(rows) do
         if range:inc(v) then
-          local h = fh
+          local y, h = row_y(v), fh
           if v == off + rows_n then
             h = fh + strip
           end
-          gfx.rectangle('fill', inset, row_y(v),
-            width - 2 * inset, h)
+          if v == range.start then
+            y, h = 0, h + y
+          end
+          gfx.rectangle('fill', inset, y, width - 2 * inset, h)
         end
       end
     end
@@ -475,7 +541,7 @@ function BufferView:draw(special, bottom)
         --- phantom text
         gfx.setColor(Color.with_alpha(colors.fg, 0.3))
         local text = string.unlines(content_text)
-        gfx.print(text)
+        gfx.print(text, 0, top)
       end
     elseif self.content_type == 'md' then
       draw_rows(content_text, self.hl,

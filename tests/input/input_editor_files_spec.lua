@@ -243,7 +243,6 @@ describe('the editor across files #input', function()
     --- the field holds the block's only copy (IS6.2): no exit
     --- may drop it
     local exits = {
-      { 'Ctrl+Shift+S', { 'lctrl', 'lshift', 's' } },
       { 'Ctrl+T', { 'lctrl', 't' } },
       { 'Ctrl+Q', { 'lctrl', 'q' } },
     }
@@ -278,7 +277,7 @@ describe('the editor across files #input', function()
       --- the edit ends first: opening a file over a draft is
       --- refused, since the field may hold a cut block alone
       chord('escape')
-      chord('lctrl', 'lshift', 's')
+      chord('lctrl', 'q')
       assert.same('ready', love.state.app_state)
 
       files['new.lua'] = 'fresh = 1\n'

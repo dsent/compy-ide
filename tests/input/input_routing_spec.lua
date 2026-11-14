@@ -62,18 +62,15 @@ describe('input surface: inbound events — routing #input',
     -- so the cell is visible, not silent.
     pending('routes the key release to the console')
 
-    -- The production widget disables selection, so an
-    -- observable selection on the console route witnesses
-    -- active-route pointer delivery. The precondition assert
-    -- pins causality: no selection existed before the pointer
-    -- events. (doc/development/internals/user_input.md, "Input
-    -- widget mouse").
+    -- A click places the console's cursor, which witnesses
+    -- active-route pointer delivery: the text was set with the
+    -- cursor at its end (doc/development/internals/
+    -- user_input.md, "Input widget mouse").
     it('routes the pointer to the console', function()
       F.console:set_text({ 'aa', 'bb', 'cc' })
-      assert.is_false(F.console.model:has_selection())
+      local before = { F.console:get_cursor_pos() }
       F.session.mousepressed(10, 540, 1, false, 1)
-      F.session.mousereleased(40, 508, 1, false, 1)
-      assert.is_true(F.console.model:has_selection())
+      assert.are_not.same(before, { F.console:get_cursor_pos() })
     end)
   end)
 

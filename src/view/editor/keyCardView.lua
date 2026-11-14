@@ -1,4 +1,5 @@
 local class = require('util.class')
+local Layout = require("view.layout")
 local KeyCard = require('model.editor.keyCard')
 
 --- The key card (IS3.16): drawn over the document view and
@@ -65,14 +66,18 @@ function KeyCardView:draw_cells(cells, colors, statusline,
   local rows, width = self:size()
   local grid, col_w, key_w, cols =
       KeyCard.layout(cells, rows, width)
-  local status_y = cf.h - fh
+  --- the card's rows on the screen's grid, the status line
+  --- on the field's row; a strip reserved at an edge takes
+  --- the card's ground
+  local l = Layout(cf)
+  local status_y = cf.h - l.bottom - l.status_h
 
   gfx.push('all')
   gfx.setFont(cf.font)
   gfx.setColor(colors.bg)
-  gfx.rectangle('fill', 0, 0, cf.w, status_y)
+  gfx.rectangle('fill', 0, 0, cf.w, cf.h)
   for r, row in ipairs(grid) do
-    local y = (r - 1) * fh
+    local y = l.top + (r - 1) * fh
     for c = 1, cols do
       local cell = row[c]
       local x = ((c - 1) * col_w + 1) * fw

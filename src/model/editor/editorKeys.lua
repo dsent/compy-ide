@@ -124,38 +124,25 @@ local DEFS = {
     { chords = { 'f1' }, card = 'F1 (hold)' }),
 
   --- not on the card --------------------------------------
-  --- Shift+Delete cuts as well, in the browsing state only;
-  --- with a draft it is the field's Delete
+  --- Shift+Delete cuts as well, in the browsing state only
   { chords = { 'shift+delete' }, repeats = true,
-    browsing = { act = 'cut_block' },
-    inserting = { act = 'field' },
-    replacing = { act = 'field' } },
-  --- PgUp and PgDn browse ten blocks (PR #28, D-PAGING)
+    browsing = { act = 'cut_block' } },
+  --- PgDn shows the first block not wholly visible below at
+  --- the view's top, PgUp the last not wholly visible above
+  --- at its bottom, and browses to it (the maintainer's
+  --- ruling of November 14, 2026)
   with(each('page'), { chords = { 'pageup', 'pagedown' },
-    repeats = true }),
-  --- Alt with a page or edge key moves the view alone (PR
-  --- #28, D-ALT-LOOK)
-  with(each('peek'), { chords = { 'alt+pageup', 'alt+pagedown',
-    'alt+left', 'alt+right', 'alt+home', 'alt+end' },
     repeats = true }),
   --- the draft's word deletions (D-WORD-DELETE), its line
   --- duplicated (D-DUPLICATE-LINE) or moved past its
-  --- neighbor, a Backspace with Shift still held, and Shift
-  --- with a move, which moves the cursor: the field has no
-  --- selection here
+  --- neighbor, and a Backspace with Shift still held: the
+  --- field's own keys, as in every field
   with(each('field'), { chords = { 'ctrl+backspace',
     'alt+backspace', 'ctrl+w', 'ctrl+d', 'alt+shift+up',
-    'alt+shift+down', 'shift+backspace',
-    'shift+left', 'shift+right', 'shift+up', 'shift+down',
-    'shift+home', 'shift+end', 'ctrl+shift+left',
-    'ctrl+shift+right', 'ctrl+shift+home', 'ctrl+shift+end' },
-    repeats = true }),
+    'alt+shift+down', 'shift+backspace' }, repeats = true }),
   --- the whole file formatted, from the browsing state (PR
-  --- #28, D-FORMAT-FILE)
-  { chords = { 'ctrl+shift+f' },
-    browsing = { act = 'format_file' } },
-  --- deprecated: leaves the editor, refused during an edit
-  with(each('leave'), { chords = { 'ctrl+shift+s' } }),
+  --- #28, D-FORMAT-FILE); refused with a notice in an edit
+  with(each('format_file'), { chords = { 'ctrl+shift+f' } }),
   --- with love.debug: the view drawn anew, the file split
   --- anew with Ctrl
   with(each('debug_refresh'), { chords = { 'f5', 'ctrl+f5' } }),

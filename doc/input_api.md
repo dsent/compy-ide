@@ -472,8 +472,14 @@ and only a bare Escape cancels: each chord is a key of its own, and a chord the
 widget does not name does nothing in it (Ctrl+Enter, Shift+Escape, Ctrl+Up).
 Shift+Enter and Alt+Enter insert a newline. Ctrl+Z and Ctrl+Y undo and redo
 the user's typing; setting or clearing the text forgets what there was to
-undo. The widget has no clipboard: Ctrl+C, Ctrl+X, Ctrl+V, Ctrl+Insert and
-Shift+Insert change nothing in it. On a non-empty submission the order is:
+undo. The widget's keys are the console's and the file editor's: Ctrl+Backspace,
+Alt+Backspace and Ctrl+W delete the word before the cursor, Ctrl+K the rest of
+its line, and Alt+Shift+Up and Alt+Shift+Down move its line; Home and End go to
+the ends of the cursor's row, Ctrl+Home and Ctrl+End to the ends of the text. A
+click places the cursor. The widget has no selection (Shift with an arrow does
+nothing, and a drag selects nothing) and no clipboard: Ctrl+C, Ctrl+X, Ctrl+V,
+Ctrl+Insert and Shift+Insert change nothing in it. On a non-empty submission
+the order is:
 
 1. `before_submit(text)`, if assigned. A truthy return vetoes the
    submit: steps 2-4 do not run and the text stays.
@@ -875,14 +881,8 @@ and debug gestures to letter chords instead: an example that wants a held help
 overlay uses Alt+H (`doc/development/keyboard.md` is the per-key availability
 table, measured on a stock Compy).
 
-Ctrl+Shift+S also does something in the **editor** — it leaves the editor — but
-that is the editor's own handling, not a reservation: it applies when you are
-editing, not while your project runs. Bare Ctrl+S does nothing there; the
-editor keeps it for itself.
-
 Ctrl+Q leaves the editor for the console, with every file you had opened in
-it, and the project stays open. Ctrl+Shift+S and Ctrl+Alt+R leave the editor
-too, and so does Ctrl+T while you browse the file. Ctrl+Shift+R does nothing
+it, and the project stays open. Ctrl+Alt+R leaves the editor too, and so does Ctrl+T while you browse the file. Ctrl+Shift+R does nothing
 in the editor. None of the exits asks a
 question. While there is text in the editor's field, or a block is
 loaded to be replaced, each is refused with a notice: submit the text with

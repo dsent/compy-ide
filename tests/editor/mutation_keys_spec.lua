@@ -47,6 +47,11 @@ describe("mutation survivors, keys #editor", function()
       assert.same(2, before.target)
       assert.same("y = 20", before.draft)
       assert.same(LOOSE, before.file)
+      -- it says why, in a notice, and changes nothing else
+      local msg = K.message()
+      assert.truthy(msg and msg:find("Finish editing first", 1,
+        true))
+      before.message = msg
       assert.same(before, held_state())
     end)
 
@@ -56,6 +61,10 @@ describe("mutation survivors, keys #editor", function()
       K.keys("lctrl", "lshift", "f")
       assert.same("z = 3", before.draft)
       assert.same(LOOSE, before.file)
+      local msg = K.message()
+      assert.truthy(msg and msg:find("Finish the text first", 1,
+        true))
+      before.message = msg
       assert.same(before, held_state())
     end)
   end)
@@ -95,6 +104,8 @@ describe("mutation survivors, keys #editor", function()
     end)
   end)
 
+  -- Shift+Delete is bound in no field (the ruling of
+  -- November 14, 2026: one text field, the same everywhere)
   describe("Shift+Delete with text in the field", function()
     before_each(function()
       K.reset({ ["main.lua"] = FILE })
@@ -102,26 +113,22 @@ describe("mutation survivors, keys #editor", function()
       K.browse_to(2)
     end)
 
-    it("deletes a character of an insertion draft, no block",
+    it("changes nothing in an insertion, no block cut",
         function()
       K.type("abc")
       K.keys("home")
+      local before = held_state()
       K.keys("lshift", "delete")
-      assert.same("bc", K.draft())
-      assert.is_nil(K.message())
-      assert.same(FILE, K.file())
-      assert.same(2, K.position())
+      assert.same(before, held_state())
     end)
 
-    it("deletes a character of a replacement draft, no block",
+    it("changes nothing in a replacement, no block cut",
         function()
       K.keys("f2")
       K.keys("home")
+      local before = held_state()
       K.keys("lshift", "delete")
-      assert.same(" = 2", K.draft())
-      assert.same(2, K.target())
-      assert.is_nil(K.message())
-      assert.same(FILE, K.file())
+      assert.same(before, held_state())
     end)
   end)
 

@@ -896,7 +896,6 @@ local SCREEN = {
 --- which only drawing reads.
 local function complete_cfg()
   local v = F.cfg.view
-  v.statusline_border = v.statusline_border or 4
   v.drawableWidth = v.drawableWidth or v.w
 end
 
@@ -955,9 +954,11 @@ function K.screen(also)
   end
   assert(ok, e)
   if screen.field_y then
-    local fh = F.cfg.view.fh
-    local below = lg.getHeight() - screen.field_y
-    screen.field_rows = math.floor(below / fh + 0.5) - 1
+    local v = F.cfg.view
+    local l = require("view.layout")(v)
+    local below = lg.getHeight() - l.bottom - screen.field_y
+        - l.status_h
+    screen.field_rows = math.floor(below / v.fh + 0.5)
   end
   return screen
 end

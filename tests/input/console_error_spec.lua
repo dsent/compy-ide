@@ -266,9 +266,10 @@ describe('console error message #input', function()
         assert.equal(failing, text())
       end)
 
-    -- Shift's own press is held back with the message up; the
-    -- selection it starts must still cover what Home passes.
-    it('Shift+Home selects the line, and a glyph replaces it',
+    -- Shift's own press is held back with the message up; a
+    -- field has no selection (the ruling of November 14, 2026),
+    -- so Shift+Home closes the message and does nothing else
+    it('Shift+Home closes the message, and a glyph is added',
       function()
         fail()
         F.session.press('lshift')
@@ -276,7 +277,7 @@ describe('console error message #input', function()
         F.session.release('lshift')
         assert.is_false(F.console:has_error())
         key('x')
-        assert.equal('x', text())
+        assert.equal(failing .. 'x', text())
       end)
   end)
 end)

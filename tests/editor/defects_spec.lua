@@ -17,22 +17,6 @@ describe("editor defects #editor", function()
     K.open()
   end)
 
-  it("Alt+End scrolls the view to the end of the file",
-      function()
-    local t = { }
-    for i = 1, 40 do
-      t[i] = "v" .. i .. " = " .. i
-    end
-    K.reset({ ["main.lua"] = table.concat(t, "\n") .. "\n" })
-    K.open()
-    K.browse_to(1)
-    K.keys("lalt", "end")
-    local rows = K.view_rows()
-    assert.same("v40 = 40", rows[#rows])
-    assert.is_true(K.in_view(40))
-    assert.same(1, K.position())
-  end)
-
   it("text that would join the block before it is refused",
       function()
     K.reset({ ["main.lua"] = "f = print\ny = 2\n" })

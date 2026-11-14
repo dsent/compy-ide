@@ -28,7 +28,10 @@ local function getMockConf(w, l)
       drawableChars = w or wrap,
       lines = l or 16,
       input_max = 14,
-      fh = 32,
+      --- a Compy's screen height and row height
+      --- (conf/display.lua)
+      h = 600,
+      fh = 33,
       lh = 1,
     },
   }

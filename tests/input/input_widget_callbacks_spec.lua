@@ -1160,7 +1160,7 @@ describe('input surface: widget callbacks #input', function()
     -- construction, like user_input_view_spec.lua.
     local function bare_uic()
       local m = UserInputModel(F.cfg, InputEvalText)
-      local c = UserInputController(m, true)
+      local c = UserInputController(m)
       c:init_view({
         render = function() end,
         draw   = function() end,

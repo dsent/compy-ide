@@ -1,5 +1,5 @@
 require('util.string.string')
-local lua = require('model.editor.luaLayer')
+local lua = require('model.syntax.lua')
 local parser = lua.parser()
 
 --- Where a draft fails to parse (editor principles, IS3.4 and
@@ -145,13 +145,12 @@ describe('the editor on Lua text #editor', function()
 
   it('names the files of require and dofile written out',
     function()
-      local _, ast = parser.parse({
+      local refs = lua.references({
         'local m = require("mod")',
         'dofile("level.lua")',
         'require(name)',
         'local f = function() return require "deep" end',
       })
-      local refs = lua.references(ast)
       local got = {}
       for _, r in ipairs(refs) do
         got[#got + 1] = { r.line, r.name, r.file or false }

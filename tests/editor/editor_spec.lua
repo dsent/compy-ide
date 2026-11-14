@@ -81,16 +81,16 @@ describe('Editor #editor', function()
       controller:open('turtle', turtle_doc, save)
 
       local buffer = controller:get_active_buffer()
-      local bc = buffer:get_content()
 
-      assert.same(turtle_doc, bc)
+      assert.same(turtle_doc, buffer:get_text_content():items())
       assert.same(#turtle_doc, buffer:get_content_length())
 
       local sel = buffer:get_selection()
       local sel_t = buffer:get_selected_text()
       --- files open at the first line
       assert.same(1, sel)
-      assert.same(turtle_doc[1], sel_t)
+      --- the first line is empty: no text to select
+        assert.same({}, sel_t)
     end)
   end)
 
@@ -109,16 +109,15 @@ describe('Editor #editor', function()
       local start_sel = #turtle_doc
 
       it('opens', function()
-        local bc = buffer:get_content()
-
-        assert.same(turtle_doc, bc)
+        assert.same(turtle_doc, buffer:get_text_content():items())
         assert.same(#turtle_doc, buffer:get_content_length())
 
         local sel = buffer:get_selection()
         local sel_t = buffer:get_selected_text()
         --- files open at the first line
         assert.same(1, sel)
-        assert.same(turtle_doc[1], sel_t)
+        --- the first line is empty: no text to select
+        assert.same({}, sel_t)
       end)
 
     end)
@@ -289,7 +288,7 @@ describe('Editor #editor', function()
   --- end plaintext
 
   describe('structured (lua) works', function()
-    it('the console widget keeps plain keys', function()
+    it('the console widget has the field\'s keys', function()
       --- a console-style input: no editing flag
       local model = UserInputModel(
         TU.mock_view_cfg(), LuaEval(), 'console')
@@ -305,17 +304,18 @@ describe('Editor #editor', function()
       local press = function(k) con:keypressed(k) end
 
       model:add_text('one two')
-      --- the word deletions are the editor's alone, and a
-      --- chord the field does not name does nothing
+      --- the word deletions are every field's (the ruling of
+      --- November 14, 2026: one text field everywhere)
       mock.keystroke('C-backspace', press)
-      assert.same({ 'one two' }, model:get_text():items())
-      mock.keystroke('C-w', press)
-      assert.same({ 'one two' }, model:get_text():items())
+      assert.same({ 'one ' }, model:get_text():items())
 
-      --- Ctrl+Y is redo, with nothing to redo, and no longer
-      --- deletes the line; Ctrl+Z undoes (D-UNDO-KEYS)
-      mock.keystroke('C-y', press)
+      --- Ctrl+Z undoes and Ctrl+Y redoes, and no longer
+      --- deletes the line (D-UNDO-KEYS)
+      mock.keystroke('C-z', press)
       assert.same({ 'one two' }, model:get_text():items())
+      mock.keystroke('C-y', press)
+      assert.same({ 'one ' }, model:get_text():items())
+      mock.keystroke('C-z', press)
       mock.keystroke('C-z', press)
       assert.same({ '' }, model:get_text():items())
       mock.keystroke('C-y', press)
@@ -434,67 +434,6 @@ describe('Editor #editor', function()
 
     end)
 
-    describe('checkpoints', function()
-      --- The editor's own checkpoint keys are gone: the spec
-      --- gives Ctrl+K to the draft. The console still writes
-      --- and restores checkpoints, and revert() reads them.
-      --- No mock of the console here: a file must exist
-      --- afterwards with the right bytes, so a broken path
-      --- adapter, a broken FS.cp or a getInfo returning nil
-      --- cannot pass unnoticed.
-      it('cross the console filesystem adapter', function()
-        require("controller.consoleController")
-        local source_path = os.tmpname()
-        local checkpoint_path = source_path .. '.~save'
-        finally(function()
-          os.remove(source_path)
-          os.remove(checkpoint_path)
-        end)
-        assert.is_true(FS.write(source_path, 'x = 1\n'))
-
-        local project = {
-          get_path = function(_, name)
-            if name == 'main.lua' then return source_path end
-            return checkpoint_path
-          end,
-        }
-        local console = setmetatable({
-          model = { projects = { current = project } },
-        }, ConsoleController)
-
-        assert.is_true(console:write_checkpoint('main.lua'))
-        assert.is_true(FS.exists(checkpoint_path))
-        assert.is_number(console:checkpoint_modtime('main.lua'))
-        local checkpoint_ok, checkpoint = FS.read(checkpoint_path)
-        assert.is_true(checkpoint_ok)
-        assert.same('x = 1\n', checkpoint)
-
-        --- and back over a changed file, as revert() does
-        assert.is_true(FS.write(source_path, 'x = 2\n'))
-        assert.is_true(console:restore_checkpoint('main.lua'))
-        local source_ok, source = FS.read(source_path)
-        assert.is_true(source_ok)
-        assert.same('x = 1\n', source)
-      end)
-
-      it('restore without a checkpoint refuses', function()
-        require("controller.consoleController")
-        local source_path = os.tmpname()
-        finally(function() os.remove(source_path) end)
-        local project = {
-          get_path = function(_, name)
-            if name == 'main.lua' then return source_path end
-            return source_path .. '.~save'
-          end,
-        }
-        local console = setmetatable({
-          model = { projects = { current = project } },
-        }, ConsoleController)
-        assert.is_false(console:restore_checkpoint('main.lua'))
-        assert.is_nil(console:checkpoint_modtime('main.lua'))
-      end)
-    end)
-
     describe('tidy() in the REPL', function()
       require("controller.consoleController")
       local path, console, printed
@@ -536,6 +475,18 @@ describe('Editor #editor', function()
           local _, text = FS.read(path)
           assert.same(broken, text)
           assert.truthy(string.find(printed[1], 'line', 1, true))
+        end)
+
+      --- its syntax formats it, by the file's name: a Markdown
+      --- file has nothing to format
+      it('leaves a Markdown file, saying it has nothing to format',
+        function()
+          local text = '#  a  title\n'
+          assert.is_true(FS.write(path, text))
+          assert.is_false(console:tidy('notes.md'))
+          local _, after = FS.read(path)
+          assert.same(text, after)
+          assert.same('notes.md has nothing to format', printed[1])
         end)
     end)
 

@@ -36,10 +36,6 @@ local NOTICE = {
       .. ' one statement.',
   merge_move = 'Moving this would merge it with a neighbor'
       .. ' into one statement.',
-  after_return = 'Lua stops at a return or break;'
-      .. ' nothing can follow one.',
-  no_load = 'Lua could not run the file after this,'
-      .. ' so it stays as it is.',
 }
 
 --- @param buf BufferModel
@@ -519,11 +515,11 @@ end
 -----------------
 
 --- @private
---- Whether a Lua file reads as blocks of statements that
---- load: what _reuse_refusal keeps true. A file that does not
---- is exempt, so that it can be repaired: one Lua does not
---- load, and one the editor cannot read, whose blocks are its
---- lines and whose count says nothing of statements.
+--- Whether a file reads as blocks that hold together as its
+--- syntax reads them: what _reuse_refusal keeps true. A file
+--- that does not is exempt, so that it can be repaired: one
+--- that does not load, and one its syntax cannot split, whose
+--- blocks are its lines and whose count says nothing.
 --- @return boolean
 function EditorController:_reads_whole()
   local buf = self:get_active_buffer()
@@ -531,27 +527,21 @@ function EditorController:_reads_whole()
 end
 
 --- @private
---- A Lua file stays one chunk whose blocks read as they
---- stand (IS3.7): a change that would stop the file loading,
---- or join two blocks into one statement, is refused, with
---- Lua's own reason.
+--- A file stays one whole whose blocks read as they stand
+--- (IS3.7): a change that would stop it loading as its syntax
+--- reads it, or join two blocks into one, is refused, with
+--- the syntax's own reason (BufferModel:loads).
 --- @param whole boolean --- _reads_whole before the change
 --- @param count integer? --- the blocks it should hold now
 --- @param joined string --- the notice for a merge
 --- @return string? why
 function EditorController:_reuse_refusal(whole, count, joined)
   local buf = self:get_active_buffer()
-  if not whole or buf.content_type ~= 'lua' then return nil end
-  local loads, err = buf:loads()
+  if not whole then return nil end
+  local loads, why, merges = buf:loads()
   if not loads then
-    err = tostring(err)
-    --- Lua reads a line starting with `(` as a call of the
-    --- line before it, and says so
-    if err:find('ambiguous', 1, true) then return joined end
-    if err:find("'<eof>' expected", 1, true) then
-      return NOTICE.after_return
-    end
-    return NOTICE.no_load
+    if merges then return joined end
+    return why
   end
   if count and buf:get_content_length() ~= count then
     return joined

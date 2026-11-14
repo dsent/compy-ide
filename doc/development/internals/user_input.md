@@ -174,9 +174,9 @@ The console's input view is `input_max = 14` lines high; the editor's field show
 
 ### Selection
 
-Text selection works across lines. `Shift+arrow` extends selection; releasing shift releases it. `UserInputController.disable_selection` suppresses selection, and it is a **constructor argument, set per instance**: the console's widget is the only one that leaves it unset (`consoleController.lua:44`). The editor's input instance (`editorController.lua`) and **the project's widget** (`consoleController.lua`, `build_input_widget` — the instance published as `love.state.user_input_controller` for the length of a run) are all constructed with it — the editor because it uses its own block-level selection model rather than character-level selection in the input.
+No field selects text (the maintainer's ruling of 2026-11-14: the clipboard that needed a selection is gone, and both return with a design of their own). No key of the widget's table starts one, and the mouse places the cursor and selects nothing. The model's selection code (`model/input/selection.lua`, `hold_selection`, `pop_selected_text`, `mouse_click`/`mouse_release`/`mouse_drag` in `userInputModel.lua`) stays for that return; nothing in the widget reaches it now.
 
-Mouse click on the input widget (translated from screen coordinates to input grid via `_translate_to_input_grid`) sets the cursor position, and drag extends selection. There is one `UserInputController` class and the project route passes the `love.state.user_input_controller` instance as its widget, so there is no project-specific translation path — but **the translation is reached only by the console's widget**, because every mouse entry point returns immediately on `disable_selection` (`userInputController.lua:772,789,803,818`) and every other instance sets it. A project's input widget therefore does not take a click to the cursor at all, and did not at this branch's base either. The coordinate translation is bottom-relative: line 0 is the bottom line of the input, which is non-obvious.
+A click on the input widget (translated from screen coordinates to input grid via `_translate_to_input_grid`) places the cursor, in every field: the console's, the file editor's and a project's (the project route passes `love.state.user_input_controller` as its widget, so there is no project-specific translation path). The coordinate translation is bottom-relative: line 0 is the bottom line of the input, which is non-obvious.
 
 ### Error state
 
@@ -569,7 +569,7 @@ keyboard/text — see "Mouse Input" below for the current routing and what chang
 ### Editor-specific keys
 
 See `editor.md` for full detail. Key differences from console mode:
-- No history navigation (PageUp/Down browse ten blocks instead)
+- No history navigation (PageUp/Down page through the file instead)
 - Up/Down browse blocks while the input is empty; with text in it they move the cursor a row, and
   Ctrl+Up/Down browse in every state
 - F2 loads the viewed block's text into the input; Escape aborts an edit, and from the browsing
@@ -603,17 +603,18 @@ The project widget runs the flows for real (that IS its submit/cancel).
 
 `UserInputController:keypressed` looks the key's chord up in the widget's own table (`FIELD_KEYS`)
 and does nothing for a chord it does not name, whichever route drives it (console, editor, or the
-project widget): moves (Left/Right, Ctrl+Left/Right by word, Home/End by row, Ctrl+Home/End over the
-text, Up/Down, each with Shift too, which extends a selection where the widget has one), Alt+Up/Down
-(and Alt+Shift+Up/Down) moving the cursor's line, Backspace and Delete (with Shift too), Shift+Enter
-and Alt+Enter breaking the line, Ctrl+Z and Ctrl+Y undoing and redoing the draft (D-UNDO-KEYS, every
-instance), bare Enter submitting and bare Escape cancelling. Ctrl+Backspace, Alt+Backspace, Ctrl+W
-and Ctrl+K act only in the editor's field (`editing`), and Ctrl+D only where the owner sets
-`allow_duplicate_line` (a constructor parameter,
-`UserInputController(model, disable_selection, allow_duplicate_line)`, set only by the editor). It
-has no clipboard keys and never inserts literal characters — see "Text Input Widget" above for why
+project widget), one table for all three (the maintainer's ruling of 2026-11-14): moves
+(Left/Right, Ctrl+Left/Right by word, Home/End to the ends of the cursor's row, Ctrl+Home/End to the
+ends of the text, Up/Down), Alt+Shift+Up/Down moving the cursor's line, Backspace (with Shift too,
+held from a capital) and Delete, Ctrl+Backspace, Alt+Backspace and Ctrl+W deleting the word before
+the cursor, Ctrl+K the rest of its line, Shift+Enter and Alt+Enter breaking the line, Ctrl+Z and
+Ctrl+Y undoing and redoing the draft (D-UNDO-KEYS), bare Enter submitting and bare Escape
+cancelling. Ctrl+D is the one key an owner switches on: only where it sets `allow_duplicate_line`
+(a constructor parameter, `UserInputController(model, allow_duplicate_line)`, set only by the
+editor). Alt+Up/Down are the editor's block move and the widget's for no owner. It has no selection
+and no clipboard keys and never inserts literal characters — see "Text Input Widget" above for why
 `keypressed` and `textinput` divide the work this way. Ahead of the table run the error lock and the
-web build's space; after it, for every key, the selection follows Shift.
+web build's space.
 
 Enter and Escape are ordinary entries of that table, **uniformly for every instance**: bare Enter
 calls `self:submit_flow()` (once per press: a repeat submits nothing, API2.2), bare Escape
@@ -646,10 +647,9 @@ console route the default handler forwards to a shown widget, else falls to `CC:
 `UserInputController` instance never receives `keyreleased`, under any circumstance, even while the
 editor is on screen.
 
-`UserInputController:keyreleased` only does two things: release character-selection on Shift-release,
-and clear an error on Space-release. Checked whether the gap is currently observable: it isn't, but
-only incidentally — the editor's own instance has `disable_selection = true` (so the
-selection-release job is moot for it), and its error state is also clearable via **any**
+`UserInputController:keyreleased` only clears an error on Space-release. Checked whether the gap is
+currently observable: it isn't, but only incidentally — the editor's error state is also clearable
+via **any**
 `textinput` character (`EditorController:textinput`, unconditional clear-on-error, same as console),
 which covers Space too, since Space is itself a text-producing key. So the missing fork happens to be
 inert today, not silently broken — but it is still a real asymmetry against the otherwise-careful
@@ -764,11 +764,10 @@ it. (`ConsoleController:wrap_handler`, which used to do this per handler, is gon
 ### Input widget mouse
 
 `UserInputController` handles mouse events on the input widget:
-- `mousepressed`: translates screen (x, y) → input grid (col, line) via `_translate_to_input_grid`. Grid is bottom-relative (y increases upward in input space). Calls `im:mouse_click(l, c)` to set cursor.
-- `mousemoved`: if left button held, calls `im:mouse_drag(l, c)` to extend selection.
-- `mousereleased`: calls `im:mouse_release(l, c)` then releases selection.
+- `mousepressed`: translates screen (x, y) → input grid (col, line) via `_translate_to_input_grid`. Grid is bottom-relative (y increases upward in input space). Moves the cursor there (`translate_grid_to_cursor`, `move_cursor`), in every field; a press outside the field's rows does nothing.
+- `mousemoved` and `mousereleased`: nothing. A drag selects nothing.
 
-Mouse events on the input widget are only processed when `disable_selection` is false. In editor mode, the input widget's controller has `disable_selection = true` — mouse interaction with the input strip is suppressed, and the editor uses keyboard-only navigation.
+The file editor forwards a press to its field (`EditorController:mousepressed`) while `cfg.editor.mouse_enabled` is on, as `main.lua` ships it; a click on the document view does nothing (PR #28, D-MOUSE-BROWSE).
 
 ### Touch
 

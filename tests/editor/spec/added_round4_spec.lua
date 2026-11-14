@@ -496,7 +496,6 @@ describe("round four #editor #spec", function()
       ["Ctrl+T"] = { "lctrl", "t" },
       ["Ctrl+Alt+R"] = { "lctrl", "lalt", "r" },
       ["Ctrl+Q"] = { "lctrl", "q" },
-      ["Ctrl+Shift+S"] = { "lctrl", "lshift", "s" },
     }
 
     for edit, start in pairs(EDITS) do

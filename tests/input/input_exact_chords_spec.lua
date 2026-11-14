@@ -89,17 +89,13 @@ describe("every chord is its own key #input", function()
         assert.same("held = 1", K.console_draft())
       end)
 
-    it("Ctrl+Delete and Ctrl+Backspace delete nothing",
-      function()
-        console()
-        K.keys("home")
-        local before = snapshot()
-        K.keys("lctrl", "delete")
-        K.keys("end")
-        K.keys("lctrl", "backspace")
-        before.cursor = { 1, 2 }
-        assert.same(before, snapshot())
-      end)
+    it("Ctrl+Delete deletes nothing", function()
+      console()
+      K.keys("home")
+      local before = snapshot()
+      K.keys("lctrl", "delete")
+      assert.same(before, snapshot())
+    end)
 
     it("every bound key with one more modifier that the table "
         .. "does not bind does nothing", function()
@@ -198,7 +194,9 @@ describe("every chord is its own key #input", function()
       { "Ctrl+Enter", { "lctrl", "return" } },
       { "Ctrl+Up", { "lctrl", "up" } },
       { "Ctrl+Delete", { "lctrl", "delete" } },
-      { "Ctrl+Backspace", { "lctrl", "backspace" } },
+      { "Shift+Delete", { "lshift", "delete" } },
+      { "Shift+Left", { "lshift", "left" } },
+      { "Alt+Up", { "lalt", "up" } },
       { "Shift+Escape", { "lshift", "escape" } },
       { "Alt+Escape", { "lalt", "escape" } },
     }) do

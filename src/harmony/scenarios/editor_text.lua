@@ -59,11 +59,12 @@ scenario('text', function(wait)
   D.shot(wait, 'moved')
   D.eq(stored(f), 'TWO\none\nthree\nx=1  (y\nfour\nfive\n'
     .. long .. '\n\n', 'replaced, cut, restored and moved')
-  -- a text file has no tidy form: Ctrl+Shift+F knocks and
-  -- writes nothing
+  -- a text file has no tidy form: Ctrl+Shift+F says so in a
+  -- notice and writes nothing
   local before = stored(f)
   D.key(wait, 'C-S-f')
   D.eq(stored(f), before, 'Ctrl+Shift+F writes nothing')
+  assert(P.message(), 'Ctrl+Shift+F says nothing')
   D.leave(wait)
   hm_done()
 end)

@@ -20,8 +20,9 @@ local function new(M, CC)
   return {
     -- Host chrome, not a transient widget: always_shown makes
     -- hide() refuse rather than leave the editor without an
-    -- input line. Selection is disabled on both surfaces.
-    input = UserInputController(M.input, true, true)
+    -- input line. Its line duplicate (Ctrl+D) is the
+    -- editor's alone.
+    input = UserInputController(M.input, true)
         :always_shown(),
     model = M,
     console = CC,
@@ -40,40 +41,21 @@ end
 --- @field pressed table<string, boolean>
 EditorController = class.create(new)
 
---- DEPRECATED (owner ruling, 2026-09-06). Ctrl+Shift+S
---- leaves the editor and stays bound, but Escape is the
---- supported way out (IS1.6) and this chord is on its way to
---- removal. Its author calls it inherited, absent from the
---- editor spec, and it is undocumented in the editor's own
---- keymap. It is kept only because our shipped guide, the
---- README walkthrough and a spec of ours all carry it.
---- Route-level and not a gate reservation, because the gate
---- binds only what competes with a running project
---- (D-EXACT-RESERVE, "Scope"), and nothing runs while the
---- editor owns the route.
-function EditorController:leave()
-  if not self:refuse_to_leave(true) then
-    self.console:finish_edit()
-  end
-end
-
---- A whole-editor exit (Ctrl+Shift+S here; Ctrl+T, Ctrl+Q
---- and Ctrl+Alt+R at the gate) is taken from the browsing
---- state. During an edit it
+--- A whole-editor exit (Ctrl+T, Ctrl+Q and Ctrl+Alt+R at the
+--- gate) is taken from the browsing state. During an edit it
 --- is refused with a notice, and no question is asked
 --- (H-NFR4.6): the field may hold a cut block's only copy
 --- (IS6.2), so the edit is submitted or aborted first
---- (FR1.2).
---- @param own_key boolean? --- the editor is handling the
---- chord's key itself (Ctrl+Shift+S), so no later key is it
+--- (FR1.2). The chord's own key reaches the editor after the
+--- gate, and must not dismiss the notice (_held_back).
 --- @return boolean refused
-function EditorController:refuse_to_leave(own_key)
+function EditorController:refuse_to_leave()
   if not self:get_active_buffer() then return false end
   if self:state_name() == 'browsing' then return false end
   self:refuse({
     'Finish the text first: Enter keeps it, Esc drops it.'
   })
-  self._gate_key = not own_key or nil
+  self._gate_key = true
   return true
 end
 
@@ -678,15 +660,28 @@ local function statements(lines)
   if ok then return ast end
 end
 
---- Format the whole open file (Ctrl+Shift+F in navigation).
+--- Format the whole open file (Ctrl+Shift+F, browsing).
 --- It is the one place blank lines outside a block change:
 --- the user asked, and every run of them becomes one. The
 --- selection stays on the statement it was on; from a blank
---- line or a comment it moves to the statement below.
+--- line or a comment it moves to the statement below. A
+--- refusal says why in a notice, as every refusal does: during
+--- an edit, and in a text or Markdown file, which has nothing
+--- to format.
 function EditorController:format_file()
   local buf = self:get_active_buffer()
+  local state = self:state_name()
+  if state == 'inserting' then
+    return self:refuse({ 'Finish the text first: Enter adds it,'
+      .. ' Esc drops it.' })
+  end
+  if state == 'replacing' then
+    return self:refuse({ 'Finish editing first: Enter keeps it,'
+      .. ' Esc drops it.' })
+  end
   if buf.content_type ~= 'lua' then
-    return self:refuse()
+    return self:refuse({ 'Only a Lua file is formatted;'
+      .. ' this one stays as it is.' })
   end
   --- text the editor cannot read has no tidy form: it stays
   --- as it is, line for line
@@ -749,7 +744,6 @@ function EditorController:format_file()
 end
 
 --- blocks a page key browses
-local PAGE_BLOCKS = 10
 
 --- The undo timeline (controller.editorReuse) hears of each
 --- action twice: _record_action(kind) while the state it
@@ -761,22 +755,34 @@ local PAGE_BLOCKS = 10
 --- Browse blocks (IS2.1): the draft, its cursor and the
 --- replacement target stay as they are (IS2.3)
 --- @param dir VerticalDir
---- @param by integer?
-function EditorController:_browse(dir, by)
+function EditorController:_browse(dir)
   local buf = self:get_active_buffer()
   --- a block taller than the view scrolls by a row first
   --- (IS2.2)
   local bv = self.view:get_current_buffer()
-  if not by and bv:scroll_block(dir) then return end
-  local moved = false
-  for _ = 1, by or 1 do
-    if not buf:move_selection(dir) then break end
-    moved = true
-  end
-  if moved then
-    self.view:get_current_buffer():follow_selection()
+  if bv:scroll_block(dir) then return end
+  if buf:move_selection(dir) then
+    bv:follow_selection()
     self:update_status()
   end
+end
+
+--- @private
+--- PgDn and PgUp browse a page at a time (the maintainer's
+--- ruling of November 14, 2026; BufferView:page): the
+--- browsing position moves with the page and stays in view,
+--- and the draft and the target stay (IS2.3)
+--- @param dir VerticalDir
+function EditorController:_page(dir)
+  local bv = self.view:get_current_buffer()
+  local b, top = bv:page(dir)
+  if b then self:get_active_buffer():set_selection(b) end
+  if top then
+    bv:show_from(top)
+  else
+    bv:follow_selection()
+  end
+  self:update_status()
 end
 
 --- @private
@@ -1010,19 +1016,6 @@ function EditorController:submit()
   end)
 end
 
---- Alt with a page or edge key moves the document view and
---- nothing else: the browsing position, the draft and the
---- replacement target stay. Alt+Left and Alt+Right page too:
---- PgUp and PgDn are four-key chords on the device keyboard.
-local PEEKS = {
-  pageup = { 'up' },
-  left = { 'up' },
-  pagedown = { 'down' },
-  right = { 'down' },
-  home = { 'up', true },
-  ['end'] = { 'down', true },
-}
-
 --- What the key tables' actions do (editorKeys.lua), each
 --- called with the controller, the key and whether it is a
 --- repeat
@@ -1051,12 +1044,7 @@ local ACTIONS = {
     end
   end,
   page = function(ec, k)
-    ec:_browse(k == 'pageup' and 'up' or 'down', PAGE_BLOCKS)
-  end,
-  peek = function(ec, k)
-    local peek = PEEKS[k]
-    ec.view:get_current_buffer():scroll(peek[1], nil, peek[2])
-    ec:update_status()
+    ec:_page(k == 'pageup' and 'up' or 'down')
   end,
   copy_block = function(ec) ec:copy_block() end,
   cut_block = function(ec, _, rep) ec:cut_block(rep) end,
@@ -1065,7 +1053,6 @@ local ACTIONS = {
   redo = function(ec, _, rep) ec:timeline_redo(rep) end,
   follow_require = function(ec) ec:follow_require() end,
   format_file = function(ec) ec:format_file() end,
-  leave = function(ec) ec:leave() end,
   --- with love.debug: the view drawn anew, and with Ctrl the
   --- file split anew
   debug_refresh = function(ec)

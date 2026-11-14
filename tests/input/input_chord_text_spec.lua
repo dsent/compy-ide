@@ -786,12 +786,12 @@ describe("a key pressed under AltGr makes no chord #input",
   describe("on a computer (Linux)", function()
     posing_as("Linux")
 
-    it("in the console, AltGr+Up moves the cursor and swaps "
-        .. "no line (Alt+Up does)", function()
+    it("in the console, AltGr+Shift+Up swaps no line "
+        .. "(Alt+Shift+Up does)", function()
       two_lines()
-      chord(ORDERS[2], { "ralt" }, "up")
+      chord(ORDERS[2], { "ralt", "lshift" }, "up")
       assert.same("a\nb", K.console_draft())
-      chord(ORDERS[2], { "lalt" }, "down")
+      chord(ORDERS[2], { "lalt", "lshift" }, "up")
       assert.same("b\na", K.console_draft())
     end)
   end)
@@ -799,10 +799,10 @@ describe("a key pressed under AltGr makes no chord #input",
   describe("on a Compy (Android)", function()
     posing_as("Android")
 
-    it("the right Alt with Up swaps lines, as Alt+Up does",
-        function()
+    it("the right Alt with Shift and Up swaps lines, as "
+        .. "Alt+Shift+Up does", function()
       two_lines()
-      chord(ORDERS[2], { "ralt" }, "up")
+      chord(ORDERS[2], { "ralt", "lshift" }, "up")
       assert.same("b\na", K.console_draft())
     end)
 

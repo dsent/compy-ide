@@ -81,7 +81,7 @@ Tags beyond the file-level `#input`:
 | Location | Row | Why it's pending, not red |
 |---|---|---|
 | `input_routing_spec.lua:68` | `routes the key release to the console` | A key release carries no text, so console delivery has no observable mutation to assert on — only the project-route release is directly witnessed |
-| `input_routing_spec.lua:144` | `routes the pointer to the editor` | The production editor widget disables selection, so pointer delivery has no observable outcome without extra scaffolding |
+| `input_routing_spec.lua:144` | `routes the pointer to the editor` | The input fixture leaves the editor's mouse off (`cfg.editor.mouse_enabled`), so pointer delivery has no observable outcome without extra scaffolding |
 | `input_routing_spec.lua:214` | `touch reaches the active route` | Touch has no gateway entry yet; both the widget and route touch handlers are no-ops, so delivery isn't black-box observable. Greens when a touch consumer lands |
 
 **A second kind of pending row, added deliberately: the reserved combos' own effects.** `input_global_shortcuts_spec.lua` asserts one property live — that a project cannot suppress a global shortcut by registering the same combo — and lists the remaining reserved combos (`ctrl+alt+r`, the profiler pair, `f10`, and `ctrl+escape` on release) as pending. `ctrl+s` and `ctrl+shift+r` left the list on 2026-11-14, when they stopped being reserved; the same file asserts that a running program receives them. Those are not unobservable like the rows above; they are simply **someone else's contract**. What each one *does* is the framework's own behaviour, worth asserting eventually and out of scope for the input API's suite, so the gap is named where a reader will meet it rather than left to be rediscovered. `ctrl+pause` and `ctrl+q` are absent from that list because their effects are asserted live, and **`ctrl+t` left it on 2026-09-09** for the same reason, once both arms of `reserved_quickswitch` were covered — the running one in that file, the editor one in `input_editor_keys_spec.lua`.
@@ -139,7 +139,7 @@ screen over a few frames (`P.drawn`, `P.shows`). It writes fixtures straight to 
 `editor.lua` drives the file editor one scenario per user-level task: open and leave a file
 (`open-close`), add blocks and copy one (`add`), replace a block with F2 and run the change with
 Ctrl+T (`change`), move a block and undo the move (`move`), cut a block and reopen the file from
-the console's history (`delete`), scroll the view and keep a loaded block (`scroll`), and follow a
+the console's history (`delete`), page through a file and keep a loaded block (`scroll`), and follow a
 `require` with Ctrl+J (`follow`). The examples run later, so a scenario that edits the turtle
 example works on a clone or undoes its change and checks that it did.
 

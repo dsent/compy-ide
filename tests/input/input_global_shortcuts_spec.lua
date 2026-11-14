@@ -330,9 +330,9 @@ describe('input surface: inbound events — global platform'
           assert.is_true(project_ran)
         end)
 
-      -- Shift stays meaningful in the editor branch, and it is
-      -- the ONLY thing that is: ctrl+shift+s leaves the editor,
-      -- bare ctrl+s does nothing there. The upstream editor
+      -- Neither ctrl+shift+s nor bare ctrl+s does anything in
+      -- the editor (ctrl+shift+s left it until it was dropped
+      -- on 2026-11-14). The upstream editor
       -- rework deleted our close and made leaving Shift+Esc,
       -- and it holds the product authority on that key (owner,
       -- 2026-09-04). It does NOT claim the key — its
@@ -345,9 +345,8 @@ describe('input surface: inbound events — global platform'
       -- the branch taken is observable without
       -- EditorController's real machinery — the same
       -- avoidance the running-state pair above takes.
-      it('ctrl+shift+s finishes the edit in the editor'
-        .. ' branch', function()
-          local called
+      it('ctrl+shift+s leaves the editor alone', function()
+          local called = false
           love.state.app_state = 'editor'
           F.cc.editor:open('t.lua', '', function()
             return true
@@ -358,7 +357,7 @@ describe('input surface: inbound events — global platform'
           F.session.press('lshift')
           F.session.press('s')
           F.cc.finish_edit = orig
-          assert.is_true(called)
+          assert.is_false(called)
         end)
 
       it('bare ctrl+s leaves the editor alone',

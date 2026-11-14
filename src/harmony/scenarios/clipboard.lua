@@ -10,8 +10,8 @@ local D = require('harmony.drive')
 local PROJECT = 'h-clip'
 local HELD = 'from the clipboard'
 
---- Ctrl+V, then a selection cut and copied; `draft` reads the
---- field
+--- Ctrl+V, then Shift+Left (bound nowhere: no selection),
+--- Ctrl+X and Ctrl+C; `draft` reads the field
 --- @param wait function
 --- @param draft function
 --- @param want string
@@ -19,7 +19,7 @@ local HELD = 'from the clipboard'
 local function keys(wait, draft, want, where)
   D.key(wait, 'C-v')
   D.eq(draft(), want, 'Ctrl+V pastes nothing in ' .. where)
-  -- Shift+Left selects, as far as the field selects at all
+  -- Shift+Left selects nothing: no field has a selection
   D.key(wait, 'S-left')
   D.key(wait, 'S-left')
   D.key(wait, 'C-x')

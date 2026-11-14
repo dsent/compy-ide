@@ -1,11 +1,9 @@
--- The document view's rows have the console's pitch, which
--- does not divide the area above the status line: under the
--- last row a strip of a few pixels may be left, and it is
--- that row's. A highlighted block at the view's edge runs on
--- to the edge, and under the status line; no strip of the
--- view's background shows between it and the status line, or
--- the view's top (the maintainer's ruling on the browsed
--- block cut at the bottom edge).
+-- The document view's rows sit on the screen's one grid, the
+-- last against the status line. A highlighted block at the
+-- view's edge runs on to the edge; no strip of the view's
+-- background shows between it and the status line, or the
+-- screen's top (the maintainer's ruling on the browsed block
+-- cut at the bottom edge).
 
 local K = require("tests.helpers.editor_keys")
 
@@ -66,8 +64,9 @@ end
 --- from its rows, as the field lays itself out.
 local function band_top(s)
   local v = K.cc.view.cfg.view
+  local l = require("view.layout")(v)
   local h = love.graphics.getHeight()
-  return h - (s.field_rows + 1) * v.fh - v.statusline_border / 2
+  return h - l.bottom - s.field_rows * v.fh - l.status_h
 end
 
 local function block_cut(b)

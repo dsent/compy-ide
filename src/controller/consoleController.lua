@@ -8,7 +8,6 @@ local class = require('util.class')
 local Blink = require('view.input.cursorBlink')
 local LANG = require("util.eval")
 local FS = require('util.filesystem')
-local lua = require('model.editor.luaLayer')
 local display = require('conf.display')
 local Application = require('util.application')
 local usb = require('util.usb')
@@ -226,7 +225,7 @@ end
 local function build_input_widget(cfg)
   local eval = Evaluator.plain('text input')
   local model = UserInputModel(cfg, eval)
-  local widget = UserInputController(model, true)
+  local widget = UserInputController(model)
   -- The project widget's one shipped default, seated on the
   -- LEAST-DESTRUCTIVE basis: submit consumes the content,
   -- because a project processes a submission through its
@@ -294,55 +293,6 @@ local function close_project(cc)
   end
 end
 
---- @private
---- @param name string
---- @return string?
---- @param name string
---- @return string
-local function checkpoint_name(name)
-  return name .. '.~save'
-end
-
---- Modification time of a project file, nil if absent
---- @param name string
---- @return integer? modtime
-function ConsoleController:file_modtime(name)
-  local p = self.model.projects.current
-  if not p then return end
-  local info = FS.getInfo(p:get_path(name))
-  return info and info.modtime
-end
-
---- @param name string
---- @return integer? modtime of the checkpoint
-function ConsoleController:checkpoint_modtime(name)
-  return self:file_modtime(checkpoint_name(name))
-end
-
---- Copy the file to its checkpoint (spec 2.6)
---- @param name string
---- @return boolean ok
-function ConsoleController:write_checkpoint(name)
-  local p = self.model.projects.current
-  if not p then return false end
-  local ok = FS.cp(
-    p:get_path(name),
-    p:get_path(checkpoint_name(name)), false, true)
-  return ok and true or false
-end
-
---- Write the checkpoint back over the file (spec 2.6)
---- @param name string
---- @return boolean ok
-function ConsoleController:restore_checkpoint(name)
-  local p = self.model.projects.current
-  if not p then return false end
-  local cp = p:get_path(checkpoint_name(name))
-  if not FS.exists(cp) then return false end
-  local ok = FS.cp(cp, p:get_path(name), false, true)
-  return ok and true or false
-end
-
 --- Format a project file the way the editor's Ctrl+Shift+F
 --- formats it, at a Compy's width: the REPL's `tidy(name)`.
 --- The file is written with LF line ends (BufferModel:save).
@@ -366,17 +316,10 @@ function ConsoleController:tidy(name)
     return self:_writefile(name, out)
   end)
   local lines = buf:snapshot().lines
-  local out, formatted = lua.format(lines, display.columns)
+  local out, formatted, why = buf.syntax.format(lines,
+    display.columns)
   if not formatted then
-    local parsed, err = lua.parser().parse(lines)
-    if not parsed and err and err.l then
-      print(string.format(
-        '%s has an error on line %d, so it stays as it is',
-        name, err.l))
-    else
-      print(name .. ' cannot be tidied without changing'
-        .. ' what it does, so it stays as it is')
-    end
+    print(name .. ' ' .. why)
     return false
   end
   if string.unlines(out) == string.unlines(lines) then
@@ -1719,16 +1662,6 @@ function ConsoleController.prepare_project_env(cc)
   --- @param name string
   project_env.edit             = function(name)
     return check_open_pr(cc.edit, cc, name)
-  end
-
-  --- @param name string
-  --- @return string?
-  --- Restore a file from its checkpoint; no prompt
-  --- @param name string? --- default main.lua
-  --- @return boolean
-  project_env.revert          = function(name)
-    name = name or ProjectService.MAIN
-    return cc:restore_checkpoint(name)
   end
 
   --- Format a file the way the editor writes code

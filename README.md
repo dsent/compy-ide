@@ -47,14 +47,16 @@ a project must be selected first.
 | Jump to the end of the row                                        | <kbd>End</kbd>                                |
 | Insert newline                                                    | <kbd>Shift</kbd>+<kbd>Enter ⏎</kbd>           |
 | Undo / redo the typing                                            | <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> |
-| Select text                                                       | <kbd>Shift</kbd>+<kbd>⇦</kbd>/<kbd>⇨</kbd>/<kbd>⇧</kbd>/<kbd>⇩</kbd> |
+| Delete the previous word                                          | <kbd>Ctrl</kbd>+<kbd>Backspace</kbd> / <kbd>Ctrl</kbd>+<kbd>W</kbd> / <kbd>Alt</kbd>+<kbd>Backspace</kbd> |
+| Delete to the end of the line                                     | <kbd>Ctrl</kbd>+<kbd>K</kbd>                  |
+| Move the cursor's line up / down                                  | <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>⇧</kbd>/<kbd>⇩</kbd> |
+| Place the cursor                                                  | click in the field                            |
 | Evaluate input                                                    | <kbd>Enter ⏎</kbd>                            |
 | **Editor**                                                        |                                               |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; _same as Input in the field, except for:_ |                                               |
-| No text selection: Shift with an arrow moves the cursor           | <kbd>Shift</kbd>+<kbd>⇦</kbd>/<kbd>⇨</kbd>/<kbd>⇧</kbd>/<kbd>⇩</kbd> |
 | Browse the file block by block                                    | <kbd>Ctrl</kbd>+<kbd>⇧</kbd>/<kbd>Ctrl</kbd>+<kbd>⇩</kbd> |
 | Browse block by block (empty field) / move the cursor a row (text in the field) | <kbd>⇧</kbd>/<kbd>⇩</kbd>                     |
-| Browse ten blocks                                                 | <kbd>PageUp</kbd>/<kbd>PageDown</kbd>         |
+| Page down / up: the next block hidden below comes to the top, the one above to the bottom | <kbd>PageDown</kbd>/<kbd>PageUp</kbd>        |
 | Insert the field's text before the highlighted block, or at the end of the file | <kbd>Enter ⏎</kbd>                            |
 | Insert an empty line (empty field)                                | <kbd>Enter ⏎</kbd>                            |
 | Load the highlighted block into the field, to replace it          | <kbd>F2</kbd>                                 |
@@ -65,20 +67,12 @@ a project must be selected first.
 | Leave the editor for the console, every open file with it (empty field) | <kbd>Ctrl</kbd>+<kbd>Q</kbd>                  |
 | Copy the highlighted block into the field                         | <kbd>Ctrl</kbd>+<kbd>Insert</kbd>             |
 | Cut the highlighted block into the field (empty field)            | <kbd>Ctrl</kbd>+<kbd>Delete</kbd> / <kbd>Shift</kbd>+<kbd>Delete</kbd> |
-| Delete the character after the cursor (text in the field)         | <kbd>Shift</kbd>+<kbd>Delete</kbd>            |
 | Move the highlighted block up / down                              | <kbd>Alt</kbd>+<kbd>⇧</kbd>/<kbd>Alt</kbd>+<kbd>⇩</kbd> |
 | Undo / redo                                                       | <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> |
-| Delete the previous word in the field                             | <kbd>Ctrl</kbd>+<kbd>Backspace</kbd> / <kbd>Ctrl</kbd>+<kbd>W</kbd> |
-| Delete to the end of the line in the field                        | <kbd>Ctrl</kbd>+<kbd>K</kbd>                  |
 | Duplicate the field's current line                                | <kbd>Ctrl</kbd>+<kbd>D</kbd>                  |
-| Scroll the view one page, the highlight stays                     | <kbd>Alt</kbd>+<kbd>PageUp</kbd>/<kbd>Alt</kbd>+<kbd>PageDown</kbd> or <kbd>Alt</kbd>+<kbd>⇦</kbd>/<kbd>Alt</kbd>+<kbd>⇨</kbd> |
-| Scroll the view to the start / end of the file                    | <kbd>Alt</kbd>+<kbd>Home</kbd> / <kbd>Alt</kbd>+<kbd>End</kbd> |
-| Checkpoint the file (asks when one exists)                        | _no key at present_                           |
-| Restore from the checkpoint (asks)                                | _no key at present_                           |
 | Follow the require or dofile of the highlighted block (empty field) | <kbd>Ctrl</kbd>+<kbd>J</kbd>                  |
 | Format the whole file (empty field)                               | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> |
 | Show the keys of the current state                                | hold <kbd>F1</kbd>                            |
-| Leave the editor (deprecated; empty field)                        | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> |
 
 Each combination is a key of its own: a key pressed with a modifier the
 table does not name does nothing. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> is not
@@ -204,8 +198,7 @@ next key dismisses it. The editor asks no questions.
 Happy with the modifications now, we can leave the editor by
 pressing <kbd>Esc</kbd> with an empty field, which steps back one
 file at a time, or <kbd>Ctrl-Q</kbd>, which returns to the console
-from any file. <kbd>Ctrl-Shift-S</kbd> also leaves, but it is
-**deprecated** and will be removed.
+from any file.
 While there is text in the field or a block is being replaced,
 leaving is refused with a notice: submit the text with
 <kbd>Enter ⏎</kbd> or drop it with <kbd>Esc</kbd> first.

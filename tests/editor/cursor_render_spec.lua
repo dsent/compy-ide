@@ -12,6 +12,12 @@ local function cfg()
   return K.cc.view.cfg.view
 end
 
+--- Where the field's first row starts in its canvas: under
+--- the status line.
+local function first_row_y()
+  return require("view.layout")(cfg()).status_h
+end
+
 local function same_colour(a, b)
   for i = 1, 3 do
     if 0.001 <= math.abs((a[i] or 0) - (b[i] or 0)) then
@@ -37,7 +43,7 @@ local function cursor(also)
       assert(also or not out.col, "one block")
       out.under, out.under_colour = nil, nil
       out.col = e.x / c.fw + 1
-      out.row = e.y / c.fh
+      out.row = (e.y - first_row_y()) / c.fh + 1
       out.x, out.y = e.x, e.y
     elseif e.text == "|" and own then
       out.bars[#out.bars + 1] = e
@@ -162,8 +168,8 @@ describe("the text cursor drawn #editor", function()
       assert.same(2, #c.bars)
       -- on the row itself, half off the edge and just inside
       local edge = v.drawableChars * v.fw
-      assert.same(v.fh, c.bars[1].y)
-      assert.same(v.fh, c.bars[2].y)
+      assert.same(first_row_y(), c.bars[1].y)
+      assert.same(first_row_y(), c.bars[2].y)
       assert.same(edge - v.fw / 2, c.bars[1].x)
       assert.is_true(c.bars[2].x < c.bars[1].x)
       assert.is_true(edge - v.fw < c.bars[2].x)

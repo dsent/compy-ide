@@ -210,8 +210,8 @@ describe("every chord is its own key #editor #spec", function()
     end)
   end)
 
-  -- with the editor's mouse switched on in the configuration
-  -- (cfg.editor.mouse_enabled); it ships off
+  -- with the editor's mouse switched on, as it ships
+  -- (cfg.editor.mouse_enabled in main.lua)
   describe("the mouse", function()
     local cfg
     before_each(function()
@@ -243,14 +243,15 @@ describe("every chord is its own key #editor #spec", function()
       assert.same(before, snapshot())
     end)
 
-    -- as before the rework: the editor's field takes no click
+    -- as in every field (the ruling of November 14, 2026)
     spec_it("IS3.8 Position the text cursor: a click in the "
-        .. "draft changes nothing", function()
+        .. "draft places the cursor there", function()
       K.open()
       K.type("abcdef")
       local before = snapshot()
       local v = view()
       click(v.fw * 2.2, v.h - v.fh * 0.5)
+      before.cursor = { 1, 3 }
       assert.same(before, snapshot())
     end)
   end)

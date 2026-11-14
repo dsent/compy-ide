@@ -55,8 +55,8 @@ local function program_global(name)
   return K.cc:get_project_env()[name]
 end
 
---- a press on the console's field and a drag over it, which
---- selects text there when it reaches the field
+--- a press on the console's field and a release elsewhere,
+--- which places the cursor when it reaches the field
 local function drag()
   F.session.mousepressed(10, 540, 1, false, 1)
   F.session.mousereleased(40, 508, 1, false, 1)
@@ -214,14 +214,15 @@ describe("round five #editor #spec", function()
         .. "shows", function()
       K.reset()
       K.type_lines({ "aa", "bb", "cc" })
+      local before = { K.cc.input:get_cursor_pos() }
       K.hold("f1")
       assert.is_not_nil(K.key_card())
       drag()
       K.release("f1")
-      assert.is_false(K.cc.input.model:has_selection())
-      -- the same drag, the card away, selects
+      assert.same(before, { K.cc.input:get_cursor_pos() })
+      -- the same click, the card away, places the cursor
       drag()
-      assert.is_true(K.cc.input.model:has_selection())
+      assert.are_not.same(before, { K.cc.input:get_cursor_pos() })
     end)
   end)
 

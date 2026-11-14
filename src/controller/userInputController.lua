@@ -24,13 +24,10 @@ local function default_callbacks()
 end
 
 --- @param model UserInputModel
---- @param disable_selection boolean?
 --- @param allow_duplicate_line boolean?  editor-only today
-local new = function(model, disable_selection,
-                     allow_duplicate_line)
+local new = function(model, allow_duplicate_line)
   return {
     model = model,
-    disable_selection = disable_selection,
     allow_duplicate_line = allow_duplicate_line,
     -- is_shown() reads this, never love.state (owner ruling
     -- 2026-07-20).
@@ -46,7 +43,6 @@ end
 --- @class UserInputController
 --- @field model UserInputModel
 --- @field view UserInputView?
---- @field disable_selection boolean
 UserInputController = class.create(new)
 
 --- @param v UserInputView
@@ -590,11 +586,14 @@ end
 ----------------
 
 --- The field's keys, each chord by its full name (Key.combo):
---- a chord the table does not name does nothing in the field,
---- whatever its key does with other modifiers. Each action
---- takes the controller, its model and the key.
---- `editing`: in the file editor's field alone; `duplicate`:
---- where the owner allows it (allow_duplicate_line).
+--- one table for every owner, the console, the file editor
+--- and a program's input (the maintainer's ruling of November
+--- 14, 2026: one text field, the same everywhere). A chord the
+--- table does not name does nothing in the field, whatever its
+--- key does with other modifiers. Each action takes the
+--- controller, its model and the key. `duplicate`: where the
+--- owner allows it (allow_duplicate_line). There is no
+--- selection: the clipboard that needed it is gone.
 
 --- Navigation-boundary output (doc/development/decisions/
 --- input.md, D-EDIT-CALLBACKS): a hit limit is signalled only
@@ -677,32 +676,27 @@ local ACT = {
   redo = function(_, input) input:redo_edit() end,
 }
 
---- chord -> { action, only where (editing|duplicate) }
+--- chord -> { action, only where (duplicate) }
 local FIELD_KEYS = { }
 local function bind(chords, act, only)
   for _, c in ipairs(chords) do
     FIELD_KEYS[c] = { act = ACT[act], only = only }
   end
 end
---- Shift with a move extends a selection where the field has
---- one, and moves the cursor where it has none
-bind({ 'left', 'right', 'shift+left', 'shift+right' }, 'char')
-bind({ 'ctrl+left', 'ctrl+right',
-  'ctrl+shift+left', 'ctrl+shift+right' }, 'word')
-bind({ 'home', 'end', 'shift+home', 'shift+end' }, 'edge')
-bind({ 'ctrl+home', 'ctrl+end',
-  'ctrl+shift+home', 'ctrl+shift+end' }, 'whole')
-bind({ 'up', 'down', 'shift+up', 'shift+down' }, 'vertical')
---- with Shift too in the file editor, whose Alt+Up moves a
---- block
-bind({ 'alt+up', 'alt+down', 'alt+shift+up', 'alt+shift+down' },
-  'move_line')
---- with Shift still held from a capital or a selection
+bind({ 'left', 'right' }, 'char')
+bind({ 'ctrl+left', 'ctrl+right' }, 'word')
+--- the ends of the cursor's row; with Ctrl, of the draft
+bind({ 'home', 'end' }, 'edge')
+bind({ 'ctrl+home', 'ctrl+end' }, 'whole')
+bind({ 'up', 'down' }, 'vertical')
+--- Alt+Up and Alt+Down are the file editor's block move
+bind({ 'alt+shift+up', 'alt+shift+down' }, 'move_line')
+--- with Shift still held from a capital
 bind({ 'backspace', 'shift+backspace' }, 'backspace')
-bind({ 'delete', 'shift+delete' }, 'delete')
+bind({ 'delete' }, 'delete')
 bind({ 'ctrl+backspace', 'alt+backspace', 'ctrl+w' },
-  'backspace_word', 'editing')
-bind({ 'ctrl+k' }, 'kill', 'editing')
+  'backspace_word')
+bind({ 'ctrl+k' }, 'kill')
 bind({ 'ctrl+d' }, 'duplicate', 'duplicate')
 bind({ 'shift+return', 'alt+return',
   'shift+kpenter', 'alt+kpenter' }, 'line_feed')
@@ -717,7 +711,6 @@ bind({ 'ctrl+y' }, 'redo')
 function UserInputController:names(chord)
   local e = FIELD_KEYS[chord]
   if not e then return false end
-  if e.only == 'editing' then return self.model.editing end
   if e.only == 'duplicate' then
     return self.allow_duplicate_line == true
   end
@@ -775,20 +768,9 @@ function UserInputController:keypressed(k, sc, isr)
     return
   end
 
-  local bound = self:names(chord)
-  if bound then
+  if self:names(chord) then
     FIELD_KEYS[chord].act(self, input, k, isr)
   end
-  --- a selection follows Shift, whatever the key: held, it
-  --- anchors (on Shift's own press too); let go, it stops
-  if Key.shift() then
-    if not self.disable_selection then
-      input:hold_selection(false)
-    end
-  else
-    input:release_selection()
-  end
-
   self:update_view()
 end
 
@@ -822,20 +804,9 @@ function UserInputController:keyreleased(k, sc)
   local input = self.model
   self:update_view()
 
-  if input:has_error() then
-    if k == 'space' then
-      input:clear_error()
-    end
-    return
+  if input:has_error() and k == 'space' then
+    input:clear_error()
   end
-
-  local function selection()
-    if Key.is_shift(k) then
-      input:release_selection()
-    end
-  end
-
-  selection()
   self:update_view()
 end
 
@@ -866,7 +837,6 @@ end
 --- @param btn integer
 --- @param handler function
 function UserInputController:_handle_mouse(x, y, btn, handler)
-  if self.disable_selection then return end
   if btn == 1 then
     local im = self.model
     local n_lines = im:get_wrapped_text():get_content_length()
@@ -882,13 +852,16 @@ end
 --- @param btn integer
 --- @param touch boolean
 --- @param presses number
+--- A click in the draft places the text cursor there, in
+--- every field; it selects nothing (the ruling of November
+--- 14, 2026)
 function UserInputController:mousepressed(
     x, y, btn, touch, presses)
-  if self.disable_selection then return end
   local im = self.model
   self:_handle_mouse(x, y, btn, function(l, c)
-    im:mouse_click(l, c)
+    im:move_cursor(im:translate_grid_to_cursor(l, c))
   end)
+  self:update_view()
 end
 
 --- @param x integer
@@ -898,12 +871,6 @@ end
 --- @param presses number
 function UserInputController:mousereleased(
     x, y, btn, touch, presses)
-  if self.disable_selection then return end
-  local im = self.model
-  self:_handle_mouse(x, y, btn, function(l, c)
-    im:mouse_release(l, c)
-  end)
-  im:release_selection()
 end
 
 --- @param x number
@@ -911,12 +878,8 @@ end
 --- @param dx number
 --- @param dy number
 --- @param touch boolean
+--- A drag selects nothing
 function UserInputController:mousemoved(x, y, dx, dy, touch)
-  if self.disable_selection then return end
-  local im = self.model
-  self:_handle_mouse(x, y, 1, function(l, c)
-    im:mouse_drag(l, c)
-  end)
 end
 
 --- @param x integer

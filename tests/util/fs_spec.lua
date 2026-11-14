@@ -237,11 +237,11 @@ describe("FS utils", function()
     end)
 
     it('of a name near the length limit', function()
-      --- 60 characters, four bytes each: the name fits, and a
-      --- checkpoint of it too, but not with the temporary
-      --- file's longer suffix
+      --- 60 characters, four bytes each, and a suffix: the
+      --- name fits, but not with the temporary file's longer
+      --- suffix
       local long = FS.join_path(dir, string.rep('\240\144\128\128', 60)
-        .. '.~save')
+        .. '.bak')
       local ltemp = FS.replace_temp(long)
       local base = string.match(ltemp, '[^/]+$')
       assert.is_true(#base <= 255)
@@ -275,7 +275,7 @@ describe("FS utils", function()
     end)
 
     it('by a copy that replaces', function()
-      local src = FS.join_path(dir, 'main.lua.~save')
+      local src = FS.join_path(dir, 'main.lua.bak')
       assert.is_true(FS.write(src, 'x = 0\n'))
       local rename = FS.rename
       finally(function() FS.rename = rename end)

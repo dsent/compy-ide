@@ -171,7 +171,7 @@ local function build_widget(cfg)
   -- sharing one would resolve every widget's highlighter to
   -- whichever bound it last.
   local m = UserInputModel(cfg, Evaluator.plain('text input'))
-  local c = UserInputController(m, true)
+  local c = UserInputController(m)
   -- The project widget's shipped lifecycle seating, mirroring
   -- build_input_widget: a fixture widget without it would let
   -- a spec assert the class defaults while a project meets
@@ -373,15 +373,13 @@ function F.activate_simple(handlers)
   return F.compy()
 end
 
--- A selection-enabled widget seeded with multi-line text, so a
--- pointer event lands an OBSERVABLE selection (the production
--- the widget disables selection, making pointer delivery a
--- no-op — doc/development/internals/user_input.md, "Input
--- widget mouse"). Witnesses pointer delivery to the widget
--- half.
-function F.show_selectable_widget(lines)
+-- A widget seeded with multi-line text, the cursor at its end,
+-- so that a click lands an OBSERVABLE cursor move
+-- (doc/development/internals/user_input.md, "Input widget
+-- mouse"). Witnesses pointer delivery to the widget half.
+function F.show_multiline_widget(lines)
   local m = UserInputModel(cfg, InputEvalText)
-  local w = UserInputController(m, false)
+  local w = UserInputController(m)
   w:init_view({ render = function() end, draw = function() end })
   w.model:set_text(lines or { 'aa', 'bb', 'cc' })
   love.state.user_input = { M = m, C = w, V = w.view }
@@ -428,7 +426,7 @@ end
 -- state production never creates, or content production keeps
 -- on purpose between runs.
 function F.reset()
-  -- Undo a show_selectable_widget swap before teardown runs, so
+  -- Undo a show_multiline_widget swap before teardown runs, so
   -- stop_project_run tears down the fixture's widget rather
   -- than a case-local one.
   love.state.user_input_controller = widget

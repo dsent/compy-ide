@@ -72,10 +72,9 @@ Project-author guide: `doc/input_api.md`.
   after a project moves it with `compy.input`.
 - **A notice is orange, the parser's message red.** The message above the status
   line has no frame.
-- **Leaving waits for the edit to end.** Ctrl+T, Ctrl+Q, Ctrl+Alt+R and the
-  deprecated Ctrl+Shift+S are refused with a notice while there is text in the field
-  or a block is being replaced; submit it or drop it first. Ctrl+J is refused the same
-  way.
+- **Leaving waits for the edit to end.** Ctrl+T, Ctrl+Q and Ctrl+Alt+R are refused
+  with a notice while there is text in the field or a block is being replaced; submit
+  it or drop it first. Ctrl+J is refused the same way.
 - **Ctrl+Q stops the program and returns to the console; the project stays open.**
   It stops a program that runs, one that is paused, and one that has finished and
   still shows its picture behind the console. In the file editor it leaves the editor
@@ -124,8 +123,22 @@ Project-author guide: `doc/input_api.md`.
   finished program still holds its handlers, or from such a program's own handler,
   stops the program first, as Ctrl+T does: its keys, hooks and calls no longer reach
   the editor or close its files.
-- Ctrl+Up / Ctrl+Down browse blocks in every state, PageUp / PageDown browse ten
-  blocks, and Ctrl+K in the field deletes to the end of the line.
+- Ctrl+Up / Ctrl+Down browse blocks in every state, and Ctrl+K in the field deletes to
+  the end of the line.
+- **PageDown and PageUp page through the file.** PageDown brings the first block hidden
+  below the view to its top, PageUp the last one hidden above to its bottom, and the
+  highlight goes with it; at the file's end or start they go to the end position or the
+  first block. A block taller than the screen is paged through first. They work in
+  every state, and repeat while held.
+- **One text field, the same everywhere.** The console, the file editor and a program's
+  input field take the same keys: Ctrl+Backspace, Alt+Backspace and Ctrl+W delete the
+  word before the cursor, Ctrl+K the rest of the line, and Alt+Shift+Up and
+  Alt+Shift+Down move the cursor's line, in every field. Alt+Up and Alt+Down move a
+  block in the file editor and do nothing elsewhere. A click places the cursor in every
+  field, the file editor's included. No field selects text: Shift with an arrow, Home or
+  End does nothing, and neither does a drag.
+- **Ctrl+Shift+F says why it refuses**, in a notice that blocks nothing: in a text or
+  Markdown file, which has nothing to format, and during an edit.
 - **Held down, a key repeats only if it writes nothing and changes no state**, in the
   file editor and the console: typing, moving the cursor, browsing, deleting in the
   field, Shift+Enter, and Ctrl+Z and Ctrl+Y through the field's own changes. Enter,
@@ -145,6 +158,11 @@ Project-author guide: `doc/input_api.md`.
 
 ### Removed
 
+- **The editor's checkpoints and `revert()`.** The editor no longer writes or restores
+  `name.~save` checkpoint files (Ctrl+K and Ctrl+Shift+K had already gone), and the
+  console's `revert()` is gone with them: saving a copy of a project is the reset
+  feature's, which is still to come. A `.~save` file already on the card is an ordinary
+  file: it is listed with the project's files and opens as plain text.
 - **Ctrl+Shift+R, the reset.** The key does nothing in the console and the editor, and
   a running program receives it. Nothing clears the console's history in its place.
 - **The editor's navigation, editing and block-reorder modes**, with their keys: Enter
@@ -157,7 +175,13 @@ Project-author guide: `doc/input_api.md`.
   not in the editor's specification and needs a design of its own, which it may get
   later.
 - **A click on the file editor's text no longer browses to a block.** The mouse needs
-  a design of its own; it is off in the editor by default.
+  a design of its own.
+- **Ctrl+Shift+S**, which left the editor; Ctrl+Q does.
+- **The Alt look-around keys** (Alt+PageUp, Alt+PageDown, Alt+Left, Alt+Right, Alt+Home,
+  Alt+End), which scrolled the file editor's view apart from the highlight; PageUp and
+  PageDown page with it.
+- **Text selection**, with Shift and the arrows or with the mouse, and Shift+Delete in a
+  field: with the clipboard gone nothing used it.
 - **The system clipboard in the text field**: Ctrl+C, Ctrl+X and Ctrl+V do nothing in
   the console, the file editor or a program's input, and Ctrl+Insert and Shift+Insert
   keep only the editor's own meanings; like search, it needs a design of its own.
@@ -208,9 +232,9 @@ Project-author guide: `doc/input_api.md`.
   keep it, F2 loads it, and a cut takes it out; a change that would leave a `#!` line
   anywhere but first, or put anything above it, is refused, since Lua could not run
   the file after it.
-- **Alt+Up and Alt+Down in a field move the cursor's line, the cursor with it**, and
-  Ctrl+Z puts the cursor back where it was. At the first or last line nothing moves;
-  the keys swapped the two lines below or above.
+- **Alt+Shift+Up and Alt+Shift+Down in a field move the cursor's line, the cursor
+  with it**, and Ctrl+Z puts the cursor back where it was. At the first or last line
+  nothing moves; the keys swapped the two lines below or above.
 - **The key press that brings the editor to the front does nothing in it.**
   Enter that made a program open a file with `edit()` added an empty line to it, and
   one held a moment too long after `edit()` in the console added one per repeat; the

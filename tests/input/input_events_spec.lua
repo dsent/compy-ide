@@ -1259,18 +1259,18 @@ describe('input surface: inbound events — dispatch #input',
     -- Falls through on falsey, so the widget still gets it —
     -- this is the pre-unification "both receive it" behaviour,
     -- now an ordinary consequence of the chain rather than a
-    -- broadcast. The selection is the widget's observable.
+    -- broadcast. The cursor a click places is the widget's
+    -- observable.
     it('a non-consuming hook still lets the widget see it',
       function()
         local input = F.activate_project()
         local got = 0
         input.hooks.mousepressed = function() got = got + 1 end
-        local w = F.show_selectable_widget()
-        F.set_mouse_down(true)
+        local w = F.show_multiline_widget()
+        local before = { w:get_cursor_pos() }
         F.session.mousepressed(10, 540, 1, false, 1)
-        F.session.mousemoved(60, 540, 50, 0, false)
         assert.equal(1, got)
-        assert.is_true(w.model:has_selection())
+        assert.are_not.same(before, { w:get_cursor_pos() })
       end)
 
     -- The capability the broadcast could not express: a shown
@@ -1279,12 +1279,10 @@ describe('input surface: inbound events — dispatch #input',
       function()
         local input = F.activate_project()
         input.hooks.mousepressed = function() return true end
-        input.hooks.mousemoved = function() return true end
-        local w = F.show_selectable_widget()
-        F.set_mouse_down(true)
+        local w = F.show_multiline_widget()
+        local before = { w:get_cursor_pos() }
         F.session.mousepressed(10, 540, 1, false, 1)
-        F.session.mousemoved(60, 540, 50, 0, false)
-        assert.is_false(w.model:has_selection())
+        assert.same(before, { w:get_cursor_pos() })
       end)
   end)
 end)

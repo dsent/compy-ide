@@ -15,7 +15,6 @@ local function terminal_draw(terminal, canvas, overlay)
   gfx.setCanvas(canvas)
   gfx.setFont(terminal.font)
   gfx.clear(terminal.clear_color_alpha)
-  local font_height = terminal.font:getHeight()
 
   for y, row in ipairs(terminal.buffer) do
     for x, char in ipairs(row) do
@@ -42,9 +41,7 @@ local function terminal_draw(terminal, canvas, overlay)
       -- Character background
       if not overlay then
         gfx.setColor(unpack(bg))
-        gfx.rectangle("fill",
-          left, top + (font_height - char_height),
-          char_width, char_height)
+        gfx.rectangle("fill", left, top, char_width, char_height)
       end
 
       local bm, am = gfx.getBlendMode()
@@ -75,7 +72,9 @@ local function terminal_draw(terminal, canvas, overlay)
 end
 
 --- @param terminal table
-function TerminalView.draw(terminal, canvas, snapshot)
+--- @param y number? --- where its first row starts: under the
+--- strip the screen may reserve at its top
+function TerminalView.draw(terminal, canvas, snapshot, y)
   gfx.setCanvas()
   gfx.push('all')
 
@@ -84,7 +83,7 @@ function TerminalView.draw(terminal, canvas, snapshot)
   else
     terminal_draw(terminal, canvas)
   end
-  gfx.draw(canvas)
+  gfx.draw(canvas, 0, y or 0)
   gfx.setBlendMode('alpha') -- default
   gfx.pop()
 end

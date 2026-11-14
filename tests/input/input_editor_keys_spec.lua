@@ -90,10 +90,10 @@ describe('editor key contract #input', function()
   end)
 
   describe('the whole-editor exits', function()
-    -- D-EDITOR-KEYS statement 6. Ctrl+Shift+S leaves the
-    -- editor through ConsoleController:finish_edit, which
-    -- drops the buffers with no acceptance step; Ctrl+T steps
-    -- aside for the run through hide_editor, which keeps them.
+    -- D-EDITOR-KEYS statement 6. Ctrl+Q leaves the editor
+    -- through ConsoleController:finish_edit, which drops the
+    -- buffers with no acceptance step; Ctrl+T steps aside for
+    -- the run through hide_editor, which keeps them.
     local left, ran, orig_finish, orig_hide, orig_run
 
     before_each(function()
@@ -131,12 +131,12 @@ describe('editor key contract #input', function()
       assert.same('editor', love.state.app_state)
     end
 
-    it('Ctrl+Shift+S is refused during an edit, then leaves',
+    it('Ctrl+Q is refused during an edit, then leaves',
       function()
         open_dirty_block()
         local draft = ed.input:get_text():items()
 
-        chord({ 'lctrl', 'lshift' }, 's')
+        chord({ 'lctrl' }, 'q')
 
         assert.is_false(left)
         assert.is_true(ed.input:has_error())
@@ -144,7 +144,7 @@ describe('editor key contract #input', function()
         assert.same(draft, ed.input:get_text():items())
 
         abort_edit()
-        chord({ 'lctrl', 'lshift' }, 's')
+        chord({ 'lctrl' }, 'q')
         assert.is_true(left)
         assert.same({}, saved)
       end)
@@ -204,7 +204,7 @@ describe('editor key contract #input', function()
   describe('leaving through the real finish_edit', function()
     -- The stubbed exits above keep the buffers, so they never
     -- saw what the key does after they are gone: the chord's
-    -- own 's' once went on to the mode's handler, which asked
+    -- own key once went on to the mode's handler, which asked
     -- the emptied editor for its buffer and raised
     -- (editorView.lua, get_current_buffer).
     before_each(function()
@@ -212,8 +212,7 @@ describe('editor key contract #input', function()
     end)
 
     after_each(function()
-      F.session.release('s')
-      F.session.release('lshift')
+      F.session.release('q')
       F.session.release('lctrl')
       ed.input.keypressed = nil
       love.debug = nil
@@ -225,13 +224,12 @@ describe('editor key contract #input', function()
       local handled = false
       local field = ed.input.keypressed
       ed.input.keypressed = function(self, k, ...)
-        handled = handled or k == 's'
+        handled = handled or k == 'q'
         return field(self, k, ...)
       end
 
       F.session.press('lctrl')
-      F.session.press('lshift')
-      F.session.press('s')
+      F.session.press('q')
 
       assert.is_false(handled)
       assert.same('ready', love.state.app_state)

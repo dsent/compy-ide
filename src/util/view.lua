@@ -2,16 +2,16 @@ if not love or not love.graphics then return end
 
 require("util.string.string")
 
+local layout = require("view.layout")
+
+--- The height of the output's rows above the status line and
+--- one row of the field, from the top strip down.
 --- @param cfg ViewConfig
 --- @return number
 local get_drawable_height = function(cfg)
-  local ch = cfg.fh * cfg.lh
-  local d = cfg.h
-      - cfg.fh -- statusline
-      - cfg.fh -- input line
-  local n_lines = math.floor(d / ch)
-  local res = n_lines * ch
-  return res
+  local l = layout(cfg)
+  local d = cfg.h - l.top - l.bottom - l.status_h - cfg.fh
+  return math.floor(d / cfg.fh) * cfg.fh
 end
 
 --- Write a line of text to output

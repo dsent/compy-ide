@@ -1,4 +1,5 @@
 local class = require("util.class")
+local Layout = require("view.layout")
 
 --- @class Statusline : ViewBase
 Statusline = class.create(function(cfg)
@@ -55,10 +56,10 @@ function Statusline:draw(status, start_y)
 
   local h = start_y or 0
   local w = cf.w
-  local fh = cf.fh
   local font = cf.font
-  local sb = cf.statusline_border
-  local corr = sb / 2
+  --- the status line's own row, its text centred in it
+  local band = Layout(cf).status_h
+  local pad = math.floor((band - font:getHeight()) / 2)
 
   --- The width of `text` in the monospace font: its columns.
   --- @param text string
@@ -68,14 +69,14 @@ function Statusline:draw(status, start_y)
   end
 
   local start_box = { x = 0, y = h }
-  local endTextX = start_box.x + w - fh
+  local margin = 2 * cf.fw
+  local endTextX = start_box.x + w - margin
   local midX = (start_box.x + w) / 2
 
   local function drawBackground()
     gfx.setColor(colors.bg)
     gfx.setFont(font)
-    gfx.rectangle("fill",
-      start_box.x, start_box.y - corr, w, fh + sb)
+    gfx.rectangle("fill", start_box.x, start_box.y, w, band)
   end
 
   --- @param m More?
@@ -98,8 +99,8 @@ function Statusline:draw(status, start_y)
     local state = love.state.app_state
     local custom = status.custom
     local start_text = {
-      x = start_box.x + fh,
-      y = start_box.y,
+      x = start_box.x + margin,
+      y = start_box.y + pad,
     }
 
     gfx.setColor(colors.fg)
@@ -157,7 +158,7 @@ function Statusline:draw(status, start_y)
       if love.state.testing then
         gfx.print('testing',
           midX - (8 * cf.fw),
-          start_text.y + corr)
+          start_text.y)
       end
       local sl = state or '???'
       local lw = cols(sl) / 2

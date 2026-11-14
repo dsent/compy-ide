@@ -68,9 +68,13 @@ local config_view = function(flags)
   local font_cjk = gfx.newFont(fonts.cjk, font_size * (2 / 3))
   font_main:setFallbacks(font_icon, font_cjk)
 
-  local lh = tf.size and 1 or 1.0468
+  --- a row's height, the same for every row of the screen
+  --- (conf/display.lua); text printed in several lines takes
+  --- it too
+  local fh = tf.size and font_main:getHeight()
+      or display.row_height
+  local lh = fh / font_main:getHeight()
   font_main:setLineHeight(lh)
-  local fh = font_main:getHeight()
   -- we use a monospace font, so the width should be the same for any input
   local fw = font_main:getWidth('█') -- 16x32
 
@@ -105,7 +109,6 @@ local config_view = function(flags)
   return {
     font = font_main,
     iconfont = font_icon,
-    statusline_border = 4,
     fh = fh,
     fw = fw,
     lh = lh,
@@ -365,8 +368,9 @@ function love.load()
   end
 
   local editorconf = {
-    --- TODO
-    mouse_enabled = false,
+    --- a click places the cursor in the editor's field, and
+    --- does nothing on the file (the ruling of 2026-11-14)
+    mouse_enabled = true,
     touch_enabled = false,
   }
 

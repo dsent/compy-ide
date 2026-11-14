@@ -1,6 +1,7 @@
 require("view.input.statusline")
 
 local class = require('util.class')
+local Layout = require("view.layout")
 local Blink = require('view.input.cursorBlink')
 require("util.debug")
 require("util.view")
@@ -11,8 +12,9 @@ require("util.view")
 local new = function(cfg, ctrl)
   local gfx = love.graphics
   local w = gfx.getWidth()
-  --- max lines + statusline
-  local h = cfg.input_max * cfg.fh + cfg.fh
+  --- the statusline, max lines, and the strip under them
+  local l = Layout(cfg)
+  local h = l.status_h + cfg.input_max * cfg.fh + l.bottom
   return {
     cfg = cfg,
     controller = ctrl,
@@ -54,13 +56,24 @@ function UserInputView:get_rows(input)
   return draft
 end
 
---- Where the status line's text starts on the screen when
---- the field takes `rows` rows under it; its band reaches
---- half the status line's border above that.
+--- Where the status line starts on the screen when the field
+--- takes `rows` rows under it: the field's rows end at the
+--- screen's bottom, or at the strip reserved there.
 --- @param rows integer
 --- @return number
 function UserInputView:status_y(rows)
-  return love.graphics.getHeight() - (rows + 1) * self.cfg.fh
+  local l = Layout(self.cfg)
+  return love.graphics.getHeight() - l.bottom
+      - rows * self.cfg.fh - l.status_h
+end
+
+--- Where the field's row `r` starts in the field's canvas,
+--- under the status line.
+--- @param r number
+--- @return number
+function UserInputView:row_y(r)
+  return Layout(self.cfg).status_h
+      + (r - 1) * self.cfg.fh
 end
 
 --- Whether a message leaves this field as it is: the file
@@ -136,7 +149,7 @@ function UserInputView:render_input(input, status, time)
 
     if vcl < 1 then return end
 
-    local ch = vcl * fh
+    local ch = self:row_y(vcl)
     local x_offset = acc - (yi - 1) * w
 
     gfx.push('all')
@@ -245,7 +258,7 @@ function UserInputView:render_input(input, status, time)
             end
           end
         end)()
-        local dy = row * fh
+        local dy = self:row_y(row)
         local dx = (c - 1) * fw
         ViewUtils.write_token(dy, dx,
           char, color, colors.bg, selected)
@@ -258,7 +271,8 @@ function UserInputView:render_input(input, status, time)
     for l, str in ipairs(visible) do
       local row = field_row(l + vc.offset)
       if 0 < row then
-        ViewUtils.write_line(row, str, fh, 0, self.cfg)
+        ViewUtils.write_line(row, str, self:row_y(1), 0,
+          self.cfg)
       end
     end
     gfx.pop()
@@ -287,13 +301,13 @@ function UserInputView:render_error(err_text, status)
   self.start_h = self:status_y(inLines)
   local drawableWidth = self.cfg.drawableWidth
   local apparentHeight = #err_text
-  local start_y = fh -- statusline
+  local start_y = self:row_y(1)
 
   local drawBackground = function()
     gfx.setColor(colors.input.error_bg)
     gfx.rectangle("fill",
       0,
-      fh,
+      start_y,
       drawableWidth,
       apparentHeight * fh)
   end
@@ -357,8 +371,7 @@ function UserInputView:draw()
   if self.controller ~= project or turned then
     self.controller:update_view()
   end
-  local b = self.cfg.statusline_border / 2
-  local h = self.start_h - b
+  local h = self.start_h
   gfx.push('all')
   gfx.setColor(1, 1, 1, 1)
   gfx.setBlendMode("replace")

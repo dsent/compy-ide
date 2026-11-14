@@ -2,6 +2,7 @@ require("view.canvas.bgView")
 require("view.canvas.terminalView")
 
 local class = require("util.class")
+local Layout = require("view.layout")
 require("util.view")
 
 local gfx = love.graphics
@@ -38,8 +39,16 @@ function CanvasView:draw(
 
   if not test then
     if ViewUtils.conditional_draw('show_terminal') then
+      --- a strip reserved at the screen's top takes the
+      --- output's ground
+      local top = Layout(cfg).top
+      if 0 < top and not snapshot then
+        gfx.setColor(cfg.colors.terminal.bg)
+        gfx.rectangle('fill', 0, 0, cfg.w, top)
+        gfx.setColor(1, 1, 1, 1)
+      end
       -- gfx.setBlendMode('multiply', "premultiplied")
-      TerminalView.draw(terminal, term_canvas, snapshot)
+      TerminalView.draw(terminal, term_canvas, snapshot, top)
     end
     if ViewUtils.conditional_draw('show_canvas') then
       gfx.draw(canvas)

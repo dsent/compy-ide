@@ -32,7 +32,7 @@ function CanvasModel.new(cfg)
     h = cfg.view.h
   end
   local canvas = gfx.newCanvas(w, h)
-  local custom_height = cfg.view.fh * cfg.view.lh
+  local custom_height = cfg.view.fh
   -- The terminal spans only the visible console region: the full
   -- view height minus the statusline and input line. Sizing it to
   -- the full height gives it rows that render under the input line,

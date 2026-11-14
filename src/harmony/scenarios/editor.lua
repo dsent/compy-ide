@@ -79,8 +79,8 @@ local function press(wait, key, n)
   end
 end
 
---- browse to the file's first block: a page key moves ten
---- blocks, and every line of a comment is a block
+--- browse to the file's first block: PgUp pages up, and at
+--- the file's start goes to its first block
 --- @param wait function
 local function to_top(wait)
   press(wait, 'pageup', 12)
@@ -366,10 +366,10 @@ local function editor()
     hm_done()
   end)
 
-  -- The view follows the browsing position; Alt with a page
-  -- or edge key scrolls the view alone. A loaded block stays
-  -- the target while the position moves, and the editor is
-  -- not left while it is loaded.
+  -- The view follows the browsing position, and PgUp and PgDn
+  -- page with it. A loaded block stays the target while the
+  -- position moves, and the editor is not left while it is
+  -- loaded.
   scenario('scroll', function(wait)
     local file = 'drawing.lua'
     wait(.1)
@@ -381,13 +381,13 @@ local function editor()
 
     press(wait, 'pageup', 2)
     shot(wait, 'page-up')
-    chord(wait, 'A-end')
-    shot(wait, 'peek-end')
-    chord(wait, 'A-pageup')
-    shot(wait, 'peek-up')
-    -- a browse brings the view back to the position
-    chord(wait, 'C-down')
-    shot(wait, 'follow-back')
+    h.love_key('pagedown')
+    wait(.1)
+    shot(wait, 'page-down')
+    -- back onto a block, which F2 loads below
+    h.love_key('pageup')
+    wait(.1)
+    shot(wait, 'page-up-again')
 
     h.love_key('f2')
     wait(.1)
