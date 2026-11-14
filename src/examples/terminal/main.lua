@@ -84,7 +84,7 @@ if serial.isConnected() then
 else
   print("[plug the micro:bit in]")
 end
-print("[Alt+R restarts the micro:bit]")
+print("[Ctrl+M restarts the micro:bit]")
 
 -- What to do when the board does not come back by itself
 local BUTTON = "press its reset button, on the back next to" ..
@@ -128,15 +128,15 @@ local function restartBoard()
   return "[the micro:bit did not restart: " .. BUTTON .. "]"
 end
 
-compy.input.shortcuts.keypressed["alt+r"] = function()
+compy.input.shortcuts.keypressed["ctrl+m"] = function()
   tail = ""
   print(restartBoard())
   return true
 end
 
--- On the Compy an Alt chord can also bring its letter as
--- text; this "r" is not meant for the board.
-compy.input.shortcuts.textinput["alt+r"] = function()
+-- On the Compy a Ctrl chord can also bring its letter as
+-- text; this "m" is not meant for the board.
+compy.input.shortcuts.textinput["ctrl+m"] = function()
   return true
 end
 

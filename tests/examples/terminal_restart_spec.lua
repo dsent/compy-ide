@@ -1,4 +1,4 @@
---- The terminal example's Alt+R on a Compy from before files
+--- The terminal example's Ctrl+M on a Compy from before files
 --- went down the cable: its serial table has send, reset and
 --- isConnected only, and no isFlashing.
 
@@ -31,7 +31,7 @@ local function load_terminal(serial)
   return input, said
 end
 
-describe('terminal Alt+R #microbit', function()
+describe('terminal Ctrl+M #microbit', function()
   it('restarts the board on an older Compy', function()
     local resets = 0
     local serial = {
@@ -41,7 +41,7 @@ describe('terminal Alt+R #microbit', function()
     }
     local input, said = load_terminal(serial)
     assert.has_no_error(function()
-      input.shortcuts.keypressed['alt+r']()
+      input.shortcuts.keypressed['ctrl+m']()
     end)
     assert.same(1, resets)
     assert.truthy(said[#said]:find('restarting the micro:bit', 1,
@@ -60,55 +60,86 @@ describe('terminal Alt+R #microbit', function()
       isFlashing = function() return true end,
     }
     local input, said = load_terminal(serial)
-    input.shortcuts.keypressed['alt+r']()
+    input.shortcuts.keypressed['ctrl+m']()
     assert.truthy(said[#said]:find('on its way to the micro:bit',
       1, true))
   end)
 end)
 
--- Through the IDE's own route: Alt+R is no key of the IDE's,
--- so it reaches the program's shortcut, and its letter, which
--- the device also sends as text, does not reach the line that
--- goes to the board.
-describe('terminal Alt+R through the IDE #microbit', function()
+-- Through the IDE's own route: Ctrl+M is no key of the IDE's
+-- (not reserved, not in the field's table), so it reaches the
+-- program's shortcut ahead of the input field, and its letter,
+-- which the device also sends as text before or after the
+-- press, does not reach the line that goes to the board. Alt+R,
+-- the restart of the day before, does nothing.
+describe('terminal Ctrl+M through the IDE #microbit', function()
   local F = require('tests.helpers.input_fixture')
   setup(F.setup)
   teardown(F.teardown)
   before_each(F.reset)
 
-  local ORDERS = { 'before', 'after' }
+  --- the terminal on the project route, over a board that
+  --- counts its resets and keeps what it is sent
+  local function terminal()
+    local board = { resets = 0, sent = { } }
+    local serial = {
+      send = function(s)
+        board.sent[#board.sent + 1] = s
+        return true
+      end,
+      reset = function()
+        board.resets = board.resets + 1
+        return true
+      end,
+      isConnected = function() return true end,
+    }
+    local input = F.activate_project()
+    local env = setmetatable({
+      compy = { serial = serial, input = input },
+      print = function() end,
+      io = { write = function() end },
+      utf8 = require('lua-utf8'),
+      love = setmetatable({ }, { __index = love }),
+    }, { __index = _G })
+    local chunk =
+        assert(loadfile('src/examples/terminal/main.lua'))
+    setfenv(chunk, env)()
+    return board
+  end
 
-  for _, order in ipairs(ORDERS) do
-    it('restarts the board, its r typed nowhere, the text '
+  --- `mod` with `key`, its letter sent as text `order` the press
+  local function chord(mod, key, order)
+    F.session.press(mod)
+    if order == 'before' then F.session.type(key) end
+    F.session.press(key)
+    if order == 'after' then F.session.type(key) end
+    F.session.release(key)
+    F.session.release(mod)
+  end
+
+  --- type "x" and Enter: what reaches the board
+  local function send_x(board)
+    F.session.type('x')
+    F.session.press('return')
+    F.session.release('return')
+    return board.sent
+  end
+
+  for _, order in ipairs({ 'before', 'after' }) do
+    it('Ctrl+M restarts the board, its m typed nowhere, the '
+        .. 'text ' .. order .. ' the key press', function()
+      local board = terminal()
+      chord('lctrl', 'm', order)
+      assert.same(1, board.resets)
+      assert.same({ 'x\r' }, send_x(board))
+    end)
+
+    it('Alt+R restarts nothing and types nothing, the text '
         .. order .. ' the key press', function()
-      local resets, sent = 0, { }
-      local serial = {
-        send = function(s) sent[#sent + 1] = s return true end,
-        reset = function() resets = resets + 1 return true end,
-        isConnected = function() return true end,
-      }
-      local input = F.activate_project()
-      local env = setmetatable({
-        compy = { serial = serial, input = input },
-        print = function() end,
-        io = { write = function() end },
-        utf8 = require('lua-utf8'),
-        love = setmetatable({ }, { __index = love }),
-      }, { __index = _G })
-      local chunk =
-          assert(loadfile('src/examples/terminal/main.lua'))
-      setfenv(chunk, env)()
-      F.session.press('lalt')
-      if order == 'before' then F.session.type('r') end
-      F.session.press('r')
-      if order == 'after' then F.session.type('r') end
-      F.session.release('r')
-      F.session.release('lalt')
-      assert.same(1, resets)
-      F.session.type('x')
-      F.session.press('return')
-      F.session.release('return')
-      assert.same({ 'x\r' }, sent)
+      local board = terminal()
+      chord('lalt', 'r', order)
+      assert.same(0, board.resets)
+      assert.same({ 'x\r' }, send_x(board))
     end)
   end
 end)
