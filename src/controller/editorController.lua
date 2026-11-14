@@ -5,8 +5,7 @@ require("view.input.customStatus")
 require("model.input.cursor")
 
 local class = require('util.class')
-local check = require('model.lang.lua.check')
-local format = require('model.lang.lua.format')
+local lua = require('model.editor.luaLayer')
 local KeyCard = require('model.editor.keyCard')
 
 --- @param M EditorModel
@@ -170,10 +169,10 @@ function EditorController:open(name, content, save, key)
     --- @param t string
     --- @param single boolean
     ch = function(t, single)
-      return parser.chunker(t, w, single)
+      return lua.chunker(t, w, single)
     end
     pp = function(t)
-      local out, formatted = format.format(t, w)
+      local out, formatted = lua.format(t, w)
       if formatted then return out end
     end
     tr = function(code)
@@ -648,15 +647,15 @@ end
 ---  keyboard handlers  ---
 ---------------------------
 
---- The notice of an action on a Lua file's `#!` first line,
---- or before it
+--- The notice of an action on a Lua file's header line, or
+--- before it
 EditorController.HEADER_NOTICE = 'The first line is the'
-    .. " file's #! header and stays as it is."
+    .. " file's header, which Lua skips, and stays as it is."
     .. ' The lines below it are edited as usual.'
 
 --- @private
---- A Lua file's first line that starts with `#!` is its
---- header: a block of its own (the chunker's line nothing
+--- A Lua file's first line that the language skips (a `#!`
+--- line; luaLayer.is_header) is its header: a block of its own (the chunker's line nothing
 --- claims), kept as it is. No action edits, cuts or moves it,
 --- or puts anything before it; each is refused with
 --- HEADER_NOTICE.
@@ -667,11 +666,12 @@ EditorController.HEADER_NOTICE = 'The first line is the'
 function EditorController:_is_header(buf, i)
   if i ~= 1 or buf.content_type ~= 'lua' then return false end
   local first = buf:block_lines(1) or {}
-  return string.match(first[1] or '', '^#!') ~= nil
+  return lua.is_header(first[1])
 end
 
 --- @private
---- The gate (model.lang.lua.check) gives the verdict. An
+--- The language layer's gate gives the verdict, as
+--- model.editor.luaLayer presents it (submission). An
 --- accepted draft goes to go as its formatted blocks. A draft
 --- unfinished at its end goes on, on a new line (IS3.5); one
 --- that fails earlier gets the cursor before the failing
@@ -679,7 +679,7 @@ end
 --- formatted, the cursor kept, under a notice naming the
 --- limit (IS3.3). A block too large is go's to refuse, after
 --- its own checks.
---- @param go fun(newtext: Block[]|string[], verdict: GateVerdict?): boolean
+--- @param go fun(newtext: Block[]|string[], verdict: SubmissionVerdict?): boolean
 --- @return boolean accepted --- go's verdict, or false
 --- when the input does not evaluate
 function EditorController:_handle_submit(go)
@@ -690,7 +690,7 @@ function EditorController:_handle_submit(go)
   local ct = buf.content_type
   if ct == 'lua' then
     --- IS3.7: empty lines alone become empty-line blocks
-    local empties = check.empty_blocks(raw)
+    local empties = lua.empty_blocks(raw)
     if empties then
       return go(empties)
     elseif not string.is_non_empty_string_array(raw) then
@@ -698,9 +698,8 @@ function EditorController:_handle_submit(go)
       local block = buf:get_content():get(sel)
       if not block then return true end
     else
-      local verdict = check.gate(raw,
-        self.model.cfg.view.drawableChars, self:_size_limit(),
-        true)
+      local verdict = lua.submission(raw,
+        self.model.cfg.view.drawableChars, self:_size_limit())
       --- an accepted draft goes as its formatted blocks; one
       --- that fails to land (a write refused) stays as typed
       if #verdict.errors == 0 then
@@ -733,7 +732,7 @@ function EditorController:_handle_submit(go)
       self:refuse(long and { string.format(
         'Line %d has %d characters, the limit is %d.'
         .. ' Shorten or break it, then press Enter',
-        long.l, long.len, check.max_line_length
+        long.l, long.len, lua.max_line_length
       ) } or verdict.errors)
       inter:update_view()
       return false
@@ -775,7 +774,7 @@ end
 
 --- Refuse a block the gate found too large, and point
 --- at it (9.6)
---- @param verdict GateVerdict?
+--- @param verdict SubmissionVerdict?
 --- @return boolean refused
 function EditorController:_reject_oversized(verdict)
   local first = verdict and verdict.oversized[1]
@@ -797,18 +796,10 @@ function EditorController:_reject_oversized(verdict)
   return true
 end
 
---- The parser is built on first use
-local lua_parser
---- @return table
-local function get_lua_parser()
-  lua_parser = lua_parser or require('model.lang.lua.parser')()
-  return lua_parser
-end
-
 --- @param lines string[]
 --- @return table? --- the statements, when the text parses
 local function statements(lines)
-  local ok, ast = get_lua_parser().parse(lines)
+  local ok, ast = lua.parser().parse(lines)
   if ok then return ast end
 end
 
@@ -833,7 +824,7 @@ function EditorController:format_file()
   if self:_refuse_stale(buf, 'tidied') then return end
   local snap = buf:snapshot()
   local before = snap.lines
-  local after, formatted = check.tidied(before,
+  local after, formatted = lua.tidied(before,
     self.model.cfg.view.drawableChars)
   if not formatted then
     return self:refuse({
@@ -961,7 +952,7 @@ function EditorController:_as_loaded(lines)
   if self:get_active_buffer().content_type ~= 'lua' then
     return lines
   end
-  return (check.formatted(lines,
+  return (lua.formatted(lines,
     self.model.cfg.view.drawableChars, true))
 end
 

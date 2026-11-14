@@ -255,7 +255,7 @@ response to a cursor-movement keypress). The editor has the most, all through
 `edit_block` (`jump_end` after a block is loaded or reloaded), and in
 `src/controller/editorReuse.lua` the undo timeline's restore of a saved draft and its cursor, the
 copy and cut of a block into the draft, and the reformat of a kept draft, which maps the cursor
-onto the formatted text (`model.lang.lua.cursor_map`). One more is in the model itself,
+onto the formatted text (`model.input.cursorMap`). One more is in the model itself,
 `_apply_eval`, which seats the caret on the error position when an evaluation is rejected, and
 the last is the project-facing `compy.input.set_cursor`/`set_text` above. Console and search
 never touch it programmatically.

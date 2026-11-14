@@ -8,7 +8,7 @@ local class = require('util.class')
 local Blink = require('view.input.cursorBlink')
 local LANG = require("util.eval")
 local FS = require('util.filesystem')
-local check = require('model.lang.lua.check')
+local lua = require('model.editor.luaLayer')
 local display = require('conf.display')
 local Application = require('util.application')
 local usb = require('util.usb')
@@ -342,13 +342,6 @@ function ConsoleController:restore_checkpoint(name)
   return ok and true or false
 end
 
---- The parser is built on first use
-local parser
-local function lua_parser()
-  parser = parser or require('model.lang.lua.parser')()
-  return parser
-end
-
 --- Format a project file the way the editor's Ctrl+Shift+F
 --- formats it, at a Compy's width: the REPL's `tidy(name)`.
 --- A `#!` first line stays. A line outside the change keeps
@@ -375,9 +368,9 @@ function ConsoleController:tidy(name)
     return self:_writefile(name, out)
   end)
   local lines = buf:snapshot().lines
-  local out, formatted = check.tidied(lines, display.columns)
+  local out, formatted = lua.tidied(lines, display.columns)
   if not formatted then
-    local parsed, err = lua_parser().parse(lines)
+    local parsed, err = lua.parser().parse(lines)
     if not parsed and err and err.l then
       print(string.format(
         '%s has an error on line %d, so it stays as it is',

@@ -6,7 +6,7 @@ require("model.lang.lua.error")
 require("view.editor.visibleContent")
 
 local class = require('util.class')
-local cursor_map = require('model.lang.lua.cursor_map')
+local cursor_map = require('model.input.cursorMap')
 require("util.wrapped_text")
 require("util.dequeue")
 require("util.string.string")

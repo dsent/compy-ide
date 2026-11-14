@@ -35,7 +35,6 @@ return function(lib)
   end
 
   local mlc = require('metalua.metalua.compiler').new()
-  local cursor_map = require('model.lang.lua.cursor_map')
   local a2s_module = 'metalua.metalua.compiler.ast_to_src'
   local long_brackets = require(a2s_module).long_brackets
 
@@ -90,141 +89,6 @@ return function(lib)
     local char = tonumber(match2() or '') or -1
     local errmsg = string.trim(colons[4])
     return Error(errmsg, char, line)
-  end
-
-  --- @param s string
-  --- @param byte integer --- a byte offset in `s`
-  --- @return integer --- the column of the character there
-  local char_col = function(s, byte)
-    local pre = string.sub(s, 1, byte - 1)
-    return (string.ulen(pre) or #pre) + 1
-  end
-
-  --- @param lines string[]
-  --- @param ln integer
-  --- @param at integer --- the byte the comment opens at
-  --- @return integer ln --- where the text goes on after it
-  --- @return integer col
-  local skip_comment = function(lines, ln, at)
-    local eq = string.match(lines[ln], '^%-%-%[(=*)%[', at)
-    if not eq then return ln + 1, 1 end
-    local close = ']' .. eq .. ']'
-    local from = at + 4 + #eq
-    while ln <= #lines do
-      local _, e = string.find(lines[ln], close, from, true)
-      if e then return ln, e + 1 end
-      ln, from = ln + 1, 1
-    end
-    return ln, 1
-  end
-
-  --- @param lines string[]
-  --- @param l integer
-  --- @param c integer --- a byte column
-  --- @return boolean --- the text before l:c ends in a comment
-  local after_comment = function(lines, l, c)
-    local before = {}
-    for i = 1, l - 1 do before[i] = lines[i] end
-    before[l] = string.sub(lines[l], 1, c - 1)
-    local els = cursor_map.elements(table.concat(before, '\n'))
-    local last = els[#els]
-    return last ~= nil and string.sub(last.text, 1, 2) == '--'
-  end
-
-  --- @param lines string[]
-  --- @param err Error
-  --- @return Error --- `err`, placed after the last character
-  local at_end = function(lines, err)
-    local last = lines[#lines] or ''
-    err.l = math.max(#lines, 1)
-    err.c = (string.ulen(last) or #last) + 1
-    err.at_end = true
-    return err
-  end
-
-  --- @param lines string[]
-  --- @param tok table --- the parser's current token
-  --- @param err Error
-  --- @return Error --- `err`, placed at the element before `tok`
-  local before_token = function(lines, tok, err)
-    local plain, upto = {}, 0
-    for i = 1, #lines do
-      plain[i] = lines[i]
-      if i < tok.l then upto = upto + #lines[i] + 1 end
-    end
-    local text = table.concat(plain, '\n')
-    upto = tok.eof and #text + 1 or upto + tok.c - 1
-    local found
-    for _, el in ipairs(cursor_map.elements(text)) do
-      local comment = string.sub(el.text, 1, 2) == '--'
-      if el.s < upto and not comment then found = el end
-    end
-    if not found then return at_end(lines, err) end
-    err.l, err.c = cursor_map.position(plain, found.s)
-    return err
-  end
-
-  --- The failure boundary (IS3.4, IS3.5): the first character
-  --- of the token the parser failed on, or the end of the text
-  --- when it failed for want of more, which `at_end` says.
-  --- @param code str
-  --- @param parse_err Error --- as parse returns it
-  --- @return Error --- a new one, at the boundary
-  local locate_failure = function(code, parse_err)
-    local lines = code
-    if type(code) == 'string' then lines = string.lines(code) end
-    local l = parse_err.l
-    local err = Error(parse_err.msg, parse_err.c, l)
-    if type(lines) ~= 'table' then return err end
-    --- an expression where a statement belongs fails as a
-    --- whole, and the parser has read past it by then; every
-    --- other failure is at the token the parser stopped at
-    local msg = err.msg or ''
-    local misplaced = string.find(msg,
-      'statement was expected', 1, true)
-    local tok = not misplaced and parse_err.token
-    --- these two the parser raises after reading the token
-    --- that failed: it is the one before the current token
-    local no_expr = string.find(msg,
-      "can't start an expression", 1, true)
-    local no_keyword = string.find(msg,
-      'A keyword was expected', 1, true)
-    --- a keyword missing at the end names no token read: the
-    --- error's own position says where the text stopped
-    if no_keyword and tok and tok.eof then tok = nil end
-    if tok and (no_expr or no_keyword) then
-      return before_token(lines, tok, err)
-    end
-    if tok and not tok.eof and lines[tok.l] then
-      err.l, err.c = tok.l, char_col(lines[tok.l], tok.c)
-      return err
-    end
-    if tok and tok.eof then return at_end(lines, err) end
-    if not lines[l] then return err end
-    --- the lexer failed, or an expression is misplaced: the
-    --- error names the last token taken before the failure,
-    --- and none when the text opens with it
-    local col = err.c + 1
-    local opens = l == 1 and err.c == 1 and misplaced
-    if opens then col = 1 end
-    --- after a comment the parser names the failing token
-    --- itself, the first one past the comment
-    if after_comment(lines, l, err.c) then col = err.c end
-    local ln = l
-    while ln <= #lines do
-      local s = lines[ln]
-      local at = string.find(s, '%S', col)
-      if not at then
-        ln, col = ln + 1, 1
-      elseif string.sub(s, at, at + 1) ~= '--' then
-        err.l, err.c = ln, char_col(s, at)
-        return err
-      else
-        --- a comment is no failure: the text goes on after it
-        ln, col = skip_comment(lines, ln, at)
-      end
-    end
-    return at_end(lines, err)
   end
 
   --- Read lexstream and determine highlighting
@@ -518,11 +382,11 @@ return function(lib)
   end
 
   --- Blocks of source lines, every line in exactly one block,
-  --- in order, as it is written (FR3.1): a block is the lines
-  --- of statements and comments that share a line, so that no
+  --- in order, as it is written: a block is the lines of
+  --- statements and comments that share a line, so that no
   --- line boundary divides them; a blank line is an empty
-  --- block of its own; a line nothing claims (a `#!` line) is
-  --- a block of its own.
+  --- block of its own; a line nothing claims (a `#` line the
+  --- parser skips) is a block of its own.
   --- @param lines string[]
   --- @param ast luaAST
   --- @return Dequeue<Block>
@@ -579,7 +443,14 @@ return function(lib)
       if ok then
         local lines = type(text) == 'string'
             and string.lines(text) or text
-        return true, source_blocks(lines, r), r
+        local ret = source_blocks(lines, r)
+        --- blank lines typed at the end of the block are one
+        --- empty block
+        while single and #ret > 1 and ret:last():is_empty()
+          and ret[#ret - 1]:is_empty() do
+          ret:pop_back()
+        end
+        return true, ret, r
       else
         --- content is not valid lua
         return false, Dequeue(text, 'string'), r
@@ -587,10 +458,7 @@ return function(lib)
     else
       --- a file of blank lines keeps every one of them
       local empties = Dequeue.typed('block')
-      local whole = not single and type(text) == 'table'
-      --- a file of no lines has no block (IS1.1)
-      if whole and #text == 0 then return true, empties, r end
-      local n = whole and #text or 1
+      local n = (not single and type(text) == 'table') and #text or 1
       for ln = 1, math.max(n, 1) do
         empties:push_back(Empty(ln))
       end
@@ -612,7 +480,6 @@ return function(lib)
 
   return {
     parse       = parse,
-    failure     = locate_failure,
     pprint      = pprint,
     comments    = comments,
     highlighter = highlighter,

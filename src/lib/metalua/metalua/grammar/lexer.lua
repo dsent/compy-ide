@@ -713,12 +713,11 @@ function lexer:newstream(src_or_stream, name)
       }
       setmetatable(stream, self)
 
-      -- Skip initial sharp-bang for Unix scripts, the line
-      -- whole, as LuaJIT does (Compy: mlp.chunk() no longer
-      -- skips a `#` line of its own)
+      -- Skip initial sharp-bang for Unix scripts
+      -- FIXME: redundant with mlp.chunk()
       if src and src:match("^#!") then
          local endofline = src:find("\n")
-         stream.i = endofline and (endofline + 1) or (#src + 1)
+         stream.i = endofline and (endofline + 1) or #src
       end
       return stream
    else

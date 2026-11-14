@@ -1,5 +1,5 @@
 require('util.string.string')
-local cursor_map = require('model.lang.lua.cursor_map')
+local cursor_map = require('model.input.cursorMap')
 --- the parser sets the path its lexer loads from, which reads
 --- the strings, numbers and comments formatting respells
 require('model.lang.lua.parser')()

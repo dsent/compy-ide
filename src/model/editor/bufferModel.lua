@@ -1,5 +1,5 @@
 require("model.editor.content")
-local analyzer = require("model.lang.lua.analyze")
+local lua = require('model.editor.luaLayer')
 local bsi = require("model.editor.bufferSemanticInfo")
 
 local class = require('util.class')
@@ -533,7 +533,7 @@ function BufferModel:analyze()
   local lines = string.lines(self:get_text_content())
   local ok, blocks, ast = self.chunker(lines)
   if not ok then return end
-  local anaok, ana = pcall(analyzer.analyze, ast)
+  local anaok, ana = pcall(lua.analyze, ast)
   if not anaok then return end
   for bi, v in ipairs(blocks) do
     if (v.pos) then

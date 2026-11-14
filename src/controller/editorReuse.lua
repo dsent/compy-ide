@@ -788,7 +788,7 @@ function EditorController:submit_and_retain()
   --- draft is not formatted, and keeps it where it was
   local l, c = kept.l, kept.c
   if buf.content_type == 'lua' then
-    l, c = require('model.lang.lua.cursor_map').cursor(
+    l, c = require('model.input.cursorMap').cursor(
       kept.text, text, kept.l, kept.c)
   end
   im:move_cursor(l, c)

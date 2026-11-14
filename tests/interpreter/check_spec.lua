@@ -131,38 +131,6 @@ describe('lua check #check', function()
         assert.is_number(verdict.errors[1].l)
       end)
 
-    --- editor principles, IS3.7: every empty line of a draft
-    --- becomes an empty-line block, the trailing ones too
-    it('keeps every empty line of a draft as a block', function()
-      local function kinds_of(lines)
-        local verdict = check.gate(lines, 64, 14, true)
-        local kinds = {}
-        for _, b in ipairs(verdict.blocks) do
-          table.insert(kinds, b:is_empty() and 'empty' or 'code')
-        end
-        return kinds, verdict.lines
-      end
-      assert.same({ 'code', 'empty' }, (kinds_of({ 'a = 1', '' })))
-      assert.same({ 'code', 'empty', 'empty' },
-        (kinds_of({ 'a = 1', '', '' })))
-      local kinds, lines = kinds_of({ 'a = 1', '', '', '' })
-      assert.same({ 'code', 'empty', 'empty', 'empty' }, kinds)
-      assert.same({ 'a = 1', '', '', '' }, lines)
-      assert.same({ 'empty', 'empty', 'code' },
-        (kinds_of({ '', '', 'a = 1' })))
-      assert.same({ 'code', 'empty', 'empty', 'code' },
-        (kinds_of({ 'a = 1', '', '', 'b = 2' })))
-    end)
-
-    it('takes a draft of blank lines for empty-line blocks',
-      function()
-        assert.is_nil(check.empty_blocks({ '' }))
-        assert.is_nil(check.empty_blocks({ 'a = 1', '' }))
-        assert.same(2, #check.empty_blocks({ '', '' }))
-        assert.same(1, #check.empty_blocks({ '  ' }))
-        assert.is_true(check.empty_blocks({ '', ' ' })[2]:is_empty())
-      end)
-
     it('chunks what passes into the blocks the editor writes',
       function()
         local verdict = check.gate({ 'a = 1', '', '', 'b = 2', '' })
