@@ -456,17 +456,27 @@ end
 
 --- @param clipboard string?
 function EditorController:set_state(clipboard)
-  --- TODO: multibuffer support
   local buf = self:get_active_buffer()
   local bid = buf:get_id()
   local buf_view_state = self.view:get_buffer(bid):get_state()
+  --- the files under it on the stack, the bottom one first,
+  --- each as it was left: a test run comes back to them all
+  --- (IS1.4)
+  local callers = {}
+  local bs = self.model.buffers
+  for i = bs:length(), 2, -1 do
+    local v = self.view:get_buffer(bs[i]:get_id())
+    if v then callers[#callers + 1] = v:get_state() end
+  end
   if self.state then
     self.state.buffer = buf_view_state
+    self.state.callers = callers
     self.state.moved = buf:get_selection()
     if clipboard then self:set_clipboard(clipboard) end
   else
     self.state = {
       buffer = buf_view_state,
+      callers = callers,
       clipboard = clipboard,
       moved = buf:get_selection()
     }
@@ -630,9 +640,6 @@ end
 function EditorController:save(buf)
   local ok, err = buf:save()
   if not ok then Log.error("can't save: ", err) end
-  --- a buffer whose last write failed holds what the file
-  --- does not
-  buf.unsaved = not ok or nil
   --- the undo timeline notes what the file now holds
   if ok and self._note_saved then self:_note_saved(buf) end
   --- what the notice names (IS1.7)
@@ -846,15 +853,13 @@ function EditorController:format_file()
   end
 
   local sel_before = buf:get_selection()
-  local was_unsaved = buf.unsaved
   buf:replace_text(after)
   if not self:save(buf) then
     --- the screen keeps showing the file, so trying again
     --- formats it again. A failed save leaves the file as it
-    --- was (FS.replace), so the buffer is as unsaved as before
+    --- was (FS.replace), and so the buffer goes back
     buf:replace_text(before)
     buf:analyze()
-    buf.unsaved = was_unsaved
     self.view:refresh()
     return self:refuse({
       'Could not save the file.'
@@ -1031,10 +1036,19 @@ end
 --- @return boolean refused
 function EditorController:_refuse_stale(buf)
   if self:_file_matches(buf) then return false end
-  self:refuse({
-    'The file changed outside the editor.'
-    .. ' Reopen it to go on.'
-  })
+  --- reopening is leaving, which drops the field: with text
+  --- there, possibly a cut block's only copy, the notice says so
+  if self:state_name() == 'browsing' then
+    self:refuse({
+      'The file changed outside the editor.'
+      .. ' Reopen it to go on.'
+    })
+  else
+    self:refuse({
+      'The file changed outside the editor, so nothing is'
+      .. ' saved. Reopening it drops the text in the field.'
+    })
+  end
   return true
 end
 
@@ -1057,7 +1071,6 @@ function EditorController:_land(lines, kind, n)
   local sel = buf:get_selection()
   local count = buf:get_content_length() - (target and 1 or 0)
   local before = table.clone(buf:get_text_content())
-  local was_unsaved = buf.unsaved
   if self:_refuse_stale(buf) then return false end
   local ran = buf:loads()
   --- the buffer goes back to what the file holds, and the
@@ -1067,7 +1080,6 @@ function EditorController:_land(lines, kind, n)
     buf:_text_change()
     buf:analyze()
     buf:set_selection(sel)
-    buf.unsaved = was_unsaved
     self.view:refresh()
   end
   local pos

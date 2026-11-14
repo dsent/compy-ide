@@ -2172,6 +2172,21 @@ function ConsoleController:edit(name, state, must_exist)
   local PS = self.model.projects
   local p  = PS.current
   if not p then return end
+  --- back from a test run (IS1.4): the files under the one in
+  --- front open first, as the stack held them. Each opening
+  --- writes the editor's state anew, so the front file's is
+  --- taken first.
+  if state and state.callers
+      and love.state.app_state ~= 'editor' then
+    local front = {
+      buffer = state.buffer,
+      clipboard = state.clipboard,
+    }
+    for _, c in ipairs(state.callers) do
+      self:edit(c.filename, { buffer = c })
+    end
+    state = front
+  end
   local filename
   -- if state and state.buffer then
   --   filename = state.buffer.filename

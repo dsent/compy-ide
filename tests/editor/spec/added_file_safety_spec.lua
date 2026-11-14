@@ -225,6 +225,22 @@ describe("text safety #editor #spec", function()
         assert.same(OUTSIDE, K.file("new.lua"))
       end)
 
+    spec_it("IS3.14 Explain a refusal: with a cut block in the "
+        .. "field, the outside-change notice says reopening drops "
+        .. "it", function()
+      K.reset({ ["main.lua"] = "x = 1\ny = 2\n" })
+      K.open()
+      K.browse_to(1)
+      K.keys("lctrl", "delete")
+      K.write_outside("main.lua", OUTSIDE)
+      K.keys("return")
+      assert.same("x = 1", K.draft())
+      assert.truthy(K.message():find(
+        "Reopening it drops the text in the field", 1, true))
+      K.keys("escape", "lctrl", "delete")
+      assert.truthy(K.message():find("Reopen it to go on", 1, true))
+    end)
+
     spec_it("IS3.11 Preserve state on refusal: a file that can "
         .. "no longer be read is not written", function()
       K.open()
@@ -250,6 +266,63 @@ describe("text safety #editor #spec", function()
       assert.same("a = 1", K.draft())
       assert.truthy(K.message():find(STALE, 1, true))
     end)
+  end)
+
+  -- Shift+Ins on a replacement left as it was changes no
+  -- file; the draft it retains is still a step of its own
+  spec_it("IS6.6 Undo and redo: a draft retained from an "
+      .. "unchanged replacement is undone before the action "
+      .. "before it", function()
+    K.reset({ ["main.lua"] = "x = 1\ny = 2\n" })
+    K.open()
+    K.type("a = 1")
+    K.keys("return")
+    K.browse_to(2)
+    K.keys("f2")
+    K.keys("lshift", "insert")
+    assert.same("y = 2", K.draft())
+    assert.same("inserting", K.state())
+    K.keys("lctrl", "z")
+    assert.same("", K.draft())
+    assert.same("browsing", K.state())
+    assert.same("x = 1\ny = 2\na = 1\n", K.file())
+    K.keys("lctrl", "z")
+    assert.same("x = 1\ny = 2\n", K.file())
+    K.keys("lctrl", "y")
+    assert.same("x = 1\ny = 2\na = 1\n", K.file())
+    K.keys("lctrl", "y")
+    assert.same("y = 2", K.draft())
+    assert.same("inserting", K.state())
+  end)
+
+  -- A test run is no leaving of a file (IS1.4): from a file
+  -- reached with Ctrl+J, the run comes back to the same stack
+  spec_it("IS1.4 Resume after running a project: a run from a "
+      .. "followed file comes back to it, its caller and both "
+      .. "timelines", function()
+    K.reset({
+      ["main.lua"] = "require('lib')\nx = 1\n",
+      ["lib.lua"] = "u = 1\n"
+    })
+    K.open()
+    K.type("m = 0")
+    K.keys("return")
+    K.browse_to(1)
+    K.keys("lctrl", "j")
+    K.type("v = 2")
+    K.keys("return")
+    K.keys("lctrl", "t")
+    K.keys("lctrl", "t")
+    assert.same("editor", K.app_state())
+    assert.same("lib.lua", K.file_name())
+    K.keys("lctrl", "z")
+    assert.same("u = 1\n", K.file("lib.lua"))
+    K.keys("escape")
+    assert.same("editor", K.app_state())
+    assert.same("main.lua", K.file_name())
+    assert.same(1, K.position())
+    K.keys("lctrl", "z")
+    assert.same("require('lib')\nx = 1\n", K.file())
   end)
 
   describe("the timeline", function()

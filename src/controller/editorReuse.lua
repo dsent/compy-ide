@@ -16,7 +16,9 @@
 --- `buf.history` once the draft holds none (IS6.6).
 
 --- the steps of `buf.history` that change no file
-local STATE_STEP = { abort = true, open = true, switch = true }
+local STATE_STEP = {
+  abort = true, open = true, switch = true, retain = true
+}
 
 local NOTICE = {
   cut_inserting = 'Finish the text first: Enter adds it,'
@@ -202,7 +204,7 @@ function EditorController:timeline_record(before, sel_before,
 end
 
 --- @private
---- @param kind 'abort'|'open'|'switch'
+--- @param kind 'abort'|'open'|'switch'|'retain'
 function EditorController:_timeline_state_step(kind)
   local buf = self:get_active_buffer()
   if not buf then return end
@@ -258,6 +260,17 @@ end
 function EditorController:_replay_state(step, forward)
   local buf = self:get_active_buffer()
   local kind = step.kind
+  if kind == 'retain' then
+    --- undone as an accepted change is, with nothing in the
+    --- file to put back: the field empty, in the browsing
+    --- state; redone, the retained draft again
+    if forward then
+      self:_field_restore(step.field)
+    else
+      self:_field_empty()
+    end
+    return
+  end
   if not forward then
     --- what a redo brings back
     step.to = buf.loaded
@@ -384,17 +397,13 @@ function EditorController:_replay_file(step, forward)
     return false
   end
   local found = self:_field_snapshot()
-  local was_unsaved = buf.unsaved
   --- the action undone just before this one
   local later = buf.redo_history[#buf.redo_history]
   if forward then buf:redo() else buf:undo() end
   if not self:save(buf) then
-    --- the file is as it was: so is the buffer, and it is
-    --- as unsaved as before, so that the next undo still
-    --- reads the file for a change from outside
+    --- the file is as it was (FS.replace): so is the buffer
     if forward then buf:undo() else buf:redo() end
     buf:analyze()
-    buf.unsaved = was_unsaved
     self.view:refresh()
     self:refuse({ self:_unsaved_notice(
       forward and 'Nothing redone.' or 'Nothing undone.') })
@@ -536,7 +545,7 @@ end
 --- @private
 --- The buffer goes back to what the file holds, and the
 --- change is refused
---- @param back table --- {before, sel, was_unsaved}
+--- @param back table --- {before, sel}
 --- @param why string
 function EditorController:_reuse_put_back(back, why)
   local buf = self:get_active_buffer()
@@ -544,7 +553,6 @@ function EditorController:_reuse_put_back(back, why)
   buf:_text_change()
   buf:analyze()
   buf:set_selection(back.sel)
-  buf.unsaved = back.was_unsaved
   self.view:refresh()
   self:refuse({ why })
 end
@@ -603,7 +611,6 @@ function EditorController:cut_block(isrepeat)
   local back = {
     before = before,
     sel = sel,
-    was_unsaved = buf.unsaved,
   }
   local ran, count = buf:loads(), buf:get_content_length()
   --- empty, with the changes typed and deleted there
@@ -662,7 +669,6 @@ function EditorController:move_block(dir)
   local back = {
     before = before,
     sel = i,
-    was_unsaved = buf.unsaved,
   }
   local ran = buf:loads()
   buf:move(i, to)
@@ -709,6 +715,11 @@ function EditorController:submit_and_retain()
   if step and not had[step] then
     --- a redo leaves the editor as the action did
     step.field = self:_field_snapshot()
+  else
+    --- a replacement by its own text changes no file, and
+    --- its edit's steps are gone from the timeline: the
+    --- retained draft is a step of its own
+    self:_timeline_state_step('retain')
   end
 end
 

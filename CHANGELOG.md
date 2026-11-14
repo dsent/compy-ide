@@ -140,6 +140,8 @@ Project-author guide: `doc/input_api.md`.
 - **Ctrl+Z reaches back to the opening of the file**, not only the latest 32 actions,
   and holding Escape no longer leaves the file after cancelling an edit.
 - A line of spaces in a text or Markdown file is saved as typed.
+- **Ctrl+T from a file reached with Ctrl+J comes back to the whole chain** of files,
+  each where it was left and with its undo history; Escape then returns to the caller.
 - Multi-line string content now writes — `show{text = "a\nb"}` / `set_text("a\nb")`
   previously wrote nothing silently — and the two spellings of the text shape now agree.
 - Non-text content is refused with a readable message that names the failing call.

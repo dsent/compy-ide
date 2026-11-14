@@ -259,7 +259,6 @@ end
 --- @field active_line integer --- source line inside the selection
 --- @field loaded integer?
 --- @field key string? --- the file's identity, project and name
---- @field unsaved boolean? --- its last write failed
 --- @field eol string --- the line ending the file was read
 --- with and is written with
 --- @field invalid boolean --- a Lua file whose text does not

@@ -712,6 +712,10 @@ describe("IS6 reuse #editor #spec", function()
       K.keys("f2")
       K.keys("lshift", "insert")
       local kept = K.draft()
+      -- the retained draft is a step of its own: taken back
+      -- first, it leaves the field empty
+      K.keys("lctrl", "z")
+      assert.same("", K.draft())
       K.keys("lctrl", "z")
       assert.same("x = 1", kept)
       assert.same("abc", K.draft())

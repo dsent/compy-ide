@@ -168,7 +168,7 @@ This gives the editor two capabilities:
 
 Opening a file (`EditorController:open`) pushes a new buffer to the front and tells the view to create a new `BufferView` for it. Escape in the browsing state (`close_buffer`) pops the front buffer and activates the next one. If only one buffer remains, it closes the editor entirely and returns to the console.
 
-Ctrl+J (`follow_require`) calls `self.console:edit(name)` which triggers a full new `open` call, pushing another buffer. This creates a chain: file A → file B → file C, navigable back with Escape, one file at a time; Ctrl+Q leaves the whole chain for the console.
+Ctrl+J (`follow_require`) calls `self.console:edit(name)` which triggers a full new `open` call, pushing another buffer. This creates a chain: file A → file B → file C, navigable back with Escape, one file at a time; Ctrl+Q leaves the whole chain for the console. A test run (Ctrl+T) keeps the chain: the editor's state lists the files under the front one (`callers`, `set_state`), and the way back opens them first (`ConsoleController:edit`), so `restore_timelines` finds every file's timeline.
 
 The buffer ID ensures the view can retrieve the right `BufferView` even after the model stack changes order. `EditorView.buffers` is never pruned during a session — views for closed buffers remain in the table but are unreachable via the controller once the model buffer is popped.
 

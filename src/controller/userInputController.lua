@@ -711,8 +711,9 @@ function UserInputController:keypressed(k, sc, isr)
     end
     if Key.ctrl() then
       if k == "y" then
-        --- unreachable in the editor: its controller
-        --- takes Ctrl+Y for redo before the widget
+        --- in the editor, bare Ctrl+Y is redo, which its
+        --- controller takes first; with Shift or Alt held it
+        --- comes here and deletes the line, undoably
         input:delete_line()
       end
       if k == "w" and editing then
