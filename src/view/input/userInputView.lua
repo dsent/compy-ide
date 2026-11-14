@@ -261,8 +261,7 @@ function UserInputView:render_input(input, status, time)
         --- line
         local at_l = tlc and tlc.l or ln
         local at_c = tlc and tlc.c or c
-        --- a draft that is only unfinished has none (IS3.5)
-        if el and not perr.at_end and (at_l > el
+        if el and (at_l > el
               or (at_l == el and ec and at_c >= ec)) then
           color = cf_colors.input.error
         end

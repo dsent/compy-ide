@@ -12,6 +12,21 @@ require("util.range")
 
 local REFUSAL = "A line may not start with !. Change it, then press Enter"
 
+--- A draft whose last line ends in & goes on: a new line
+--- indented by two, the cursor after the indent; Lua's would
+--- be an empty line, the cursor at its start
+--- @param lines string[]
+--- @return SyntaxVerdict?
+local function goes_on(lines)
+  local last = lines[#lines] or ""
+  if string.sub(last, -1) ~= "&" then return nil end
+  local out = { }
+  for i, l in ipairs(lines) do out[i] = l end
+  out[#out + 1] = "  "
+  return { lines = out, formatted = true,
+    cursor = { l = #out, c = 3 } }
+end
+
 --- Every two lines are a block, a last odd line one alone
 local function pairs_of(lines)
   local out = Dequeue.typed("block")
@@ -29,6 +44,8 @@ local t4 = {
   spans_lines = true,
   blocks = pairs_of,
   submit = function(lines)
+    local more = goes_on(lines)
+    if more then return more end
     for _, l in ipairs(lines) do
       if string.sub(l, 1, 1) == "!" then
         return { lines = lines, formatted = false,
@@ -66,6 +83,23 @@ local t4 = {
 }
 
 local FILE = "one\ntwo\nthree\nfour\n"
+
+--- The parser t4 hands a field, whose evaluator asks it what
+--- a draft that does not parse comes to
+local function t4_evaluator()
+  require("model.interpreter.eval.evaluator")
+  require("model.lang.lua.error")
+  local parser = {
+    parse = function(lines)
+      if goes_on(lines) then
+        return false, Error("goes on", 1, 1)
+      end
+      return true, { }
+    end,
+    unparsed = function(lines) return goes_on(lines) end,
+  }
+  return Evaluator("t4", { parser = parser })
+end
 
 describe("a fourth syntax, through keys #syntax #editor", function()
   setup(K.setup)
@@ -121,6 +155,38 @@ describe("a fourth syntax, through keys #syntax #editor", function()
     assert.same("ONE\nTWO\nTHREE\nFOUR\n", K.file("a.t4"))
     K.keys("lalt", "f")
     assert.same("The file is upper case already.", K.message())
+  end)
+
+  it("shows a draft that goes on as the syntax returns it, "
+      .. "the cursor where it says, nothing written", function()
+    K.browse_to(1)
+    K.keys("f2")
+    K.type("&")
+    K.keys("return")
+    assert.same("replacing", K.state())
+    assert.same("ONE\nTWO&\n  ", K.draft())
+    assert.same({ 3, 3 }, { K.cursor() })
+    assert.is_nil(K.message())
+    assert.same(FILE, K.file("a.t4"))
+    -- one change to undo, as a typed line break would be
+    K.keys("lctrl", "z")
+    assert.same("ONE\nTWO&", K.draft())
+  end)
+
+  it("a field shows a draft that goes on as the syntax "
+      .. "returns it", function()
+    K.keys("escape")
+    K.keys("escape")
+    local console = K.cc.input
+    local was = console:get_eval()
+    finally(function() console:set_eval(was) end)
+    console:set_eval(t4_evaluator())
+    K.type("x &")
+    K.keys("return")
+    assert.same("x &\n  ", K.console_draft())
+    assert.same({ 2, 3 }, { console.model:get_cursor_pos() })
+    assert.is_false(console:has_error())
+    assert.is_nil(console.model:get_highlight().parse_err)
   end)
 
   it("cuts a block into the draft with Ctrl+Delete", function()

@@ -43,6 +43,23 @@ describe('the syntax processors #syntax', function()
         assert.is_nil(v.refusal)
       end)
 
+      it('never goes on with a draft: every one is taken',
+        function()
+          local drafts = {
+            { 'for i = 1, 2 do' }, { 'x = 1 +' }, { 'a &' },
+            { '' },
+          }
+          for _, d in ipairs(drafts) do
+            local v = syntax.submit(d, 64, 14)
+            assert.is_table(v.blocks)
+            assert.is_nil(v.cursor)
+            assert.is_nil(v.failure)
+            assert.is_false(v.formatted)
+          end
+          local p = syntax.evaluator().parser
+          assert.is_nil(p and p.unparsed)
+        end)
+
       it('has nothing to format, and always loads', function()
         local text, ok, why = syntax.format({ 'a  b' }, 64)
         assert.same({ 'a  b' }, text)
@@ -86,6 +103,27 @@ describe('the syntax processors #syntax', function()
         assert.same({ 'x = 1' }, v.lines)
         assert.same(1, #v.blocks)
       end)
+
+    it('continues an unfinished draft on a new line, the '
+        .. 'cursor there, with no failure', function()
+      local v = lua.submit({ 'for i = 1, 2 do' }, 64, 14)
+      assert.same({ 'for i = 1, 2 do', '' }, v.lines)
+      assert.same({ l = 2, c = 1 }, v.cursor)
+      assert.is_true(v.formatted)
+      assert.is_nil(v.failure)
+      assert.is_nil(v.refusal)
+      assert.is_nil(v.blocks)
+      local p = lua.evaluator().parser
+      local _, err = p.parse({ 'f(', '  1,' })
+      local u = p.unparsed({ 'f(', '  1,' }, err)
+      assert.same({ 'f(', '  1,', '' }, u.lines)
+      assert.same({ l = 3, c = 1 }, u.cursor)
+      assert.is_nil(u.failure)
+      _, err = p.parse({ 'x = = 1' })
+      u = p.unparsed({ 'x = = 1' }, err)
+      assert.same({ 1, 5 }, { u.failure.l, u.failure.c })
+      assert.is_nil(u.cursor)
+    end)
 
     it('says why a file is not formatted', function()
       local _, ok, why = lua.format({ 'x = = 1' }, 64)

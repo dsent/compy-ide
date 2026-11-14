@@ -256,37 +256,32 @@ local function same_lines(a, b)
   return true
 end
 
---- The draft canonically formatted, as one change to it: what
---- was typed before stays undoable, and the cursor keeps its
---- line and column as far as the new text allows.
+--- The draft as a syntax returns it, as one change to it:
+--- what was typed before stays undoable. The cursor goes to
+--- `at` when it is given, else it follows the text element
+--- it stood at (IS3.9).
 --- @param text str
-function UserInputModel:reformat(text)
+--- @param at {l: integer, c: integer}?
+function UserInputModel:reformat(text, at)
   local lines = normalized_lines(text)
   if not lines then return end
   --- the same text is no change, and no step (IS6.6)
-  if same_lines(lines, self:get_text()) then return end
+  if same_lines(lines, self:get_text()) then
+    if at then self:move_cursor(at.l, at.c) end
+    return
+  end
   self:_record_edit('format', true)
-  --- the cursor follows the text element it stood at (IS3.9)
   local cl, cc = self:get_cursor_pos()
   local nl, nc = cursor_map.cursor(self:get_text(), lines, cl, cc)
+  if at then
+    self:clear_selection()
+    nl, nc = at.l, at.c
+  end
   self.entered = InputText(lines)
   self:set_cursor(Cursor(nl, nc))
   self:text_change()
   self:_clamp_cursor_pos()
   self:_follow_cursor()
-  self:_note_edit()
-end
-
---- Continue the draft on a new line (IS3.5): a line break
---- after its last character, the cursor after the break,
---- wherever it stood.
-function UserInputModel:continue_line()
-  self:_record_edit('newline', true)
-  self:clear_selection()
-  local n = self:get_n_text_lines()
-  self:insert_text_line('', n + 1)
-  self:move_cursor(n + 1, 1)
-  self:text_change()
   self:_note_edit()
 end
 
@@ -494,7 +489,7 @@ function UserInputModel:backspace()
   self:_note_edit()
 end
 
---- Ctrl+Backspace, Alt+Backspace and Ctrl+W: delete exactly
+--- Ctrl+Backspace and Ctrl+W: delete exactly
 --- what Ctrl+Left moves over (IS3.8), as one change: one word
 --- splitting for both (the maintainer's ruling of November
 --- 14, 2026). At a line's start that is the line break and the
@@ -596,9 +591,12 @@ function UserInputModel:highlight()
     local ok, p_err = p.parse(text)
     local parse_err
     if not ok then
-      --- red starts at the failing character (IS3.4); a draft
-      --- that fails only at its end has none (IS3.5)
-      parse_err = p.failure and p.failure(text, p_err) or p_err
+      --- red starts at the failing character (IS3.4), where
+      --- the parser's syntax places a failure, if it has one
+      parse_err = p_err
+      if p.unparsed then
+        parse_err = p.unparsed(text, p_err).failure
+      end
     end
     local hl
     if ev.highlighter then
@@ -1228,14 +1226,14 @@ end
 
 --- @private
 --- @param ent InputText
---- @return Error? --- where the text fails to parse, at the
---- failing character, when the evaluator's parser can say
-function UserInputModel:_parse_failure(ent)
+--- @return Unparsed? --- what the text that fails to parse
+--- comes to, when the evaluator's parser can say
+function UserInputModel:_unparsed(ent)
   local p = self.evaluator.parser
-  if not p or not p.failure then return nil end
+  if not p or not p.unparsed then return nil end
   local parses, err = p.parse(ent)
   if parses then return nil end
-  return p.failure(ent, err)
+  return p.unparsed(ent, err)
 end
 
 --- @private
@@ -1248,17 +1246,19 @@ function UserInputModel:_apply_eval(ent)
   if ok then return ok, result end
   local perr = result[1]
   if not perr or not perr.c then return ok, result end
-  --- a draft unfinished at its end goes on, on a new line,
-  --- with no error to show (IS3.5); a failure before the end
-  --- seats the cursor before the failing character (IS3.4)
-  local failure = self:_parse_failure(ent)
-  if failure and failure.at_end then
-    self:continue_line()
-    return false, nil
-  end
+  --- the parser's syntax says what the draft comes to: a
+  --- failure seats the cursor before the failing character
+  --- (IS3.4); any other answer is shown as it is, with no
+  --- error (IS3.5)
+  local said = self:_unparsed(ent)
+  local failure = said and said.failure
   if failure then
     self:move_cursor(failure.l, failure.c)
     return ok, { failure }
+  end
+  if said then
+    self:reformat(said.lines, said.cursor)
+    return false, nil
   end
   local c = char_col(self:get_text_line(perr.l), perr.c)
   if c > 1 then c = c + 1 end

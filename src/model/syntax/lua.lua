@@ -189,11 +189,48 @@ function M.failure(code, parse_err)
 end
 
 
---- The language layer's parser, with `failure` beside it:
+--- What a draft that does not parse comes to (IS3.4, IS3.5):
+--- its failure, at the failing character; or, when it is
+--- only unfinished, no failure: it goes on, on a new line at
+--- its end, the cursor there
+--- @param lines string[]
+--- @param failure Error --- as M.failure places it
+--- @return Unparsed
+local went_on = function(lines, failure)
+  if not failure.at_end then
+    return { lines = lines, formatted = false,
+      failure = failure }
+  end
+  local out = {}
+  for i, l in ipairs(lines) do out[i] = l end
+  out[#out + 1] = ''
+  return { lines = out, formatted = true,
+    cursor = { l = #out, c = 1 } }
+end
+
+--- @class Unparsed
+--- @field failure Error? --- where the draft fails, if it does
+--- @field lines string[] --- the draft to show
+--- @field formatted boolean --- `lines` differ from the draft
+--- @field cursor {l: integer, c: integer}? --- where the cursor
+--- goes in `lines`; nil: it follows the text it stood at
+
+--- What a draft that does not parse comes to, as the field
+--- shows it
+--- @param code str
+--- @param parse_err Error --- as parse returns it
+--- @return Unparsed
+function M.unparsed(code, parse_err)
+  local lines = code
+  if type(code) == 'string' then lines = string.lines(code) end
+  return went_on(lines, M.failure(lines, parse_err))
+end
+
+--- The language layer's parser, with `unparsed` beside it:
 --- the parser of the console's field and the file editor's
 --- @return table
 function M.parser()
-  return setmetatable({ failure = M.failure },
+  return setmetatable({ unparsed = M.unparsed },
     { __index = function(_, k) return get_parser()[k] end })
 end
 
@@ -292,25 +329,25 @@ end
 --- @field blocks Block[]? --- what an accepted draft lands as
 --- @field lines string[] --- the draft as the syntax writes it
 --- @field formatted boolean --- `lines` differ from the draft
---- @field failure Error? --- where the draft fails to parse,
---- `at_end` when it is only unfinished
+--- @field failure Error? --- where the draft fails to parse
+--- @field cursor {l: integer, c: integer}? --- where the cursor
+--- goes in `lines` when the draft is not taken; nil: it
+--- follows the text it stood at
 --- @field refusal string? --- the notice of a rule it breaks
 
 --- A draft as Lua takes it (IS3.2 to IS3.5): refused where it
---- does not parse, or with a notice for a line over the limit
---- or a block over the size limit; accepted as the gate's
---- formatted blocks
+--- does not parse, gone on on a new line when it is only
+--- unfinished, or refused with a notice for a line over the
+--- limit or a block over the size limit; accepted as the
+--- gate's formatted blocks
 --- @param lines string[]
 --- @param width integer
 --- @param max_block integer
 --- @return SyntaxVerdict
 function M.submit(lines, width, max_block)
   local v = M.submission(lines, width, max_block)
+  if v.failure then return went_on(v.lines, v.failure) end
   local out = { lines = v.lines, formatted = v.formatted }
-  if v.failure then
-    out.failure = v.failure
-    return out
-  end
   local long = v.long_line
   if #v.errors > 0 then
     out.refusal = long and string.format(

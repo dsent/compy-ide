@@ -11,7 +11,8 @@
 ---   nil when the syntax cannot split the text
 --- * `submit(lines, width, max_block)` --- a draft's verdict
 ---   (SyntaxVerdict): its blocks when accepted, else a
----   failure or a refusal
+---   failure, or the draft to show, with the cursor's place
+---   and a refusal's notice when it has them
 --- * `format(lines, width)` --- the text formatted:
 ---   text, ok, and when not ok why
 --- * `loads(lines)` --- whether the file holds together after

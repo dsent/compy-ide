@@ -40,7 +40,7 @@ end
 --- @field pressed table<string, boolean>
 EditorController = class.create(new)
 
---- A whole-editor exit (Ctrl+T, Ctrl+Q and Ctrl+Alt+R at the
+--- A whole-editor exit (Ctrl+T, Ctrl+Q and Ctrl+R at the
 --- gate) is taken from the browsing state. During an edit it
 --- is refused with a notice, and no question is asked
 --- (H-NFR4.6): the field may hold a cut block's only copy
@@ -507,13 +507,12 @@ end
 
 --- @private
 --- The file's syntax gives the verdict (model.syntax). An
---- accepted draft goes to go as the syntax's blocks. A draft
---- unfinished at its end goes on, on a new line (IS3.5); one
---- that fails earlier gets the cursor before the failing
---- character (IS3.4); one the syntax refuses for a rule (a
---- line or a block over its limit, IS3.3) is shown as the
---- syntax writes it, the cursor kept, under the syntax's
---- notice.
+--- accepted draft goes to go as the syntax's blocks. One that
+--- fails gets the cursor before the failing character (IS3.4).
+--- Any other is shown as the syntax returns it, as one
+--- undoable change, the cursor where the syntax puts it or
+--- where it stood, under the syntax's notice if it gives one
+--- (IS3.2, IS3.3, IS3.5, IS3.9).
 --- @param go fun(newtext: Block[]): boolean
 --- @return boolean accepted --- go's verdict, or false
 --- when the draft is not taken
@@ -527,13 +526,6 @@ function EditorController:_handle_submit(go)
   --- fails to land (a write refused) stays as typed
   if verdict.blocks then return go(verdict.blocks) end
   local failure = verdict.failure
-  if failure and failure.at_end then
-    --- IS3.5: a draft that is only unfinished goes on, on
-    --- a new line at its end
-    inter.model:continue_line()
-    inter:update_view()
-    return false
-  end
   if failure then
     --- IS3.4: the cursor goes before the failing character,
     --- where the red text starts, and the parser's message
@@ -543,13 +535,10 @@ function EditorController:_handle_submit(go)
     inter:update_view()
     return false
   end
-  --- a refused draft is shown as the syntax writes it, as one
-  --- undoable change to it, the cursor where it stood (IS3.2,
-  --- IS3.9)
-  if verdict.formatted then
-    inter.model:reformat(verdict.lines)
+  if verdict.formatted or verdict.cursor then
+    inter.model:reformat(verdict.lines, verdict.cursor)
   end
-  self:refuse({ verdict.refusal })
+  if verdict.refusal then self:refuse({ verdict.refusal }) end
   inter:update_view()
   return false
 end
