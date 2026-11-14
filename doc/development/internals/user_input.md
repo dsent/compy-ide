@@ -112,7 +112,7 @@ The "keypressed = control channel, textinput = character channel" split used thr
 
 Every channel carries LÖVE's own argument list end to end, unchanged. LÖVE calls `love.handlers.keypressed` with `(key, scancode, isrepeat)`; the gateway keeps all three, and the project route forwards all three to every consumer — shortcut, hook and widget alike. A handler written as `love.keypressed(key, scancode, isrepeat)` therefore behaves identically once it is seeded as a hook, which is the point (D-LOVE-ARGS).
 
-The console/editor route is the one place that narrows: its default handler accepts the arguments and calls `CC:keypressed(k)` (and from there `EditorController:keypressed(k)`), so console/editor mode dispatch sees neither `scancode` nor `isrepeat`. It has no widget step to thread them to — see "Keyboard Handling".
+The console/editor route passes all three to `CC:keypressed` and from there to `EditorController:keypressed`; neither reads `scancode`. `isrepeat` tells them a key's press from its repeats: each records the keys whose press reached it (the key card follows the help key's press), and the editor acts on a repeat only where the press reached it. The route has no widget step to thread them to — see "Keyboard Handling".
 
 Shortcuts dispatch (the `compy.input.shortcuts` combo tables) does not gate on `isrepeat` — see "Key state" below.
 
@@ -170,7 +170,7 @@ recorded because a reader meeting the old shape in an older tree needs to know w
 no longer differ. The `add_text` path never had the split, having normalised with `string.unlines`
 at the controller before it reaches the model.
 
-The input view height is `input_max = 14` lines. This is a display limit only — the model can hold more lines, and scrolling within the input works normally. In the editor context this becomes relevant when loading a monster block: the editor's buffer viewport is `LINES = 16`, a **separate** limit from `input_max`, so a block can exceed the 14-line input strip — all content stays in the model, but only 14 lines are visible at once. **Open:** `input_max` (14) and `LINES` (16) currently differ, and whether 14 or 16 is the correct monster-block threshold is **not yet settled** — reconciling them is a pending review item (see `editor.md` — *`input_max` vs `LINES`* and *Monster Blocks*).
+The console's input view is `input_max = 14` lines high; the editor's field shows at most 8 rows, half the rows it shares with the document view. Both are display limits only — the model holds every line, and the field scrolls to its cursor. `input_max` is also the editor's block size limit, so a block at the limit is taller than the editor's field (see `editor.md` — *Three heights* and *Monster Blocks*).
 
 ### Selection
 

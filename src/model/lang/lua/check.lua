@@ -230,6 +230,8 @@ function M.tidied(lines, width)
   local head = shebang(lines) and { lines[1] } or {}
   local rest = {}
   for i = #head + 1, #lines do rest[#rest + 1] = lines[i] end
+  --- a header alone has nothing below it to format
+  if #rest == 0 then return lines, true end
   local out, formatted = format.format(rest, width)
   if not formatted then return lines, false end
   for _, l in ipairs(out) do head[#head + 1] = l end

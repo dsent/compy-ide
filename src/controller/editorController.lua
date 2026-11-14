@@ -26,7 +26,8 @@ local function new(M, CC)
     console = CC,
     view = nil,
     mode = 'nav',
-    --- the keys pressed since the editor came to the front
+    --- the keys whose press reached the editor since it came
+    --- to the front, until their release
     pressed = {},
   }
 end
@@ -118,6 +119,11 @@ end
 function EditorController:gate_key_done()
   self._gate_key = nil
   self._in_key = nil
+end
+
+--- @param k string
+function EditorController:key_released(k)
+  self.pressed[k] = nil
 end
 
 --- @param v EditorView
@@ -411,7 +417,7 @@ end
 --- @param k string? --- nil for typed text
 --- @return boolean
 function EditorController:_held_back(k)
-  if KeyCard.shows() then return true end
+  if KeyCard.shows(self.pressed) then return true end
   --- a gate chord's own key reaches the editor after the
   --- gate refused the exit, or the key the editor came to
   --- the front on (came_forward): it must not dismiss the
@@ -456,7 +462,7 @@ end
 --- @return string[]?
 function EditorController:key_card()
   if love.state.app_state ~= 'editor' then return nil end
-  if not KeyCard.shows() then return nil end
+  if not KeyCard.shows(self.pressed) then return nil end
   local card = self.view.key_card
   return card:lines(self:state_name(), self:_draft_is_empty())
 end
@@ -646,6 +652,7 @@ end
 --- or before it
 EditorController.HEADER_NOTICE = 'The first line is the'
     .. " file's #! header and stays as it is."
+    .. ' The lines below it are edited as usual.'
 
 --- @private
 --- A Lua file's first line that starts with `#!` is its
@@ -760,7 +767,8 @@ function EditorController:mousepressed(x, y, btn, touch, presses)
   self.input:mousepressed(x, y, btn, touch, presses)
 end
 
---- @return integer --- the input strip's height (2.7)
+--- @return integer --- the block size limit (IS1.3), which
+--- only a submission is held to
 function EditorController:_size_limit()
   return self.view:get_current_buffer():get_max_size()
 end
@@ -991,18 +999,10 @@ function EditorController:_editable_lines(bn)
     return nil, 'An empty line has nothing to edit.'
         .. ' Move onto a block.'
   end
-  --- a line of a file the editor cannot read is cut for
-  --- repair, as a block over the limit is (IS1.3)
-  if buf.invalid then
-    return nil, 'The editor cannot split this file into'
-        .. ' blocks. Ctrl+Delete cuts a line to fix.'
-  end
-  local max = self:_size_limit()
-  if buf.content_type == 'lua' and #lines > max then
-    return nil, string.format(
-      'Block of %d lines, limit %d.'
-      .. ' Ctrl+Delete cuts it to fix.', #lines, max)
-  end
+  --- whatever the block holds, a block over the limit or a
+  --- line of a file the editor cannot split into blocks: the
+  --- language's check judges the submission (ruling of
+  --- November 14, 2026, over IS1.3)
   return self:_as_loaded(lines)
 end
 
@@ -1292,6 +1292,8 @@ function EditorController:keypressed(k, _, isrepeat)
   if isrepeat and not self.pressed[k] then return end
   if self:_held_back(k) then return end
   if not isrepeat then self.pressed[k] = true end
+  --- its press brings up the card (KeyCard.shows)
+  if k == KeyCard.KEY then return end
   self.input:update_view()
   local mode = self.mode
 

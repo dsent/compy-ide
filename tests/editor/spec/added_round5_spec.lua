@@ -501,11 +501,12 @@ describe("round five #editor #spec", function()
           "a = = 1\nfunction f()\n  b = 2\nend\n")
         K.keys("lctrl", "t")
         assert.same(4, K.blocks())
+        -- Edit opens the one line (the maintainer's ruling of
+        -- November 14, 2026)
         K.browse_to(2)
         K.keys("f2")
-        assert.is_nil(K.target())
-        assert.truthy((K.message() or ""):find("cannot split", 1,
-          true))
+        assert.same(2, K.target())
+        assert.same("function f()", K.draft())
       end)
 
     spec_it("IS1.2 Admit or refuse a file: a file made "

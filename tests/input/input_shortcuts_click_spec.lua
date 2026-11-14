@@ -55,6 +55,8 @@ describe('input surface: inbound events — shortcuts and clicks'
             stop_project_run = function() calls.stop = true end,
             finish_edit = function() calls.leave = true end,
             keypressed = function() end,
+            card_shows = function() return false end,
+            key_released = function() end,
           }
           local saved    = table.clone(love.handlers)
           local saved_kp = love.keypressed

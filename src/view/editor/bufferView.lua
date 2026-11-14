@@ -271,20 +271,6 @@ local function settle(top, total, s, e, h)
   return top
 end
 
---- @param tolerate_oversize boolean?
---- @return boolean
-function BufferView:is_selection_visible(tolerate_oversize)
-  local s, e = self:_browsed_rows()
-  local r = self.content:get_range()
-  if e < s then
-    return r:inc(e) or e == 0
-  end
-  if r:inc(s) and r:inc(e) then return true end
-  -- a block taller than the view, shown from its first row
-  return (tolerate_oversize and s == r.start and r.fin < e)
-      or false
-end
-
 --- Show the browsing position: the browsed block with its
 --- context, or the end of the file at the end position
 function BufferView:follow_selection()

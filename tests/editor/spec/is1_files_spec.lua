@@ -122,9 +122,9 @@ describe("IS1 files #editor #spec", function()
     -- A .lua file whose text does not parse is admitted, so
     -- that it can be repaired. The spec names no blocks for
     -- such text; as in Luditor, its reference implementation,
-    -- each line is a block until the file parses again, and
-    -- Edit is refused on them as on a block over the limit
-    -- (IS1.3): cutting a line loads it for repair.
+    -- each line is a block until the file parses again. Edit
+    -- opens a line as it opens any block, and cutting a line
+    -- loads it too.
     describe("a file that does not parse", function()
       local BROKEN = "x = 1\n?\n\n  function f(\ny = 2\n"
 
@@ -163,16 +163,16 @@ describe("IS1 files #editor #spec", function()
           K.file("broken.lua"))
       end)
 
-      spec_it("IS1.2 Admit or refuse a file: Edit on a line of "
-          .. "a file that does not parse is refused with a " ..
-          "notice naming the way to fix it", function()
+      -- the maintainer's ruling of November 14, 2026 overrides
+      -- IS1.3's refusal of Edit
+      spec_it("IS1.2 Admit or refuse a file: Edit opens a line of "
+          .. "a file that does not parse, as it stands", function()
         K.browse_to(2)
         K.keys("f2")
-        assert.same("browsing", K.state())
-        assert.is_nil(K.target())
-        assert.truthy(
-          (K.message() or ""):find("Ctrl+Delete", 1, true)
-        )
+        assert.same("replacing", K.state())
+        assert.same(2, K.target())
+        assert.same("?", K.draft())
+        assert.is_nil(K.message())
         assert.same(BROKEN, K.file("broken.lua"))
       end)
 
@@ -384,14 +384,21 @@ describe("IS1 files #editor #spec", function()
       assert.same("browsing", K.state())
     end)
 
-    spec_it("IS1.3 Handle size limits: Edit on an oversized "
-        .. "block is refused with a notice naming the limit",
-        function()
+    -- the maintainer's ruling of November 14, 2026 overrides
+    -- IS1.3's refusal of Edit
+    spec_it("IS1.3 Handle size limits: Edit opens an oversized "
+        .. "block, and Enter refuses it with a notice naming the "
+        .. "limit", function()
       K.open()
       K.browse_to(1)
       K.keys("f2")
-      assert.same("browsing", K.state())
+      assert.same("replacing", K.state())
+      assert.same(1, K.target())
+      assert.is_nil(K.message())
+      K.keys("return")
+      assert.same("replacing", K.state())
       assert.truthy((K.message() or ""):find("14", 1, true))
+      assert.same(tall(16) .. "y = 2\n", K.file())
     end)
 
     spec_it("IS1.3 Handle size limits: cutting an oversized "

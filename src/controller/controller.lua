@@ -1133,10 +1133,11 @@ Controller = {
       local reservation = RESERVED.keypressed[combo_string(k)]
       -- While the key card shows, the editor's keys do
       -- nothing, Ctrl+Q included (editor spec, IS3.16); over a
-      -- program that takes the help key there is no card
-      -- (key_owner).
-      if reservation
-          and not require('model.editor.keyCard').shows() then
+      -- program that took the help key there is no card
+      -- (KeyCard.shows). A reservation acts on its key's press,
+      -- not on its repeats: a held Ctrl+T does not flip between
+      -- the run and the editor.
+      if reservation and not isr and not CC:card_shows() then
         reservation()
       end
 
@@ -1185,6 +1186,9 @@ Controller = {
     end
 
     handlers.keyreleased = function(k, sc)
+      -- here, whichever route has the keys: the help key's
+      -- release ends its card wherever its press went
+      CC:key_released(k)
       local reservation = RESERVED.keyreleased[combo_string(k)]
       if reservation then reservation() end
       if love.keyreleased then
@@ -1315,27 +1319,6 @@ Controller = {
   --- exits the IDE) stops it back to the console.
   user_is_interactive = function()
     return (love.state.user_input ~= nil) or user_pointer
-  end,
-
-  --- Who a key pressed now goes to, as the routes decide it:
-  --- the one answer the gate and the key card share (IS3.16).
-  --- The program has it while its route holds the keyboard (a
-  --- run, or a program idle behind the console; a paused one
-  --- is let go) and its chain has a consumer for the key, or
-  --- it holds the screen, where nothing falls through
-  --- (fall_through). Otherwise the console's route has it,
-  --- which gives it to the file editor in the editor's state
-  --- and to the console's own field else.
-  --- @param k string
-  --- @return 'program'|'editor'|'console'
-  key_owner = function(k)
-    local pic = Controller.project_input
-    if pic.compy_input
-        and (user_draw or pic:takes('keypressed', k)) then
-      return 'program'
-    end
-    if love.state.app_state == 'editor' then return 'editor' end
-    return 'console'
   end,
 
   --- @param userlove table

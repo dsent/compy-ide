@@ -120,9 +120,11 @@ changes, then send it back with <kbd>Enter ⏎</kbd>.
 ![capitalized](./interface/hello_cap.apng)
 
 In a Lua file a block is a statement or an empty line, and a
-text that is not valid Lua is not accepted. In a text or
-Markdown file every line is a block, and a line is accepted as
-written.
+text that is not valid Lua is not accepted. <kbd>F2</kbd> loads
+any block, one longer than 14 lines or with a line longer than
+64 characters too; <kbd>Enter ⏎</kbd> accepts it once it keeps
+to those limits. In a text or Markdown file every line is a
+block, and a line is accepted as written.
 
 When the editor cannot do what a key asks, it shows a notice
 just above the status line that says why and what would work.

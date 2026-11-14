@@ -37,6 +37,8 @@ local function drive_stub(combo)
     cfg     = { mode = 'dev' },
     restart = function() calls.restart = true end,
     reset   = function() calls.reset = true end,
+    card_shows = function() return false end,
+    key_released = function() end,
   }
   local saved    = table.clone(love.handlers)
   local saved_kp = love.keypressed

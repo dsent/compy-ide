@@ -278,15 +278,17 @@ describe("timeline safety #editor #spec", function()
     local FILE = BOM .. "x = 1\nfunction f()\n  return 1\nend\n"
         .. "y = 2\n"
 
-    spec_it("IS1.2 Admit or refuse a file: Edit's notice does not "
-        .. "call a file that runs invalid", function()
+    -- Edit opens its lines (the maintainer's ruling of
+    -- November 14, 2026); formatting is refused
+    spec_it("IS1.2 Admit or refuse a file: the notice of a file "
+        .. "the editor cannot split does not call a file that "
+        .. "runs invalid", function()
       K.reset({ ["main.lua"] = FILE })
       K.open()
-      K.browse_to(1)
-      K.keys("f2")
+      K.keys("lctrl", "lshift", "f")
       local msg = K.message() or ""
       assert.falsy(msg:find("valid", 1, true))
-      assert.truthy(msg:find("Ctrl+Delete", 1, true))
+      assert.truthy(msg:find("cannot split", 1, true))
     end)
 
     spec_it("IS6.2 Cut a block: the line to repair is cut, with "

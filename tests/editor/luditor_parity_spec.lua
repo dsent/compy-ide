@@ -858,7 +858,9 @@ describe("Luditor parity #editor", function()
   end)
 
   describe("over_limit_lua_block_is_browsable_and_cuttable_but_not_editable", function()
-    it("over_limit_lua_block_is_browsable_and_cuttable_but_not_editable / Edit refused, cut loads it", function()
+    -- Luditor refuses Edit here; the maintainer's ruling of
+    -- November 14, 2026 opens the block, and Enter refuses it
+    it("over_limit_lua_block_is_browsable_and_cuttable_but_not_editable / Edit opens it, cut loads it", function()
       local body = "function f()\n"
       for i = 0, 13 do
         body = body .. "  print(" .. i .. ")\n"
@@ -870,8 +872,12 @@ describe("Luditor parity #editor", function()
       K.keys("up")
       assert.same(1, K.position())
       K.keys("f2")
-      assert.same("browsing", K.state())
+      assert.same("replacing", K.state())
+      K.keys("return")
       assert.truthy((K.message() or ""):find("14", 1, true))
+      assert.same(body, K.file())
+      K.keys("escape")
+      assert.same("browsing", K.state())
       K.keys("lctrl", "delete")
       assert.same(0, K.blocks())
       local n = select(2, K.draft():gsub("\n", "")) + 1
@@ -1081,8 +1087,11 @@ describe("Luditor parity #editor", function()
       K.open()
       assert.same(2, K.blocks())
       K.keys("up")
+      -- Luditor refuses Edit here; the maintainer's ruling of
+      -- November 14, 2026 opens the line
       K.keys("f2")
-      assert.is_not_nil(K.message())
+      assert.same("?", K.draft())
+      K.keys("escape")
       K.keys("lctrl", "delete")
       K.keys("escape")
       K.keys("up")

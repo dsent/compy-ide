@@ -15,6 +15,7 @@ local usb = require('util.usb')
 require("util.key")
 require("util.table")
 local TerminalTest = require("util.test_terminal")
+local KeyCard = require('model.editor.keyCard')
 
 local messages = {
   file_does_not_exist = function(name)
@@ -82,6 +83,9 @@ function ConsoleController.new(M, main_ctrl)
     project_env = {},
 
     loaders     = {},
+    --- the keys whose press reached the console's own key
+    --- handler, until their release (EditorController.pressed)
+    pressed     = {},
 
     view        = nil,
 
@@ -2373,10 +2377,25 @@ end
 --- @return string[]?
 function ConsoleController:key_card()
   if love.state.app_state == 'editor' then return nil end
-  if not require('model.editor.keyCard').shows() then
-    return nil
-  end
+  if not KeyCard.shows(self.pressed) then return nil end
   return self.view.editor.key_card:console_lines(self.run_live)
+end
+
+--- Whether a key card shows, the console's or the file
+--- editor's, whichever is in front
+--- @return boolean
+function ConsoleController:card_shows()
+  if love.state.app_state == 'editor' then
+    return KeyCard.shows(self.editor.pressed)
+  end
+  return KeyCard.shows(self.pressed)
+end
+
+--- A key is released wherever its press went
+--- @param k string
+function ConsoleController:key_released(k)
+  self.pressed[k] = nil
+  self.editor:key_released(k)
 end
 
 --- @param t string
@@ -2422,7 +2441,12 @@ function ConsoleController:keypressed(k, sc, isrepeat)
   if love.state.app_state == 'editor' then
     self.editor:keypressed(k, sc, isrepeat)
   else
-    --- the key card suspends the console's keys (IS3.16)
+    --- a key repeats where its press acted: one held since
+    --- the editor or a program had it does nothing here
+    if isrepeat and not self.pressed[k] then return end
+    if not isrepeat then self.pressed[k] = true end
+    --- the key card suspends the console's keys (IS3.16),
+    --- and the help key's press brings it up
     if self:key_card() then return end
     if love.state.testing == 'running' then
       return

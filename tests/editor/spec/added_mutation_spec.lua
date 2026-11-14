@@ -47,16 +47,23 @@ describe("mutation survivors #editor #spec", function()
       )
     end)
 
-    spec_it("IS1.3 Handle size limits: Edit on a block of " ..
-        "15 lines is refused with a notice naming the limit",
-        function()
-      open_file(K.block(15) .. "y = 2\n")
+    -- the maintainer's ruling of November 14, 2026 overrides
+    -- IS1.3's refusal of Edit
+    spec_it("IS1.3 Handle size limits: Edit opens a block of " ..
+        "15 lines, and Enter refuses it with a notice naming " ..
+        "the limit", function()
+      local text = K.block(15) .. "y = 2\n"
+      open_file(text)
       K.browse_to(1)
       K.keys("f2")
-      assert.same("browsing", K.state())
-      assert.is_nil(K.target())
-      assert.same("", K.draft())
+      assert.same("replacing", K.state())
+      assert.same(1, K.target())
+      K.keys("return")
+      assert.same("replacing", K.state())
+      assert.same(1, K.target())
+      assert.same(table.concat(K.block_lines(15), "\n"), K.draft())
       assert.truthy((K.message() or ""):find("14", 1, true))
+      assert.same(text, K.file())
     end)
   end)
 

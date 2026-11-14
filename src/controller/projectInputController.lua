@@ -167,22 +167,6 @@ local function dispatch(shortcuts, hooks, widget, event, trigger, ...)
   return false
 end
 
---- Whether the walk has a consumer for an event now: a
---- shortcut for its combo, a hook, or the shown widget. One
---- that is there is offered the event before the console,
---- whatever it answers (Controller.key_owner).
---- @param event string
---- @param trigger string?
---- @return boolean
-function ProjectInputController:takes(event, trigger)
-  local input = self.compy_input
-  if not input then return false end
-  local widget = love.state.user_input_controller
-  return find_shortcut(input.shortcuts[event], trigger) ~= nil
-      or input.hooks[event] ~= nil
-      or widget ~= nil and widget:is_shown()
-end
-
 --- Run the chain for one event. `trigger` is the combo token
 --- (the key, or the text); the varargs are the channel payload.
 --- @param event string

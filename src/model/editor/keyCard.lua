@@ -21,16 +21,16 @@ function KeyCard.held()
   return by_scancode ~= nil and by_scancode(KeyCard.KEY)
 end
 
---- Whether a card shows (IS3.16): while the help key is held
---- where it goes to the file editor or the console, as the
---- routes decide (Controller.key_owner). Where it goes to a
---- program, as every other key there, the program gives its
---- own help. While a card shows no key does anything, a
---- reserved one included.
+--- Whether a surface's card shows (IS3.16): while the help
+--- key is held and its press reached the surface's own key
+--- handler, which records it in `pressed` until the release.
+--- A press a program took is recorded nowhere: the program
+--- gives its own help, and nothing is suspended. While a card
+--- shows no key does anything, a reserved one included.
+--- @param pressed table<string, true> --- the surface's record
 --- @return boolean
-function KeyCard.shows()
-  return KeyCard.held()
-      and Controller.key_owner(KeyCard.KEY) ~= 'program'
+function KeyCard.shows(pressed)
+  return pressed[KeyCard.KEY] == true and KeyCard.held()
 end
 
 --- @param state EditorStateName
