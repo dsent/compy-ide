@@ -1123,6 +1123,7 @@ Controller = {
     handlers.keypressed = function(k, sc, isr)
       --- a key press shows the text cursor (H-NFR4.4)
       Blink.restart()
+      if CC.editor then CC.editor:key_begins() end
       -- Not a reservation: this fires on ANY key in playback
       -- while shutting down, not on one combo, so it cannot be
       -- a table entry.
@@ -1132,11 +1133,10 @@ Controller = {
       local reservation = RESERVED.keypressed[combo_string(k)]
       -- While the key card shows, the editor's keys do
       -- nothing, Ctrl+Q included (editor spec, IS3.16).
-      local st = love.state.app_state
-      local card = (st == 'editor' or st == 'ready'
-            or st == 'inspect')
-          and require('model.editor.keyCard').held()
-      if reservation and not card then reservation() end
+      if reservation
+          and not require('model.editor.keyCard').shows() then
+        reservation()
+      end
 
       -- This is `love.handlers.keypressed`, the raw
       -- event-pump entry; `love.keypressed` below holds the

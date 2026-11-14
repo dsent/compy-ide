@@ -2344,6 +2344,7 @@ function ConsoleController:_enter_editor()
   end
   love.state.prev_state = love.state.app_state
   love.state.app_state = 'editor'
+  self.editor:came_forward()
   return true
 end
 
@@ -2364,15 +2365,15 @@ end
 
 --- Handlers ---
 
---- The console's key card while the help key is held in the
---- console input context (IS3.16), nil otherwise: the
---- console's own and the one a paused program hands over.
+--- The console's key card while it shows (KeyCard.shows),
+--- nil otherwise: the console's own and the one a paused
+--- program hands over.
 --- @return string[]?
 function ConsoleController:key_card()
-  local st = love.state.app_state
-  if st ~= 'ready' and st ~= 'inspect' then return nil end
-  local KeyCard = require('model.editor.keyCard')
-  if not KeyCard.held() then return nil end
+  if love.state.app_state == 'editor' then return nil end
+  if not require('model.editor.keyCard').shows() then
+    return nil
+  end
   return self.view.editor.key_card:console_lines(self.run_live)
 end
 
@@ -2505,7 +2506,7 @@ function ConsoleController:mousepressed(
     if self.cfg.editor.mouse_enabled then
       self.editor:mousepressed(x, y, btn, touch, presses)
     end
-  else
+  elseif not self:key_card() then
     self.input:mousepressed(x, y, btn, touch, presses)
   end
 end
@@ -2521,7 +2522,7 @@ function ConsoleController:mousereleased(
     if self.cfg.editor.mouse_enabled then
       self.editor.input:mousereleased(x, y, btn, touch, presses)
     end
-  else
+  elseif not self:key_card() then
     self.input:mousereleased(x, y, btn, touch, presses)
   end
 end
@@ -2536,7 +2537,7 @@ function ConsoleController:mousemoved(x, y, dx, dy, touch)
     if self.cfg.editor.mouse_enabled then
       self.editor.input:mousemoved(x, y, dx, dy, touch)
     end
-  else
+  elseif not self:key_card() then
     self.input:mousemoved(x, y, dx, dy, touch)
   end
 end
@@ -2548,7 +2549,7 @@ function ConsoleController:wheelmoved(x, y)
     if self.cfg.editor.mouse_enabled then
       self.editor.input:wheelmoved(x, y)
     end
-  else
+  elseif not self:key_card() then
     self.input:wheelmoved(x, y)
   end
 end
@@ -2565,7 +2566,7 @@ function ConsoleController:touchpressed(id, x, y,
     if self.cfg.editor.touch_enabled then
       self.editor.input:touchpressed(id, x, y, dx, dy, pressure)
     end
-  else
+  elseif not self:key_card() then
     self.input:touchpressed(id, x, y, dx, dy, pressure)
   end
 end
@@ -2583,7 +2584,7 @@ function ConsoleController:touchreleased(id, x, y,
       self.editor.input:touchreleased(id, x, y,
         dx, dy, pressure)
     end
-  else
+  elseif not self:key_card() then
     self.input:touchreleased(id, x, y, dx, dy, pressure)
   end
 end
@@ -2600,7 +2601,7 @@ function ConsoleController:touchmoved(id, x, y,
     if self.cfg.editor.touch_enabled then
       self.editor.input:touchmoved(id, x, y, dx, dy, pressure)
     end
-  else
+  elseif not self:key_card() then
     self.input:touchmoved(id, x, y, dx, dy, pressure)
   end
 end

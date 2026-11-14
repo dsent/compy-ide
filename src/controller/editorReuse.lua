@@ -215,6 +215,11 @@ end
 function EditorController:_timeline_state_step(kind)
   local buf = self:get_active_buffer()
   if not buf then return end
+  --- a change from outside not seen yet ends the timeline
+  --- before this step, so that Ctrl+Z takes it back
+  if not buf.outdated and self:_baseline(buf) == 'changed' then
+    self:_outdate(buf)
+  end
   table.insert(buf.history, {
     kind = kind,
     field = self:_field_snapshot(),
@@ -357,11 +362,15 @@ end
 --- @private
 --- @param buf BufferModel
 --- @return Baseline
+--- @return string|false|nil --- with 'changed', what the card
+--- holds now, read in the same reading: its text, or false
+--- for a missing file
 function EditorController:_baseline(buf)
   local now, asked = self:_disk_text(buf)
   if not asked then return 'same' end
   if now == nil then return 'unknown' end
-  return now == buf.disk_seen and 'same' or 'changed'
+  if now == buf.disk_seen then return 'same' end
+  return 'changed', now
 end
 
 --- @private
@@ -412,10 +421,20 @@ function EditorController:_timeline_ready(buf, forward)
   --- write is refused until the file is opened again (the
   --- baseline stays) or a write lands (_note_saved)
   if buf.outdated then return true end
+  self:_outdate(buf)
+  return false
+end
+
+--- @private
+--- A change from outside, seen for the first time: every
+--- action on the timeline ends there, the draft's changes
+--- included, and what follows is recorded after it (IS6.6)
+--- @param buf BufferModel
+function EditorController:_outdate(buf)
+  if buf.outdated then return end
   buf.outdated = true
   self:timeline_forget(buf)
   self.input.model.edit_history:reset()
-  return false
 end
 
 --- @private

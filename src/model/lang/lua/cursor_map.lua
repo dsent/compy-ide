@@ -330,6 +330,42 @@ local function into_pieces(b, j0, j1, k)
   return b[j1].e
 end
 
+--- @param s string
+--- @return integer[] --- where each line of `s` starts, as a
+--- byte offset into it
+local function line_starts(s)
+  local out, i = { 0 }, 1
+  while true do
+    local nl = string.find(s, '\n', i, true)
+    if not nl then return out end
+    out[#out + 1] = nl
+    i = nl + 1
+  end
+end
+
+--- The spacing between two elements that survive side by
+--- side, or between one and the draft's edge, is unchanged
+--- where it has the same lines and the cursor's line of it is
+--- the same: a blank line stays one when the formatter
+--- respaces the line above it. Lines added or removed replace
+--- the spacing.
+--- @param g0 string --- the gap in the old text
+--- @param g1 string --- the gap in the new text
+--- @param k integer --- the cursor, bytes into `g0`
+--- @return integer? --- the cursor, bytes into `g1`
+local function in_gap(g0, g1, k)
+  if g0 == g1 then return k end
+  local l0, l1 = line_starts(g0), line_starts(g1)
+  if #l0 ~= #l1 then return nil end
+  local n = #l0
+  while l0[n] > k do n = n - 1 end
+  local function line(g, l, j)
+    return string.sub(g, l[j] + 1, (l[j + 1] or #g + 1) - 1)
+  end
+  if line(g0, l0, n) ~= line(g1, l1, n) then return nil end
+  return l1[n] + (k - l0[n])
+end
+
 --- @param old string
 --- @param new string
 --- @param at integer --- byte offset in `old`, 0 at its start
@@ -342,8 +378,27 @@ function M.map(old, new, at)
   local a, b = M.elements(old), M.elements(new)
   local m, last = pair(a, b)
   --- @param i integer
-  --- @return integer --- the index in b of a[i]'s last piece
-  local function fin(i) return last[i] or m[i] end
+  --- @return integer? --- the index in b of a[i]'s last piece;
+  --- the draft's start, before the first element, is 0
+  local function fin(i)
+    if i == 0 then return 0 end
+    return last[i] or m[i]
+  end
+  --- @param i integer --- the element after the gap, past the
+  --- last one for the gap at the draft's end
+  --- @return integer? --- the cursor in the new text
+  local function gap(i)
+    local j = fin(i - 1)
+    local nb = i > #a and #b + 1 or m[i]
+    if not j or not nb or nb ~= j + 1 then return nil end
+    local s0 = i > 1 and a[i - 1].e or 0
+    local s1 = j > 0 and b[j].e or 0
+    local e0 = i <= #a and a[i].s or #old
+    local e1 = nb <= #b and b[nb].s or #new
+    local k = in_gap(string.sub(old, s0 + 1, e0),
+      string.sub(new, s1 + 1, e1), at - s0)
+    return k and s1 + k
+  end
   for i, el in ipairs(a) do
     --- the end of the element before the cursor comes first
     if el.e == at and m[i] then return b[fin(i)].e end
@@ -359,16 +414,12 @@ function M.map(old, new, at)
     end
     if at <= el.s or inside then
       --- in a gap before `el`, or in an element that is gone
-      local prev = a[i - 1]
-      local gap = prev and m[i - 1] and m[i]
-          and m[i] == fin(i - 1) + 1 and not inside
-          and string.sub(old, prev.e + 1, el.s)
-          == string.sub(new, b[fin(i - 1)].e + 1, b[m[i]].s)
-      if gap then return b[fin(i - 1)].e + (at - prev.e) end
-      return before_next(a, b, m, i) or #new
+      return not inside and gap(i)
+          or before_next(a, b, m, i) or #new
     end
   end
-  return #new
+  --- in the gap after the last element
+  return gap(#a + 1) or #new
 end
 
 --- @param lines string[]

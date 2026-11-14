@@ -203,6 +203,32 @@ M.draft_parser = setmetatable({
   end,
 }, { __index = function(_, k) return get_parser()[k] end })
 
+--- @param at_head boolean?
+--- @return table --- the parser a draft is read with where it
+--- lands: at the file's head a `#!` line opens it
+local function draft_parser(at_head)
+  return at_head and get_parser() or M.draft_parser
+end
+
+--- The parser of a draft whose landing place can change: it
+--- reads the draft as gate() will, at the file's head or below
+--- it, as `at_head` answers at each reading, so that the red
+--- text and the verdict agree. `context` lets a memo of a
+--- reading tell that the answer changed.
+--- @param at_head fun(): boolean
+--- @return table
+function M.placed_parser(at_head)
+  return setmetatable({
+    parse = function(lines)
+      return draft_parser(at_head()).parse(lines)
+    end,
+    failure = function(lines, err)
+      return draft_parser(at_head()).failure(lines, err)
+    end,
+    context = at_head,
+  }, { __index = function(_, k) return get_parser()[k] end })
+end
+
 --- The text as the editor writes it: formatted, or as given
 --- when it does not format. A draft's empty lines between
 --- statements stay when `keep_empty` asks (IS3.7). A draft
@@ -291,7 +317,7 @@ function M.gate(lines, width, max_block, keep_empty, at_head)
   }
   --- syntax comes before size: the line check counts
   --- formatted lines (IS3.2), which a failed parse has none of
-  local draft = at_head and get_parser() or M.draft_parser
+  local draft = draft_parser(at_head)
   local parses, failure = draft.parse(lines)
   if not parses then
     verdict.failure = draft.failure(lines, failure)

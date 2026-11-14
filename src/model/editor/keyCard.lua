@@ -21,6 +21,21 @@ function KeyCard.held()
   return by_scancode ~= nil and by_scancode(KeyCard.KEY)
 end
 
+--- Whether a card shows (IS3.16): while the help key is held
+--- in the file editor, and in the console where its own field
+--- takes the keys. A paused program's field waits, and the
+--- console's takes them. Over a program's input field, or a
+--- program that runs, the help key is the program's, as every
+--- other key is. While a card shows no key does anything, a
+--- reserved one included.
+--- @return boolean
+function KeyCard.shows()
+  local st = love.state.app_state
+  local here = st == 'editor' or st == 'inspect'
+      or st == 'ready' and love.state.user_input == nil
+  return here and KeyCard.held()
+end
+
 --- @param state EditorStateName
 --- @param empty boolean --- the draft is empty
 --- @return table[] --- { key, what it does, admitted }

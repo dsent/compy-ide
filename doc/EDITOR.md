@@ -11,10 +11,12 @@
   editor was away comes back with its new text when you return with
   <kbd>Ctrl</kbd>+<kbd>T</kbd>, and its undo history starts again;
   so does a file you return to with <kbd>Escape</kbd>. A file
-  changed while the editor shows it keeps the text it had, and the
-  next <kbd>Enter</kbd>, cut, move, <kbd>Ctrl</kbd>+<kbd>Z</kbd> or
-  <kbd>Ctrl</kbd>+<kbd>Y</kbd> says it changed and saves nothing.
-  To see what the SD card holds then, leave the editor
+  changed while the editor shows it keeps the text it had: the
+  next <kbd>Enter</kbd>, cut, move or
+  <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> says it changed
+  and saves nothing, and <kbd>Ctrl</kbd>+<kbd>Z</kbd> and
+  <kbd>Ctrl</kbd>+<kbd>Y</kbd> no longer reach what you did before
+  the change. To see what the SD card holds then, leave the editor
   (<kbd>Ctrl</kbd>+<kbd>Q</kbd>) and open the file again with
   `edit()`.
 - `edit()` in the console starts the editor afresh: the files a

@@ -170,7 +170,21 @@ Project-author guide: `doc/input_api.md`.
 - **Ctrl+T from a file reached with Ctrl+J comes back to the whole chain** of files,
   each where it was left and with its undo history; Escape then returns to the caller.
 - **`tidy()` keeps a `#!` first line and the file's line ends**, as Ctrl+Shift+F does;
-  it emptied the one and rewrote the others as LF.
+  it emptied the one and rewrote the others as LF. In a file of mixed line ends, both
+  keep the ending of every line they leave as it is.
+- **Holding F1 shows the console's key card only where the console's field takes the
+  keys.** Over a program's input field the card showed while the field kept typing;
+  there F1 and the keys held with it are the program's now.
+- **A `#!` first line is no longer shown red** in the file editor's field where Enter
+  accepts it: loaded with F2, or typed where it lands as the file's first line.
+- **Alt+Up and Alt+Down in a field move the cursor's line, the cursor with it**, and
+  Ctrl+Z puts the cursor back where it was. At the first or last line nothing moves;
+  the keys swapped the two lines below or above.
+- **The key that brings the editor to the front does nothing in it.** Enter that made
+  a program open a file with `edit()` added an empty line to it, and the Ctrl+T that
+  came back to a file changed outside the editor dismissed the notice saying so.
+- **An Escape after a file changed outside the editor is undone by Ctrl+Z**, as any
+  other Escape is.
 - **Text pasted with Windows (CRLF) or old Mac (CR) line breaks** is split into lines
   as typed text is: in a CRLF file it no longer writes an extra empty line.
 - Multi-line string content now writes — `show{text = "a\nb"}` / `set_text("a\nb")`

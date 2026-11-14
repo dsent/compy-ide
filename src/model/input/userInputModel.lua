@@ -386,6 +386,19 @@ function UserInputModel:duplicate_line()
   self:_note_edit()
 end
 
+--- The cursor's line swaps with the one above or below it,
+--- the cursor going with it at its column (Alt+Up,
+--- Alt+Down): one change to the draft, whose step holds the
+--- field as the key found it. At the first or the last line
+--- nothing moves.
+--- @param dir VerticalDir
+function UserInputModel:move_line(dir)
+  local cl = self:get_cursor_y()
+  local to = dir == 'up' and cl - 1 or cl + 1
+  if to < 1 or to > self:get_n_text_lines() then return end
+  self:swap_lines(to, cl)
+end
+
 --- Swap to lines of text, second param defaults to cursor line
 --- @param ln_that integer
 --- @param ln_this integer?
@@ -652,7 +665,11 @@ function UserInputModel:highlight()
     -- hl stays indexable even with no highlighter (parser but
     -- no colouring): the view indexes highlight.hl
     -- unconditionally.
-    self._memo.highlight = { hl = hl or {}, parse_err = parse_err }
+    self._memo.highlight = {
+      hl = hl or {},
+      parse_err = parse_err,
+      context = p.context and p.context(),
+    }
   else
     if ev.highlighter then
       -- same invariant as the parser branch above: a
@@ -666,7 +683,12 @@ function UserInputModel:highlight()
 end
 
 function UserInputModel:get_highlight()
-  if not self._memo.highlight then
+  local memo = self._memo.highlight
+  --- a parser that reads the text by its context (where an
+  --- editor's draft lands) reads it anew when that changed
+  local p = self.evaluator and self.evaluator.parser
+  if not memo
+      or p and p.context and p.context() ~= memo.context then
     self:highlight()
   end
   return self._memo.highlight

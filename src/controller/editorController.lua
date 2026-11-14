@@ -96,10 +96,24 @@ function EditorController:refuse_to_leave(own_key)
   return true
 end
 
+--- A key press comes in at the gate
+function EditorController:key_begins()
+  self._in_key = true
+end
+
+--- The editor comes to the front. During a key press, that
+--- key is not the editor's: the gate's Ctrl+T, or the key a
+--- program's hook opened a file on. It does nothing there,
+--- and leaves the notice the editor came with (IS3.14).
+function EditorController:came_forward()
+  if self._in_key then self._gate_key = true end
+end
+
 --- The gate has passed its chord's key on: whether or not
 --- the key reached the editor, no later key is the chord's
 function EditorController:gate_key_done()
   self._gate_key = nil
+  self._in_key = nil
 end
 
 --- @param v EditorView
@@ -168,6 +182,20 @@ function EditorController:open(name, content, save, key)
     b.disk_seen = self:_disk_text(b)
   else
     self:_note_read(b, content)
+  end
+  if is_lua then
+    --- the field reads the draft as its submission will,
+    --- where it lands now (check.gate), so that the red text
+    --- and the verdict agree (IS3.4)
+    eval = Evaluator('lua', {
+      parser = check.placed_parser(function()
+        return self:_lands_at_head(b)
+      end),
+      highlighter = eval.highlighter,
+    }, {
+      line_validators = eval.line_validators,
+      astValidators = eval.astValidators,
+    })
   end
   --- the file's own field: its draft and the draft's changes
   --- stay with it while another file is in front (IS1.5,
@@ -395,7 +423,9 @@ end
 function EditorController:_held_back(k)
   if KeyCard.held() then return true end
   --- a gate chord's own key reaches the editor after the
-  --- gate refused the exit: it must not dismiss that notice
+  --- gate refused the exit, or the key the editor came to
+  --- the front on (came_forward): it must not dismiss the
+  --- notice
   if self._gate_key and k and not Key.is_mod(k) then
     self._gate_key = nil
     return true
@@ -475,8 +505,10 @@ end
 --- storage says so (_refuse_unread).
 function EditorController:_take_outside_change()
   local buf = self:get_active_buffer()
-  if not buf or self:_baseline(buf) ~= 'changed' then return end
-  local text = self:_disk_text(buf)
+  if not buf then return end
+  --- the text the change is told by is the text taken
+  local seen, text = self:_baseline(buf)
+  if seen ~= 'changed' then return end
   --- an edit in progress would go with the old text: none
   --- reaches here, since a file is left only in the browsing
   --- state (refuse_to_leave, follow_require). Text that is
@@ -621,6 +653,16 @@ end
 ---------------------------
 
 --- @private
+--- A draft lands as the file's first lines in the target's
+--- place there, or before the first block: a `#!` line is
+--- Lua's at the top of a file alone
+--- @param buf BufferModel
+--- @return boolean
+function EditorController:_lands_at_head(buf)
+  return (buf.loaded or buf:get_selection()) == 1
+end
+
+--- @private
 --- The gate (model.lang.lua.check) gives the verdict. An
 --- accepted draft goes to go as its formatted blocks. A draft
 --- unfinished at its end goes on, on a new line (IS3.5); one
@@ -648,12 +690,9 @@ function EditorController:_handle_submit(go)
       local block = buf:get_content():get(sel)
       if not block then return true end
     else
-      --- a `#!` line is Lua's at the top of a file alone: in
-      --- the target's place there, or before the first block
-      local at_head = (buf.loaded or buf:get_selection()) == 1
       local verdict = check.gate(raw,
         self.model.cfg.view.drawableChars, self:_size_limit(),
-        true, at_head)
+        true, self:_lands_at_head(buf))
       --- an accepted draft goes as its formatted blocks; one
       --- that fails to land (a write refused) stays as typed
       if #verdict.errors == 0 then
@@ -1016,7 +1055,8 @@ end
 --- wrote there (_baseline): a file changed from outside, or
 --- one that cannot be read just now, is not written over,
 --- and the action is refused with a notice and state stays
---- (IS3.11)
+--- (IS3.11). The change ends the timeline where it is seen,
+--- so that an abort after it undoes (_outdate).
 --- @param buf BufferModel
 --- @param undone string --- what did not happen: 'saved'
 --- @return boolean refused
@@ -1027,6 +1067,7 @@ function EditorController:_refuse_stale(buf, undone)
     self:_refuse_unread(buf, undone)
     return true
   end
+  self:_outdate(buf)
   self:refuse({ self:_outside_notice() })
   return true
 end

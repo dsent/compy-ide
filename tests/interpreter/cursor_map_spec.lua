@@ -48,9 +48,32 @@ describe('cursor through formatting #check', function()
     local old = { 'a=1', '', 'b=2' }
     local new = { 'a = 1', '', 'b = 2' }
     assert.same({ 2, 1 }, at(old, new, 2, 1))
-    -- with its indentation replaced, before what follows it
+    -- in indentation replaced, before what follows it; the
+    -- blank line above it is kept, and keeps the cursor
     old = { 'a=1', '', '  b=2' }
-    assert.same({ 3, 1 }, at(old, new, 2, 1))
+    assert.same({ 3, 1 }, at(old, new, 3, 2))
+    assert.same({ 2, 1 }, at(old, new, 2, 1))
+  end)
+
+  it('keeps a blank line at the start, at the end and after '
+      .. 'a line respaced', function()
+    local old = { '', '', 'x=1' }
+    local new = { '', '', 'x = 1' }
+    assert.same({ 2, 1 }, at(old, new, 2, 1))
+    old, new = { 'x=1', '', '' }, { 'x = 1', '', '' }
+    assert.same({ 2, 1 }, at(old, new, 2, 1))
+    old, new = { 'x=1  ', '', 'y=2' }, { 'x = 1', '', 'y = 2' }
+    assert.same({ 2, 1 }, at(old, new, 2, 1))
+  end)
+
+  it('goes before what follows from blank lines the '
+      .. 'formatter adds or removes', function()
+    local old = { 'function f()', 'a=1', '', '', 'b=2', 'end' }
+    local new = { 'function f()', '  a = 1', '', '  b = 2', 'end' }
+    assert.same({ 4, 3 }, at(old, new, 3, 1))
+    -- a line of spaces that becomes empty is replaced too
+    old, new = { 'x=1', '   ', 'y=2' }, { 'x = 1', '', 'y = 2' }
+    assert.same({ 3, 1 }, at(old, new, 2, 4))
   end)
 
   it('goes before the next element from replaced spacing',

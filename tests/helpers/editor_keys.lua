@@ -16,6 +16,8 @@ K.PROJECT = "demo"
 local files, writes, restore
 -- a write fails with this reason while it is set
 local write_failure, read_failure
+-- reads that still succeed before read_failure takes hold
+local read_grace
 -- the SD card is out: no file and no project folder is there
 local card_out = false
 -- Caps Lock, a device state its key toggles
@@ -88,9 +90,14 @@ local function read_over(combined_read)
     if not f then
       return combined_read(path)
     end
-    if card_out or read_failure == true or read_failure == f
-    then
+    if card_out then
       return nil
+    end
+    if read_failure == true or read_failure == f then
+      if not read_grace or read_grace < 1 then
+        return nil
+      end
+      read_grace = read_grace - 1
     end
     return files[f]
   end
@@ -218,7 +225,7 @@ function K.reset(contents)
   K.cc, K.ed = F.cc, nil
   files = contents or { ["main.lua"] = "x = 1\n" }
   writes, write_failure, caps = { }, nil, false
-  read_failure, card_out = nil, false
+  read_failure, read_grace, card_out = nil, nil, false
   local back = use_memory_project()
   -- what the console prints reaches its terminal, as the
   -- running IDE wires it (model.io.redirect)
@@ -285,9 +292,17 @@ function K.fail_reads(name)
   read_failure = name or true
 end
 
+--- As K.fail_reads, once `n` more reads have succeeded: a
+--- read that fails just after one that did.
+--- @param n integer
+--- @param name string?
+function K.fail_reads_after(n, name)
+  read_failure, read_grace = name or true, n
+end
+
 --- From now on, reads succeed again.
 function K.mend_reads()
-  read_failure = nil
+  read_failure, read_grace = nil, nil
 end
 
 --- Take the SD card out: the project's folder and its files

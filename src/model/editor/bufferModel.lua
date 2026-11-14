@@ -156,6 +156,48 @@ local function no_ends(n)
   return ends
 end
 
+--- How far ahead the pairing of lines looks for a line it
+--- left behind
+local LOOKAHEAD = 8
+
+--- Lines between the edges of a change that are the same as
+--- lines they replace, in the same order, take their endings:
+--- formatting leaves most lines as they are. The pairing goes
+--- in one pass: a line that differs is skipped on the side
+--- where the other turns up soonest.
+--- @param old string[]
+--- @param old_ends string[]
+--- @param j integer --- the first old line between the edges
+--- @param j1 integer --- the last one
+--- @param new string[]
+--- @param new_ends string[]
+--- @param i integer --- the first new line between the edges
+--- @param i1 integer --- the last one
+local function carry_ends(old, old_ends, j, j1, new, new_ends,
+                          i, i1)
+  local function ahead(list, from, to, text)
+    for d = 1, math.min(to - from, LOOKAHEAD) do
+      if list[from + d] == text then return d end
+    end
+  end
+  while i <= i1 and j <= j1 do
+    if new[i] == old[j] then
+      new_ends[i] = old_ends[j]
+      i, j = i + 1, j + 1
+    else
+      local dj = ahead(old, j, j1, new[i])
+      local di = ahead(new, i, i1, old[j])
+      if dj and (not di or dj <= di) then
+        j = j + dj
+      elseif di then
+        i = i + di
+      else
+        i, j = i + 1, j + 1
+      end
+    end
+  end
+end
+
 --- Todo: convert to class, store revmap
 --- @alias Content Dequeue<string>|Dequeue<Block>
 
@@ -369,9 +411,10 @@ end
 
 --- @private
 --- Splice lines into the content and re-chunk. Lines given
---- without their endings take, at either edge of the lines
---- they replace, the ending of a line they are the same as;
---- the others have none of their own.
+--- without their endings take the ending of a line they
+--- replace and are the same as: at either edge of the change,
+--- and between them in the same order (carry_ends); the
+--- others have none of their own.
 --- The re-chunk may split the file anew: a file that starts
 --- or stops parsing turns from lines into statements or
 --- back. So the browsing position is kept as a line, not a
@@ -406,6 +449,8 @@ function BufferModel:_splice(start, n_out, lines_in, ends_in)
       ends_in[n_in - tail] = ends[last - tail]
       tail = tail + 1
     end
+    carry_ends(lines, ends, start + head, last - tail,
+      lines_in, ends_in, head + 1, n_in - tail)
   end
   for _ = 1, n_out do
     table.remove(lines, start)
