@@ -642,8 +642,10 @@ function UserInputModel:keep_history()
   return true
 end
 
---- @private
-function UserInputModel:_remember()
+--- Store the field's line in the history: called when the
+--- line is accepted, before it runs. A line refused or gone
+--- on with is not stored, and the walk stays as it was.
+function UserInputModel:remember()
   if self:keep_history() then
     local ent = self.entered
     if string.is_non_empty_string_array(ent) then
@@ -1194,11 +1196,8 @@ function UserInputModel:evaluate()
   return self:handle(true)
 end
 
---- Clear the field. Only a line that `ran` goes to the
---- history: one dropped never ran.
---- @param ran boolean?
-function UserInputModel:cancel(ran)
-  if ran then self:_remember() end
+--- Clear the field; the history keeps nothing of it
+function UserInputModel:cancel()
   self:reset()
 end
 
@@ -1277,7 +1276,6 @@ function UserInputModel:handle(eval)
   local ent = self:get_text()
   local ok, result
   if ent:non_empty() then
-    self:_remember()
     if eval then
       ok, result = self:_apply_eval(ent)
       if not ok then return false, result end

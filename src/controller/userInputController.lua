@@ -246,6 +246,11 @@ function UserInputController:reset(history)
   self.model:reset(history)
 end
 
+--- Store the line, which the owner has accepted
+function UserInputController:remember()
+  self.model:remember()
+end
+
 function UserInputController:history_back()
   self.model:history_back()
 end
@@ -457,16 +462,14 @@ end
 --- Dispose of the content a verb finished with, then take the
 --- widget down — both only if this instance seats the cell
 --- (doc/development/decisions/input.md, D-LIFECYCLE-FLAGS).
---- The clear is model:cancel(): a submitted line reaches the
---- input history before it is emptied, and a cancelled one,
---- which never ran, does not (the classic shell's history).
---- It is not compy.input.clear(), which touches no history.
+--- The clear is model:cancel(), which stores nothing: a
+--- submission was stored when it was accepted (submit_flow),
+--- and a cancelled line never ran.
 --- @param self UserInputController
 --- @param clear boolean?
 --- @param hide boolean?
---- @param ran boolean? the verb is a submission
-local function dispose(self, clear, hide, ran)
-  if clear then self.model:cancel(ran) end
+local function dispose(self, clear, hide)
+  if clear then self.model:cancel() end
   if hide then self:hide() end
 end
 
@@ -504,7 +507,10 @@ function UserInputController:submit_flow()
     return
   end
   local text = string.unlines(lines)
-  dispose(self, self.clear_on_submit, self.hide_on_submit, true)
+  --- accepted: the line enters the history (the classic
+  --- shell's, which holds only lines that ran)
+  self.model:remember()
+  dispose(self, self.clear_on_submit, self.hide_on_submit)
   run_callback(self, 'on_text_entered', text)
   run_callback(self, 'after_submit', text)
 end

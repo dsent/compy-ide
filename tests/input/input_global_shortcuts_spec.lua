@@ -451,11 +451,17 @@ describe('input surface: inbound events — global platform'
   -- once both its arms were covered: the running one above
   -- ("still quickswitches while running"), the editor one in
   -- input_editor_keys_spec.lua ("Ctrl+T leaves and runs").
-  -- reserved_quickswitch has no third arm.
+  -- reserved_quickswitch has no third arm. ctrl+r left it on
+  -- 2026-11-14, when it replaced ctrl+alt+r, for the same
+  -- reason: input_run_anew_spec.lua runs the project with it
+  -- from the console, the editor and over a running program,
+  -- and holds it back under the editor's card; the refusal
+  -- during an edit is in is1_files_spec.lua and
+  -- input_editor_files_spec.lua, and program_canvas_spec.lua
+  -- sees the program start again.
   describe('reserved combos, own effect not yet asserted',
     function()
 
-      pending('ctrl+r restarts the current project')
       pending('ctrl+alt+p / ctrl+alt+shift+p start/stop the'
         .. ' oneshot profiler (love.PROFILE gated)')
       -- Disagreement with the enumeration read off the source

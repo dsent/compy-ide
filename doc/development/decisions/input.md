@@ -1596,8 +1596,9 @@ behaviour. The table now holds:
   takes the place of `ctrl+s`.
 - `ctrl+s` and `ctrl+shift+r` are reserved no longer: a project receives them. No key closes the
   project, and nothing replaces the reset.
-- `ctrl+escape` (on release), `ctrl+alt+r`, `ctrl+t`, `ctrl+pause`, the profiler pair and `f10`
-  are as they were.
+- `ctrl+r` runs the project anew; `ctrl+alt+r`, which did, is reserved no longer.
+- `ctrl+escape` (on release), `ctrl+t`, `ctrl+pause`, the profiler pair and `f10` are as they
+  were.
 
 The table's contract is unchanged: privileged, exact, consulted before any route, and never
 consuming.
@@ -2313,8 +2314,10 @@ combinations are **four independent, project-owned boolean settings**:
    touch history. Two operations, one English word, and the surface keeps both — so any prose
    naming a flag must say which.
    *(Amended 2026-11-14, the maintainer's ruling that the console's history is the classic
-   shell's: it holds only lines that ran. The submit verb's clear still remembers; the cancel
-   verb's clear no longer does — `model:cancel(ran)` remembers only when `ran`.)*
+   shell's: it holds only lines that ran. Neither clear remembers now: a line enters the
+   history when it is accepted — in `submit_flow` once the validator takes it, flag or no flag,
+   and in the console once the line parses and loads, before it runs — and `model:cancel()` only
+   clears.)*
 5. **`auto_hide` is superseded by `hide_on_submit`** — and as built, the old name is gone
    entirely; the paragraph below records the reasoning that got there. *Both names are accepted for one release, the
    alias resolving to the flag, and **when both are given the explicit `hide_on_submit` wins.**

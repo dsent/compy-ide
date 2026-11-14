@@ -1,10 +1,12 @@
 -- The mouse is ignored while the key card shows (the
 -- maintainer's ruling of November 14, late): in the file
 -- editor, in the console, and over a program behind the
--- console's card, no press, release, move, wheel or derived
--- click does anything. A button's release goes where its press
--- went, so that no route is left with half a click. Events
--- through the production gateway (F.session, the K helper).
+-- console's card, no press, release, move, wheel, derived
+-- click or touch does anything. A button's release goes where
+-- its press went, and a touch's where its start went, by its
+-- id, so that no route is left with half a click. Events
+-- through the production gateway (love.handlers, F.session,
+-- the K helper).
 
 local F = require("tests.helpers.input_fixture")
 local K = require("tests.helpers.editor_keys")
@@ -131,6 +133,112 @@ describe("the mouse under the key card #input", function()
       assert.same({ }, log())
       assert.same(before, { K.cc.input:get_cursor_pos() })
     end)
+
+  describe("touch", function()
+    local H = function() return love.handlers end
+    --- a touch's press, move and release, by id
+    local function touch(id, phase)
+      local x, y = on_field(2)
+      if phase ~= "release" and phase ~= "move" then
+        H().touchpressed(id, x, y, 0, 0, 1)
+      end
+      if phase == nil or phase == "move" then
+        H().touchmoved(id, x + 10, y, 10, 0, 1)
+      end
+      if phase ~= "press" and phase ~= "move" then
+        H().touchreleased(id, x + 10, y, 0, 0, 1)
+      end
+    end
+
+    local TOUCHES = table.concat({
+      "TOUCHES = {}",
+      "for _, n in ipairs({ 'touchpressed', 'touchmoved',",
+      "  'touchreleased' }) do",
+      "  compy.input.hooks[n] = function()",
+      "    TOUCHES[#TOUCHES + 1] = n",
+      "  end",
+      "end",
+    }, "\n") .. "\n"
+
+    local function touches()
+      return K.cc:get_project_env().TOUCHES
+    end
+
+    --- count the touch events a field controller is handed
+    local function counting(field)
+      local n = 0
+      for _, m in ipairs({ "touchpressed", "touchmoved",
+        "touchreleased" }) do
+        field[m] = function() n = n + 1 end
+      end
+      return function() return n end
+    end
+
+    it("reaches no program idling behind the console's card",
+      function()
+        K.reset({ ["main.lua"] = IDLES .. TOUCHES })
+        K.keys("lctrl", "r")
+        assert.is_true(K.cc.run_live)
+        K.hold("f1")
+        assert.is_not_nil(K.key_card())
+        touch("t1")
+        K.release("f1")
+        assert.same({ }, touches())
+        touch("t2")
+        assert.same({ "touchpressed", "touchmoved",
+          "touchreleased" }, touches())
+      end)
+
+    it("a touch begun under the card ends there, and one begun "
+        .. "before it gets its release under it", function()
+      K.reset({ ["main.lua"] = IDLES .. TOUCHES })
+      K.keys("lctrl", "r")
+      K.hold("f1")
+      touch("t1", "press")
+      K.release("f1")
+      touch("t1", "release")
+      assert.same({ }, touches())
+      touch("t2", "press")
+      K.hold("f1")
+      touch("t2", "move")
+      touch("t2", "release")
+      K.release("f1")
+      assert.same({ "touchpressed", "touchreleased" }, touches())
+    end)
+
+    it("reaches not the console's field under its card", function()
+      K.reset()
+      local count = counting(K.cc.input)
+      K.hold("f1")
+      assert.is_not_nil(K.key_card())
+      touch("t1")
+      K.release("f1")
+      assert.same(0, count())
+      -- the card away, the field is handed the touch
+      touch("t2")
+      assert.same(3, count())
+    end)
+
+    it("reaches not the file editor's field: its touch is off, "
+        .. "and under the card held back with it on too",
+      function()
+        K.reset({ ["notes.txt"] = "" })
+        K.open("notes.txt")
+        local count = counting(K.ed.input)
+        -- as main.lua ships it
+        K.cc.cfg.editor = { touch_enabled = false }
+        touch("t1")
+        assert.same(0, count())
+        K.cc.cfg.editor = { touch_enabled = true }
+        K.hold("f1")
+        assert.is_not_nil(K.key_card())
+        touch("t2")
+        K.release("f1")
+        assert.same(0, count())
+        touch("t3")
+        assert.same(3, count())
+      end)
+  end)
 
   describe("leaves no half click", function()
     it("a press under the card holds back its release after "

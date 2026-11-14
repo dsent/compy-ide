@@ -129,8 +129,8 @@ Project-author guide: `doc/input_api.md`.
   end of the file, where new text is added.
 - **Formatting the file is Alt+F.** Ctrl+F is kept free for a search to come.
 - **Ctrl+R runs the project anew**, in the console, the editor and over a running
-  program; Ctrl+Alt+R does nothing now. The `r` a Compy sends with the chord reaches no
-  field and no program. The terminal example restarts the micro:bit with Alt+R.
+  program; Ctrl+Alt+R does nothing now. The `r` a Compy sends as text with the chord
+  reaches no field and no program. The terminal example restarts the micro:bit with Alt+R.
 - **Ctrl+G goes back to the block being replaced.** While replacing, it brings the
   highlight back to the block loaded with F2 and shows it; the field's text stays. In
   the other states it does nothing.
@@ -264,9 +264,10 @@ Project-author guide: `doc/input_api.md`.
   shortcut, the card showed while the program kept them; there F1 is the program's
   now, and Ctrl+Q stops the program while F1 is held, with or without other keys
   pressed since. A card that shows stays until F1 is released, and so does the pause
-  of the keys it holds back. While a card shows the mouse does nothing: a click no
-  longer moves the hidden draft's cursor, and no pointer event reaches a program
-  behind the console's card.
+  of the keys it holds back. While a card shows the mouse and touch do nothing: a
+  click no longer moves the hidden draft's cursor, and no mouse or touch event reaches
+  a program behind the console's card. A press or a touch begun under the card ends
+  there; one begun before it still gets its release.
 - **A `#!` first line is kept, and edited like any line.** Alt+F and `tidy()`
   keep it, F2 loads it, and a cut takes it out; a change that would leave a `#!` line
   anywhere but first, or put anything above it, is refused, since Lua could not run

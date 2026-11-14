@@ -1810,6 +1810,9 @@ function ConsoleController:evaluate_input()
       local run_env = self:get_project_env()
       local f, load_err = codeload(code, run_env)
       if f then
+        --- the line is taken: it enters the history before
+        --- it runs, and stays there if running it fails
+        inter:remember()
         local _, err = run_user_code(f, self)
         if err then
           inter:set_error({ err })

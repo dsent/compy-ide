@@ -154,14 +154,14 @@ describe("the console's history #editor #spec #history", function()
   end)
 
   describe("what the history holds", function()
-    spec_deviation("IS7.8 Recall an instruction: a line that "
-        .. "fails stays as it ran, however the field corrects "
-        .. "it", RULING, function()
+    spec_deviation("IS7.8 Recall an instruction: a line the "
+        .. "syntax refuses is no entry, and the line corrected "
+        .. "and run is", RULING, function()
       K.reset()
       K.type("x = = 1")
       K.keys("return")
       assert.is_true(K.cc.input:has_error())
-      -- Enter closes the error; the failed line stays
+      -- Enter closes the error; the refused line stays
       K.keys("return")
       K.keys("home")
       K.keys("delete")
@@ -174,7 +174,82 @@ describe("the console's history #editor #spec #history", function()
       K.keys("backspace")
       assert.same("y = 1", K.console_draft())
       K.keys("return")
-      assert.same({ "y = 1", "x = = 1" }, walk("up", 2))
+      assert.same({ "y = 1", "y = 1" }, walk("up", 2))
+    end)
+
+    spec_deviation("IS7.8 Recall an instruction: Up from a "
+        .. "refused line walks from the line typed, and Down "
+        .. "brings the refused line back", RULING, function()
+      K.reset()
+      run("a = 1")
+      K.type("x = = 1")
+      K.keys("return")
+      assert.is_true(K.cc.input:has_error())
+      K.keys("return")
+      assert.same({ "a = 1", "a = 1" }, walk("up", 2))
+      assert.same({ "x = = 1", "x = = 1" }, walk("down", 2))
+      K.keys("escape")
+      assert.same({ "a = 1", "a = 1" }, walk("up", 2))
+    end)
+
+    spec_deviation("IS7.8 Recall an instruction: a line that "
+        .. "fails while it runs ran, and is an entry", RULING,
+      function()
+        K.reset()
+        run("a = 1")
+        K.type('error("boom")')
+        K.keys("return")
+        assert.is_true(K.cc.input:has_error())
+        assert.same('error("boom")', K.console_draft())
+        K.keys("return")
+        K.keys("escape")
+        assert.same({ 'error("boom")', "a = 1" }, walk("up", 2))
+      end)
+
+    spec_deviation("IS7.8 Recall an instruction: a draft the "
+        .. "syntax continues is no entry", RULING, function()
+      K.reset()
+      run("a = 1")
+      K.type("if true then")
+      K.keys("return")
+      assert.same("if true then\n", K.console_draft())
+      K.keys("escape")
+      assert.same({ "a = 1", "a = 1" }, walk("up", 2))
+    end)
+
+    spec_deviation("IS7.8 Recall an instruction: a command "
+        .. "finished over three Enters is one entry, the whole "
+        .. "command", RULING, function()
+      K.reset()
+      run("a = 1")
+      K.type("function f()")
+      K.keys("return")
+      K.type("return 1")
+      K.keys("return")
+      K.type("end")
+      K.keys("return")
+      assert.same("", K.console_draft())
+      local whole = "function f()\nreturn 1\nend"
+      -- Up recalls it with the cursor on its last row, rises
+      -- through its rows, then recalls the line before
+      assert.same({ whole, whole, whole, "a = 1" }, walk("up", 4))
+    end)
+
+    spec_deviation("IS7.8 Recall an instruction: a recalled line "
+        .. "the syntax continues keeps the walk, and Down brings "
+        .. "the line typed back", RULING, function()
+      K.reset()
+      run("a = 1")
+      K.type("precious = 42")
+      K.keys("up")
+      assert.same("a = 1", K.console_draft())
+      K.type("+")
+      K.keys("return")
+      assert.same("a = 1+\n", K.console_draft())
+      K.keys("down")
+      assert.same("precious = 42", K.console_draft())
+      K.keys("up")
+      assert.same("a = 1+\n", K.console_draft())
     end)
 
     spec_it("IS7.8 Recall an instruction: an empty or blank "

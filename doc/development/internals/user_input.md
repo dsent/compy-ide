@@ -528,15 +528,20 @@ binding to apply, deliberately not a rule the tier enforces.
 
 ### Console-specific keys
 
-- **PageUp/PageDown**: page the output; they recall nothing
+- **PageUp/PageDown**: do nothing; neither key table binds them, and they recall nothing. They
+  are kept for paging the output once the console keeps its scrolled-off rows
 - **Up/Down at input boundary**: history navigation, through the widget's `on_limit_reached`
   (below). The walk is the classic shell's (`model/input/history.lua`): the entries are the lines
   that ran, and walking never changes one. Up from the line being typed keeps it in a slot below
   the newest entry, and Down past the newest brings it back; Down on it does nothing. An edit to a
-  recalled line is kept for that entry while the walk moves away and back. Enter stores the shown
-  line as a new entry, and Enter or a cleared field (Escape, a successful run) ends the walk and
-  forgets the kept line and every edit. A recalled line shows with the cursor at its end. An empty
-  or blank line is no entry; a line equal to the newest is stored again.
+  recalled line is kept for that entry while the walk moves away and back. A line is stored when
+  it is accepted: `evaluate_input` calls `remember` once the line parses and loads, before it
+  runs, so a line that fails while running is stored; a program's widget stores in `submit_flow`
+  once its validator takes the line. Storing a line, or a cleared field (Escape, a successful
+  run), ends the walk and forgets the kept line and every edit. A line the syntax refuses, or a
+  draft it continues on a new line, is not stored and leaves the walk as it was. A recalled line
+  shows with the cursor at its end. An empty or blank line is no entry; a line equal to the newest
+  is stored again.
 - **Enter** (no shift): submit → `evaluate_input()`
 - **Ctrl+L**: clear terminal output
 - **Shift+Enter**: insert newline in input (multiline expression)

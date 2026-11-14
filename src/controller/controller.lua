@@ -1210,7 +1210,9 @@ Controller = {
     -- holds back its release, after the card too, and a
     -- press that went through gets its release under the
     -- card, so that no route is left with half a click.
+    -- Touches follow the same rule, paired by the touch's id.
     local held_press = { }
+    local held_touch = { }
 
     -- The gateway entry: hand the event to whoever occupies
     -- the slot. Under a project run that is the project
@@ -1296,6 +1298,11 @@ Controller = {
     --- @param dy number?
     --- @param pressure number?
     handlers.touchpressed = function(id, x, y, dx, dy, pressure)
+      if CC:card_shows() then
+        held_touch[id] = true
+        return
+      end
+      held_touch[id] = nil
       if love.touchpressed then
         return love.touchpressed(id, x, y, dx, dy, pressure)
       end
@@ -1308,6 +1315,10 @@ Controller = {
     --- @param dy number?
     --- @param pressure number?
     handlers.touchreleased = function(id, x, y, dx, dy, pressure)
+      if held_touch[id] then
+        held_touch[id] = nil
+        return
+      end
       if love.touchreleased then
         return love.touchreleased(id, x, y, dx, dy, pressure)
       end
@@ -1320,6 +1331,7 @@ Controller = {
     --- @param dy number?
     --- @param pressure number?
     handlers.touchmoved = function(id, x, y, dx, dy, pressure)
+      if CC:card_shows() then return end
       if love.touchmoved then
         return love.touchmoved(id, x, y, dx, dy, pressure)
       end

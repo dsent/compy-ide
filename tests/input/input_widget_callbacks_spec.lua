@@ -636,6 +636,33 @@ describe('input surface: widget callbacks #input', function()
       assert.same({ 'remembered' }, F.widget:get_text())
     end)
 
+    -- A line enters the history when it is accepted, the
+    -- clear flag or not, and a refused one does not (the
+    -- classic shell's history, which holds only lines that
+    -- ran)
+    it('a refused line is no entry, an accepted one is',
+      function()
+        local input = F.activate_project()
+        input.show({
+          text = 'bad',
+          validator = function(lines)
+            if lines[1] == 'bad' then
+              return false, { Error('no', 1, 1) }
+            end
+            return true
+          end,
+        })
+        F.session.press('return')
+        assert.same({ 'bad' }, F.widget:get_text())
+        assert.same(0, F.widget.model.history:length())
+        input.set_text('good')
+        -- the first Enter closes the refusal's error
+        F.session.press('return')
+        F.session.press('return')
+        assert.same({ { 'good' } },
+          F.widget.model.history:_get_entries())
+      end)
+
     -- And the cancel side, which seats NOTHING: Escape neither
     -- empties the widget nor takes it down, so cancelling is
     -- fully opt-in (statement 3, "the least-destructive
