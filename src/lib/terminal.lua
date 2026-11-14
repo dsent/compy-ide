@@ -33,6 +33,14 @@ local function on_grid(v, last)
     return v
 end
 
+-- The whole cells from `first` to `last` that are on a grid of
+-- `size` cells: none (a first after the last) when no number.
+local function on_grid_span(first, last, size)
+    first, last = math.floor(first), math.floor(last)
+    if first ~= first or last ~= last then return 1, 0 end
+    return math.max(first, 1), math.min(last, size)
+end
+
 local function terminal_update_character(terminal, x, y, new_char)
     -- a cell outside the grid is no cell: what lands there is lost
     if not (x >= 1 and x <= terminal.width
@@ -192,8 +200,10 @@ local function terminal_update(terminal, dt)
             local w, h =
                 char_or_command.w or terminal.width,
                 char_or_command.h or terminal.height
-            for y = y, y + h - 1 do
-                for x = x, x + w - 1 do
+            local left, right = on_grid_span(x, x + w - 1, terminal.width)
+            local top, bottom = on_grid_span(y, y + h - 1, terminal.height)
+            for y = top, bottom do
+                for x = left, right do
                     terminal_update_character(terminal, x, y, " ")
                 end
             end
@@ -255,11 +265,15 @@ local function terminal_update(terminal, dt)
 
             local horizontal_char = utf8_sub(style, 5, 5)
             local vertical_char = utf8_sub(style, 6, 6)
-            for i = left + 1, right - 1 do
+            -- the edges' cells on the grid; corners and edges off
+            -- it are not drawn
+            local from, to = on_grid_span(left + 1, right - 1, terminal.width)
+            for i = from, to do
                 terminal_update_character(terminal, i, top, horizontal_char)
                 terminal_update_character(terminal, i, bottom, horizontal_char)
             end
-            for i = top + 1, bottom - 1 do
+            from, to = on_grid_span(top + 1, bottom - 1, terminal.height)
+            for i = from, to do
                 terminal_update_character(terminal, left, i, vertical_char)
                 terminal_update_character(terminal, right, i, vertical_char)
             end

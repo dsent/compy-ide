@@ -291,6 +291,41 @@ describe("terminal outside the grid", function()
       assert.equal("│", t.buffer[16][19])
     end)
 
+  --- a clear or a frame walks the cells of the grid only: one
+  --- far away or without end finishes, and changes what it covers
+  --- of the grid
+  it("clears and frames however far or large, and finishes",
+    function()
+      local huge = math.huge
+      local t = full()
+      t:clear(1e20, 1, 1, 1)
+      t:clear(1, 1e20, 1, 1)
+      t:frame("line", 1e20, 1, 3, 3)
+      t:frame("line", 1, 1e20, 3, 3)
+      local ok, err = bounded(function() t:update(1000) end)
+      assert.is_true(ok, err)
+      for y = 1, t.height - 1 do
+        assert.equal(string.rep("x", 20), row(t, y), "row " .. y)
+      end
+      t:clear(3, 2, huge, huge)
+      t:frame("line", -huge, -huge, huge, huge)
+      t:frame("line", 1, 1, huge, huge)
+      ok, err = bounded(function() t:update(1000) end)
+      assert.is_true(ok, err)
+      assert.equal("┌" .. string.rep("─", 19), row(t, 1))
+      assert.equal("│x", row(t, 2))
+      assert.equal("│x", row(t, t.height))
+    end)
+
+  it("clears a fractional rectangle from its whole cells",
+    function()
+      local t = full()
+      t:clear(2.5, 1.5, 2, 1)
+      local ok, err = bounded(function() t:update(1000) end)
+      assert.is_true(ok, err)
+      assert.equal("x  " .. string.rep("x", 17), row(t, 1))
+    end)
+
   --- more rolls than rows leave the same blank grid, so no
   --- row the cursor is on asks for more than a grid's worth
   it("scrolls a grid's worth at most, whatever the row", function()
