@@ -1121,6 +1121,7 @@ refusal (there is no active session to clear).
 | `src/model/input/selection.lua` | Selection range model |
 | `src/model/input/history.lua` | Command history (console) |
 | `src/view/input/userInputView.lua` | Renders the input strip and status line |
+| `src/view/layout.lua` | The screen's rows on one grid of `row_height`: the status line's height (a row and `status_extra`), the pixels above its text (`status_above`, 0: the extra pixels lie under the text), and the strip at the bottom (`bottom_strip`), all from `src/conf/display.lua` |
 | `src/controller/controller.lua` | Gateway (`love.handlers.*`), global shortcuts, `combo_string`/`any_mod`, route management |
 | `src/controller/projectInputController.lua` | The project route: the three-consumer dispatch walk (`shortcuts` → `hooks` → widget), hook seeding |
 | `src/controller/consoleController.lua` | Console/editor route dispatch, `compy` namespace + `compy.input` surface construction |

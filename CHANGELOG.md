@@ -136,8 +136,9 @@ Project-author guide: `doc/input_api.md`.
   the other states it does nothing.
 - **The status line shows a block's lines as `L2-21`**, without the count that
   followed in brackets.
-- **The status line is 37 pixels high**, a row's 33 and two pixels above and below its
-  text, and a strip of two pixels stays under the field at the screen's bottom.
+- **The status line is 37 pixels high**: its text sits in a row's 33 at the line's top,
+  four pixels lie under it, and a strip of two pixels stays under the field at the
+  screen's bottom.
 - **A block that goes on beyond the editor's edge is marked there.** While the
   highlighted block or the block being replaced has rows above or below the view, the
   edge row fades toward the edge and its last column carries a translucent `^` or `v`;

@@ -21,13 +21,16 @@ return {
   --- of the screen's 600.
   row_height = 33,
   --- where the 6 pixels the rows leave go, as two numbers that
-  --- add up to them: pixels added to the status line, split
-  --- evenly above and below its text, and pixels left at the
-  --- screen's bottom, under the field, in its background; what
-  --- the two leave lies at the top (the maintainer's ruling of
-  --- November 14, 2026: four and two)
+  --- add up to them: pixels added to the status line, and
+  --- pixels left at the screen's bottom, under the field, in
+  --- its background; what the two leave lies at the top (the
+  --- maintainer's ruling of November 14, 2026: four and two)
   status_extra = 4,
   bottom_strip = 2,
+  --- of the pixels added to the status line, those above its
+  --- text; the rest are below it (the ruling of November 15,
+  --- 2026: all four below)
+  status_above = 0,
   --- the width, in pixels, of the bar at the left edge beside a
   --- line that takes more than one row (the ruling of November
   --- 15, 2026)
