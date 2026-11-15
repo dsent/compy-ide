@@ -663,3 +663,44 @@ describe("the console's kept rows under any mix #console",
         assert.is_true(n > 1000)
       end)
   end)
+
+describe("the sign of a scrolled view #console", function()
+  before_each(function() reset() end)
+  after_each(K.cleanup)
+
+  --- the cue's marks drawn on the whole screen
+  local function marks_drawn()
+    output().terminal.dirty = true
+    local s = K.screen()
+    local seen = { }
+    for _, p in ipairs(s.texts) do
+      if p.text == "^" or p.text == "v" then seen[p.text] = true end
+    end
+    return seen
+  end
+
+  it("is none at rest", function()
+    print_lines(1, 80)
+    assert.same({ }, marks_drawn())
+  end)
+
+  it("is on top alone while only older rows lie beyond the view",
+    function()
+      print_lines(1, 80)
+      K.keys("lctrl", "up")
+      assert.same({ ["^"] = true }, marks_drawn())
+    end)
+
+  it("is at the bottom alone at the oldest kept row", function()
+    print_lines(1, 80)
+    K.keys("home")
+    assert.same({ v = true }, marks_drawn())
+  end)
+
+  it("is on both edges between them", function()
+    print_lines(1, 80)
+    K.keys("pageup")
+    K.keys("lctrl", "up")
+    assert.same({ ["^"] = true, v = true }, marks_drawn())
+  end)
+end)
