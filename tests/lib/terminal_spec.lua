@@ -28,14 +28,28 @@ local Terminal = require("lib.terminal")
 --- Run `f`, failing with "still running" when it would not end.
 --- LuaJIT fires a count hook only in code it runs uncompiled, and
 --- its hook holds for every coroutine, so the JIT and any hook
---- before are put back however `f` ends.
+--- before are put back however `f` ends. The hook raises only
+--- while `f` runs: once `f` has ended, or the hook has raised,
+--- nothing raises, so whenever the count runs out the putting
+--- back is done.
+--- @param limit integer? --- the count, 1e7 by default
 --- @return boolean ok, any err
-local function bounded(f)
+local function bounded(f, limit)
   local was_on = jit and jit.status()
   local hook, mask, count = debug.gethook()
+  local running = true
   if jit then jit.off() end
-  debug.sethook(function() error("still running") end, "", 1e7)
-  local ok, err = pcall(f)
+  debug.sethook(function()
+    if running then
+      running = false
+      error("still running")
+    end
+  end, "", limit or 1e7)
+  local ok, err = pcall(function()
+    local done, why = pcall(f)
+    running = false
+    if not done then error(why, 0) end
+  end)
   if hook then debug.sethook(hook, mask, count)
   else debug.sethook() end
   if was_on then jit.on() end
@@ -433,4 +447,31 @@ describe("terminal cursor showing", function()
     end
     assert.same({ false, true, false, true, true }, seen)
   end)
+end)
+
+
+--- bounded() puts the JIT and the hook before it back, wherever
+--- its count runs out: in the body, or just after it returns
+describe("bounded", function()
+  it("puts the JIT and the hook back at the count's edge",
+    function()
+      local before = function() end
+      debug.sethook(before, "", 1e9)
+      local was_on = jit and jit.status()
+      local left = {}
+      for n = 900, 1010 do
+        local returned = pcall(bounded,
+          function() for _ = 1, n do end end, 1000)
+        local hook = debug.gethook()
+        local on = jit and jit.status()
+        --- put back at once, should bounded() have left it out
+        debug.sethook(before, "", 1e9)
+        if was_on then jit.on() end
+        if not returned or hook ~= before or on ~= was_on then
+          table.insert(left, n)
+        end
+      end
+      debug.sethook()
+      assert.same({}, left)
+    end)
 end)
