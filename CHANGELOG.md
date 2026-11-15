@@ -279,6 +279,10 @@ Project-author guide: `doc/input_api.md`.
 
 ### Fixed
 
+- **`gotoxy` given something other than a number names the program's line.**
+  `compy.terminal.gotoxy('x', 'y')` stopped the program with an error about `floor` on
+  a line of the IDE's terminal; it now stops it with `compy.terminal.gotoxy: x and y
+  must be numbers` on the line that called it.
 - **A letter outside ASCII no longer crashes the IDE.** Enter on a Lua line such as
   `п = 1` or `x = é` in the console or the file editor stopped the IDE; the message now
   names the whole letter. A message holding bytes that are not UTF-8 shows `�` for them,

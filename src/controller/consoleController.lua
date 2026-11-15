@@ -655,9 +655,15 @@ local compy_graphics = {
 -- below, the input solicitation surface.
 local get_compy_terminal = function(terminal)
   return {
+    --- What is not a number fails in the program's own call,
+    --- on its line; a number written as text moves, as it
+    --- always did. The grid puts any number on the grid.
     --- @param x number
     --- @param y number
     gotoxy = function(x, y)
+      if not (tonumber(x) and tonumber(y)) then
+        error('compy.terminal.gotoxy: x and y must be numbers', 2)
+      end
       return terminal:move_to(x, y)
     end,
     clear = function()

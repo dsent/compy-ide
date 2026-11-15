@@ -74,6 +74,35 @@ describe("compy.terminal #console", function()
     assert.equal("x", K.cc.model.output.terminal.buffer[5][3])
   end)
 
+  --- gotoxy with what is not a number fails in the program's
+  --- own call, on its own line, in the words of the other
+  --- argument errors (Compy check C5)
+  for _, args in ipairs({ "'x', 'y'", "", "1", "{ }, 2", "1, nil" }) do
+    it("refuses gotoxy(" .. args .. ") on the program's line",
+      function()
+        reset({ ["main.lua"] = "local a = 1\nlocal b = 2\n"
+          .. "compy.terminal.gotoxy(" .. args .. ")\n" })
+        run("run()")
+        assert.same("ready", K.app_state())
+        local text = K.console_text()
+        assert.truthy(text:find(
+          "L3:compy.terminal.gotoxy: x and y must be numbers", 1, true),
+          text)
+        assert.falsy(text:find("floor", 1, true))
+      end)
+  end
+
+  it("takes gotoxy's numbers written as text, as it did",
+    function()
+      reset({ ["main.lua"] =
+        "compy.terminal.gotoxy('3', '5') io.write('x')\n" })
+      K.cc:get_project_env().io = { write = function(s)
+        K.cc.model.output:write(s)
+      end }
+      run("run()")
+      assert.equal("x", K.cc.model.output.terminal.buffer[5][3])
+    end)
+
   it("still clears the screen", function()
     reset({ ["main.lua"] =
       "print('gone') compy.terminal.clear()\n" })
