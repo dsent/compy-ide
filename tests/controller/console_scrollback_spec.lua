@@ -1043,6 +1043,99 @@ describe("the scrolled view at a transition #console", function()
       at_rest("the program's field")
       K.cc:get_project_env().love.update = nil
     end)
+
+  it("not a paused program's field: the keys scroll its output",
+    function()
+      reset({ ["main.lua"] = "for i = 1, 40 do print('L' .. i) end\n"
+        .. FIELD .. RUNS })
+      run("run()")
+      assert.is_true(love.state.user_input_controller:is_shown())
+      K.keys("lctrl", "pause")
+      K.frame()
+      K.cc:suspend()
+      assert.same("inspect", K.app_state())
+      K.keys("home")
+      assert.is_true(output():is_scrolled(), "Home")
+      for _ = 1, 5 do K.frame() end
+      assert.equal(output().kept.first, output():top(),
+        "the oldest row stays on top")
+      K.keys("end")
+      K.keys("pageup")
+      for _ = 1, 5 do K.frame() end
+      assert.is_true(output():is_scrolled(), "PgUp")
+      K.cc:get_project_env().love.update = nil
+    end)
+
+  --- a program that takes keys from its 20th frame on, by the
+  --- hook `hook` for `event`, and says so
+  local function takes_later(event, hook)
+    return "for i = 1, 40 do print('L' .. i) end\n"
+        .. "local n = 0\n"
+        .. "function love.update()\n"
+        .. "  n = n + 1\n"
+        .. "  if n == 20 then\n"
+        .. "    compy.input.hooks." .. event .. " = " .. hook .. "\n"
+        .. "    print('Ready for keys.')\n"
+        .. "  end\n"
+        .. "end\n"
+  end
+
+  --- the program's handlers go with it: the fixture keeps its
+  --- tables for the next run in this file
+  local function forget_program()
+    local env = K.cc:get_project_env()
+    env.love.update = nil
+    env.compy.input.hooks.keypressed = nil
+    env.compy.input.hooks.textinput = nil
+  end
+
+  it("a key a program takes after the view scrolled", function()
+    reset({ ["main.lua"] = takes_later("keypressed",
+      "function() return true end") })
+    run("run()")
+    K.keys("home")
+    assert.is_true(output():is_scrolled(), "Home, before the hook")
+    for _ = 1, 30 do K.frame() end
+    assert.is_true(output():is_scrolled(),
+      "the hook alone leaves the view")
+    K.keys("end")
+    at_rest("the key the program took")
+    K.frame(100)
+    local s = table.concat(screen(), "\n")
+    assert.truthy(s:find("Ready for keys.", 1, true))
+    forget_program()
+  end)
+
+  it("a text a program takes after the view scrolled", function()
+    reset({ ["main.lua"] = takes_later("textinput",
+      "function() return true end") })
+    run("run()")
+    K.keys("home")
+    for _ = 1, 30 do K.frame() end
+    assert.is_true(output():is_scrolled())
+    love.handlers.textinput("a")
+    at_rest("the text the program took")
+    forget_program()
+  end)
+
+  it("not a lone modifier a program takes, nor a key it leaves",
+    function()
+      reset({ ["main.lua"] = takes_later("keypressed",
+        "function(k) return k == 'lshift' or k == 'x' end") })
+      run("run()")
+      for _ = 1, 30 do K.frame() end
+      K.keys("lctrl", "up")
+      assert.is_true(output():is_scrolled(),
+        "Ctrl+Up the program leaves scrolls")
+      local t = output():top()
+      K.keys("lshift")
+      assert.equal(t, output():top(), "a lone Shift the program took")
+      K.keys("lctrl", "up")
+      assert.equal(t - 1, output():top(), "Ctrl+Up again")
+      K.keys("x")
+      at_rest("x, which the program took")
+      forget_program()
+    end)
 end)
 
 --- The view's one rule (CanvasModel:show): its top lies between

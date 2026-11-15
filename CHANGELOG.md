@@ -191,8 +191,9 @@ Project-author guide: `doc/input_api.md`.
   field is empty, Home and End go to the oldest and the newest row. A scrolled view fills
   the screen, carries the editor's continuation cue at an edge with more beyond, and stays
   where it is while new output arrives; any other key but a modifier, a lock key or F1
-  brings the screen back, and so does a program's start, stop or pause. The field
-  keeps its text and cursor. PageUp and PageDown no longer recall the history, which Up and
+  brings the screen back, and so do a program's start, stop or pause, a key or text a
+  running program takes, and its input field coming up. The field keeps its text and
+  cursor. PageUp and PageDown no longer recall the history, which Up and
   Down still do. While a program's input field shows, or the program takes the keys
   itself, the keys are the program's. The key card lists Ctrl+Up/Down and Home/End.
 - **Ctrl+L empties the console**: the screen, the kept output, and output still waiting

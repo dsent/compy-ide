@@ -92,8 +92,14 @@ a window of 16 consecutive rows of the sequence, drawn by
 either; a number names the same row while new rows arrive, so new
 output leaves the view where it is. `scroll_row`, `scroll_page`,
 `to_oldest` and `to_rest` move it (the keys in
-`src/model/input/consoleKeys.lua`), and every other key brings the
-screen back first (`ConsoleController:_back_to_screen`).
+`src/model/input/consoleKeys.lua`). Every other key brings the
+screen back first, except a modifier or a lock key on its own and
+F1 (`ConsoleController:_back_to_screen`). A key or a text that a
+running program takes brings it back too, except a lone modifier
+or lock (`takes_screen` in `src/controller/controller.lua`), and
+so does a running program's input field when it comes up
+(`ConsoleController:pass_time`); a paused program's field leaves
+the keys to the console.
 `CanvasView:draw_cues` draws the editor's continuation cue
 (`src/view/continuationCue.lua`) at a cut edge of a scrolled view.
 

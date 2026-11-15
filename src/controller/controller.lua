@@ -232,6 +232,20 @@ local function fall_through(event, ...)
   return console(...)
 end
 
+--- A key or a text that a running program takes brings the
+--- console's output back from its scrolled view, whatever took
+--- it: the program's field, a hook, a shortcut or its own
+--- handler, as any key but the scrolling ones does in the
+--- console. A modifier or a lock on its own leaves the view,
+--- and so does a key's release, a pointer or a touch.
+--- @param event string
+--- @param k string?
+--- @return boolean
+local function takes_screen(event, k)
+  if event == 'textinput' then return true end
+  return event == 'keypressed' and not Key.is_lone(k)
+end
+
 --- The project route occupies the keyboard/text handlers for
 --- the run; the project's own handlers ride along for
 --- delegation (never route owners themselves).
@@ -263,7 +277,10 @@ local function occupy_input(userlove, CC)
     love[k] = with_canvas_and_errors(CC, function(...)
       -- LÖVE discards a handler's return, so the
       -- walk's verdict is spent here or not at all.
-      if pic[k](pic, ...) then return end
+      if pic[k](pic, ...) then
+        if takes_screen(k, ...) then CC.model.output:to_rest() end
+        return
+      end
       return fall_through(k, ...)
     end)
   end

@@ -1786,10 +1786,18 @@ end
 ---@param dt number
 function ConsoleController:pass_time(dt)
   self.time = self.time + dt
-  --- a program's field that shows takes the keys: the screen
-  --- comes back under it
+  --- a running program's field that comes up while the view is
+  --- scrolled brings the screen back, so that its prompt is
+  --- seen before any key; a paused program's field waits, and
+  --- the keys scroll its output
   local w = love.state.user_input_controller
-  if w and w:is_shown() then self.model.output:to_rest() end
+  local st = love.state.app_state
+  local field = self.run_live and (st == 'running' or st == 'ready')
+      and w ~= nil and w:is_shown()
+  if field and not self.field_shown then
+    self.model.output:to_rest()
+  end
+  self.field_shown = field
   --- the text cursor blinks on the frames' time
   Blink.pass_time(dt)
   self.model.output.terminal:update(dt)

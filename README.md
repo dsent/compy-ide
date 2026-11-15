@@ -82,7 +82,8 @@ its output, and the keys above scroll over them. A scrolled view
 fills the screen and is marked at its edges where more lies
 beyond; new output leaves it where it is, and any other key but
 a modifier, a lock key or <kbd>F1</kbd> brings the screen back,
-as does a program's start or stop. Each line the console runs is
+as do a program's start, stop or pause and a key the program
+takes. Each line the console runs is
 written to the output in blue before it runs, and its error
 after it. <kbd>Ctrl</kbd>+<kbd>L</kbd> empties the console: the
 screen, the kept rows and output still waiting to be written;
