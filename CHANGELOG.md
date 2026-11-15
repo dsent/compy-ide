@@ -146,9 +146,10 @@ Project-author guide: `doc/input_api.md`.
   highlighted block or the block being replaced has rows above or below the view, the
   edge row fades toward the edge and its last column carries a translucent `^` or `v`;
   the field's edges are marked the same way while the text in it has rows out of sight.
-- **A row that continues a wrapped line has a tiny rounded corner at its top left**,
-  in the editor's view and in every text field; a line's first row has none, and the
-  text does not move.
+- **A wrapped line has tiny orange corners**: one at the top right of every row that
+  goes on, one at the bottom left of every row that continues it, in the editor's view
+  and in every text field. They lie under the text, which does not move; an edge row
+  with a continuation cue has no corner where the cue stands.
 - **PageDown and PageUp page through the file.** PageDown brings the first block hidden
   below the view to its top, PageUp the last one hidden above to its bottom, and the
   highlight goes with it; at the file's end or start they go to the end position or the

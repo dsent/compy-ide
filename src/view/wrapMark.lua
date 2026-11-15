@@ -1,13 +1,13 @@
---- A wrapped line's mark: every row that continues a line,
---- one that takes more than one row, has a small inward
---- rounded corner at its top left, a fillet (the maintainer's
---- rulings of November 15, 2026). The line's first row has
---- none. It is drawn under the text, which does not move, and
---- in the corner the font leaves free: no glyph's ink reaches
---- it. Its colour, size and the rounding of its outer corner
---- are the theme's (`colors.editor.wrap_mark`).
+--- A wrapped line's marks (the maintainer's rulings of
+--- November 15 and 16, 2026): a line that takes more than one
+--- row carries a small rounded corner, a fillet, at the top
+--- right of every row that goes on below, at the last text
+--- column, and the same corner mirrored at the bottom left of
+--- every row that continues it. They are drawn under the text:
+--- the glyphs, a selection and the cursor all paint over them.
+--- Their colour, size and the rounding of the outer corner are
+--- the theme's (`colors.editor.wrap_mark`).
 local WrapMark = { }
-
 --- @class WrapMarkTheme
 --- @field color RGB
 --- @field size integer --- the fillet's radius, in pixels
@@ -45,34 +45,55 @@ function WrapMark.runs(size, round)
   return runs
 end
 
---- The rows `first` to `last` of a wrapped text that continue
---- a line.
+--- Where the marks go on rows `first` to `last` of a wrapped
+--- text: { row, at } with `at` 'end', the top right of a row
+--- that goes on below, or 'start', the bottom left of a row
+--- that continues the one above. `bare` lists rows that take
+--- no 'end' mark (a continuation cue's edge row). Rows past
+--- `total`, such as the row a field keeps for the cursor
+--- after its text, are no rows of a line.
 --- @param rev table<integer, integer> --- a row's line
 --- @param first integer
 --- @param last integer
---- @return integer[]
-function WrapMark.rows(rev, first, last)
+--- @param total integer --- the text's rows
+--- @param bare table<integer, boolean>?
+--- @return { row: integer, at: 'end'|'start' }[]
+function WrapMark.places(rev, first, last, total, bare)
   local out = { }
-  for r = math.max(first, 2), last do
-    if rev[r] and rev[r] == rev[r - 1] then out[#out + 1] = r end
+  for r = first, math.min(last, total) do
+    local l = rev[r]
+    local goes_on = r < total and l == rev[r + 1]
+    if l and goes_on and not (bare and bare[r]) then
+      out[#out + 1] = { row = r, at = 'end' }
+    end
+    if l and 1 < r and l == rev[r - 1] then
+      out[#out + 1] = { row = r, at = 'start' }
+    end
   end
   return out
 end
 
---- Draw the mark on each of `rows`.
---- @param rows integer[]
+--- Draw the marks of `places`.
+--- @param places { row: integer, at: 'end'|'start' }[]
 --- @param row_y fun(r: integer): number --- where row `r` starts
+--- @param right number --- the last text column's right edge
+--- @param fh number --- a row's height
 --- @param theme WrapMarkTheme
-function WrapMark.draw(rows, row_y, theme)
-  if #rows == 0 then return end
+function WrapMark.draw(places, row_y, right, fh, theme)
+  if #places == 0 then return end
   local gfx = love.graphics
   local runs = WrapMark.runs(theme.size, theme.round)
   gfx.push('all')
   gfx.setColor(theme.color)
-  for _, r in ipairs(rows) do
-    local y = row_y(r)
+  for _, p in ipairs(places) do
+    local y = row_y(p.row)
     for _, run in ipairs(runs) do
-      gfx.rectangle('fill', run[1], y + run[2], run[3], 1)
+      if p.at == 'end' then
+        gfx.rectangle('fill', right - run[1] - run[3], y + run[2],
+          run[3], 1)
+      else
+        gfx.rectangle('fill', run[1], y + fh - 1 - run[2], run[3], 1)
+      end
     end
   end
   gfx.pop()

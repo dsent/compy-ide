@@ -294,8 +294,16 @@ function UserInputView:render_input(input, status, time)
 
   local shown = vc:get_range()
   local function row_y(r) return self:row_y(field_row(r)) end
-  WrapMark.draw(WrapMark.rows(vc.wrap_reverse, vc.offset + 1,
-    vc.offset + inLines), row_y, cf_colors.editor.wrap_mark)
+  --- a wrapped line's marks, under the draft's text; an edge
+  --- row with a continuation cue takes no mark in its last
+  --- column
+  local first, last = vc.offset + 1, vc.offset + inLines
+  local bare = { }
+  if 1 < shown.start then bare[first] = true end
+  if shown.fin < vc:get_content_length() then bare[last] = true end
+  WrapMark.draw(WrapMark.places(vc.wrap_reverse, first, last,
+    vc:get_content_length(), bare), row_y, w * fw, fh,
+    cf_colors.editor.wrap_mark)
 
   if highlight then
     gfx.push('all')

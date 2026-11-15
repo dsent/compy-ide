@@ -544,31 +544,14 @@ function BufferView:draw(special, bottom)
     end
   end
 
-  local draw_marks = function()
-    WrapMark.draw(WrapMark.rows(vc.wrap_reverse, range.start,
-      range.fin), row_y, colors.wrap_mark)
-  end
-
-  --- The continuation cue (FR4.8, IS2.2) at an edge of the view
-  --- beyond which rows of the browsed block or of the
-  --- replacement target lie; a block the view merely cuts has
-  --- none. The edge row fades into its own highlight.
-  local draw_cues = function()
-    local sel = self.buffer:get_selection()
-    local target = self.buffer.loaded
-    local white = special and colors.highlight_special
-        or colors.highlight
-    local yellow = colors.highlight_loaded
-    local paint = {
-      browsed = { { x = 0, w = width, color = white } },
-      target = { { x = 0, w = width, color = yellow } },
-      both = {
-        { x = 0, w = fw, color = white },
-        { x = fw, w = width - 2 * fw, color = yellow },
-        { x = width - fw, w = fw, color = white },
-      },
-    }
-    local cut = { }
+  --- The edges of the view that carry a continuation cue
+  --- (FR4.8, IS2.2): those beyond which rows of the browsed
+  --- block or of the replacement target lie, a block the view
+  --- merely cuts has none; each with the kind of its row
+  local sel = self.buffer:get_selection()
+  local target = self.buffer.loaded
+  local cut = { }
+  do
     local function look(b, kind)
       local s, e = self:_block_span(b)
       if not s then return end
@@ -583,6 +566,34 @@ function BufferView:draw(special, bottom)
       look(target, target == sel and 'both' or 'target')
     end
     look(sel, 'browsed')
+  end
+
+  --- a wrapped line's marks, under the text; a cue's edge row
+  --- takes no mark in its last column, where the cue stands
+  local draw_marks = function()
+    local bare = { }
+    if cut.top then bare[range.start] = true end
+    if cut.bottom then bare[range.fin] = true end
+    WrapMark.draw(WrapMark.places(vc.wrap_reverse, range.start,
+      range.fin, vc:get_text_length(), bare), row_y, self.cfg.drawableChars * fw, fh,
+      colors.wrap_mark)
+  end
+
+  --- The continuation cue at each edge in `cut`. The edge row
+  --- fades into its own highlight.
+  local draw_cues = function()
+    local white = special and colors.highlight_special
+        or colors.highlight
+    local yellow = colors.highlight_loaded
+    local paint = {
+      browsed = { { x = 0, w = width, color = white } },
+      target = { { x = 0, w = width, color = yellow } },
+      both = {
+        { x = 0, w = fw, color = white },
+        { x = fw, w = width - 2 * fw, color = yellow },
+        { x = width - fw, w = fw, color = white },
+      },
+    }
     for edge, kind in pairs(cut) do
       local v = edge == 'top' and range.start or range.fin
       Cue.draw({

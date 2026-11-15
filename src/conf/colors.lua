@@ -102,12 +102,12 @@ return {
       box = Color[Color.gray],
       box_alpha = .25,
     },
-    --- the mark at the top left of a row that continues a line
-    --- (view/wrapMark.lua): black, a fillet of 6 pixels with
-    --- a square outer corner
+    --- the marks of a wrapped line (view/wrapMark.lua): the
+    --- status lines' orange, a fillet of 8 pixels with a square
+    --- outer corner
     wrap_mark = {
-      color = Color[Color.black],
-      size = 6,
+      color = warning,
+      size = 8,
       round = 0,
     },
   },
