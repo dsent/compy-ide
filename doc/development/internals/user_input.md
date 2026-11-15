@@ -180,25 +180,36 @@ A click on the input widget (translated from screen coordinates to input grid vi
 
 ### Error state
 
-When an error is set on the model (`set_error()`), the message covers the
-input. This is used for parse errors, runtime errors, and validation failures.
+An error or a notice is shown one of two ways, chosen per field by
+`model.message_band`.
 
-- **Project widget:** the input is locked — text input and most keys are
-  ignored until the error is cleared. Cleared by: Enter, space, or arrow keys.
-- **Console:** the failed line stays in the input, to be corrected. Enter,
-  Escape, Up and Down only close the message; any other key or typed character
-  closes it and does its usual work, so nothing typed is lost. A modifier
-  alone leaves it up, and a key pressed with it closes it as that key would
-  (`ConsoleController:keypressed`, `:textinput`).
-- **Editor:** its own rules, in `EditorController:_held_back`. In the
-  editor's field (`model.editing`) the widget itself locks nothing: the next
-  key or character closes the message and does its usual work, Escape
-  included (editor principles, IS3.14). The message is drawn over the
-  document view, directly above the status line (`EditorView:draw_message`),
-  and the field stays as it is.
-- **Drawing:** each line of a message is wrapped on its own, a tab shows as two
-  spaces, and a message taller than the input area shows its first rows and
-  ends in `...` (`UserInputModel:get_wrapped_error`,
+- **The notice band** (the file editor's field, `model.editing`, and the
+  console's, seated by `UserInputController:messages_above()`): the message
+  shows in a band directly above the status line, over the last rows of what
+  is above it, which are not moved or laid out again (`UserInputView:draw_notice`,
+  called by `EditorView:draw_message` on the document view's row grid and by
+  `ConsoleView:draw` on the output's). The field and the status line stay as
+  they are, the draft and its cursor shown, a syntax failure red from the
+  failing character (IS3.4). `UserInputModel:set_notice(msg, kind)` stores it:
+  each line of the message breaks between words at the field's width, and
+  the band shows three rows at most, the last cut with `…`
+  (`UserInputView:notice_rows`). Its kind is `'notice'` (a refusal, in the
+  status line theme's `warning` colour) or `'error'` (a parser's, a load's or
+  a run's message, in the error colour); `set_error` on such a field stores an
+  error (`UserInputController:set_error`). The message blocks nothing: the
+  next key or character dismisses it and does its usual work, Enter and
+  Escape included; a modifier, a lock or a system key alone leaves it
+  (`Key.is_lone`). A character that arrives before its key press dismisses it
+  and is typed once. In the editor `EditorController:_held_back` applies
+  this, and F1 leaves it too; in the console `ConsoleController:keypressed`
+  and `:textinput` do (the ruling "The console shows an error as the editor
+  does"). The key card covers the band while it shows.
+- **In the field's place** (a project's widget): the message covers the
+  input, under an `Errors:` header, and the input is locked — text input and
+  most keys are ignored until the error is cleared. Cleared by: Enter, space,
+  or arrow keys. Each line of a message is wrapped on its own, a tab shows as
+  two spaces, and a message taller than the input area shows its first rows
+  and ends in `...` (`UserInputModel:get_wrapped_error`,
   `UserInputView:render_error`).
 
 ### Evaluator and validation

@@ -174,6 +174,46 @@ local function layout(wait, where, color, eight)
   D.eq(b8 - a8, b - a, where .. ': the band keeps its height')
 end
 
+-- The console shows an error as the editor does (the ruling
+-- of November 15, 2026): the message in the band right above
+-- the status line, the field under it with the draft red from
+-- the failure, the status line where it was; the next key
+-- takes the band away. The band's ground is the status line's
+-- black, so the rows are found from the layout, not the band.
+scenario('console-messages', function(wait)
+  local t = theme()
+  wait(.1)
+  if love.state.app_state == 'editor' then D.leave(wait) end
+  D.key(wait, 'escape')
+  local view = P.cc().cfg.view
+  local l = require('view.layout')(view)
+  local field = view.h - l.bottom - view.fh
+  local status = field - l.status_h
+  D.type(wait, 'x = = 1')
+  D.key(wait, 'return')
+  local img = P.capture(wait)
+  D.shot(wait, 'console-syntax')
+  local _, fg = P.cell(img, 1, 1, field)
+  is_not(fg, t.input.error, 'x, before the failure')
+  _, fg = P.cell(img, 7, 1, field)
+  is(fg, t.input.error, 'the 1 after the failure')
+  local bg
+  bg = P.colors(img, 0, status, view.fw * 6, view.fh)
+  is(bg, t.statusline.console.bg, 'the status line, where it was')
+  bg, fg = P.colors(img, 0, status - view.fh, view.fw * 6, view.fh)
+  is(bg, t.input.error_bg, 'the band')
+  is(fg, t.input.error, 'the parser\'s message')
+  D.key(wait, 'right')
+  img = P.capture(wait)
+  D.shot(wait, 'console-dismissed')
+  bg = P.colors(img, 0, status - view.fh, view.fw * 6, view.fh)
+  is_not(bg, t.input.error_bg, 'the band, gone with the key')
+  _, fg = P.cell(img, 7, 1, field)
+  is(fg, t.input.error, 'the draft, still red from the failure')
+  D.key(wait, 'escape')
+  hm_done()
+end)
+
 scenario('layout', function(wait)
   local t = theme()
   wait(.1)

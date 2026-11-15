@@ -224,62 +224,31 @@ function EditorController:refuse(msg, kind)
   if msg then self:notice(msg, kind) end
 end
 
---- What a message in the band is: a notice says why an
---- action was refused and what would work; an error is the
---- parser's message for a draft that is not valid Lua. The
---- band draws each in its own colour.
---- @alias MessageKind 'notice'|'error'
-
 --- Show a message in the message band (IS3.14): a notice,
 --- unless `kind` says it is an error. It blocks no input and
 --- changes no state; the next key press dismisses it
---- (_held_back).
+--- (_held_back). The band is the field's
+--- (UserInputModel:set_notice), the console's too.
 --- @param msg string|string[]
 --- @param kind MessageKind?
 function EditorController:notice(msg, kind)
-  local model = self.input.model
-  local w = model.visible and model.visible.wrap_w or 64
-  local rows = { }
-  local parts = type(msg) == 'table' and msg or { msg }
-  for _, part in ipairs(parts) do
-    --- a word wider than a row is left to the field's wrap
-    local wrapped = string.wrap_words(tostring(part), w)
-    for _, row in ipairs(wrapped) do
-      rows[#rows + 1] = row
-    end
-  end
-  model:set_error(rows)
-  if model.error then
-    model.error.notice = true
-    model.error.kind = kind or 'notice'
-  end
+  self.input:notice(msg, kind)
 end
 
 --- The kind of the message the band shows, nil when none
---- shows. A message shown another way than through `notice`
---- is an error.
+--- shows
 --- @return MessageKind?
 function EditorController:message_kind()
-  local e = self.input.model.error
-  if type(e) ~= 'table' or #e == 0 then return nil end
-  return e.kind or 'error'
+  return self.input:message_kind()
 end
 
---- A key that does nothing on its own: a modifier, a lock or
---- the help key. It dismisses no notice (IS3.14).
-local LOCKS = {
-  capslock = true,
-  numlock = true,
-  scrolllock = true,
-  lgui = true,
-  rgui = true,
-  [KeyCard.KEY] = true,
-}
-
+--- A key that does nothing on its own: a modifier, a lock,
+--- a system key or the help key. It dismisses no notice
+--- (IS3.14).
 --- @param k string
 --- @return boolean
 local function lone_key(k)
-  return Key.is_mod(k) or LOCKS[k] == true
+  return Key.is_lone(k) or k == KeyCard.KEY
 end
 
 --- Whether a key press is held back from the editor's keys:

@@ -60,6 +60,10 @@ function ConsoleController.new(M, main_ctrl)
     -- D-LIFECYCLE-FLAGS, statement 3). The line never ran, so
     -- the history does not keep it.
     :seat_lifecycle({ clear_on_cancel = true })
+    -- its errors show as the editor's do, in the notice band
+    -- above the status line (the ruling "The console shows an
+    -- error as the editor does")
+    :messages_above()
   -- Console history navigation: at the vertical boundary the
   -- widget fires on_limit_reached; the console maps up/down to
   -- history back/forward (doc/development/decisions/input.md,
@@ -486,7 +490,7 @@ function ConsoleController:run_project(name)
   if love.state.app_state == 'inspect' or
       love.state.app_state == 'running'
   then
-    self.input:set_error(
+    self.input:notice(
       { "There's already a project running!" })
     return
   end
@@ -2368,15 +2372,6 @@ local ACTIONS = {
   end,
 }
 
---- The chords that only close an error: the line under it is
---- the one that failed, kept to be corrected
-local CLOSE_ONLY = {
-  ['return'] = true, kpenter = true,
-  ['shift+return'] = true, ['shift+kpenter'] = true,
-  ['alt+return'] = true, ['alt+kpenter'] = true,
-  escape = true, up = true, down = true,
-}
-
 --- In the console a key is looked up by its full chord in the
 --- table of the console's state (consoleKeys.lua), then in the
 --- text field's (fieldKeys.lua); a chord neither names does
@@ -2416,20 +2411,11 @@ function ConsoleController:keypressed(k, sc, isrepeat)
     return
   end
 
-  -- doc/development/internals/user_input.md, "Error state":
-  -- the line under the error is the one that failed, kept to
-  -- be corrected. Enter (with Shift or Alt too), Escape, Up
-  -- and Down only close the error; any other key closes it
-  -- and does its usual work. A modifier alone leaves it up.
-  if input:has_error() then
-    if Key.is_mod(k) then
-      return
-    end
+  -- A message is a hint that blocks nothing (IS3.14): the
+  -- next key dismisses it and does its usual work, Enter and
+  -- Escape included. A modifier or a lock alone leaves it.
+  if input:has_error() and not Key.is_lone(k) then
     input:clear_error()
-    if CLOSE_ONLY[chord] then
-      input:update_view()
-      return
-    end
   end
 
   if entry then

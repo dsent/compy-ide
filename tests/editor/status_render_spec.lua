@@ -351,6 +351,9 @@ describe("status line, notice and key card drawn #editor",
       assert.is_nil(K.message_kind())
     end)
 
+    -- the console's message is in its notice band now, above
+    -- its status line (the ruling "The console shows an error
+    -- as the editor does"), no longer in its field
     it("the console's error stays in the error colour",
         function()
       K.reset({ ["main.lua"] = "x = 1\n" })
@@ -359,7 +362,7 @@ describe("status line, notice and key card drawn #editor",
       local s = K.screen()
       local colors = K.cc.view.cfg.view.colors
       local found = false
-      for _, t in ipairs(s.field) do
+      for _, t in ipairs(s.texts) do
         if t.text:find("expression", 1, true) then
           found = true
           assert.is_true(same_colour(colors.input.error,

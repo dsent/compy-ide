@@ -108,14 +108,83 @@ function UserInputView:cell_at(x, y, input)
 end
 
 --- Whether a message leaves this field as it is: the file
---- editor shows its messages over the document view, above
---- the status line, and neither the field nor the status
---- line moves for one (IS3.14). The console and a project's
---- input show an error in the field's place.
+--- editor and the console show their messages in the notice
+--- band (draw_notice), and neither the field nor the status
+--- line moves for one (IS3.14). A project's input shows an
+--- error in the field's place.
 --- @private
 --- @return boolean
 function UserInputView:_message_elsewhere()
-  return self.controller.model.editing == true
+  return self.controller.model.message_band == true
+end
+
+--- The rows a message may take in the band: one, or up to
+--- three when it is wider than the screen
+local NOTICE_ROWS = 3
+
+--- The rows of the message the band shows, nil when none
+--- shows; one longer than the band ends in an ellipsis.
+--- @return string[]?
+function UserInputView:notice_rows()
+  if not self:_message_elsewhere() then return nil end
+  local all = self.controller:get_wrapped_error()
+  if not all or #all == 0 then return nil end
+  local rows = { }
+  for i = 1, math.min(#all, NOTICE_ROWS) do
+    rows[i] = all[i]
+  end
+  if #all > NOTICE_ROWS then
+    local w = self.cfg.drawableChars
+    local last = string.usub(rows[NOTICE_ROWS], 1, w - 1)
+    rows[NOTICE_ROWS] = last .. '…'
+  end
+  return rows
+end
+
+--- The colour of a message's text: an error in the error
+--- colour, a notice in the status line's warning colour, as
+--- the console's status line has its '[no sd card]'.
+--- @private
+--- @return RGB
+function UserInputView:_notice_color()
+  local colors = self.cfg.colors
+  if self.controller:message_kind() == 'notice' then
+    return colors.statusline.editor.warning
+  end
+  return colors.input.error
+end
+
+--- The notice band: a message, a notice or an error's,
+--- directly above the status line, over the last rows of
+--- what is drawn above it (IS3.14). It is a hint that blocks
+--- nothing: neither the status line nor the field moves for
+--- it, and what is above neither scrolls nor is laid out
+--- again; the rows under it are hidden until the next key.
+--- The rows above are `pitch` high from `origin`, and the
+--- band covers each of them it reaches into whole. Call
+--- after the field's draw, which places the status line.
+--- @param pitch number
+--- @param origin number
+function UserInputView:draw_notice(pitch, origin)
+  local rows = self:notice_rows()
+  if not rows then return end
+  local cf = self.cfg
+  local fh = cf.fh
+  local width = gfx.getWidth()
+  local bottom = self.start_h
+  local top = bottom - #rows * fh
+  local from = origin
+      + math.floor((top - origin) / pitch) * pitch
+
+  gfx.push('all')
+  gfx.setFont(cf.font)
+  gfx.setColor(cf.colors.input.error_bg)
+  gfx.rectangle('fill', 0, from, width, bottom - from)
+  gfx.setColor(self:_notice_color())
+  for i, row in ipairs(rows) do
+    gfx.print(row, 0, top + (i - 1) * fh)
+  end
+  gfx.pop()
 end
 
 --- The draft's rows in the field, up to its display limit

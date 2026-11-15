@@ -187,6 +187,14 @@ Project-author guide: `doc/input_api.md`.
   are on it. Only a bare F1 brings it up.
 - **PageUp and PageDown do nothing in the console**: they no longer recall the history,
   which Up and Down still do, and are kept for paging the output.
+- **The console shows an error as the file editor does**: a line the syntax refuses,
+  one Lua does not load, one that fails while it runs, and a paused program's error
+  show their message in a band directly above the status line, over the output's last
+  rows, without the `Errors:` heading. The line stays in the field with its cursor,
+  red from a syntax failure, and the status line no longer moves. The message blocks
+  nothing: the next key dismisses it and does its work, so Enter runs the line again,
+  Escape clears it and Up recalls the history. A program's own input field shows its
+  errors as before.
 - **The console's history works as a classic shell's.** It holds only the lines that ran:
   Up no longer adds the line being typed, an edit to a recalled line no longer replaces
   the line that ran, and Escape no longer stores the line it clears. The line being typed
