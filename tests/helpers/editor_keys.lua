@@ -954,9 +954,16 @@ function K.screen(also)
     end
   })
   rawset(screen.canvas, "renderTo", scr_render_to)
+  -- The fixture's font has no rasterizers for the output's
+  -- view to read a character's picture from
+  -- (view/canvas/terminalView.lua): every character counts as
+  -- painting inside its cell.
+  local measure = TerminalView.measure
+  TerminalView.measure = function() return 0 end
   local ok, e = xpcall(function()
     draw_all(also)
   end, debug.traceback)
+  TerminalView.measure = measure
   rawset(screen.canvas, "renderTo", nil)
   setmetatable(lg, mt)
   for name in pairs(SCREEN) do

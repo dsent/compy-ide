@@ -572,6 +572,118 @@ describe("terminal queue", function()
     end)
 end)
 
+--- The view (view/canvas/terminalView.lua) draws a row's
+--- backgrounds, then its characters, so that the GPU takes each
+--- kind in one call, and keeps the picture that drawing cell by
+--- cell made: a background covered what the character before it
+--- painted past its own cell. The graphics here are a stand-in
+--- that records the calls, and the rasterizer is synthetic: a
+--- character's glyph is as wide as INK says, in a cell 10 wide.
+describe("terminal view", function()
+  require("util.color")
+  require("view.canvas.terminalView")
+  local gfx = love.graphics
+  local INK = { [" "] = 0, i = 4, W = 10, M = 12, ["="] = 25 }
+  local rasterizer = {
+    hasGlyphs = function() return true end,
+    getGlyphData = function(_, char)
+      local ink = INK[char]
+      return {
+        getDimensions = function() return ink, 1 end,
+        getBearing = function() return 0, 0 end,
+        getFormat = function() return "la8" end,
+        getString = function() return ("\255\255"):rep(ink) end,
+      }
+    end,
+  }
+  local saved, calls
+
+  before_each(function()
+    saved, calls = { }, { }
+    local stand_in = {
+      getBlendMode = function() return "alpha", "alphamultiply" end,
+      setBlendMode = function() end,
+      rectangle = function(_, x, y)
+        if y == 0 then calls[#calls + 1] = "back " .. x / 10 end
+      end,
+      print = function(char, x, y)
+        if y == 0 then calls[#calls + 1] = char .. " " .. x / 10 end
+      end,
+    }
+    for name, f in pairs(stand_in) do
+      saved[name] = gfx[name] or false
+      gfx[name] = f
+    end
+  end)
+
+  after_each(function()
+    for name, f in pairs(saved) do gfx[name] = f or nil end
+  end)
+
+  --- the first row's calls once `text` is drawn, the 20
+  --- backgrounds that open it checked and left out
+  local function drawn(text, over_a_picture, unknown_font)
+    local t = new_term()
+    t.font.getDPIScale = function() return 1 end
+    if not unknown_font then t.rasterizers = { rasterizer } end
+    t:print(text)
+    t:update(1000)
+    TerminalView.draw(t, t.canvas, over_a_picture)
+    if over_a_picture then return calls end
+    local rest = { }
+    for i, call in ipairs(calls) do
+      if i <= 20 then
+        assert.equal("back " .. i - 1, call)
+      else
+        rest[#rest + 1] = call
+      end
+    end
+    return rest
+  end
+
+  --- the calls up to the row's last character that is no space
+  local function trimmed(rest)
+    while rest[#rest] and rest[#rest]:sub(1, 1) == " " do
+      rest[#rest] = nil
+    end
+    return rest
+  end
+
+  it("draws a row's backgrounds, then its characters", function()
+    assert.same({ "i 0", "i 1", "  2", "i 3" },
+      trimmed(drawn("ii i")))
+  end)
+
+  it("draws again the background a character reaches, before "
+    .. "that cell's own character", function()
+    -- M is 2 wider than its cell and = reaches two cells on
+    assert.same({
+      "M 0", "back 1", "i 1", "i 2",
+      "= 3", "back 4", "i 4", "back 5", "i 5", "i 6",
+    }, trimmed(drawn("Mii=iii")))
+  end)
+
+  it("counts a character that fills its cell to the last column "
+    .. "as reaching the next", function()
+    assert.same({ "W 0", "back 1", "i 1", "i 2" },
+      trimmed(drawn("Wii")))
+  end)
+
+  it("draws the characters alone over a program's picture",
+    function()
+      assert.same({ "M 0", "i 1", "  2", "= 3", "i 4" },
+        trimmed(drawn("Mi =i", true)))
+    end)
+
+  it("draws cell by cell after a character of a font whose "
+    .. "rasterizers it was not given", function()
+    local rest = drawn("ii", false, true)
+    assert.same({ "i 0", "back 1", "i 1", "back 2", "  2" },
+      { rest[1], rest[2], rest[3], rest[4], rest[5] })
+    assert.equal(20 + 19, #rest)
+  end)
+end)
+
 describe("bounded", function()
   it("puts the JIT and the hook back at the count's edge",
     function()

@@ -63,9 +63,18 @@ local config_view = function(flags)
   local font_size = fonts.default_size
   local label_size = fonts.label_size
 
-  local font_main = gfx.newFont(fonts.main, font_size)
-  local font_icon = gfx.newFont(fonts.icon, font_size)
-  local font_cjk = gfx.newFont(fonts.cjk, font_size * (2 / 3))
+  --- What the font and its fallbacks are made from, in the
+  --- order a character is looked for in them: the output's
+  --- view reads a character's picture there
+  --- (view/canvas/terminalView.lua)
+  local rasterizers = {
+    love.font.newRasterizer(fonts.main, font_size),
+    love.font.newRasterizer(fonts.icon, font_size),
+    love.font.newRasterizer(fonts.cjk, font_size * (2 / 3)),
+  }
+  local font_main = gfx.newFont(rasterizers[1])
+  local font_icon = gfx.newFont(rasterizers[2])
+  local font_cjk = gfx.newFont(rasterizers[3])
   font_main:setFallbacks(font_icon, font_cjk)
 
   --- a row's height, the same for every row of the screen
@@ -108,6 +117,7 @@ local config_view = function(flags)
 
   return {
     font = font_main,
+    rasterizers = rasterizers,
     iconfont = font_icon,
     fh = fh,
     fw = fw,

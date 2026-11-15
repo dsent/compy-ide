@@ -42,6 +42,7 @@
 
 --- @class ViewConfig table
 --- @field font love.Font
+--- @field rasterizers love.Rasterizer[]? --- of `font`, then its fallbacks
 --- @field iconfont love.Font
 --- @field fh integer -- font height
 --- @field fw integer -- font width

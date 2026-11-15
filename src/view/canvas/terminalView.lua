@@ -5,29 +5,83 @@ TerminalView = {}
 
 local utf8 = require("utf8")
 
---- One cell: its background, unless drawn over a program's
---- picture, then its character
+--- A cell's two colors: its background's, then its character's
 --- @param state { color: number[], backcolor: number[],
 ---   reversed: boolean? }
-local function draw_cell(char, state, left, top, cw, ch, overlay)
-  local back, fore
+local function cell_colors(state)
   if state.reversed then
-    back, fore = state.color, state.backcolor
-  else
-    back, fore = state.backcolor, state.color
+    return state.color, state.backcolor
   end
-  if overlay then
-    back = Color.with_alpha(back, 0.25)
-    fore = Color.with_alpha(fore, 0.75)
-  else
-    gfx.setColor(unpack(back))
-    gfx.rectangle("fill", left, top, cw, ch)
+  return state.backcolor, state.color
+end
+
+--- How far each character's picture goes past its cell, for
+--- each font
+--- @type table<love.Font, table<string, integer>>
+local reaches = setmetatable({ }, { __mode = 'k' })
+
+--- How far the picture of `char` goes, read from the glyph the
+--- font draws: how many cells to the right of its own it paints
+--- into. A terminal that does not name its font's rasterizers
+--- gets every cell after a character drawn as drawing cell by
+--- cell did.
+--- @param terminal table
+--- @param char string
+--- @return integer
+function TerminalView.measure(terminal, char)
+  local rasterizers = terminal.rasterizers
+  if not rasterizers then return math.huge end
+  --- the font's own glyph, else the first fallback's that has
+  --- one, as the font chooses
+  local from = rasterizers[1]
+  for _, r in ipairs(rasterizers) do
+    if r:hasGlyphs(char) then
+      from = r
+      break
+    end
   end
-  local bm, am = gfx.getBlendMode()
-  gfx.setBlendMode('alpha', "alphamultiply")
-  gfx.setColor(unpack(fore))
-  gfx.print(char, left, top)
-  gfx.setBlendMode(bm, am)
+  local glyph = from:getGlyphData(char)
+  local w, h = glyph:getDimensions()
+  --- a pixel's last byte is its opacity
+  local size = glyph:getFormat() == 'la8' and 2 or 4
+  local bytes = glyph:getString()
+  local last = -1
+  for y = 0, h - 1 do
+    for x = w - 1, last + 1, -1 do
+      if 0 < bytes:byte((y * w + x) * size + size) then
+        last = x
+        break
+      end
+    end
+  end
+  if last < 0 then return 0 end
+  --- A picture counts as one column wider than it is: the
+  --- font's texture is sampled between its pixels, so the
+  --- column next to a painted one can take a trace of it, and
+  --- whether it does changes as the texture fills.
+  local right = glyph:getBearing() + last + 2
+  local cell = terminal.char_width * terminal.font:getDPIScale()
+  return math.max(0, math.ceil(right / cell) - 1)
+end
+
+--- How many cells to its right `char` paints into when a cell
+--- draws it: none for most characters, one or more for one
+--- as wide as its cell or wider. Measured once for a character.
+--- @param terminal table
+--- @param char string
+--- @return integer
+local function reach(terminal, char)
+  local known = reaches[terminal.font]
+  if not known then
+    known = { }
+    reaches[terminal.font] = known
+  end
+  local r = known[char]
+  if r == nil then
+    r = TerminalView.measure(terminal, char)
+    known[char] = r
+  end
+  return r
 end
 
 --- The cells of a kept row in order: each(x, char, style)
@@ -47,24 +101,64 @@ local function each_kept_cell(row, each)
   end
 end
 
---- Grid row `y` drawn at the canvas's row `at`
-local function draw_grid_row(terminal, y, at, overlay)
-  local cw, ch = terminal.char_width, terminal.char_height
+--- The cells of grid row `y` in order: each(x, char, style)
+local function each_grid_cell(terminal, y, each)
   local states = terminal.state_buffer[y]
   for x, char in ipairs(terminal.buffer[y]) do
     local state = states[x]
-    draw_cell(char, state, (x - 1) * cw, (at - 1) * ch, cw, ch,
-      overlay)
+    each(x, char, state)
     state.dirty = false
   end
 end
 
---- A kept row drawn at the canvas's row `at`
-local function draw_kept_row(terminal, row, at, overlay)
+--- A row at the canvas's row `at`: its backgrounds, then its
+--- characters, so that calls of one kind follow each other and
+--- reach the GPU together. The picture is the one that drawing
+--- cell by cell, background then character, makes: there a
+--- cell's background covers what an earlier character painted
+--- past its own cell, so here the background of a cell that an
+--- earlier character reaches is drawn again before the cell's
+--- own character. Over a program's picture (`overlay`) the
+--- backgrounds stay out.
+--- @param terminal table
+--- @param cells fun(each: fun(x: integer, char: string,
+---   style: table)) --- the row's cells in order
+--- @param at integer
+--- @param overlay boolean?
+--- @param bm string --- the blend mode the backgrounds take
+--- @param am string
+local function draw_row(terminal, cells, at, overlay, bm, am)
   local cw, ch = terminal.char_width, terminal.char_height
-  each_kept_cell(row, function(x, char, style)
-    draw_cell(char, style, (x - 1) * cw, (at - 1) * ch, cw, ch,
-      overlay)
+  local top = (at - 1) * ch
+  if not overlay then
+    gfx.setBlendMode(bm, am)
+    cells(function(x, _, style)
+      local back = cell_colors(style)
+      gfx.setColor(unpack(back))
+      gfx.rectangle("fill", (x - 1) * cw, top, cw, ch)
+    end)
+  end
+  gfx.setBlendMode('alpha', "alphamultiply")
+  --- how many cells from here on an earlier character reaches
+  local reached = 0
+  cells(function(x, char, style)
+    local back, fore = cell_colors(style)
+    local left = (x - 1) * cw
+    if 0 < reached then
+      reached = reached - 1
+      if not overlay then
+        gfx.setBlendMode(bm, am)
+        gfx.setColor(unpack(back))
+        gfx.rectangle("fill", left, top, cw, ch)
+        gfx.setBlendMode('alpha', "alphamultiply")
+      end
+    end
+    reached = math.max(reached, reach(terminal, char))
+    if overlay then
+      fore = Color.with_alpha(fore, 0.75)
+    end
+    gfx.setColor(unpack(fore))
+    gfx.print(char, left, top)
   end)
 end
 
@@ -81,17 +175,25 @@ local function terminal_draw(terminal, canvas, overlay, window)
     gfx.setCanvas(canvas)
     gfx.setFont(terminal.font)
     gfx.clear(terminal.clear_color_alpha)
+    local bm, am = gfx.getBlendMode()
+    local function grid(y, at)
+      draw_row(terminal, function(each)
+        each_grid_cell(terminal, y, each)
+      end, at, overlay, bm, am)
+    end
     if window then
       for at, r in ipairs(window) do
         if r.kept then
-          draw_kept_row(terminal, r.kept, at, overlay)
+          draw_row(terminal, function(each)
+            each_kept_cell(r.kept, each)
+          end, at, overlay, bm, am)
         elseif r.y then
-          draw_grid_row(terminal, r.y, at, overlay)
+          grid(r.y, at)
         end
       end
     else
       for y = 1, #terminal.buffer do
-        draw_grid_row(terminal, y, y, overlay)
+        grid(y, y)
       end
     end
     terminal.dirty = false
