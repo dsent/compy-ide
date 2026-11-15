@@ -897,3 +897,122 @@ describe("list_projects() #console", function()
       assert.same({ 1, 2, 3, 4, 5 }, marks(seq))
     end)
 end)
+
+--- Every transition that hands the keys to something else or
+--- changes what the console shows brings the screen back, so
+--- that a scrolled view is never left where no key reaches it
+describe("the scrolled view at a transition #console", function()
+  before_each(function() reset() end)
+  after_each(cleanup)
+
+  local FIELD = "compy.input.show { }\n"
+  local RUNS = "function love.update() end\n"
+
+  --- output enough to scroll, and the view scrolled
+  local function scrolled()
+    print_lines(1, 40)
+    K.keys("home")
+    assert.is_true(output():is_scrolled())
+  end
+
+  local function at_rest(what)
+    assert.is_false(output():is_scrolled(), what)
+  end
+
+  it("a run started by Ctrl+R", function()
+    reset({ ["main.lua"] = FIELD })
+    scrolled()
+    K.keys("lctrl", "r")
+    at_rest("Ctrl+R")
+  end)
+
+  it("a run started by run()", function()
+    reset({ ["main.lua"] = RUNS })
+    scrolled()
+    K.cc:run_project()
+    at_rest("run()")
+    -- the fixture keeps a program's love table for the next run
+    K.cc:get_project_env().love.update = nil
+  end)
+
+  it("a run started by Ctrl+T from the editor", function()
+    reset({ ["main.lua"] = FIELD })
+    print_lines(1, 40)
+    K.open()
+    output():to_oldest()
+    K.keys("lctrl", "t")
+    at_rest("Ctrl+T")
+  end)
+
+  it("a stop by Ctrl+Q", function()
+    reset({ ["main.lua"] = RUNS })
+    run("run()")
+    print_lines(1, 40)
+    output():to_oldest()
+    K.keys("lctrl", "q")
+    at_rest("Ctrl+Q")
+  end)
+
+  it("a pause and its end", function()
+    reset({ ["main.lua"] = RUNS })
+    run("run()")
+    print_lines(1, 40)
+    output():to_oldest()
+    K.keys("lctrl", "pause")
+    K.frame()
+    K.cc:suspend()
+    assert.same("inspect", K.app_state())
+    at_rest("a pause")
+    K.keys("home")
+    assert.is_true(output():is_scrolled())
+    K.cc:get_project_env().continue()
+    at_rest("continue()")
+    K.cc:get_project_env().love.update = nil
+  end)
+
+  it("an error that pauses the program", function()
+    reset({ ["main.lua"] =
+      "function love.update() love.update = nil; error('x') end\n" })
+    run("run()")
+    print_lines(1, 40)
+    output():to_oldest()
+    K.frame()
+    K.cc:suspend()
+    at_rest("the error's pause")
+  end)
+
+  it("opening and leaving the editor", function()
+    scrolled()
+    K.cc:edit("main.lua")
+    assert.same("editor", K.app_state())
+    at_rest("the editor opened")
+    output():to_oldest()
+    K.cc:finish_edit()
+    at_rest("the editor left")
+  end)
+
+  it("opening and closing a project", function()
+    scrolled()
+    K.next_project("other", { ["main.lua"] = "b = 1\n" })
+    K.cc:open_project("other")
+    at_rest("a project opened")
+    output():to_oldest()
+    K.cc:close_project()
+    at_rest("a project closed")
+  end)
+
+  it("a program's field shown while the view is scrolled",
+    function()
+      reset({ ["main.lua"] = "for i = 1, 40 do print('L' .. i) end\n"
+        .. "function love.update()\n"
+        .. "  n = (n or 0) + 1\n"
+        .. "  if n == 20 then compy.input.show { } end\n"
+        .. "end\n" })
+      run("run()")
+      K.keys("lctrl", "up")
+      assert.is_true(output():is_scrolled())
+      for _ = 1, 30 do K.frame() end
+      at_rest("the program's field")
+      K.cc:get_project_env().love.update = nil
+    end)
+end)

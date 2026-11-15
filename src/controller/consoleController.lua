@@ -490,6 +490,9 @@ function ConsoleController:run_project(name)
       { "There's already a project running!" })
     return
   end
+  --- a program takes the keys from here: the screen at rest
+  --- under it, never a scrolled view no key reaches
+  self.model.output:to_rest()
   local P   = self.model.projects
   local cur = P.current
   local ok
@@ -1692,6 +1695,7 @@ function ConsoleController.prepare_project_env(cc)
     if love.state.app_state == 'inspect' then
       -- resume
       love.state.app_state = 'running'
+      cc.model.output:to_rest()
       cc.main_ctrl.restore_user_handlers(cc)
       -- After the handlers: a cursor the program has released
       -- raises here, and the program runs on regardless.
@@ -1782,6 +1786,10 @@ end
 ---@param dt number
 function ConsoleController:pass_time(dt)
   self.time = self.time + dt
+  --- a program's field that shows takes the keys: the screen
+  --- comes back under it
+  local w = love.state.user_input_controller
+  if w and w:is_shown() then self.model.output:to_rest() end
   --- the text cursor blinks on the frames' time
   Blink.pass_time(dt)
   self.model.output.terminal:update(dt)
@@ -1883,6 +1891,7 @@ function ConsoleController:suspend()
   local runner_env = self:get_project_env()
   Log.info('Suspending project run')
   love.state.app_state = 'inspect'
+  self.model.output:to_rest()
   local msg = love.state.suspend_msg
   if msg then
     self.input:set_error({ tostring(msg) })
@@ -1912,6 +1921,7 @@ end
 --- @param play boolean?
 --- @return boolean success
 function ConsoleController:open_project(name, play)
+  self.model.output:to_rest()
   local P = self.model.projects
   if not name then
     print('No project name provided!')
@@ -2002,6 +2012,7 @@ end
 ---   before the default one opens
 --- @return boolean success
 function ConsoleController:close_project(closed)
+  self.model.output:to_rest()
   local ok = self:_close_project()
   if ok then
     if closed then closed() end
@@ -2033,6 +2044,7 @@ end
 --- The editor steps aside first, its files kept for Ctrl+T:
 --- the gate's restart (Ctrl+R) reaches here from it.
 function ConsoleController:stop_project_run()
+  self.model.output:to_rest()
   if self.stopping then return end
   if love.state.app_state == 'editor' then
     self:hide_editor()
@@ -2241,6 +2253,7 @@ end
 --- The editor steps aside for a run, its files kept as they
 --- are for the way back (IS1.4)
 function ConsoleController:hide_editor()
+  self.model.output:to_rest()
   self.editor:hide()
   love.state.app_state = love.state.prev_state
   love.state.prev_state = nil
@@ -2274,6 +2287,7 @@ function ConsoleController:_enter_editor()
   end
   love.state.prev_state = love.state.app_state
   love.state.app_state = 'editor'
+  self.model.output:to_rest()
   self.editor:came_forward()
   return true
 end
