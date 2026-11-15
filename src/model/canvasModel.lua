@@ -3,11 +3,13 @@ require("util.string.string")
 require("util.view")
 local class = require('util.class')
 local Terminal = require("lib.terminal")
+require("model.keptRows")
 
 local gfx = love.graphics
 
 --- @class CanvasModel
 --- @field terminal table
+--- @field kept KeptRows --- the rows scrolled off its top
 --- @field canvas love.Canvas
 --- @field term_canvas love.Canvas
 --- @field cfg table
@@ -53,8 +55,13 @@ function CanvasModel.new(cfg)
   term:set_cursor_backcolor(unpack(color.bg))
   term:clear()
   local t_canvas = term.canvas
+  local kept = KeptRows(cfg.output_kept)
+  term.on_row_leaving = function(chars, states)
+    kept:keep(chars, states)
+  end
   local self = setmetatable({
     terminal = term,
+    kept = kept,
     canvas = canvas,
     term_canvas = t_canvas,
     cfg = cfg,
@@ -79,10 +86,18 @@ function CanvasModel:push(newResult)
   end
 end
 
+--- Clear the 16 rows, as a clear from code does: what was on
+--- them is gone, and the kept rows stay
 function CanvasModel:reset()
   self.terminal:clear()
   self.terminal:move_to(1, 1)
   self.terminal.dirty = true
+end
+
+--- The user's own clear (Ctrl+L): the screen and the kept rows
+function CanvasModel:erase()
+  self:reset()
+  self.kept:forget()
 end
 
 function CanvasModel:invalidate_terminal()

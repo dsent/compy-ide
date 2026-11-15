@@ -452,8 +452,10 @@ function F.reset()
   -- lifecycle inspect case, m5c chunk 4).
   love.state.suspend_msg        = nil
   love.update(1.0)
-  -- no earlier case's lines in the console's history
+  -- no earlier case's lines in the console's history, nor
+  -- its rows in the output's kept rows
   CC.input:reset(true)
+  CC.model.output:erase()
   CC.input:clear()
   CC.editor.input:clear()
   -- Only the widget's CONTENT: production teardown hides the

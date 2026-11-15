@@ -137,6 +137,9 @@ local function terminal_roll_up(terminal, how_many)
     for _ = 1, how_many do
         -- the row leaving the top, characters and states, whole
         local first_row, first_states = buffer[1], state_buffer[1]
+        if terminal.on_row_leaving then
+            terminal.on_row_leaving(first_row, first_states)
+        end
         for y = 2, terminal.height do
             buffer[y - 1] = buffer[y]
             state_buffer[y - 1] = state_buffer[y]
@@ -423,6 +426,8 @@ end
 --- @field canvas love.Canvas
 --- @field buffer table
 --- @field state_buffer table
+--- @field on_row_leaving fun(chars: string[], states: table[])?
+--- called with the row leaving the top while it is still whole
 
 --- @return Terminal
 local function terminal(self, width, height,

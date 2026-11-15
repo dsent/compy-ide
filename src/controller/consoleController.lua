@@ -2362,7 +2362,7 @@ local ACTIONS = {
   run = function(cc)
     if not cc.input:has_error() then cc:evaluate_input() end
   end,
-  clear_terminal = function(cc) cc.model.output:reset() end,
+  clear_terminal = function(cc) cc.model.output:erase() end,
   terminal_test = function(cc)
     if love.DEBUG then cc:_terminal_test() end
   end,

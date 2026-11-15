@@ -380,6 +380,8 @@ function love.load()
     editor = editorconf,
     --- console history entries kept; 0 for unlimited
     input_history = 1000,
+    --- rows the console's output keeps once they scroll off
+    output_kept = 1000,
     autotest = autotest,
     mode = mode,
   }
