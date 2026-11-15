@@ -148,13 +148,13 @@ on beyond the top or the bottom of the screen, the row at that
 edge fades toward it and shows a faint `^` or `v` in its last
 column. Other blocks the screen cuts off get no mark. The field
 does the same when its text has more rows than it shows. A line
-too long for one row goes on in the next, with a gray bar at its
-left from its first row to its last.
+too long for one row goes on in the next, and each row that
+continues it has a tiny rounded corner at its top left.
 
 When the editor cannot do what a key asks, it shows a notice
 just above the status line that says why and what would work.
 A text that is not valid Lua gets the parser's message there,
-in light red on dark gray; a notice is orange. The next key dismisses the message
+in red; a notice is orange. The next key dismisses the message
 and does its usual work. The editor asks no questions.
 
 Happy with the modifications now, we can leave the editor by

@@ -110,11 +110,17 @@ describe('console error message #input', function()
     it('keeps a program\'s own colours: the theme\'s error on '
       .. 'error_bg, not the notice band\'s', function()
       fail()
+      local c = F.cfg.view.colors.input
+      -- the band's colours apart from the field's, for this
+      -- draw: today both are black and red
+      local saved = c.notice
+      c.notice = { bg = { 0, 0, 1, 1 }, error = { 0, 1, 0, 1 },
+        warning = { 0, 1, 0, 1 } }
       local fills, texts, colour = { }, { }, nil
       local prev = _G.gfx
       _G.gfx = setmetatable({
         getHeight = function() return 600 end,
-        setColor = function(c) colour = c end,
+        setColor = function(col) colour = col end,
         rectangle = function() fills[#fills + 1] = colour end,
         print = function() texts[#texts + 1] = colour end,
       }, { __index = function() return function() end end })
@@ -123,11 +129,10 @@ describe('console error message #input', function()
         view:render_error(F.widget:get_wrapped_error())
       end)
       _G.gfx = prev
+      c.notice = saved
       assert(ok, err)
-      local c = F.cfg.view.colors.input
       assert.equal(c.error_bg, fills[#fills])
       assert.equal(c.error, texts[#texts])
-      assert.are_not.same(c.notice.bg, c.error_bg)
     end)
 
     it('fits the rows the input area has', function()

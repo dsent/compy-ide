@@ -200,9 +200,20 @@ scenario('console-messages', function(wait)
   local bg
   bg = P.colors(img, 0, status, view.fw * 6, view.fh)
   is(bg, t.statusline.console.bg, 'the status line, where it was')
+  local line_bg = bg
   bg, fg = P.colors(img, 0, status - view.fh, view.fw * 6, view.fh)
   is(bg, t.input.notice.bg, 'the band')
   is(fg, t.input.notice.error, 'the parser\'s message')
+  -- the two grounds are close, closer than is()'s margin: the
+  -- status line is its own colour and the band's is another
+  local want, apart = t.statusline.console.bg, 0
+  for i = 1, 3 do
+    assert(math.abs(line_bg[i] - want[i]) < .02,
+      'the status line\'s ground: ' .. P.show(line_bg))
+    apart = math.max(apart, math.abs(line_bg[i] - bg[i]))
+  end
+  assert(.05 < apart, 'the status line stands apart from the band: '
+    .. P.show(line_bg) .. ' and ' .. P.show(bg))
   D.key(wait, 'right')
   img = P.capture(wait)
   D.shot(wait, 'console-dismissed')

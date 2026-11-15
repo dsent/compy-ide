@@ -21,7 +21,7 @@ require("util.color")
 --- @field highlight_special RGB
 --- @field results BaseColors
 --- @field cue CueColors
---- @field wrap_bar RGB
+--- @field wrap_mark WrapMarkTheme
 
 --- The continuation cue (FR4.8): the edge row's own background
 --- laid over it, `fade` opaque at the edge and clear at the
@@ -45,11 +45,9 @@ require("util.color")
 --- @field notice NoticeColors
 
 --- The notice band above the status line, in the editor and
---- the console: dark gray, so that it stands apart from the
---- console's black status line, with its text in the light
---- red and orange that read on it (the maintainer's question
---- of November 15, 2026). A program's field shows its error
---- on `error_bg`, in `error`, as before.
+--- the console: black, an error in red and a notice in orange.
+--- It is set apart from a program's own error display
+--- (`error_bg`, `error`), which has the same colours today.
 --- @class NoticeColors
 --- @field bg RGB
 --- @field error RGB --- a syntax or run error
@@ -110,8 +108,14 @@ return {
       box = Color[Color.gray],
       box_alpha = .25,
     },
-    --- the bar beside a line that takes more than one row
-    wrap_bar = Color[Color.gray],
+    --- the mark at the top left of a row that continues a line
+    --- (view/wrapMark.lua): black, a fillet of 6 pixels with
+    --- a square outer corner
+    wrap_mark = {
+      color = Color[Color.black],
+      size = 6,
+      round = 0,
+    },
   },
   input = {
     console = {
@@ -130,9 +134,9 @@ return {
     error = Color[Color.red],
     error_bg = Color[Color.black],
     notice = {
-      bg = Color[Color.black + Color.bright],
-      error = Color[Color.salmon + Color.bright],
-      warning = Color[Color.orange + Color.bright],
+      bg = Color[Color.black],
+      error = Color[Color.red],
+      warning = Color[Color.orange],
     },
   },
   lua_syntax = {
@@ -156,9 +160,14 @@ return {
     end)()
   },
   statusline = {
+    --- a near-black gray, #181818, so that the black notice
+    --- band above it stands apart while '[no sd card]' keeps
+    --- the orange of the other status lines (the maintainer's
+    --- ruling of November 15, 2026); the palette has no such
+    --- gray, so it is given as it is
     console = {
       fg = Color[Color.white + Color.bright],
-      bg = Color[Color.black],
+      bg = { 24 / 255, 24 / 255, 24 / 255, 1 },
       indicator = indicator,
       special = special,
       warning = warning,

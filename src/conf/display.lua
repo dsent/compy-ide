@@ -31,8 +31,4 @@ return {
   --- text; the rest are below it (the ruling of November 15,
   --- 2026: all four below)
   status_above = 0,
-  --- the width, in pixels, of the bar at the left edge beside a
-  --- line that takes more than one row (the ruling of November
-  --- 15, 2026)
-  wrap_bar = 3,
 }

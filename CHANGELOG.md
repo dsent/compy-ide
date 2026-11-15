@@ -73,9 +73,9 @@ Project-author guide: `doc/input_api.md`.
   after a project moves it with `compy.input`.
 - **A notice is orange, the parser's message red.** The message above the status
   line has no frame.
-- **The band above the status line is dark gray**, in the editor and the console, so
-  that it stands apart from the console's black status line; its red and orange are
-  lighter, to read on it. A program's own field shows its errors as before.
+- **The console's status line is a near-black gray**, so that the black band of an
+  error or a notice above it stands apart; its key card is the same gray. The editor's
+  status line and a paused program's are as before.
 - **Leaving waits for the edit to end.** Ctrl+T, Ctrl+Q and Ctrl+R are refused
   with a notice while there is text in the field or a block is being replaced; submit
   it or drop it first. Ctrl+J is refused the same way.
@@ -146,9 +146,9 @@ Project-author guide: `doc/input_api.md`.
   highlighted block or the block being replaced has rows above or below the view, the
   edge row fades toward the edge and its last column carries a translucent `^` or `v`;
   the field's edges are marked the same way while the text in it has rows out of sight.
-- **A line that takes more than one row has a gray bar at its left**, from the middle
-  of its first row to the middle of its last, in the editor's view and in every text
-  field; the text does not move.
+- **A row that continues a wrapped line has a tiny rounded corner at its top left**,
+  in the editor's view and in every text field; a line's first row has none, and the
+  text does not move.
 - **PageDown and PageUp page through the file.** PageDown brings the first block hidden
   below the view to its top, PageUp the last one hidden above to its bottom, and the
   highlight goes with it; at the file's end or start they go to the end position or the

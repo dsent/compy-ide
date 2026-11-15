@@ -213,8 +213,8 @@ on beyond the top or the bottom of the screen, the row at that
 edge fades toward it and shows a faint `^` or `v` in its last
 column. Other blocks the screen cuts off get no mark. The field
 does the same when its text has more rows than it shows. A line
-too long for one row goes on in the next, with a gray bar at its
-left from its first row to its last.
+too long for one row goes on in the next, and each row that
+continues it has a tiny rounded corner at its top left.
 
 When the editor cannot do what a key asks, it shows a notice
 just above the status line that says why and what would work.
