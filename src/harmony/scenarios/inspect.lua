@@ -33,24 +33,31 @@ local function inspect()
     wait(.1)
     h.screenshot('console-emptied')
 
-    -- a run asked for while one is paused is refused with a
-    -- notice above the status line, until the next key
+    -- a run asked for while one is paused is refused in the
+    -- output, in its error color, and the band stays empty
+    -- (the maintainer's ruling of November 15, 2026)
     wait(.4)
     h.love_text('run()')
     wait(.1)
     h.love_key('return')
-    wait(.4)
+    wait(.6)
     h.screenshot('run-refused')
     wait(.1)
-    local said = P.console_message() or ''
+    local said = P.console_text()
     assert(said:find('already running', 1, true),
-      'no notice for the refused run: ' .. said)
-    assert(P.cc().input:message_kind() == 'notice',
-      'the refused run is not a notice')
-    h.love_key('backspace')
-    wait(.1)
+      'the refused run is not in the output: ' .. said)
     assert(P.console_message() == nil,
-      'the next key leaves the notice')
+      'the refused run is in the band')
+    local t = P.cc().model.output.terminal
+    local red = P.cc().cfg.view.colors.terminal.error
+    local found
+    for y, r in ipairs(t.buffer) do
+      if table.concat(r):find('already running', 1, true) then
+        local c = t.state_buffer[y][1].color
+        found = P.near(c, red)
+      end
+    end
+    assert(found, 'the refused run is not in the error color')
 
     wait(.4)
     h.love_text('continue()')

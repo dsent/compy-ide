@@ -174,12 +174,14 @@ local function layout(wait, where, color, eight)
   D.eq(b8 - a8, b - a, where .. ': the band keeps its height')
 end
 
--- The console shows an error as the editor does (the ruling
--- of November 15, 2026): the message in the band right above
--- the status line, the field under it with the draft red from
--- the failure, the status line where it was; the next key
--- takes the band away. The band's ground is the status line's
--- black, so the rows are found from the layout, not the band.
+-- The console's band says why a line was not taken, as the
+-- editor's does (the rulings of November 15, 2026): the
+-- message right above the status line, the field under it
+-- with the draft red from the failure, the status line where
+-- it was; the next key takes the band away. An unfinished
+-- statement's hint shows there in orange. The band's ground is
+-- the status line's black, so the rows are found from the
+-- layout, not the band.
 scenario('console-messages', function(wait)
   local t = theme()
   wait(.1)
@@ -221,6 +223,16 @@ scenario('console-messages', function(wait)
   is_not(bg, t.input.notice.bg, 'the band, gone with the key')
   _, fg = P.cell(img, 7, 1, field)
   is(fg, t.input.error, 'the draft, still red from the failure')
+  D.key(wait, 'escape')
+  -- an unfinished statement: Enter begins its next line, and
+  -- the band says so in orange
+  D.type(wait, 'for i = 1, 2 do')
+  D.key(wait, 'return')
+  img = P.capture(wait)
+  D.shot(wait, 'console-unfinished')
+  bg, fg = P.colors(img, 0, status - view.fh, view.fw * 6, view.fh)
+  is(bg, t.input.notice.bg, 'the band, for the hint')
+  is(fg, t.input.notice.warning, 'the hint, in orange')
   D.key(wait, 'escape')
   hm_done()
 end)
