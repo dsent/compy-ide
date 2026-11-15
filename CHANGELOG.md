@@ -294,6 +294,9 @@ Project-author guide: `doc/input_api.md`.
 
 ### Fixed
 
+- **A long output costs less while it is written.** A program that prints thousands of
+  lines at once made every frame copy all the output still waiting to be written. A
+  frame now handles only what it writes.
 - **`gotoxy` given something other than a number names the program's line.**
   `compy.terminal.gotoxy('x', 'y')` stopped the program with an error about `floor` on
   a line of the IDE's terminal; it now stops it with `compy.terminal.gotoxy: x and y

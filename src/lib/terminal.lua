@@ -103,16 +103,28 @@ local SETS_STYLE = {
     show_cursor = true, hide_cursor = true,
 }
 
+-- What waits to be written, oldest first. `stdin` holds it from
+-- `stdin_head + 1` on: the entries before that are written
+-- already and stay until the queue is packed (terminal_update).
+local function terminal_waiting(terminal)
+    local stdin, i = terminal.stdin, terminal.stdin_head
+    return function()
+        i = i + 1
+        return stdin[i]
+    end
+end
+
 -- Drop what waits to be written, keeping the styles that the
 -- waiting commands set for what follows
 local function terminal_discard(terminal)
     local keep = {}
-    for _, c in ipairs(terminal.stdin) do
+    for c in terminal_waiting(terminal) do
         if type(c) == "table" and SETS_STYLE[c.type] then
             keep[#keep + 1] = c
         end
     end
     terminal.stdin = keep
+    terminal.stdin_head = 0
 end
 
 -- What comes next starts a row of its own: on the next row when
@@ -194,9 +206,9 @@ local function wrap_if_bottom(terminal)
 end
 
 local function terminal_update(terminal, dt)
-    if #terminal.stdin == 0 then return end
+    if #terminal.stdin == terminal.stdin_head then return end
     local frame_budget = terminal.speed * dt + terminal.accumulator
-    local stdin_index = 1
+    local stdin_index = terminal.stdin_head + 1
     while frame_budget > terminal.char_cost do
         local char_or_command = terminal.stdin[stdin_index]
         if char_or_command == nil then break end
@@ -321,11 +333,24 @@ local function terminal_update(terminal, dt)
         end
     end
     terminal.accumulator = frame_budget
-    local rest = {}
-    for i = stdin_index, #terminal.stdin do
-        table.insert(rest, terminal.stdin[i])
+    -- What was written leaves the queue by moving its head: a
+    -- frame's cost is what it wrote, however much still waits.
+    -- The written entries are dropped once they are more than
+    -- half of the table, so each waiting entry is copied at most
+    -- once per halving and the table holds at most twice what
+    -- waits.
+    local stdin, written = terminal.stdin, stdin_index - 1
+    if written == #stdin then
+        terminal.stdin, terminal.stdin_head = {}, 0
+    elseif written * 2 > #stdin then
+        local rest = {}
+        for i = stdin_index, #stdin do
+            rest[#rest + 1] = stdin[i]
+        end
+        terminal.stdin, terminal.stdin_head = rest, 0
+    else
+        terminal.stdin_head = written
     end
-    terminal.stdin = rest
 end
 
 --- @param terminal table
@@ -455,7 +480,9 @@ end
 --- @field speed integer
 --- @field char_cost integer
 --- @field accumulator integer
---- @field stdin table
+--- @field stdin table --- what waits, after `stdin_head` written entries
+--- @field stdin_head integer
+--- @field waiting fun(self: Terminal): fun(): any --- what waits, in order
 --- @field clear_color table
 --- @field clear_color_alpha table
 --- @field canvas love.Canvas
@@ -493,6 +520,7 @@ local function terminal(self, width, height,
         char_cost = 1,
         accumulator = 0,
         stdin = {},
+        stdin_head = 0,
 
         clear_color = { 0, 0, 0 },
         clear_color_alpha = { 1, 1, 1, 0 },
@@ -527,6 +555,7 @@ local function terminal(self, width, height,
     instance.move_to = terminal_move_to
     instance.fresh_row = terminal_fresh_row
     instance.discard = terminal_discard
+    instance.waiting = terminal_waiting
     instance.hide_cursor = terminal_hide_cursor
     instance.show_cursor = terminal_show_cursor
     instance.reverse_cursor = terminal_reverse

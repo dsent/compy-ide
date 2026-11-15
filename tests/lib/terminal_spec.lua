@@ -452,6 +452,126 @@ end)
 
 --- bounded() puts the JIT and the hook before it back, wherever
 --- its count runs out: in the body, or just after it returns
+--- The queue of what waits to be written. A frame writes a few
+--- characters of it; what the frame costs must not depend on how
+--- much still waits behind them (a program that prints 2,000 lines
+--- at once made every frame copy the whole queue).
+describe("terminal queue", function()
+  --- A terminal with `n` characters waiting and a frame's budget
+  --- of ten of them
+  local function waiting_term(n)
+    local t = new_term()
+    t.accumulator = 0
+    t:print(string.rep("x", n))
+    return t
+  end
+
+  --- What waits, as one string of its characters
+  local function waits(t)
+    local out = { }
+    for c in t:waiting() do
+      out[#out + 1] = type(c) == "string" and c or "<" .. c.type .. ">"
+    end
+    return table.concat(out)
+  end
+
+  --- The memory one frame allocates, in kB, with the collector off
+  local function frame_kb(t)
+    collectgarbage("collect")
+    collectgarbage("stop")
+    local before = collectgarbage("count")
+    t:update(10 / t.speed + 0.001)
+    local kb = collectgarbage("count") - before
+    collectgarbage("restart")
+    return kb
+  end
+
+  it("writes a frame's characters in a count that the waiting "
+    .. "ones do not raise", function()
+    -- ten characters cost a few hundred VM instructions; copying
+    -- 60,000 waiting entries cost several hundred thousand
+    local t = waiting_term(60000)
+    local ok, err = bounded(function()
+      t:update(10 / t.speed + 0.001)
+    end, 5000)
+    assert.is_true(ok, err)
+    assert.equal(string.rep("x", 10),
+      table.concat(t.buffer[1]):sub(1, 10))
+  end)
+
+  it("allocates for a frame what a short queue's frame does",
+    function()
+      local short = frame_kb(waiting_term(100))
+      local long = frame_kb(waiting_term(60000))
+      -- the copy of 60,000 entries took 512 kB
+      assert.is_true(long < short + 8, string.format(
+        "a frame allocated %.1f kB with 60,000 waiting, %.1f kB"
+        .. " with 100", long, short))
+    end)
+
+  it("yields what still waits, oldest first, after each frame",
+    function()
+      local t = new_term()
+      t.accumulator = 0
+      t:print("abcdefghij")
+      t:update(4 / t.speed + 0.0001)
+      assert.equal("efghij", waits(t))
+      t:print("KL")
+      assert.equal("efghijKL", waits(t))
+      t:update(3 / t.speed)
+      assert.equal("hijKL", waits(t))
+      t:update(1000)
+      assert.equal("", waits(t))
+      assert.equal("abcdefghijKL",
+        table.concat(t.buffer[1]):sub(1, 12))
+    end)
+
+  it("holds at most twice what waits, and nothing once all is "
+    .. "written", function()
+    local t = waiting_term(1000)
+    for _ = 1, 99 do
+      t:update(10 / t.speed)
+      local left = 0
+      for _ in t:waiting() do left = left + 1 end
+      assert.is_true(#t.stdin <= 2 * left, string.format(
+        "%d entries held for %d waiting", #t.stdin, left))
+    end
+    t:update(1000)
+    assert.same({ }, t.stdin)
+    assert.equal(0, t.stdin_head)
+  end)
+
+  it("discards what waits, not what is written, and keeps the "
+    .. "waiting styles", function()
+    local t = new_term()
+    t.accumulator = 0
+    t:print("abcdef")
+    t:set_cursor_color(1, 0, 0, 1)
+    t:print("gh")
+    t:update(3 / t.speed + 0.0001)
+    assert.equal("def<cursor_color>gh", waits(t))
+    t:discard()
+    assert.equal("<cursor_color>", waits(t))
+    t:print("Z")
+    t:update(1000)
+    assert.equal("abcZ", table.concat(t.buffer[1]):sub(1, 4))
+    assert.same({ 1, 0, 0, 1 }, t.state_buffer[1][4].color)
+  end)
+
+  it("takes a write straight into the queue after a frame",
+    function()
+      -- as the clear command's test above puts its command
+      local t = new_term()
+      t.accumulator = 0
+      t:print("abcd")
+      t:update(2 / t.speed + 0.0001)
+      table.insert(t.stdin, "e")
+      assert.equal("cde", waits(t))
+      t:update(1000)
+      assert.equal("abcde", table.concat(t.buffer[1]):sub(1, 5))
+    end)
+end)
+
 describe("bounded", function()
   it("puts the JIT and the hook back at the count's edge",
     function()

@@ -660,7 +660,7 @@ function K.console_text()
   for y, row in ipairs(term.buffer) do
     rows[y] = table.concat(row):gsub("%s+$", "")
   end
-  for _, c in ipairs(term.stdin) do
+  for c in term:waiting() do
     if type(c) == "string" then
       pending[#pending + 1] = c
     end

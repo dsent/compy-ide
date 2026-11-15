@@ -185,7 +185,9 @@ describe("the console's kept rows #console", function()
       output().terminal.accumulator = 0
       for i = 1, 200 do output():push("L" .. i) end
       K.frame(0.1)
-      assert.is_true(#output().terminal.stdin > 500)
+      local waits = 0
+      for _ in output().terminal:waiting() do waits = waits + 1 end
+      assert.is_true(waits > 500)
       K.keys("lctrl", "l")
       K.frame(100)
       assert.same({ }, kept())
