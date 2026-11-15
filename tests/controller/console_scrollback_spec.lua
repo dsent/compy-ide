@@ -1163,3 +1163,85 @@ describe("the scrolled view's rule #console", function()
       end
     end)
 end)
+
+--- The console's messages show in the notice band above the
+--- status line, over the output's bottom rows (the editor
+--- branch's ruling of November 15, 2026); the next key that is
+--- not lone dismisses the message and does its work
+describe("the scrollback and the console's notice #console",
+  function()
+    before_each(function() reset() end)
+    after_each(cleanup)
+
+    local function message()
+      local e = K.cc.input.model.error
+      if type(e) == "table" then return table.concat(e, "\n") end
+      return e
+    end
+
+    it("shows a run error in the output and in the band", function()
+      run("print('a') error('boom')")
+      local s = screen()
+      local a
+      for y, r in ipairs(s) do if r == "a" then a = y end end
+      assert.is_not_nil(a)
+      assert.truthy(s[a + 1]:find("boom", 1, true))
+      assert.is_true(K.cc.input:has_error())
+      assert.truthy(tostring(message()):find("boom", 1, true))
+      assert.is_false(output():is_scrolled())
+    end)
+
+    it("brings the screen back for a line the syntax refuses, "
+      .. "unechoed", function()
+        print_lines(1, 40)
+        K.keys("lctrl", "up")
+        K.type("x = = 1")
+        K.keys("return")
+        K.frame(100)
+        assert.is_false(output():is_scrolled())
+        assert.is_true(K.cc.input:has_error())
+        assert.equal("x = = 1", K.console_draft())
+        for _, r in ipairs(screen()) do
+          assert.not_equal("x = = 1", r)
+        end
+      end)
+
+    it("lets Ctrl+Up dismiss a message and scroll, once",
+      function()
+        print_lines(1, 40)
+        K.keys("lctrl", "up")
+        local one = view()
+        K.keys("end")
+        K.type("x = = 1")
+        K.keys("return")
+        assert.is_true(K.cc.input:has_error())
+        K.keys("lctrl", "up")
+        assert.is_false(K.cc.input:has_error())
+        assert.same(one, view())
+      end)
+
+    it("lets Ctrl+L dismiss a message and empty the console",
+      function()
+        print_lines(1, 40)
+        K.type("x = = 1")
+        K.keys("return")
+        assert.is_true(K.cc.input:has_error())
+        K.keys("lctrl", "l")
+        K.frame(100)
+        assert.is_false(K.cc.input:has_error())
+        assert.same({ }, kept())
+        for _, r in ipairs(screen()) do assert.equal("", r) end
+      end)
+
+    it("lets a typed key dismiss a message over a scrolled view, "
+      .. "bring the screen back and type once", function()
+        print_lines(1, 40)
+        K.keys("lctrl", "up")
+        K.cc.input:set_error({ "a message" })
+        assert.is_true(output():is_scrolled())
+        K.type("q")
+        assert.is_false(K.cc.input:has_error())
+        assert.is_false(output():is_scrolled())
+        assert.equal("q", K.console_draft())
+      end)
+  end)
