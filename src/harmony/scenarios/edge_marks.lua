@@ -5,9 +5,9 @@ local D = require('harmony.drive')
 --- rulings of November 15, 2026), read from its pixels against
 --- the theme (conf/colors.lua): the continuation cue, the edge
 --- row's fade and the mark in its last column (FR4.8), and a
---- wrapped line's mark at the top left of each row that
---- continues it, on gray, white and yellow rows and in the
---- field.
+--- wrapped line's marks at the top right of each row that
+--- goes on and the bottom left of each row that continues it,
+--- on gray, white and yellow rows and in the field.
 
 local PROJECT = 'h-edges'
 
@@ -107,12 +107,15 @@ scenario('wrap-mark', function(wait)
   local t = theme()
   local v = P.cc().cfg.view
   local fh = v.fh
+  local right = v.drawableChars * v.fw
   local dots = string.rep('.', 150)
+  local low = string.rep('_', 80)
   wait(.1)
   D.open(wait, PROJECT, 'marks.txt', { ['marks.txt'] =
-    table.concat({ dots, 'one', dots, dots, 'end' }, '\n') .. '\n' })
+    table.concat({ dots, 'one', dots, dots, 'end', low }, '\n')
+    .. '\n' })
   -- line 4 the target, line 3 browsed, line 1 plain
-  D.press(wait, 'up', 2)
+  D.press(wait, 'up', 3)
   D.key(wait, 'f2')
   D.key(wait, 'C-up')
   D.eq(P.target(), 4, 'the target')
@@ -121,34 +124,59 @@ scenario('wrap-mark', function(wait)
   D.shot(wait, 'marks')
   local mark = t.editor.wrap_mark
   local fwd = P.view().content.wrap_forward
-  --- the mark of a 6 pixel fillet: its corner, the ends of its
-  --- two arms, and its inside left clear
-  local function marked(y, what)
-    is(px(img, 0, y), mark.color, what .. ', its corner')
-    is(px(img, 3, y), mark.color, what .. ', along the top')
-    is(px(img, 0, y + 3), mark.color, what .. ', down the edge')
-    assert(not P.near(px(img, 2, y + 2), mark.color),
-      what .. ': hollow inside')
-    assert(not P.near(px(img, 0, y + 5), mark.color),
-      what .. ': six pixels at most')
+  local function on(x, y) return P.near(px(img, x, y), mark.color) end
+  --- the end mark: the top right corner of the row at y
+  local function ends(y, what)
+    is(px(img, right - 1, y), mark.color, what .. ', its corner')
+    is(px(img, right - 5, y), mark.color, what .. ', along the top')
+    is(px(img, right - 1, y + 4), mark.color, what .. ', down the edge')
+    assert(not on(right - 3, y + 3), what .. ': hollow inside')
+  end
+  --- the start mark: the bottom left corner of the row at y
+  local function starts(y, what)
+    local b = y + fh - 1
+    is(px(img, 0, b), mark.color, what .. ', its corner')
+    is(px(img, 4, b), mark.color, what .. ', along the bottom')
+    is(px(img, 0, b - 4), mark.color, what .. ', up the edge')
+    assert(not on(2, b - 2), what .. ': hollow inside')
   end
   for _, l in ipairs({ { 1, 'gray' }, { 3, 'white' },
     { 4, 'yellow' } }) do
     local rows = fwd[l[1]]
     D.eq(#rows, 3, 'the rows of line ' .. l[1])
     local what = 'the ' .. l[2] .. ' line'
-    assert(not P.near(px(img, 0, row_y(rows[1])), mark.color),
-      what .. ': no mark on its first row')
-    marked(row_y(rows[2]), what .. ', its second row')
-    marked(row_y(rows[3]), what .. ', its third row')
+    local y1, y2, y3 = row_y(rows[1]), row_y(rows[2]), row_y(rows[3])
+    ends(y1, what .. ', row 1 goes on')
+    ends(y2, what .. ', row 2 goes on')
+    starts(y2, what .. ', row 2 continues')
+    starts(y3, what .. ', row 3 continues')
+    assert(not on(0, y1 + fh - 1), what .. ': row 1 continues nothing')
+    assert(not on(right - 1, y3), what .. ': row 3 goes on to nothing')
   end
+  local one = row_y(fwd[2][1])
+  assert(not on(0, one + fh - 1) and not on(right - 1, one),
+    'a line of one row has no mark')
+  -- under the text: on the row that continues a line of _, the
+  -- underscore's ink keeps its colour over the mark, and the
+  -- mark shows around it
+  local u = row_y(fwd[6][2])
+  local ink, shown = 0, 0
+  for x = 0, 4 do
+    for y = u + fh - 5, u + fh - 1 do
+      local c = px(img, x, y)
+      if P.near(c, t.editor.fg) then ink = ink + 1 end
+      if P.near(c, mark.color) then shown = shown + 1 end
+    end
+  end
+  assert(0 < ink, 'the underscore\'s ink over the mark')
+  assert(0 < shown, 'the mark around the underscore')
   -- the draft in the field: line 4, three rows under the
   -- status line
   local _, bottom = P.band(img, t.statusline.editor.bg)
   local first = bottom + 1
-  assert(not P.near(px(img, 0, first), mark.color),
-    'the field: no mark on the line\'s first row')
-  marked(first + fh, 'the field, the second row')
+  ends(first, 'the field, row 1')
+  starts(first + fh, 'the field, row 2')
+  assert(not on(0, first + fh - 1), 'the field: row 1 continues nothing')
   D.leave(wait)
   hm_done()
 end)
