@@ -375,6 +375,15 @@ describe("the console's scrolled view #console", function()
     assert.equal(p1[1], p2[H])
     output():scroll_page(1)
     assert.same(p1, view())
+    -- no page goes past the filled view, so no row is skipped;
+    -- from it the next page is the screen at rest
+    output():scroll_page(1)
+    output():to_rest()
+    output():scroll_row(-1)
+    local filled = view()
+    output():scroll_page(-1)
+    output():scroll_page(1)
+    assert.same(filled, view())
     output():scroll_page(1)
     assert.is_false(output():is_scrolled())
   end)
@@ -499,6 +508,10 @@ describe("the console's scrolling keys #console", function()
       assert.equal(p1[1], view()[H])
       K.keys("pagedown")
       assert.same(p1, view())
+      K.keys("pagedown")
+      local last = view()
+      assert.is_not_nil(last)
+      assert.equal(screen()[H - 1], last[H])
       K.keys("pagedown")
       assert.is_nil(view())
     end)
@@ -1014,5 +1027,124 @@ describe("the scrolled view at a transition #console", function()
       for _ = 1, 30 do K.frame() end
       at_rest("the program's field")
       K.cc:get_project_env().love.update = nil
+    end)
+end)
+
+--- The view's one rule (CanvasModel:show): its top lies between
+--- the oldest kept row and the filled view's top, however the
+--- sequence's end moves; a page never skips a row; rest is a
+--- state of its own
+describe("the scrolled view's rule #console", function()
+  before_each(function() reset() end)
+  after_each(cleanup)
+
+  local H = 16
+
+  local function tty()
+    return K.cc:get_project_env().compy.terminal
+  end
+
+  --- the sequence's numbers the view shows, and whether all its
+  --- rows lie in the sequence
+  local function shown()
+    local out = output()
+    local rows = out:window()
+    local last = out:view_bounds()
+    local ns, inside = { }, true
+    for _, r in ipairs(rows) do
+      ns[#ns + 1] = r.n
+      if r.n < out.kept.first or last < r.n then inside = false end
+    end
+    return ns, inside
+  end
+
+  --- Home, then PgDn until rest: every row of the sequence is
+  --- shown at least once, the screen's own at rest
+  local function pages_cover(what)
+    local out = output()
+    local first = out.kept.first
+    local last = out:view_bounds()
+    local seen = { }
+    K.keys("home")
+    for _ = 1, 200 do
+      if not out:is_scrolled() then break end
+      for _, n in ipairs((shown())) do seen[n] = true end
+      K.keys("pagedown")
+    end
+    assert.is_false(out:is_scrolled(), what .. ": PgDn reached rest")
+    for n = out.kept.last + 1, last do seen[n] = true end
+    for n = first, last do
+      assert.is_true(seen[n] == true,
+        what .. ": row " .. n .. " of " .. first .. "-" .. last
+        .. " never shown")
+    end
+  end
+
+  it("pages down over every row above a short screen", function()
+    for i = 1, 115 do output():push("L" .. i) end
+    tty().clear()
+    for i = 116, 118 do output():push("L" .. i) end
+    K.frame(100)
+    pages_cover("a short screen")
+  end)
+
+  it("stays a full window when a clear shortens the sequence",
+    function()
+      print_lines(1, 40)
+      K.keys("lctrl", "up")
+      tty().clear()
+      K.frame(100)
+      local ns, inside = shown()
+      assert.equal(H, #ns)
+      assert.is_true(inside)
+    end)
+
+  it("pages up from an empty screen to a full window", function()
+    print_lines(1, 40)
+    tty().clear()
+    K.frame(100)
+    K.keys("pageup")
+    local ns, inside = shown()
+    assert.equal(H, #ns)
+    assert.is_true(inside)
+  end)
+
+  it("holds under any mix of prints, clears, Ctrl+L and the "
+    .. "scrolling keys", function()
+      math.randomseed(20261115)
+      local KEYS = { { "lctrl", "up" }, { "lctrl", "down" },
+        { "pageup" }, { "pagedown" }, { "home" }, { "end" } }
+      local n = 0
+      for step = 1, 400 do
+        local op = math.random(1, 12)
+        if op <= 3 then
+          for _ = 1, math.random(1, op == 3 and 60 or 8) do
+            n = n + 1
+            output():push("L" .. n)
+          end
+        elseif op == 4 then
+          tty().clear()
+        elseif op == 5 then
+          K.keys("lctrl", "l")
+        else
+          K.frame(100)
+          K.keys(unpack(KEYS[math.random(1, #KEYS)]))
+        end
+        K.frame(100)
+        local out = output()
+        local what = "step " .. step
+        if out:is_scrolled() then
+          local _, filled = out:view_bounds()
+          local t = out:top()
+          assert.is_true(out.kept.first <= t and t <= filled, what)
+          local last = out:view_bounds()
+          if last - out.kept.first + 1 >= H then
+            local ns, inside = shown()
+            assert.equal(H, #ns, what)
+            assert.is_true(inside, what .. ": a row past the end")
+          end
+        end
+        if step % 40 == 0 then pages_cover(what) end
+      end
     end)
 end)

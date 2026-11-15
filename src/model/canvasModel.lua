@@ -169,11 +169,23 @@ end
 
 --- @return boolean
 function CanvasModel:is_scrolled()
-  return self.view_top ~= nil
+  return self:top() ~= nil
 end
 
---- @param top integer?
+--- The view's one rule: a scrolled view's top lies between the
+--- oldest kept row and the filled view's top, so that it is a
+--- full window whenever enough rows exist, however the
+--- sequence's end moved under it (a clear from code, a short
+--- screen, rows dropped at the limit). Rest is a state of its
+--- own, and so is having no kept row: nothing to scroll to.
+--- Every move of the view goes through here.
+--- @param top integer? --- nil for rest
 function CanvasModel:show(top)
+  if top and self.kept:count() == 0 then top = nil end
+  if top then
+    local _, filled = self:view_bounds()
+    top = math.min(math.max(top, self.kept.first), filled)
+  end
   if top ~= self.view_top then
     self.view_top = top
     self.terminal.dirty = true
@@ -184,30 +196,24 @@ function CanvasModel:to_rest()
   self:show(nil)
 end
 
---- The view's top, the oldest kept row when the rows it
---- showed were dropped at the limit
+--- The view's top as the rule holds it now
 --- @return integer?
 function CanvasModel:top()
-  local t = self.view_top
-  if t and t < self.kept.first then
-    t = self.kept.first
-    self.view_top = t
-  end
-  return t
+  self:show(self.view_top)
+  return self.view_top
 end
 
 --- One row toward older output (`-1`) or newer (`1`). From rest
 --- the first step shows the filled view; from it a step toward
---- newer output returns to rest. Nothing while no row is kept.
+--- newer output returns to rest.
 --- @param dir integer
 function CanvasModel:scroll_row(dir)
-  if self.kept:count() == 0 then return end
   local _, filled = self:view_bounds()
   local t = self:top()
   if not t then
     if dir < 0 then self:show(filled) end
   elseif dir < 0 then
-    self:show(math.max(self.kept.first, t - 1))
+    self:show(t - 1)
   elseif filled < t + 1 then
     self:to_rest()
   else
@@ -217,35 +223,33 @@ end
 
 --- A page of one row fewer than the screen: toward older
 --- output the row at the top of the view goes to its bottom,
---- toward newer the bottom row goes to its top. At rest the
---- view is the screen's rows. A page that would reach the
---- filled view or past it returns to rest.
+--- toward newer the bottom row goes to its top, never past the
+--- filled view, so that no row is skipped; from the filled view
+--- a page down returns to rest. At rest the view is the
+--- screen's rows.
 --- @param dir integer
 function CanvasModel:scroll_page(dir)
-  if self.kept:count() == 0 then return end
-  local k, h = self.kept, self.terminal.height
+  local h = self.terminal.height
   local _, filled = self:view_bounds()
   local t = self:top()
   if dir < 0 then
-    local from = t or k.last + 1
-    self:show(math.max(k.first, from - (h - 1)))
+    self:show((t or self.kept.last + 1) - (h - 1))
   elseif t then
-    local next = t + (h - 1)
-    if filled <= next then
+    if filled <= t then
       self:to_rest()
     else
-      self:show(next)
+      self:show(t + (h - 1))
     end
   end
 end
 
 --- The oldest kept row at the top of the view
 function CanvasModel:to_oldest()
-  if self.kept:count() == 0 then return end
   self:show(self.kept.first)
 end
 
 --- @class ViewRow
+--- @field n integer --- its number in the sequence
 --- @field kept KeptRow? --- a kept row
 --- @field y integer? --- or a row on screen
 
@@ -262,11 +266,11 @@ function CanvasModel:window()
   for i = 0, h - 1 do
     local n = t + i
     if n <= k.last then
-      rows[#rows + 1] = { kept = k:get(n) }
+      rows[#rows + 1] = { n = n, kept = k:get(n) }
     elseif n - k.last <= h then
-      rows[#rows + 1] = { y = n - k.last }
+      rows[#rows + 1] = { n = n, y = n - k.last }
     else
-      rows[#rows + 1] = { }
+      rows[#rows + 1] = { n = n }
     end
   end
   return rows, k.first < t, t + h - 1 < last
