@@ -18,7 +18,7 @@ local KeyCard = require('model.editor.keyCard')
 local ConsoleKeys = require('model.input.consoleKeys')
 
 --- What the console's commands say when they refuse: in the
---- output, through CanvasModel:write_error (the maintainer's
+--- output, through CanvasModel:write_refusal (the maintainer's
 --- ruling of November 15, 2026)
 local messages = {
   nothing_running = 'Nothing is running.',
@@ -312,12 +312,8 @@ function ConsoleController:tidy(name)
   local PS = self.model.projects
   local p = PS.current
   local said = self.model.output
-  if not p then
-    said:write_error(PS.messages.no_open_project)
-    return false
-  end
   if not FS.exists(p:get_path(name)) then
-    said:write_error(PS.messages.not_in_project(name))
+    said:write_refusal(PS.messages.not_in_project(name))
     return false
   end
   local text = self:_readfile(name)
@@ -329,7 +325,7 @@ function ConsoleController:tidy(name)
   local out, formatted, why = buf.syntax.format(lines,
     display.columns)
   if not formatted then
-    said:write_error(name .. ' ' .. why)
+    said:write_refusal(name .. ' ' .. why)
     return false
   end
   if string.unlines(out) == string.unlines(lines) then
@@ -338,7 +334,7 @@ function ConsoleController:tidy(name)
   buf:replace_text(out)
   local ok, err = buf:save()
   if not ok then
-    said:write_error(err)
+    said:write_refusal(err)
     return false
   end
   return true
@@ -354,7 +350,7 @@ function ConsoleController:_readfile(name, quiet)
   if ok then
     return text_or_err
   elseif not quiet then
-    self.model.output:write_error(text_or_err)
+    self.model.output:write_refusal(text_or_err)
   end
 end
 
@@ -395,7 +391,7 @@ function ConsoleController:writefile(name, content)
   if ok then
     print(name .. ' written')
   else
-    self.model.output:write_error(err)
+    self.model.output:write_refusal(err)
   end
 end
 
@@ -495,7 +491,7 @@ function ConsoleController:run_project(name)
   if love.state.app_state == 'inspect' or
       love.state.app_state == 'running'
   then
-    self.model.output:write_error(messages.already_running)
+    self.model.output:write_refusal(messages.already_running)
     return
   end
   --- a program takes the keys from here: the screen at rest
@@ -516,7 +512,7 @@ function ConsoleController:run_project(name)
     -- left there; a project that fails to load leaves the
     -- error on a blank console, not under the old picture.
     self.model.output:clear_canvas()
-    local f, load_err, path = P:run(name, runner_env)
+    local f, load_err, path, refused = P:run(name, runner_env)
     if f then
       local n = name or P.current.name or 'project'
       Log.info('Running \'' .. n .. '\'')
@@ -599,6 +595,8 @@ function ConsoleController:run_project(name)
           end
         end
       end
+    elseif refused then
+      self.model.output:write_refusal(load_err)
     else
       self.model.output:write_error(load_err)
     end
@@ -628,16 +626,17 @@ local function project_dofile(cc, filename, env)
   local P = cc.model.projects
   local fn = filename
   local open = P.current
-  if open then
-    local chunk = open:load_file(fn)
-    if chunk then
-      if env then
-        setfenv(chunk, env)
-      end
-      return true, chunk()
-    else
-      cc.model.output:write_error(P.messages.not_in_project(filename))
+  local chunk, load_err = open:load_file(fn)
+  if chunk then
+    if env then
+      setfenv(chunk, env)
     end
+    return true, chunk()
+  elseif load_err then
+    --- the file is there and Lua does not load it
+    cc.model.output:write_error(load_err)
+  else
+    cc.model.output:write_refusal(P.messages.not_in_project(filename))
   end
 end
 
@@ -1538,18 +1537,9 @@ function ConsoleController.prepare_project_env(cc)
   gfx                          = love.graphics
 
   --- @param f function
-  local check_open_pr          = function(f, ...)
-    if not P.current then
-      cc.model.output:write_error(P.messages.no_open_project)
-    else
-      return f(...)
-    end
-  end
-
-  --- @param f function
   local check_microbit_path    = function(f, ...)
     if not love.paths.microbit_path then
-      cc.model.output:write_error(P.messages.no_microbit_board)
+      cc.model.output:write_refusal(P.messages.no_microbit_board)
     else
       return f(...)
     end
@@ -1559,9 +1549,7 @@ function ConsoleController.prepare_project_env(cc)
     return project_require(name)
   end
   project_env.dofile           = function(name)
-    return check_open_pr(function()
-      return project_dofile(cc, name, cc:get_project_env())
-    end)
+    return project_dofile(cc, name, cc:get_project_env())
   end
 
   --- project management
@@ -1592,17 +1580,13 @@ function ConsoleController.prepare_project_env(cc)
   end
 
   project_env.current_project  = function()
-    if P.current and P.current.name then
-      print('Currently open project: ' .. P.current.name)
-    else
-      print(P.messages.no_open_project)
-    end
+    print('Currently open project: ' .. P.current.name)
   end
 
   project_env.example_projects = function()
     local ok, err = P:deploy_examples()
     if not ok then
-      cc.model.output:write_error(
+      cc.model.output:write_refusal(
         'The examples could not be copied (' .. tostring(err) .. ').')
     end
   end
@@ -1610,7 +1594,7 @@ function ConsoleController.prepare_project_env(cc)
   project_env.clone            = function(old, new)
     local ok, err = P:clone(old, new)
     if not ok then
-      cc.model.output:write_error(err)
+      cc.model.output:write_refusal(err)
     end
   end
 
@@ -1621,14 +1605,12 @@ function ConsoleController.prepare_project_env(cc)
   --- file access
 
   project_env.list_contents    = function()
-    return check_open_pr(function()
-      local p = P.current
-      local items = p:contents()
-      print(P.messages.project_header(p.name))
-      for _, f in pairs(items) do
-        print('• ' .. f.name)
-      end
-    end)
+    local p = P.current
+    local items = p:contents()
+    print(P.messages.project_header(p.name))
+    for _, f in pairs(items) do
+      print('• ' .. f.name)
+    end
   end
 
   --- @param name string
@@ -1637,20 +1619,20 @@ function ConsoleController.prepare_project_env(cc)
   --- @return string?
   project_env.readfile         = function(name, quiet)
     --- @diagnostic disable-next-line: invisible
-    return check_open_pr(cc._readfile, cc, name, quiet)
+    return cc:_readfile(name, quiet)
   end
 
   --- @param name string
   --- @return string[]?
   project_env.readlines        = function(name)
     --- @diagnostic disable-next-line: invisible
-    return check_open_pr(cc._readlines, cc, name)
+    return cc:_readlines(name)
   end
 
   --- @param name string
   --- @param content string[]
   project_env.writefile        = function(name, content)
-    return check_open_pr(cc.writefile, cc, name, content)
+    return cc:writefile(name, content)
   end
 
   --- @param content string
@@ -1671,12 +1653,12 @@ function ConsoleController.prepare_project_env(cc)
   --- @param name string
   --- @return function? chunk
   project_env.loadfile         = function(name)
-    return check_open_pr(cc.loadfile, cc, name)
+    return cc:loadfile(name)
   end
 
   --- @param name string
   project_env.edit             = function(name)
-    return check_open_pr(cc.edit, cc, name)
+    return cc:edit(name)
   end
 
   --- Format a file the way the editor writes code
@@ -1697,13 +1679,13 @@ function ConsoleController.prepare_project_env(cc)
   --- @param msg string?
   project_env.pause            = function(msg)
     if not cc.run_live then
-      return cc.model.output:write_error(messages.nothing_running)
+      return cc.model.output:write_refusal(messages.nothing_running)
     end
     cc:suspend_run(msg)
   end
   project_env.stop             = function()
     if not cc.run_live then
-      return cc.model.output:write_error(messages.nothing_running)
+      return cc.model.output:write_refusal(messages.nothing_running)
     end
     cc:stop_project_run()
   end
@@ -1719,7 +1701,7 @@ function ConsoleController.prepare_project_env(cc)
       cc.paused_mouse = nil
       set_mouse(mouse)
     else
-      cc.model.output:write_error(messages.nothing_paused)
+      cc.model.output:write_refusal(messages.nothing_paused)
     end
   end
 
@@ -1960,7 +1942,7 @@ function ConsoleController:open_project(name, play)
   self.model.output:to_rest()
   local P = self.model.projects
   if not name then
-    self.model.output:write_error(messages.needs_a_name)
+    self.model.output:write_refusal(messages.needs_a_name)
     return false
   end
   local cur = P.current
@@ -1985,13 +1967,21 @@ function ConsoleController:open_project(name, play)
     end
     --- env resets on every project switch
     self:_reset_executor_env()
+  elseif cur then
+    --- a project is always open: one that cannot be opened
+    --- leaves the one that was open, its loader back in place
+    P.current = cur
+    local lf = self:get_loader(cur.name)
+    if lf and not table.is_member(package.loaders, lf) then
+      table.insert(package.loaders, 1, lf)
+    end
   end
   if open then
     print('Project ' .. name .. ' opened')
   elseif create then
     print('Project ' .. name .. ' created')
   else
-    self.model.output:write_error(err)
+    self.model.output:write_refusal(err)
   end
   return ok
 end
@@ -2170,7 +2160,7 @@ function ConsoleController:reset_scratchpad()
   if kept then
     print(P.messages.kept_as(name, kept))
   else
-    self.model.output:write_error(P.messages.not_kept(name))
+    self.model.output:write_refusal(P.messages.not_kept(name))
   end
   return self:open_project(name)
 end
@@ -2204,7 +2194,7 @@ function ConsoleController:edit(name, must_exist)
     if love.state.app_state == 'editor' then
       self.editor:refuse({ msg })
     else
-      self.model.output:write_error(msg)
+      self.model.output:write_refusal(msg)
     end
   end
   --- an edit in progress is resolved first (FR1.2): opening

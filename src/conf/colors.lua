@@ -14,7 +14,8 @@ require("util.color")
 
 --- @class TerminalColors : BaseColors
 --- @field echo RGB --- an accepted line written to the output
---- @field error RGB --- a refusal or an error written to it
+--- @field error RGB --- a run's error written to it
+--- @field refusal RGB --- a command's refusal written to it
 
 --- @class EditorColors : BaseColors
 --- @field highlight RGB
@@ -91,10 +92,14 @@ return {
     --- the maintainer's ruling "Console scrollback, first
     --- version": an echoed line reads as code
     echo = Color[Color.blue],
-    --- the maintainer's ruling of November 15, 2026: a
-    --- command's refusal and a run's error are said in the
-    --- output, in the theme's red
+    --- the maintainer's rulings of November 15, 2026: a run's
+    --- error is said in the output in the theme's red, which
+    --- is for errors alone, and a command's refusal, which is
+    --- no error, in a burnt orange that reads on the output's
+    --- gray about as well (3.6:1 to the red's 3.5:1); the
+    --- palette has no such orange, so it is given as it is
     error = Color[Color.red],
+    refusal = { 0x93 / 255, 0x49 / 255, 0, 1 },
   },
   editor = {
     fg = Color[Color.black],

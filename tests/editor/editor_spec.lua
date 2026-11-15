@@ -453,7 +453,7 @@ describe('Editor #editor', function()
           model = {
             projects = { current = project,
               messages = ProjectService.messages },
-            output = { write_error = function(_, s)
+            output = { write_refusal = function(_, s)
               table.insert(printed, s)
             end },
           },

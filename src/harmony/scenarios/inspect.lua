@@ -34,8 +34,8 @@ local function inspect()
     h.screenshot('console-emptied')
 
     -- a run asked for while one is paused is refused in the
-    -- output, in its error color, and the band stays empty
-    -- (the maintainer's ruling of November 15, 2026)
+    -- output, in its refusal color, and the band stays empty
+    -- (the maintainer's rulings of November 15, 2026)
     wait(.4)
     h.love_text('run()')
     wait(.1)
@@ -49,15 +49,15 @@ local function inspect()
     assert(P.console_message() == nil,
       'the refused run is in the band')
     local t = P.cc().model.output.terminal
-    local red = P.cc().cfg.view.colors.terminal.error
+    local want = P.cc().cfg.view.colors.terminal.refusal
     local found
     for y, r in ipairs(t.buffer) do
       if table.concat(r):find('already running', 1, true) then
         local c = t.state_buffer[y][1].color
-        found = P.near(c, red)
+        found = P.near(c, want)
       end
     end
-    assert(found, 'the refused run is not in the error color')
+    assert(found, 'the refused run is not in the refusal color')
 
     wait(.4)
     h.love_text('continue()')

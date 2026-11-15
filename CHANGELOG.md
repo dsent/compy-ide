@@ -208,10 +208,10 @@ Project-author guide: `doc/input_api.md`.
   after its output, and the line stays in the field. A line the syntax check refuses is
   not written and stays in the field.
 - **The console says what a command did in its output, and what the line being typed
-  needs in a band above the status line.** Every refusal of a console command, a typed
-  line's error and a program's error are written to the output in red; answers such as
-  "Project x opened" keep the output's colour, and so does the message of a program's
-  `pause("text")`. A line the syntax refuses or Lua does not load shows its message in
+  needs in a band above the status line.** A typed line's error and a program's error are
+  written to the output in red, which is for errors alone; a console command's refusal,
+  which is no error, in a burnt orange; answers such as "Project x opened" keep the
+  output's colour, and so does the message of a program's `pause("text")`. A line the syntax refuses or Lua does not load shows its message in
   the band, over the output's last rows, without the `Errors:` heading; the line stays
   in the field with its cursor, red from a syntax failure, and the status line no longer
   moves. The message blocks nothing: the next key dismisses it and does its work, so
@@ -224,9 +224,13 @@ Project-author guide: `doc/input_api.md`.
 - **One sentence for each refusal.** `stop()` and `pause()` with nothing running say
   "Nothing is running.", and `continue()` with nothing paused "Nothing is paused."; a file
   the open project does not hold is "There is no NAME in this project." wherever it is
-  asked for; a command that needs a project with none open says "No project is open:
-  project("name") opens one."; and `project()` with no name says "A project needs a
-  name: project("name").".
+  asked for; and `project()` with no name says "A project needs a name:
+  project("name").".
+- **A project is always open.** `project()` with a name that cannot be a project's, such
+  as `project("a/b")`, left no project open, and commands that need one refused until
+  another was opened; the project that was open now stays open, and only the reason is
+  said. `dofile()` of a file Lua does not load says Lua's error instead of saying the file
+  is not there.
 - **The console's history works as a classic shell's.** It holds only the lines that ran:
   Up no longer adds the line being typed, an edit to a recalled line no longer replaces
   the line that ran, and Escape no longer stores the line it clears. The line being typed

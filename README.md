@@ -86,7 +86,7 @@ as do a program's start, stop or pause and a key the program
 takes. Each line the console runs is
 written to the output in blue before it runs, and its error
 after it, in red. A command that refuses says why in the output,
-in red too. The band above the status line belongs to the line
+in orange. The band above the status line belongs to the line
 being typed: it says why a line did not run because it does not
 parse, and, in orange, that a statement is not finished yet,
 when <kbd>Enter</kbd> begins its next line instead of running it.

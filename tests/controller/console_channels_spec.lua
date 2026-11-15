@@ -3,8 +3,10 @@
 -- only why a line was not taken (it does not parse) or, in
 -- orange, a hint that is no error (an unfinished statement).
 -- What a command does, a refusal or a run's error included, is
--- said in the output: a refusal or an error in the theme's red
--- (colors.terminal.error), an answer in the output's own color.
+-- said in the output: a run's error in the theme's red
+-- (colors.terminal.error), a refusal, which is no error, in a
+-- burnt orange (colors.terminal.refusal), an answer in the
+-- output's own color.
 -- Keys only, through the K helper and the console's real paths.
 
 local K = require("tests.helpers.editor_keys")
@@ -153,7 +155,7 @@ describe("the console's channels #console", function()
       assert.is_nil((K.console_text():find("x = = 1", 1, true)))
     end)
 
-  describe("a command's refusal is said in the output, in red",
+  describe("a command's refusal is said in the output, in its own color",
     function()
       it("run() while a program runs", function()
         reset({ ["main.lua"] = "function love.update() end\n" })
@@ -161,7 +163,7 @@ describe("the console's channels #console", function()
         K.cc:get_project_env().run()
         K.frame(100)
         said("A project is already running: Ctrl+Q stops it.",
-          colors().error)
+          colors().refusal)
         no_band()
         K.cc:get_project_env().love.update = nil
       end)
@@ -170,7 +172,7 @@ describe("the console's channels #console", function()
         it(cmd .. " with nothing running", function()
           reset()
           run(cmd)
-          said("Nothing is running.", colors().error)
+          said("Nothing is running.", colors().refusal)
           no_band()
         end)
       end
@@ -178,14 +180,14 @@ describe("the console's channels #console", function()
       it("continue() with nothing paused", function()
         reset()
         run("continue()")
-        said("Nothing is paused.", colors().error)
+        said("Nothing is paused.", colors().refusal)
       end)
 
       it("project() with no name", function()
         reset()
         run("project()")
         said('A project needs a name: project("name").',
-          colors().error)
+          colors().refusal)
       end)
 
       it("a file the project does not hold, in one sentence",
@@ -197,26 +199,23 @@ describe("the console's channels #console", function()
             K.keys("lctrl", "l")
             run(cmd)
             said("There is no nosuch.lua in this project.",
-              colors().error, cmd)
+              colors().refusal, cmd)
           end
         end)
 
-      it("a command that needs a project, with none open",
+      it("a project that cannot be opened, the open one left open",
         function()
           reset()
+          local open = K.cc.model.projects.current
           run("project('a/b')")
-          assert.is_nil(K.cc.model.projects.current)
-          for _, cmd in ipairs({ "tidy()", "list_contents()",
-            "readfile('main.lua')", "edit('main.lua')" }) do
-            K.keys("lctrl", "l")
-            run(cmd)
-            said('No project is open: project("name") opens one.',
-              colors().error, cmd)
-          end
-          K.keys("lctrl", "l")
+          said("Filename invalid: Forbidden characters",
+            colors().refusal)
+          assert.equal(open, K.cc.model.projects.current)
           run("current_project()")
-          said('No project is open: project("name") opens one.',
-            colors().fg, "current_project() answers")
+          said("Currently open project: " .. open.name, colors().fg)
+          K.keys("lctrl", "l")
+          run("print(readfile('main.lua') ~= nil)")
+          said("true", colors().fg)
         end)
     end)
 

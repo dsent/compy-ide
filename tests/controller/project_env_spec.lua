@@ -217,11 +217,11 @@ describe('ConsoleController project env #project', function()
       local env = CC:get_project_env()
       local said = { }
       local out = CC.model.output
-      local write_error = out.write_error
-      out.write_error = function(_, s) said[#said + 1] = s end
+      local write_refusal = out.write_refusal
+      out.write_refusal = function(_, s) said[#said + 1] = s end
       local loud = env.readfile('nothere.lua')
       local quiet = env.readfile('nothere.lua', true)
-      out.write_error = write_error
+      out.write_refusal = write_refusal
       assert.is_nil(loud)
       assert.is_nil(quiet)
       assert.are.same({ 'There is no nothere.lua in this project.' },
@@ -389,10 +389,10 @@ describe('ConsoleController project env #project', function()
       CC:close_project()
       local said = { }
       local out = CC.model.output
-      local write_error = out.write_error
-      out.write_error = function(_, s) said[#said + 1] = s end
+      local write_refusal = out.write_refusal
+      out.write_refusal = function(_, s) said[#said + 1] = s end
       CC:get_project_env().continue()
-      out.write_error = write_error
+      out.write_refusal = write_refusal
       assert.are.same({ 'Nothing is paused.' }, said)
       assert.are.equal('ready', love.state.app_state)
     end)

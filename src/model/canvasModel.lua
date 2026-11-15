@@ -102,20 +102,34 @@ function CanvasModel:echo(lines)
   t.dirty = true
 end
 
---- A refusal or an error, on a row of its own after what was
---- printed, in the output's error color: the one way the
---- console says that something did not happen (the
---- maintainer's ruling of November 15, 2026)
---- @param msg string
-function CanvasModel:write_error(msg)
-  local t = self.terminal
-  local colors = self.cfg.view.colors.terminal
+--- `msg` on a row of its own after what was printed, in
+--- `color`, the output's own color after it
+--- @param model CanvasModel
+--- @param msg any
+--- @param color number[]
+local function say(model, msg, color)
+  local t = model.terminal
   t:fresh_row()
-  t:set_cursor_color(colors.error)
+  t:set_cursor_color(color)
   --- a byte that is not UTF-8 shows as U+FFFD, as in the band
   t:print(string.scrub(tostring(msg)) .. '\n')
-  t:set_cursor_color(colors.fg)
+  t:set_cursor_color(model.cfg.view.colors.terminal.fg)
   t.dirty = true
+end
+
+--- A run's error, a typed line's or a program's, in the
+--- output's error color, the theme's red, which is for errors
+--- alone (the maintainer's rulings of November 15, 2026)
+--- @param msg string
+function CanvasModel:write_error(msg)
+  say(self, msg, self.cfg.view.colors.terminal.error)
+end
+
+--- A command's refusal, which is no error, in the output's
+--- refusal color
+--- @param msg string
+function CanvasModel:write_refusal(msg)
+  say(self, msg, self.cfg.view.colors.terminal.refusal)
 end
 
 --- Clear the 16 rows, as a clear from code does: what was on

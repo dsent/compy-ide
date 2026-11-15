@@ -48,7 +48,6 @@ local messages = {
   not_in_project      = function(name)
     return 'There is no ' .. tostring(name) .. ' in this project.'
   end,
-  no_open_project     = 'No project is open: project("name") opens one.',
   no_microbit_board   = 'No micro:bit is plugged in.',
   flash_no_data       = 'No firmware data to flash.',
   kept_as             = function(name, kept)
@@ -551,25 +550,24 @@ end
 --- @return function?
 --- @return string? error
 --- @return string? path
+--- @return boolean? refused --- the error is no error of the
+---   code's: there is no such project, or no main.lua to read
 function ProjectService:run(name, env)
   local p_path, err
   if not name then
-    if self.current then
-      p_path = self.current.path
-    else
-      return nil, messages.no_open_project
-    end
+    p_path = self.current.path
   else
     p_path, err = self.is_project(ProjectService.path, name)
   end
   if p_path then
     local ok, code = self.current:readfile(ProjectService.MAIN)
-    if not ok then return nil, code, p_path end
+    if not ok then return nil, code, p_path, true end
     if type(code) ~= 'string' then
-      return nil, FS.messages.unreadable(ProjectService.MAIN), p_path
+      return nil, FS.messages.unreadable(ProjectService.MAIN), p_path,
+          true
     end
     local content, c_err = codeload(code, env, ProjectService.MAIN)
     return content, c_err, p_path
   end
-  return nil, err
+  return nil, err, nil, true
 end

@@ -254,7 +254,7 @@ describe("the console's errors in the notice band #editor #spec",
     for _, line in ipairs({ "run()", 'run("other")',
       "run_project()" }) do
       spec_it("IS3.14 Explain a refusal: " .. line .. " while "
-          .. "a program is paused says it in the output, in red, "
+          .. "a program is paused says it in the output, as a refusal, "
           .. "not in the band, the line run and stored",
         function()
           paused()
@@ -271,7 +271,7 @@ describe("the console's errors in the notice band #editor #spec",
             end
           end
           assert.is_not_nil(found)
-          assert.is_true(same_colour(colors().terminal.error, found))
+          assert.is_true(same_colour(colors().terminal.refusal, found))
           -- the call returned: the line ran, so it is stored
           -- and the field is cleared
           assert.same("", K.console_draft())
