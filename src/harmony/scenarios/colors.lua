@@ -230,7 +230,10 @@ scenario('console-messages', function(wait)
   D.key(wait, 'return')
   img = P.capture(wait)
   D.shot(wait, 'console-unfinished')
-  bg, fg = P.colors(img, 0, status - view.fh, view.fw * 6, view.fh)
+  -- the draft's second row takes a row: the status line and
+  -- the band move up by one
+  bg, fg = P.colors(img, 0, status - 2 * view.fh, view.fw * 6,
+    view.fh)
   is(bg, t.input.notice.bg, 'the band, for the hint')
   is(fg, t.input.notice.warning, 'the hint, in orange')
   D.key(wait, 'escape')
