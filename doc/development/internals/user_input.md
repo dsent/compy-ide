@@ -293,7 +293,7 @@ a session you are *not* re-activating is `compy.input.set_cursor`'s job.
 "Reset the widget" is four bespoke, mutually inconsistent mechanisms, not one shared primitive:
 
 - **console** — Escape empties the line, which the history does not keep (it holds only lines
-  that ran), and Ctrl+L clears the terminal only
+  that ran), and Ctrl+L clears the terminal and the rows it keeps, and nothing of the field
   (Ctrl+Q no longer resets the console's content, and Ctrl+Shift+R, which wiped content and
   history, is dropped: the reserved map of 2026-11-14);
 - **editor** — Escape during an edit (`cancel_edit`: the draft and the replacement target go),
@@ -528,8 +528,12 @@ binding to apply, deliberately not a rule the tier enforces.
 
 ### Console-specific keys
 
-- **PageUp/PageDown**: do nothing; neither key table binds them, and they recall nothing. They
-  are kept for paging the output once the console keeps its scrolled-off rows
+- **Ctrl+Up/Ctrl+Down, PageUp/PageDown, and Home/End with an empty field**: scroll the output
+  over its kept rows, a row, a page of 15 rows with one carried over, and to the oldest or the
+  newest row; they recall nothing and leave the field's text and cursor as they are. With text
+  in the field, Home and End are the field's own keys. Every other key brings the screen back
+  before it does its work (`ConsoleController:_back_to_screen`); a modifier or a lock key on
+  its own and F1 leave the view. See `console.md`, "The Output and Its Kept Rows".
 - **Up/Down at input boundary**: history navigation, through the widget's `on_limit_reached`
   (below). The walk is the classic shell's (`model/input/history.lua`): the entries are the lines
   that ran, and walking never changes one. Up from the line being typed keeps it in a slot below
@@ -544,7 +548,7 @@ binding to apply, deliberately not a rule the tier enforces.
   newest entry, every line of it compared exactly (the ruling "The history skips a repeated
   line"); it ends the walk all the same.
 - **Enter** (no shift): submit → `evaluate_input()`
-- **Ctrl+L**: clear terminal output
+- **Ctrl+L**: clear the terminal output and the rows it keeps
 - **Shift+Enter**: insert newline in input (multiline expression)
 
 These are interpreted by `ConsoleController` itself (console-mode-specific dispatch), not the

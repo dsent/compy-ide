@@ -178,14 +178,27 @@ Project-author guide: `doc/input_api.md`.
 - **Every chord is a key of its own.** A key pressed with a modifier that nothing
   binds does nothing, in the file editor, the console and a program's input field:
   Ctrl+Enter no longer submits in the console or a program's input, Ctrl+Up and
-  Ctrl+Down no longer move or recall in the console, and Shift+Escape no longer cancels
+  Ctrl+Down no longer move the cursor or recall in the console, and Shift+Escape no longer cancels
   a program's input. The F1 key card is drawn from the same key tables and lists every
   key the editor or the console takes, the reserved ones (Ctrl+T, Ctrl+Q, Ctrl+R,
   Ctrl+Esc) included, but the trivial ones: the arrows, Home and End within a draft,
   Backspace, Delete and paging. Ctrl+Home and Ctrl+End, to the text's start and end,
   are on it. Only a bare F1 brings it up.
-- **PageUp and PageDown do nothing in the console**: they no longer recall the history,
-  which Up and Down still do, and are kept for paging the output.
+- **The console keeps its output.** The last 1,000 rows that scroll off the top of the
+  console's output are kept, each with its colors, and Ctrl+Up / Ctrl+Down scroll over them
+  a row at a time, PageUp / PageDown a page of 15 rows with one carried over, and, while the
+  field is empty, Home and End go to the oldest and the newest row. A scrolled view fills
+  the screen, carries the editor's continuation cue at an edge with more beyond, and stays
+  where it is while new output arrives; any other key brings the screen back. The field
+  keeps its text and cursor. PageUp and PageDown no longer recall the history, which Up and
+  Down still do. While a program's input field shows, or the program takes the keys
+  itself, the keys are the program's. The key card lists Ctrl+Up/Down and Home/End.
+- **Ctrl+L also forgets the kept output**; a program's `compy.terminal.clear()` clears the
+  screen alone, and what was on it is gone. `list_projects()` no longer clears the screen:
+  it lists below what is there.
+- **Each line the console runs is written to its output**, in blue, before it runs, so that
+  what it prints follows it; a line that fails also has its error written there, after its
+  output. A line the syntax check refuses is not written and stays in the field.
 - **The console's history works as a classic shell's.** It holds only the lines that ran:
   Up no longer adds the line being typed, an edit to a recalled line no longer replaces
   the line that ran, and Escape no longer stores the line it clears. The line being typed

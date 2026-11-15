@@ -29,12 +29,16 @@ a project must be selected first.
 
 | Command                                                           | Combination                                   |
 | :---------------------------------------------------------------- | :-------------------------------------------- |
-| Clear terminal                                                    | <kbd>Ctrl</kbd>+<kbd>L</kbd>                  |
+| Clear the console's screen and the output it keeps                | <kbd>Ctrl</kbd>+<kbd>L</kbd>                  |
 | Stop the program and return to the console (the project stays open) | <kbd>Ctrl</kbd>+<kbd>Q</kbd>                  |
 | Restart project                                                   | <kbd>Ctrl</kbd>+<kbd>R</kbd>               |
 | Exit application                                                  | <kbd>Ctrl</kbd>+<kbd>Esc</kbd>                |
 | Pause project                                                     | <kbd>Ctrl</kbd>+<kbd>Pause</kbd>              |
 | Toggle edit/run                                                   | <kbd>Ctrl</kbd>+<kbd>T</kbd>                  |
+| **Console output**                                                |                                               |
+| Scroll the output a row (the field keeps its text)                | <kbd>Ctrl</kbd>+<kbd>⇧</kbd>/<kbd>Ctrl</kbd>+<kbd>⇩</kbd> |
+| Scroll the output a page of 15 rows                               | <kbd>PageUp</kbd>/<kbd>PageDown</kbd>         |
+| To the oldest / newest row of the output (empty field)            | <kbd>Home</kbd>/<kbd>End</kbd>                |
 | **Input**                                                         |                                               |
 | Move cursor horizontally                                          | <kbd>⇦</kbd>/<kbd>⇨</kbd>                     |
 | Move cursor vertically                                            | <kbd>⇧</kbd>/<kbd>⇩</kbd>                     |
@@ -72,6 +76,17 @@ a project must be selected first.
 | Follow the require or dofile of the highlighted block (empty field) | <kbd>Ctrl</kbd>+<kbd>J</kbd>                  |
 | Format the whole file (empty field)                               | <kbd>Alt</kbd>+<kbd>F</kbd>                   |
 | Show the keys of the current state                                | hold <kbd>F1</kbd>                            |
+
+The console keeps the last 1,000 rows that scroll off the top of
+its output, and the keys above scroll over them. A scrolled view
+fills the screen and is marked at its edges where more lies
+beyond; new output leaves it where it is, and any other key
+brings the screen back. Each line the console runs is written to
+the output in blue before it runs, and its error after it.
+<kbd>Ctrl</kbd>+<kbd>L</kbd> forgets the kept rows with the
+screen; `compy.terminal.clear()` from a program clears the screen
+alone. While a program's input field shows, or the program takes
+the keys itself, the scrolling keys are the program's.
 
 Each combination is a key of its own: a key pressed with a modifier the
 table does not name does nothing. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> is not

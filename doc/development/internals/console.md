@@ -59,11 +59,45 @@ When Enter is pressed in the REPL (`ConsoleController:keypressed`, line 1009):
 1. `evaluate_input()` is called
 2. The input text is validated via the `Evaluator` (LuaEval — parse via metalua)
 3. If parse succeeds: `codeload(code, run_env)` compiles the string into a chunk with the appropriate `fenv` (console env normally; project env during `inspect`)
-4. `run_user_code(f, self)` executes the chunk inside `use_canvas` — so any `gfx.*` calls go to the virtual canvas
-5. Output from `print()` goes to the terminal via the `redirect_to` mechanism (set up in `src/main.lua`)
-6. On success: input is cleared. On error: error is set on the input model and displayed in the status line.
+4. The line is accepted: it enters the history, and `CanvasModel:echo` writes it to the output in `colors.terminal.echo` (blue), on a row of its own, before it runs. A line the parse refuses or continues is not echoed.
+5. `run_user_code(f, self)` executes the chunk inside `use_canvas` — so any `gfx.*` calls go to the virtual canvas
+6. Output from `print()` goes to the terminal via the `redirect_to` mechanism (set up in `src/main.lua`)
+7. On success: input is cleared. On error: `CanvasModel:write_error` writes the error to the output after what the line printed, in the output's own color, and the error is also set on the input model and shown over the field.
 
 During `inspect` state, the REPL runs code in `project_env`, allowing the user to inspect and mutate the paused project's state.
+
+---
+
+## The Output and Its Kept Rows
+
+The output is the terminal's grid (`src/lib/terminal.lua`), 64 by
+16 cells, sized in `src/model/canvasModel.lua`. When a row scrolls
+off its top, `terminal_roll_up` hands it, still whole, to
+`terminal.on_row_leaving`; `CanvasModel` keeps it in a `KeptRows`
+store (`src/model/keptRows.lua`): its text with a style (color, back
+color, reversal) for each run of characters, the newest
+`output_kept` rows (1,000, `src/main.lua`). Nothing else enters
+the kept rows: `CanvasModel:reset` (a clear from code,
+`compy.terminal.clear()`, closing a project) erases the 16 rows
+alone, and `CanvasModel:erase` (Ctrl+L) forgets the kept rows too.
+
+The console's text is one sequence: the kept rows, numbered from
+`kept.first` to `kept.last`, then the screen's rows down to the
+last that holds text. At rest the screen is drawn as it is. A
+scrolled view (`CanvasModel.view_top`, its first row's number) is
+a window of 16 consecutive rows of the sequence, drawn by
+`TerminalView` from the kept rows and the grid without changing
+either; a number names the same row while new rows arrive, so new
+output leaves the view where it is. `scroll_row`, `scroll_page`,
+`to_oldest` and `to_rest` move it (the keys in
+`src/model/input/consoleKeys.lua`), and every other key brings the
+screen back first (`ConsoleController:_back_to_screen`).
+`CanvasView:draw_cues` draws the editor's continuation cue
+(`src/view/continuationCue.lua`) at a cut edge of a scrolled view.
+
+A key reaches these only when it reaches the console: a program's
+shown input field, its own `love.keypressed` or its own `love.draw`
+keeps every key (`fall_through` in `src/controller/controller.lua`).
 
 ---
 
@@ -155,6 +189,8 @@ Projects receive a `compy` table with:
 |---|---|
 | `src/controller/consoleController.lua` | Everything: env setup, project lifecycle, REPL eval, widget input API |
 | `src/model/consoleModel.lua` | Model aggregate (input, editor, output canvas, project service) |
+| `src/model/canvasModel.lua` | The output: the terminal grid, its kept rows, the scrolled view, the echo |
+| `src/model/keptRows.lua` | The rows scrolled off the output's top |
 | `src/model/project/project.lua` | `ProjectService` and `Project` — open/run/close, file I/O, filesystem mount |
 | `src/model/io/redirect.lua` | Redirects `print()` output to the terminal |
 | `src/view/consoleView.lua` | Top-level view compositor |
