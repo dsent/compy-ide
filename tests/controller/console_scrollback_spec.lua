@@ -174,6 +174,46 @@ describe("the console's kept rows #console", function()
     for _, r in ipairs(screen()) do assert.equal("", r) end
   end)
 
+  --- Ctrl+L leaves an empty console: what was still waiting to
+  --- be written when it was pressed appears neither on the
+  --- screen nor among the kept rows
+  it("are not refilled by output that waited for Ctrl+L",
+    function()
+      -- a frame's budget left from an earlier drain would write
+      -- the burst at once: a tenth of a second writes 80
+      -- characters
+      output().terminal.accumulator = 0
+      for i = 1, 200 do output():push("L" .. i) end
+      K.frame(0.1)
+      assert.is_true(#output().terminal.stdin > 500)
+      K.keys("lctrl", "l")
+      K.frame(100)
+      assert.same({ }, kept())
+      for _, r in ipairs(screen()) do assert.equal("", r) end
+      K.keys("home")
+      assert.is_false(output():is_scrolled())
+    end)
+
+  it("keep the output's color when Ctrl+L drops a waiting echo",
+    function()
+      -- the echo's blue taken, its return to the output's color
+      -- still waiting
+      K.frame(100)
+      output().terminal.accumulator = 0
+      output():echo({ "x = 1" })
+      K.frame(0.005)
+      assert.same(K.cc.cfg.view.colors.terminal.echo,
+        output().terminal.cursor_color)
+      K.keys("lctrl", "l")
+      K.frame(100)
+      local t = output().terminal
+      assert.same(K.cc.cfg.view.colors.terminal.fg, t.cursor_color)
+      output():push("after")
+      K.frame(100)
+      assert.same(K.cc.cfg.view.colors.terminal.fg,
+        t.state_buffer[1][1].color)
+    end)
+
   it("stay through a visit to the editor and a program's run",
     function()
       reset({ ["main.lua"] = "for i = 41, 60 do print('L' .. i) end\n" })

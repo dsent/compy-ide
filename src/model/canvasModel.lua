@@ -120,8 +120,11 @@ function CanvasModel:reset()
   self.terminal.dirty = true
 end
 
---- The user's own clear (Ctrl+L): the screen and the kept rows
+--- The user's own clear (Ctrl+L): the screen and the kept rows,
+--- and what still waited to be written when it was pressed, so
+--- that none of it appears afterwards
 function CanvasModel:erase()
+  self.terminal:discard()
   self:reset()
   self.kept:forget()
   self:to_rest()

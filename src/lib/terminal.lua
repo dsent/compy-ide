@@ -96,6 +96,25 @@ local function terminal_set_cursor_backcolor(terminal, red, blue, green, alpha)
 end
 
 
+-- The commands that set how what follows looks, not what is on
+-- the grid
+local SETS_STYLE = {
+    cursor_color = true, cursor_backcolor = true, reverse = true,
+    show_cursor = true, hide_cursor = true,
+}
+
+-- Drop what waits to be written, keeping the styles that the
+-- waiting commands set for what follows
+local function terminal_discard(terminal)
+    local keep = {}
+    for _, c in ipairs(terminal.stdin) do
+        if type(c) == "table" and SETS_STYLE[c.type] then
+            keep[#keep + 1] = c
+        end
+    end
+    terminal.stdin = keep
+end
+
 -- What comes next starts a row of its own: on the next row when
 -- the cursor's row already holds text, else at its start
 local function terminal_fresh_row(terminal)
@@ -507,6 +526,7 @@ local function terminal(self, width, height,
     instance.load_position = terminal_load_position
     instance.move_to = terminal_move_to
     instance.fresh_row = terminal_fresh_row
+    instance.discard = terminal_discard
     instance.hide_cursor = terminal_hide_cursor
     instance.show_cursor = terminal_show_cursor
     instance.reverse_cursor = terminal_reverse
