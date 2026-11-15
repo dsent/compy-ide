@@ -359,6 +359,9 @@ local CONSOLE = {
     D.key(wait, 'escape')
     D.type(wait, 'print("row " .. 6 * 7)')
     D.key(wait, 'return')
+    -- the echo of the line goes first, and the output takes
+    -- its time: 800 characters a second
+    wait(.5)
     assert(string.find(P.console_text(), 'row 42', 1, true), 'not run')
   end },
   ['Shift/Alt+Enter'] = { 'break the line', function(wait)
