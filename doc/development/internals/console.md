@@ -176,7 +176,7 @@ Projects receive a `compy` table with:
 | Field | Contents |
 |---|---|
 | `compy.audio` | Sound effects (`sfx.beep()`, `sfx.gameover()`, etc.) — `src/util/audio.lua` |
-| `compy.terminal` | VT-100 terminal control (`gotoxy`, `clear`, `show_cursor`, `hide_cursor`); a `gotoxy` position outside the screen is taken to the nearest edge |
+| `compy.terminal` | VT-100 terminal control (`gotoxy`, `clear`); a `gotoxy` position outside the screen is taken to the nearest edge |
 | `compy.graphics` | Extended graphics (`shape2d`) — `src/util/graphics/shape2d.lua` |
 | `compy.fonts` | Font path constants (`mono`, `sans`, `serif`, etc.) — `src/util/namespace/fonts.lua` |
 | `compy.input` | Text input widget surface (`show`/`hide`/`configure`/`clear`/`set_text`) — see [`user_input.md`](user_input.md) |

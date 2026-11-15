@@ -643,7 +643,9 @@ local compy_graphics = {
 -- Builds the `compy.terminal` sub-namespace — the console
 -- OUTPUT surface. These wrap the live `terminal` (the
 -- REPL/console text grid): position the grid cursor
--- (gotoxy), show/hide it, and clear the screen. This is
+-- (gotoxy) and clear the screen. The grid's cursor is not
+-- the program's to show (the maintainer's ruling "Programs
+-- lose show_cursor and hide_cursor"). This is
 -- where a project WRITES to the console; always present
 -- while the project runs. Contrast with `compy.input`
 -- below, the input solicitation surface.
@@ -653,12 +655,6 @@ local get_compy_terminal = function(terminal)
     --- @param y number
     gotoxy = function(x, y)
       return terminal:move_to(x, y)
-    end,
-    show_cursor = function()
-      return terminal:show_cursor()
-    end,
-    hide_cursor = function()
-      return terminal:hide_cursor()
     end,
     clear = function()
       terminal:move_to(1, 1)

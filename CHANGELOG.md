@@ -216,6 +216,11 @@ Project-author guide: `doc/input_api.md`.
 
 ### Removed
 
+- **`compy.terminal.show_cursor()` and `hide_cursor()`** (also on `tty`). They never
+  worked: `show_cursor()` stopped the program with an error, and the output is drawn
+  over the grid's cursor, so even a working call would have shown nothing. A person
+  types in the field under the status line, and the output only shows text, so a cursor
+  there would mark nothing. `gotoxy` and `clear` stay.
 - **The editor's checkpoints and `revert()`.** The editor no longer writes or restores
   `name.~save` checkpoint files (Ctrl+K and Ctrl+Shift+K had already gone), and the
   console's `revert()` is gone with them: saving a copy of a project is the reset
