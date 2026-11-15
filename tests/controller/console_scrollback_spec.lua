@@ -836,3 +836,24 @@ describe("the echo of an entered line #console", function()
     assert.same(colors().echo, found.runs[1].style.color)
   end)
 end)
+
+describe("list_projects() #console", function()
+  before_each(function() reset() end)
+  after_each(cleanup)
+
+  it("prints below what is on the screen, clearing nothing",
+    function()
+      print_lines(1, 5)
+      run("list_projects()")
+      local seq = sequence()
+      local l5, header
+      for i, r in ipairs(seq) do
+        if r == "L5" then l5 = i end
+        if r == "Projects:" then header = header or i end
+      end
+      assert.is_not_nil(header)
+      assert.is_not_nil(l5)
+      assert.is_true(l5 < header)
+      assert.same({ 1, 2, 3, 4, 5 }, marks(seq))
+    end)
+end)

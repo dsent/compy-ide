@@ -1560,8 +1560,9 @@ function ConsoleController.prepare_project_env(cc)
       -- no projects, display a message about it
       print(P.messages.no_projects)
     else
-      -- list projects
-      cc.model.output:reset()
+      -- below what is on the screen, as list_contents() prints
+      -- (the maintainer's ruling "Console scrollback, first
+      -- version")
       print(P.messages.list_header)
       for _, p in ipairs(ps) do
         print('> ' .. p.name)
