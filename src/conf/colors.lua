@@ -18,7 +18,7 @@ require("util.color")
 --- @field highlight_special RGB
 --- @field results BaseColors
 --- @field cue CueColors
---- @field wrap_bar RGB
+--- @field wrap_mark WrapMarkTheme
 
 --- The continuation cue (FR4.8): the edge row's own background
 --- laid over it, `fade` opaque at the edge and clear at the
@@ -102,8 +102,14 @@ return {
       box = Color[Color.gray],
       box_alpha = .25,
     },
-    --- the bar beside a line that takes more than one row
-    wrap_bar = Color[Color.gray],
+    --- the mark at the top left of a row that continues a line
+    --- (view/wrapMark.lua): black, a fillet of 6 pixels with
+    --- a square outer corner
+    wrap_mark = {
+      color = Color[Color.black],
+      size = 6,
+      round = 0,
+    },
   },
   input = {
     console = {
@@ -150,14 +156,14 @@ return {
   statusline = {
     --- dark gray, so that the black notice band above it
     --- stands apart (the maintainer's ruling of November 15,
-    --- 2026); its warning, '[no sd card]', is lighter than the
-    --- other status lines' orange, to read on the gray
+    --- 2026); its warning, '[no sd card]', is gold, which
+    --- reads on the gray where the other lines' orange does not
     console = {
       fg = Color[Color.white + Color.bright],
       bg = Color[Color.black + Color.bright],
       indicator = indicator,
       special = special,
-      warning = Color[Color.tan + Color.bright],
+      warning = Color[Color.gold + Color.bright],
       error = error,
     },
     user = {

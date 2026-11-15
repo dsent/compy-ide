@@ -3,7 +3,7 @@ require("view.input.statusline")
 local class = require('util.class')
 local Layout = require("view.layout")
 local Cue = require("view.continuationCue")
-local WrapBar = require("view.wrapBar")
+local WrapMark = require("view.wrapMark")
 local Blink = require('view.input.cursorBlink')
 require("util.debug")
 require("util.view")
@@ -294,9 +294,8 @@ function UserInputView:render_input(input, status, time)
 
   local shown = vc:get_range()
   local function row_y(r) return self:row_y(field_row(r)) end
-  WrapBar.draw(WrapBar.strokes(vc.wrap_forward, vc.wrap_reverse,
-    vc.offset + 1, vc.offset + inLines, row_y, fh),
-    cf_colors.editor.wrap_bar)
+  WrapMark.draw(WrapMark.rows(vc.wrap_reverse, vc.offset + 1,
+    vc.offset + inLines), row_y, cf_colors.editor.wrap_mark)
 
   if highlight then
     gfx.push('all')

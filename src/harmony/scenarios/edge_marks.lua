@@ -5,8 +5,9 @@ local D = require('harmony.drive')
 --- rulings of November 15, 2026), read from its pixels against
 --- the theme (conf/colors.lua): the continuation cue, the edge
 --- row's fade and the mark in its last column (FR4.8), and a
---- wrapped line's bar at the left edge, on gray, white and
---- yellow rows and in the field.
+--- wrapped line's mark at the top left of each row that
+--- continues it, on gray, white and yellow rows and in the
+--- field.
 
 local PROJECT = 'h-edges'
 
@@ -102,14 +103,13 @@ scenario('cue', function(wait)
   hm_done()
 end)
 
-scenario('wrap-bar', function(wait)
+scenario('wrap-mark', function(wait)
   local t = theme()
   local v = P.cc().cfg.view
   local fh = v.fh
-  local half = math.floor(fh / 2)
   local dots = string.rep('.', 150)
   wait(.1)
-  D.open(wait, PROJECT, 'bars.txt', { ['bars.txt'] =
+  D.open(wait, PROJECT, 'marks.txt', { ['marks.txt'] =
     table.concat({ dots, 'one', dots, dots, 'end' }, '\n') .. '\n' })
   -- line 4 the target, line 3 browsed, line 1 plain
   D.press(wait, 'up', 2)
@@ -118,35 +118,37 @@ scenario('wrap-bar', function(wait)
   D.eq(P.target(), 4, 'the target')
   D.eq(P.position(), 3, 'the browsed line')
   local img = P.capture(wait)
-  D.shot(wait, 'bars')
-  local bar = t.editor.wrap_bar
+  D.shot(wait, 'marks')
+  local mark = t.editor.wrap_mark
   local fwd = P.view().content.wrap_forward
+  --- the mark of a 6 pixel fillet: its corner, the ends of its
+  --- two arms, and its inside left clear
+  local function marked(y, what)
+    is(px(img, 0, y), mark.color, what .. ', its corner')
+    is(px(img, 3, y), mark.color, what .. ', along the top')
+    is(px(img, 0, y + 3), mark.color, what .. ', down the edge')
+    assert(not P.near(px(img, 2, y + 2), mark.color),
+      what .. ': hollow inside')
+    assert(not P.near(px(img, 0, y + 5), mark.color),
+      what .. ': six pixels at most')
+  end
   for _, l in ipairs({ { 1, 'gray' }, { 3, 'white' },
     { 4, 'yellow' } }) do
     local rows = fwd[l[1]]
     D.eq(#rows, 3, 'the rows of line ' .. l[1])
-    local y1, y2, y3 = row_y(rows[1]), row_y(rows[2]),
-        row_y(rows[3])
-    local what = 'the bar beside the ' .. l[2] .. ' line'
-    is(px(img, 1, y2 + half), bar, what .. ', its middle row')
-    is(px(img, 1, y1 + fh - 3), bar, what .. ', its first row\'s '
-      .. 'lower half')
-    is(px(img, 1, y3 + 3), bar, what .. ', its last row\'s upper '
-      .. 'half')
-    assert(not P.near(px(img, 1, y1 + 3), bar),
-      what .. ': none above the first row\'s middle')
-    assert(not P.near(px(img, 1, y3 + fh - 3), bar),
-      what .. ': none below the last row\'s middle')
-    assert(not P.near(px(img, 4, y2 + half), bar),
-      what .. ': three pixels wide')
+    local what = 'the ' .. l[2] .. ' line'
+    assert(not P.near(px(img, 0, row_y(rows[1])), mark.color),
+      what .. ': no mark on its first row')
+    marked(row_y(rows[2]), what .. ', its second row')
+    marked(row_y(rows[3]), what .. ', its third row')
   end
   -- the draft in the field: line 4, three rows under the
   -- status line
   local _, bottom = P.band(img, t.statusline.editor.bg)
   local first = bottom + 1
-  is(px(img, 1, first + fh + half), bar, 'the bar in the field')
-  is(px(img, 5, first + fh + half), t.input.console.bg,
-    'the field beside the bar')
+  assert(not P.near(px(img, 0, first), mark.color),
+    'the field: no mark on the line\'s first row')
+  marked(first + fh, 'the field, the second row')
   D.leave(wait)
   hm_done()
 end)

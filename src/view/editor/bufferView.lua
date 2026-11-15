@@ -3,7 +3,7 @@ require("view.editor.visibleStructuredContent")
 local class = require("util.class")
 local Layout = require("view.layout")
 local Cue = require("view.continuationCue")
-local WrapBar = require("view.wrapBar")
+local WrapMark = require("view.wrapMark")
 require("util.scrollable")
 require("util.table")
 -- local B = require("util.block")
@@ -544,9 +544,9 @@ function BufferView:draw(special, bottom)
     end
   end
 
-  local draw_bars = function()
-    WrapBar.draw(WrapBar.strokes(vc.wrap_forward, vc.wrap_reverse,
-      range.start, range.fin, row_y, fh), colors.wrap_bar)
+  local draw_marks = function()
+    WrapMark.draw(WrapMark.rows(vc.wrap_reverse, range.start,
+      range.fin), row_y, colors.wrap_mark)
   end
 
   --- The continuation cue (FR4.8, IS2.2) at an edge of the view
@@ -595,7 +595,7 @@ function BufferView:draw(special, bottom)
 
   draw_background()
   draw_highlight()
-  draw_bars()
+  draw_marks()
   draw_text()
   draw_cues()
   draw_debuginfo()
