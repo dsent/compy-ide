@@ -8,7 +8,7 @@ local D = require('harmony.drive')
 --- continuation cue at a cut edge and none at rest; the first
 --- step from a nearly empty screen, which fills it; the echo of
 --- an entered line in blue and its error after it in the
---- output's color; and the key card's rows.
+--- output's error color; and the key card's rows.
 
 --- @return table
 local function theme() return P.cc().cfg.view.colors end
@@ -131,10 +131,10 @@ scenario('echo', function(wait)
   local _, out = P.cell(img, 1, 2, top())
   is(out, t.terminal.fg, 'what it printed is in the output\'s color')
   local _, err = P.cell(img, 1, 3, top())
-  is(err, t.terminal.fg, 'its error is in the output\'s color')
+  is(err, t.terminal.error, 'its error is in the output\'s error color')
   assert(P.console_text():find('boom', 1, true), 'the error is written')
-  -- the error closes, then the line kept under it goes
-  D.key(wait, 'escape')
+  assert(P.console_message() == nil, 'the error is not in the band')
+  -- the line kept in the field goes
   D.key(wait, 'escape')
   hm_done()
 end)
