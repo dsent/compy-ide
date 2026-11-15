@@ -157,6 +157,9 @@ local function console()
     D.eq(P.console_draft(), 'print("old " .. 2)', 'Up, the edit kept')
     D.shot(wait, 'walk-4-edit-kept')
     D.key(wait, 'return')
+    -- the echo of the line goes first, and the output takes
+    -- its time: 800 characters a second
+    wait(.5)
     assert(string.find(P.console_text(), 'old 2', 1, true),
       'the edited line did not run')
     D.key(wait, 'up')
