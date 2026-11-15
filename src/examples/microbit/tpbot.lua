@@ -1,5 +1,5 @@
 -- tpbot.lua: the micro:bit firmware for the Compy's robot lessons. It is
--- the start-up script of the firmware the Compy ships (773ed3e), prompt
+-- the start-up script of the firmware the Compy ships (3166307), prompt
 -- and radio link included, with the lessons' words added near its end:
 -- robot_info(), robot_move(left, right, seconds), turn(hours) and
 -- straight(steps). upload("tpbot.lua") puts it on the board, which then
@@ -579,12 +579,12 @@ do
   -- The module that drives the robot that answers, tpbot for a TPBot
   -- Classic and tpbot2 for a TPBot Edu, and its name
   local function robot()
-    local info = classic.info()
-    if not info.connected then error(NO_ROBOT, 0) end
-    if info.robot == "TPBot Classic" then
-      return classic, info.robot
+    local connected, name = classic.info()
+    if not connected then error(NO_ROBOT, 0) end
+    if name == "TPBot Classic" then
+      return classic, name
     end
-    return edu, info.robot
+    return edu, name
   end
 
   function robot_info()

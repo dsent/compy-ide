@@ -1,6 +1,6 @@
 -- tpbot-radio.lua: the micro:bit firmware for a robot the Compy's robot
 -- lessons drive by radio. It is tpbot.lua, the start-up script of the
--- firmware the Compy ships (773ed3e) with the lessons' words, and at
+-- firmware the Compy ships (3166307) with the lessons' words, and at
 -- every start it waits for a call: listen() without a name, so a board
 -- that calls it with connect("<this board's name>") gets it again after
 -- the robot lost power. upload("tpbot-radio.lua") puts it on the board;
@@ -580,12 +580,12 @@ do
   -- The module that drives the robot that answers, tpbot for a TPBot
   -- Classic and tpbot2 for a TPBot Edu, and its name
   local function robot()
-    local info = classic.info()
-    if not info.connected then error(NO_ROBOT, 0) end
-    if info.robot == "TPBot Classic" then
-      return classic, info.robot
+    local connected, name = classic.info()
+    if not connected then error(NO_ROBOT, 0) end
+    if name == "TPBot Classic" then
+      return classic, name
     end
-    return edu, info.robot
+    return edu, name
   end
 
   function robot_info()
