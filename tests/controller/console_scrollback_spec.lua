@@ -186,3 +186,217 @@ describe("the console's kept rows #console", function()
     assert.equal(0, fresh.kept:count())
   end)
 end)
+
+--- the scrolled view's rows' texts, top to bottom, spaces at
+--- their ends left out; nil at rest
+--- @return string[]?
+local function view()
+  local rows = output():window()
+  if not rows then return nil end
+  local t, out = output().terminal, { }
+  for i, r in ipairs(rows) do
+    local text = ""
+    if r.kept then
+      text = r.kept.text
+    elseif r.y then
+      text = table.concat(t.buffer[r.y])
+    end
+    out[i] = (text:gsub("%s+$", ""))
+  end
+  return out
+end
+
+--- the console's text as one sequence: the kept rows, then the
+--- screen's rows down to the last that holds text
+--- @return string[]
+local function sequence()
+  local out = kept()
+  local s = screen()
+  local last = 0
+  for y, r in ipairs(s) do
+    if r ~= "" then last = y end
+  end
+  for y = 1, last do out[#out + 1] = s[y] end
+  return out
+end
+
+--- the rows from `i` to `j` of `list`
+local function slice(list, i, j)
+  local out = { }
+  for n = i, j do out[#out + 1] = list[n] end
+  return out
+end
+
+--- what scrolling must not change: the grid's cells and the
+--- kept rows
+local function contents()
+  local t = output().terminal
+  local cells = { }
+  for y = 1, t.height do
+    for x = 1, t.width do
+      local s = t.state_buffer[y][x]
+      cells[#cells + 1] = table.concat({ t.buffer[y][x],
+        table.concat(s.color, ","), table.concat(s.backcolor, ","),
+        tostring(s.reversed == true) }, "|")
+    end
+  end
+  local k = output().kept
+  return { cells = cells, kept = kept(), first = k.first,
+    last = k.last, cursor = { t.cursor_x, t.cursor_y } }
+end
+
+describe("the console's scrolled view #console", function()
+  before_each(function() reset() end)
+  after_each(K.cleanup)
+
+  local H = 16
+
+  it("is the screen as it is at rest", function()
+    print_lines(1, 40)
+    assert.is_false(output():is_scrolled())
+    assert.is_nil(view())
+  end)
+
+  it("fills a nearly empty screen with history at once",
+    function()
+      print_lines(1, 40)
+      run("compy.terminal.clear()")
+      print_lines(41, 43)
+      output():scroll_row(-1)
+      local seq, v = sequence(), view()
+      assert.equal(H, #v)
+      assert.equal("L43", v[H])
+      assert.same(slice(seq, #seq - H + 1, #seq), v)
+      for _, r in ipairs(v) do assert.not_equal("", r) end
+    end)
+
+  it("moves a full screen's text by one row on the first step",
+    function()
+      print_lines(1, 40)
+      local s, k = screen(), kept()
+      output():scroll_row(-1)
+      local v = view()
+      assert.equal(k[#k], v[1])
+      assert.same(slice(s, 1, H - 1), slice(v, 2, H))
+    end)
+
+  it("moves a row at a time and stops at the oldest kept row",
+    function()
+      print_lines(1, 40)
+      output():scroll_row(-1)
+      local first = view()
+      output():scroll_row(-1)
+      assert.same(slice(first, 1, H - 1), slice(view(), 2, H))
+      for _ = 1, 100 do output():scroll_row(-1) end
+      local k = kept()
+      assert.same(slice(k, 1, H), view())
+      output():scroll_row(-1)
+      assert.same(slice(k, 1, H), view())
+    end)
+
+  it("returns to rest from the filled view", function()
+    print_lines(1, 40)
+    output():scroll_row(-1)
+    output():scroll_row(-1)
+    output():scroll_row(1)
+    assert.is_true(output():is_scrolled())
+    output():scroll_row(1)
+    assert.is_false(output():is_scrolled())
+    output():scroll_row(1)
+    assert.is_false(output():is_scrolled())
+  end)
+
+  it("pages by 15 rows with one carried over", function()
+    print_lines(1, 80)
+    local s = screen()
+    output():scroll_page(-1)
+    local p1 = view()
+    assert.equal(s[1], p1[H])
+    output():scroll_page(-1)
+    local p2 = view()
+    assert.equal(p1[1], p2[H])
+    output():scroll_page(1)
+    assert.same(p1, view())
+    output():scroll_page(1)
+    assert.is_false(output():is_scrolled())
+  end)
+
+  it("goes to the oldest kept row and back to rest", function()
+    print_lines(1, 80)
+    output():to_oldest()
+    assert.same(slice(kept(), 1, H), view())
+    output():to_rest()
+    assert.is_nil(view())
+  end)
+
+  it("does nothing while no row is kept", function()
+    print_lines(1, 5)
+    output():scroll_row(-1)
+    output():scroll_page(-1)
+    output():to_oldest()
+    assert.is_false(output():is_scrolled())
+  end)
+
+  it("stays where it is while new output arrives", function()
+    print_lines(1, 40)
+    for _ = 1, 5 do output():scroll_row(-1) end
+    local before = view()
+    for i = 41, 70 do output():push("L" .. i) end
+    K.frame(100)
+    assert.same(before, view())
+  end)
+
+  it("stays at the oldest row kept when the rows it showed are "
+    .. "dropped", function()
+      print_lines(1, 40)
+      output():to_oldest()
+      for i = 41, 1100 do output():push("L" .. i) end
+      K.frame(100)
+      assert.same(slice(kept(), 1, H), view())
+    end)
+
+  it("changes neither the screen nor the kept rows", function()
+    print_lines(1, 80)
+    local before = contents()
+    for _, step in ipairs({ { "scroll_row", -1 }, { "scroll_page", -1 },
+      { "to_oldest" }, { "scroll_row", 1 }, { "scroll_page", 1 },
+      { "scroll_row", -1 }, { "to_rest" } }) do
+      output()[step[1]](output(), step[2])
+      assert.same(before, contents(), step[1])
+    end
+  end)
+
+  it("is drawn from the kept rows and the screen, with the cue "
+    .. "at a cut edge", function()
+      print_lines(1, 80)
+      for _ = 1, 3 do output():scroll_row(-1) end
+      local s = K.screen()
+      local t = output().terminal
+      local cw, ch = t.char_width, t.char_height
+      local rows = { }
+      for _, p in ipairs(s.texts) do
+        local col, y = p.x / cw, p.y / ch
+        local mark = p.text == "^" or p.text == "v"
+        if col == math.floor(col) and y == math.floor(y)
+            and y < H and #p.text <= 4 and not mark then
+          rows[y + 1] = rows[y + 1] or { }
+          rows[y + 1][col + 1] = p.text
+        end
+      end
+      local drawn = { }
+      for i = 1, H do
+        local r = rows[i] or { }
+        local cells = { }
+        for x = 1, t.width do cells[x] = r[x] or " " end
+        drawn[i] = (table.concat(cells):gsub("%s+$", ""))
+      end
+      assert.same(view(), drawn)
+      local marks = { }
+      for _, p in ipairs(s.texts) do
+        if p.text == "^" or p.text == "v" then
+          marks[p.text] = true
+        end
+      end
+      assert.same({ ["^"] = true, v = true }, marks)
+    end)
+end)

@@ -56,7 +56,8 @@ function ConsoleView:draw(terminal, canvas, snapshot)
     local tc = self.controller.model.output.term_canvas
     self.canvas:draw(
       terminal, canvas, tc,
-      self.drawable_height, snapshot)
+      self.drawable_height, snapshot,
+      self.controller.model.output)
 
     if ViewUtils.conditional_draw('show_input') then
       self.input:draw()
