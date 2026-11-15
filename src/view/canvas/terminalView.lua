@@ -16,8 +16,8 @@ local function cell_colors(state)
 end
 
 --- How far each character's picture goes past its cell, for
---- each font
---- @type table<love.Font, table<string, integer>>
+--- each font and each width of a cell
+--- @type table<love.Font, table<number, table<string, integer>>>
 local reaches = setmetatable({ }, { __mode = 'k' })
 
 --- How far the picture of `char` goes, read from the glyph the
@@ -66,15 +66,21 @@ end
 
 --- How many cells to its right `char` paints into when a cell
 --- draws it: none for most characters, one or more for one
---- as wide as its cell or wider. Measured once for a character.
+--- as wide as its cell or wider. Measured once for a character
+--- in cells of one width.
 --- @param terminal table
 --- @param char string
 --- @return integer
 local function reach(terminal, char)
-  local known = reaches[terminal.font]
+  local widths = reaches[terminal.font]
+  if not widths then
+    widths = { }
+    reaches[terminal.font] = widths
+  end
+  local known = widths[terminal.char_width]
   if not known then
     known = { }
-    reaches[terminal.font] = known
+    widths[terminal.char_width] = known
   end
   local r = known[char]
   if r == nil then

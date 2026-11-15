@@ -669,6 +669,35 @@ describe("terminal view", function()
       trimmed(drawn("Wii")))
   end)
 
+  it("measures a character again for cells of another width",
+    function()
+      local font = {
+        getWidth = function() return 10 end,
+        getHeight = function() return 10 end,
+        getDPIScale = function() return 1 end,
+      }
+      local function first_row(cell_width)
+        local t = Terminal(200, 200, font, cell_width, 10)
+        t.rasterizers = { rasterizer }
+        t:print("Wi")
+        t:update(1000)
+        for i = #calls, 1, -1 do calls[i] = nil end
+        TerminalView.draw(t, t.canvas)
+        local after = { }
+        for _, call in ipairs(calls) do
+          if call:sub(1, 1) == "i" then break end
+          if #after > 0 or call:sub(1, 1) == "W" then
+            after[#after + 1] = call
+          end
+        end
+        return after
+      end
+      -- W is 10 wide: inside a cell of 20, to the edge of one
+      -- of 10
+      assert.same({ "W 0" }, first_row(20))
+      assert.same({ "W 0", "back 1" }, first_row(10))
+    end)
+
   it("draws the characters alone over a program's picture",
     function()
       assert.same({ "M 0", "i 1", "  2", "= 3", "i 4" },

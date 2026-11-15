@@ -333,11 +333,11 @@ local function terminal_update(terminal, dt)
         end
     end
     terminal.accumulator = frame_budget
-    -- What was written leaves the queue by moving its head: a
-    -- frame's cost is what it wrote, however much still waits.
-    -- The written entries are dropped once they are more than
-    -- half of the table, so each waiting entry is copied at most
-    -- once per halving and the table holds at most twice what
+    -- What was written leaves the queue by moving its head, so
+    -- most frames cost what they wrote, however much still
+    -- waits. The written entries are dropped once they are more
+    -- than half of the table: that frame copies all that waits,
+    -- once per halving, and the table holds at most twice what
     -- waits.
     local stdin, written = terminal.stdin, stdin_index - 1
     if written == #stdin then
