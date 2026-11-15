@@ -688,12 +688,26 @@ describe("the console's kept rows under any mix #console",
     it("hold every row that scrolled off since Ctrl+L, once and "
       .. "in order, the newest 1,000, and scrolling changes "
       .. "neither them nor the screen", function()
-        local t = output().terminal
-        local left = { }
-        local keep = t.on_row_leaving
-        t.on_row_leaving = function(chars, states)
-          left[#left + 1] = (table.concat(chars):gsub("%s+$", ""))
-          keep(chars, states)
+        --- The test's own picture of the 16 rows: each print is
+        --- a row of its own, the cursor's row the next blank one,
+        --- and the top row leaves when a print passes the
+        --- bottom. What left is recorded here, apart from the
+        --- console's code.
+        local H = output().terminal.height
+        local rows, cursor, left = { }, 1, { }
+        local function blank()
+          for y = 1, H do rows[y] = "" end
+          cursor = 1
+        end
+        blank()
+        local function print_row(text)
+          rows[cursor] = text
+          cursor = cursor + 1
+          if H < cursor then
+            left[#left + 1] = table.remove(rows, 1)
+            rows[H] = ""
+            cursor = H
+          end
         end
         local tty = K.cc:get_project_env().compy.terminal
         local n = 0
@@ -707,12 +721,15 @@ describe("the console's kept rows under any mix #console",
             for _ = 1, math.random(1, op == 4 and 400 or 20) do
               n = n + 1
               output():push("L" .. n)
+              print_row("L" .. n)
             end
           elseif op == 5 then
             tty.clear()
+            blank()
           elseif op == 6 then
             K.keys("lctrl", "l")
             K.frame(100)
+            blank()
             left = { }
           else
             K.frame(100)
@@ -721,15 +738,13 @@ describe("the console's kept rows under any mix #console",
             assert.same(before, contents(), "step " .. step)
           end
           K.frame(100)
+          local what = "step " .. step
+          assert.same(rows, screen(), what .. ": the screen")
           local want = { }
           for i = math.max(1, #left - 999), #left do
             want[#want + 1] = left[i]
           end
-          assert.same(want, kept(), "step " .. step)
-          local m = marks(kept())
-          for i = 2, #m do
-            assert.is_true(m[i - 1] < m[i], "step " .. step)
-          end
+          assert.same(want, kept(), what .. ": the kept rows")
         end
         assert.is_true(n > 1000)
       end)
