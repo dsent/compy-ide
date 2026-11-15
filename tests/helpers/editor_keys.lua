@@ -146,15 +146,16 @@ end
 --- Open the memory project; returns what puts the previous
 --- project, the filesystem and the clipboard back.
 --- A run (Ctrl+T) loads main.lua from the memory project, as
---- the project loader does from the card; returns what puts
---- the service's own loader back.
+--- the project service does from the card (ProjectService:run,
+--- codeload): a file Lua does not load gives its error to the
+--- run, not to the test; returns what puts the service's own
+--- loader back.
 local function stub_run(projects)
   local run = projects.run
   function projects.run(_, _, env)
-    local chunk = assert(
-      loadstring(files["main.lua"] or "", "main.lua")
-    )
-    return setfenv(chunk, env), nil, ROOT
+    local chunk, err = codeload(files["main.lua"] or "", env,
+      "main.lua")
+    return chunk, err, ROOT
   end
   return function()
     projects.run = run
