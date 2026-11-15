@@ -1233,6 +1233,36 @@ describe("the scrollback and the console's notice #console",
         for _, r in ipairs(screen()) do assert.equal("", r) end
       end)
 
+    --- the notice band covers the output's bottom rows and a cue
+    --- at that edge until the next key (the ruling "A notice is
+    --- drawn over the document view")
+    it("draws the band over a scrolled view and its bottom cue",
+      function()
+        print_lines(1, 80)
+        K.keys("pageup")
+        local _, _, below = output():window()
+        assert.is_true(below)
+        K.cc.input:set_error({ "a message" })
+        output().terminal.dirty = true
+        local s = K.screen()
+        local mark, band
+        for _, p in ipairs(s.texts) do
+          if p.text == "v" then mark = p end
+        end
+        for _, p in ipairs(s.texts) do
+          if p.text:find("a message", 1, true) then band = p end
+        end
+        for _, p in ipairs(s.field) do
+          if p.text:find("a message", 1, true) then band = band or p end
+        end
+        assert.is_not_nil(mark)
+        assert.is_not_nil(band)
+        assert.is_true(band.seq > mark.seq, "the band after the cue")
+        local fh = K.cc.cfg.view.fh
+        assert.is_true(math.abs(band.y - mark.y) < 2 * fh,
+          "the band over the output's bottom rows")
+      end)
+
     it("lets a typed key dismiss a message over a scrolled view, "
       .. "bring the screen back and type once", function()
         print_lines(1, 40)

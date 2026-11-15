@@ -116,8 +116,13 @@ local function console()
     D.in_state('ready')
     D.eq(P.cc().model.projects.current.name, open,
       'Escape on an empty field keeps the project')
+    --- the output's rows that print("second") wrote: its echo
+    --- (the scrollback's) reads print("second")
     local function seconds()
-      local _, n = string.gsub(P.console_text(), 'second', '')
+      local n = 0
+      for row in (P.console_text() .. '\n'):gmatch('(.-)\n') do
+        if row:match('^second%s*$') then n = n + 1 end
+      end
       return n
     end
     local before = seconds()
