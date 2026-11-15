@@ -85,7 +85,12 @@ a modifier, a lock key or <kbd>F1</kbd> brings the screen back,
 as do a program's start, stop or pause and a key the program
 takes. Each line the console runs is
 written to the output in blue before it runs, and its error
-after it. <kbd>Ctrl</kbd>+<kbd>L</kbd> empties the console: the
+after it, in red. A command that refuses says why in the output,
+in red too. The band above the status line belongs to the line
+being typed: it says why a line did not run because it does not
+parse, and, in orange, that a statement is not finished yet,
+when <kbd>Enter</kbd> begins its next line instead of running it.
+<kbd>Ctrl</kbd>+<kbd>L</kbd> empties the console: the
 screen, the kept rows and output still waiting to be written;
 `compy.terminal.clear()` from a program clears the screen alone.
 While a program's input field shows, or the program takes the

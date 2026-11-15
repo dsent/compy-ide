@@ -193,10 +193,13 @@ An error or a notice is shown one of two ways, chosen per field by
   failing character (IS3.4). `UserInputModel:set_notice(msg, kind)` stores it:
   each line of the message breaks between words at the field's width, and
   the band shows three rows at most, the last cut with `…`
-  (`UserInputView:notice_rows`). Its kind is `'notice'` (a refusal, in the
-  status line theme's `warning` colour) or `'error'` (a parser's, a load's or
-  a run's message, in the error colour); `set_error` on such a field stores an
-  error (`UserInputController:set_error`). The message blocks nothing: the
+  (`UserInputView:notice_rows`). Its kind is `'notice'` (a refusal or a hint,
+  in the status line theme's `warning` colour) or `'error'` (a parser's or a
+  load's message, in the error colour); `set_error` on such a field stores an
+  error (`UserInputController:set_error`). In the console the band holds only
+  what concerns the line being typed: why it was not taken, and the hint that
+  an unfinished statement takes Enter as its next line; what a line that ran
+  did is said in the output (`console.md`, "Console Input Evaluation"). The message blocks nothing: the
   next key or character dismisses it and does its usual work, Enter and
   Escape included; a modifier, a lock or a system key alone leaves it
   (`Key.is_lone`). A character that arrives before its key press dismisses it

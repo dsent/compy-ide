@@ -204,18 +204,29 @@ Project-author guide: `doc/input_api.md`.
   screen alone, and what was on it is gone. `list_projects()` no longer clears the screen:
   it lists below what is there.
 - **Each line the console runs is written to its output**, in blue, before it runs, so that
-  what it prints follows it; a line that fails also has its error written there, after its
-  output. A line the syntax check refuses is not written and stays in the field.
-- **The console shows an error as the file editor does**: a line the syntax refuses,
-  one Lua does not load, one that fails while it runs, and a paused program's error
-  show their message in a band directly above the status line, over the output's last
-  rows, without the `Errors:` heading. The line stays in the field with its cursor,
-  red from a syntax failure, and the status line no longer moves. The message blocks
-  nothing: the next key dismisses it and does its work, so Enter runs the line again,
-  Escape clears it and Up recalls the history. A program's own input field shows its
-  errors as before. `run()` while a project is paused now says so in that band, "A
-  project is already running: Ctrl+Q stops it.", where before its message was cleared
+  what it prints follows it; a line that fails also has its error written there, in red,
+  after its output, and the line stays in the field. A line the syntax check refuses is
+  not written and stays in the field.
+- **The console says what a command did in its output, and what the line being typed
+  needs in a band above the status line.** Every refusal of a console command, a typed
+  line's error and a program's error are written to the output in red; answers such as
+  "Project x opened" keep the output's colour, and so does the message of a program's
+  `pause("text")`. A line the syntax refuses or Lua does not load shows its message in
+  the band, over the output's last rows, without the `Errors:` heading; the line stays
+  in the field with its cursor, red from a syntax failure, and the status line no longer
+  moves. The message blocks nothing: the next key dismisses it and does its work, so
+  Enter tries the line again, Escape clears it and Up recalls the history. Enter on a
+  statement that is not finished begins its next line, as before, and the band now says
+  so in orange: "Not finished yet: Enter runs it once it is." A program's own input field
+  shows its errors as before. `run()` while a project is paused now says "A project is
+  already running: Ctrl+Q stops it." in the output, where before its message was cleared
   as it appeared.
+- **One sentence for each refusal.** `stop()` and `pause()` with nothing running say
+  "Nothing is running.", and `continue()` with nothing paused "Nothing is paused."; a file
+  the open project does not hold is "There is no NAME in this project." wherever it is
+  asked for; a command that needs a project with none open says "No project is open:
+  project("name") opens one."; and `project()` with no name says "A project needs a
+  name: project("name").".
 - **The console's history works as a classic shell's.** It holds only the lines that ran:
   Up no longer adds the line being typed, an edit to a recalled line no longer replaces
   the line that ran, and Escape no longer stores the line it clears. The line being typed

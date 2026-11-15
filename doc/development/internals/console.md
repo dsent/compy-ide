@@ -59,10 +59,12 @@ When Enter is pressed in the REPL (`ConsoleController:keypressed`, line 1009):
 1. `evaluate_input()` is called
 2. The input text is validated via the `Evaluator` (LuaEval — parse via metalua)
 3. If parse succeeds: `codeload(code, run_env)` compiles the string into a chunk with the appropriate `fenv` (console env normally; project env during `inspect`)
-4. The line is accepted: it enters the history, and `CanvasModel:echo` writes it to the output in `colors.terminal.echo` (blue), on a row of its own, before it runs. A line the parse refuses or continues is not echoed.
-5. `run_user_code(f, self)` executes the chunk inside `use_canvas` — so any `gfx.*` calls go to the virtual canvas
-6. Output from `print()` goes to the terminal via the `redirect_to` mechanism (set up in `src/main.lua`)
-7. On success: the input is cleared (`clear_text`), and a message the line itself set, such as `run()`'s refusal while a project is paused, stays in the notice band until the next key; any message shown before the line's Enter went with that key. On error: `CanvasModel:write_error` writes the error to the output after what the line printed, in the output's own color, and the error is also set on the input model and shown in the notice band directly above the status line, as the file editor shows its messages; the line stays in the field (`user_input.md`, "Error state").
+4. A line the parse refuses, or one Lua does not load, is not taken: its message shows in the notice band directly above the status line, as the file editor shows its messages, and the line stays in the field (`user_input.md`, "Error state"). A statement the parse continues takes Enter as its next line, and the band says so in orange (`UNFINISHED`, a notice).
+5. The line is accepted: it enters the history, and `CanvasModel:echo` writes it to the output in `colors.terminal.echo` (blue), on a row of its own, before it runs.
+6. `run_user_code(f, self)` executes the chunk inside `use_canvas` — so any `gfx.*` calls go to the virtual canvas. Output from `print()` goes to the terminal via the `redirect_to` mechanism (set up in `src/main.lua`)
+7. On success: the input is cleared (`clear_text`); any message shown before the line's Enter went with that key. On error: `CanvasModel:write_error` writes the error to the output after what the line printed, and the line stays in the field.
+
+The console has two channels (the maintainer's ruling of November 15, 2026). The notice band is the field's: it says why a line was not taken, and in orange a hint that is no error. What a command does is said in the output: `CanvasModel:write_error` writes a refusal or an error on a row of its own in `colors.terminal.error` (red), and an answer, such as "Project x opened", is printed in the output's own colour. Through `write_error` go every console command's refusal (`messages` in `consoleController.lua`, and `ProjectService.messages` for a file or a project), a typed line's run error, and a program's load and run errors (`run_project`, and `user_error_handler` in `controller.lua`, which pauses the program without a message). `pause("text")`'s text and Ctrl+Pause's are printed in the output's own colour when the program pauses (`ConsoleController:suspend`).
 
 During `inspect` state, the REPL runs code in `project_env`, allowing the user to inspect and mutate the paused project's state.
 
