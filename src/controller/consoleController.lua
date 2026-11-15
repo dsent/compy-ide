@@ -17,11 +17,14 @@ local TerminalTest = require("util.test_terminal")
 local KeyCard = require('model.editor.keyCard')
 local ConsoleKeys = require('model.input.consoleKeys')
 
+--- What the console's commands say when they refuse: in the
+--- output, through CanvasModel:write_error (the maintainer's
+--- ruling of November 15, 2026)
 local messages = {
-  file_does_not_exist = function(name)
-    local n = name or ''
-    return 'cannot open ' .. n .. ': No such file or directory'
-  end,
+  nothing_running = 'Nothing is running.',
+  nothing_paused  = 'Nothing is paused.',
+  already_running = 'A project is already running: Ctrl+Q stops it.',
+  needs_a_name    = 'A project needs a name: project("name").',
 }
 --- @class ConsoleController
 --- @field time number
@@ -306,13 +309,15 @@ end
 --- @param name string
 --- @return boolean tidy --- the file is formatted now
 function ConsoleController:tidy(name)
-  local p = self.model.projects.current
+  local PS = self.model.projects
+  local p = PS.current
+  local said = self.model.output
   if not p then
-    print('Open a project first')
+    said:write_error(PS.messages.no_open_project)
     return false
   end
   if not FS.exists(p:get_path(name)) then
-    print('There is no ' .. name .. ' in this project')
+    said:write_error(PS.messages.not_in_project(name))
     return false
   end
   local text = self:_readfile(name)
@@ -324,7 +329,7 @@ function ConsoleController:tidy(name)
   local out, formatted, why = buf.syntax.format(lines,
     display.columns)
   if not formatted then
-    print(name .. ' ' .. why)
+    said:write_error(name .. ' ' .. why)
     return false
   end
   if string.unlines(out) == string.unlines(lines) then
@@ -333,7 +338,7 @@ function ConsoleController:tidy(name)
   buf:replace_text(out)
   local ok, err = buf:save()
   if not ok then
-    print(err)
+    said:write_error(err)
     return false
   end
   return true
@@ -349,7 +354,7 @@ function ConsoleController:_readfile(name, quiet)
   if ok then
     return text_or_err
   elseif not quiet then
-    print(text_or_err)
+    self.model.output:write_error(text_or_err)
   end
 end
 
@@ -390,7 +395,7 @@ function ConsoleController:writefile(name, content)
   if ok then
     print(name .. ' written')
   else
-    print(err)
+    self.model.output:write_error(err)
   end
 end
 
@@ -490,8 +495,7 @@ function ConsoleController:run_project(name)
   if love.state.app_state == 'inspect' or
       love.state.app_state == 'running'
   then
-    self.input:notice(
-      { 'A project is already running: Ctrl+Q stops it.' })
+    self.model.output:write_error(messages.already_running)
     return
   end
   --- a program takes the keys from here: the screen at rest
@@ -568,7 +572,7 @@ function ConsoleController:run_project(name)
           self.run_live = false
         end
         love.state.app_state = 'ready'
-        print('Error: ', run_err)
+        self.model.output:write_error('Error: ' .. tostring(run_err))
       else
         if not self.main_ctrl.user_is_blocking() then
           -- The route is NOT released here. A non-blocking run
@@ -596,8 +600,7 @@ function ConsoleController:run_project(name)
         end
       end
     else
-      --- TODO extract error message here
-      print(load_err)
+      self.model.output:write_error(load_err)
     end
   end
 end
@@ -633,7 +636,7 @@ local function project_dofile(cc, filename, env)
       end
       return true, chunk()
     else
-      print(messages.file_does_not_exist(filename))
+      cc.model.output:write_error(P.messages.not_in_project(filename))
     end
   end
 end
@@ -1537,7 +1540,7 @@ function ConsoleController.prepare_project_env(cc)
   --- @param f function
   local check_open_pr          = function(f, ...)
     if not P.current then
-      print(P.messages.no_open_project)
+      cc.model.output:write_error(P.messages.no_open_project)
     else
       return f(...)
     end
@@ -1546,7 +1549,7 @@ function ConsoleController.prepare_project_env(cc)
   --- @param f function
   local check_microbit_path    = function(f, ...)
     if not love.paths.microbit_path then
-      print(P.messages.no_microbit_board)
+      cc.model.output:write_error(P.messages.no_microbit_board)
     else
       return f(...)
     end
@@ -1599,14 +1602,15 @@ function ConsoleController.prepare_project_env(cc)
   project_env.example_projects = function()
     local ok, err = P:deploy_examples()
     if not ok then
-      print('err: ' .. err)
+      cc.model.output:write_error(
+        'The examples could not be copied (' .. tostring(err) .. ').')
     end
   end
 
   project_env.clone            = function(old, new)
     local ok, err = P:clone(old, new)
     if not ok then
-      print(err)
+      cc.model.output:write_error(err)
     end
   end
 
@@ -1692,9 +1696,15 @@ function ConsoleController.prepare_project_env(cc)
 
   --- @param msg string?
   project_env.pause            = function(msg)
+    if not cc.run_live then
+      return cc.model.output:write_error(messages.nothing_running)
+    end
     cc:suspend_run(msg)
   end
   project_env.stop             = function()
+    if not cc.run_live then
+      return cc.model.output:write_error(messages.nothing_running)
+    end
     cc:stop_project_run()
   end
   project_env.continue         = function()
@@ -1709,7 +1719,7 @@ function ConsoleController.prepare_project_env(cc)
       cc.paused_mouse = nil
       set_mouse(mouse)
     else
-      print('No project halted')
+      cc.model.output:write_error(messages.nothing_paused)
     end
   end
 
@@ -1814,6 +1824,10 @@ function ConsoleController:get_timestamp()
   return self.time
 end
 
+--- What Enter says on a statement that is not finished, when
+--- it begins the statement's next line instead of running it
+local UNFINISHED = 'Not finished yet: Enter runs it once it is.'
+
 function ConsoleController:evaluate_input()
   local inter = self.input
 
@@ -1834,14 +1848,16 @@ function ConsoleController:evaluate_input()
       local f, load_err = codeload(code, run_env)
       if f then
         --- the line is taken: it enters the history and the
-        --- output before it runs, and stays there if running
-        --- it fails, its error written after what it printed
+        --- output before it runs, and stays in the field if
+        --- running it fails, its error written to the output
+        --- after what it printed, and nowhere else: the band
+        --- is the field's, for a line not taken (the
+        --- maintainer's ruling of November 15, 2026)
         inter:remember()
         self.model.output:echo(text)
         local _, err = run_user_code(f, self)
         if err then
           self.model.output:write_error(err)
-          inter:set_error({ err })
         else
           inter:clear_text()
         end
@@ -1853,6 +1869,10 @@ function ConsoleController:evaluate_input()
       local eval_err = res
       if eval_err then
         inter:set_error(eval_err)
+      else
+        --- the statement goes on: Enter has begun its next
+        --- line, and says why it ran nothing
+        inter:notice({ UNFINISHED })
       end
     end
   end
@@ -1906,9 +1926,11 @@ function ConsoleController:suspend()
   Log.info('Suspending project run')
   love.state.app_state = 'inspect'
   self.model.output:to_rest()
+  --- what the program said as it paused is said in the
+  --- output, as the rest of what it printed
   local msg = love.state.suspend_msg
   if msg then
-    self.input:set_error({ tostring(msg) })
+    print(tostring(msg))
     love.state.suspend_msg = nil
   end
 
@@ -1938,7 +1960,7 @@ function ConsoleController:open_project(name, play)
   self.model.output:to_rest()
   local P = self.model.projects
   if not name then
-    print('No project name provided!')
+    self.model.output:write_error(messages.needs_a_name)
     return false
   end
   local cur = P.current
@@ -1969,7 +1991,7 @@ function ConsoleController:open_project(name, play)
   elseif create then
     print('Project ' .. name .. ' created')
   else
-    print(err)
+    self.model.output:write_error(err)
   end
   return ok
 end
@@ -2148,7 +2170,7 @@ function ConsoleController:reset_scratchpad()
   if kept then
     print(P.messages.kept_as(name, kept))
   else
-    print(P.messages.not_kept(name))
+    self.model.output:write_error(P.messages.not_kept(name))
   end
   return self:open_project(name)
 end
@@ -2182,7 +2204,7 @@ function ConsoleController:edit(name, must_exist)
     if love.state.app_state == 'editor' then
       self.editor:refuse({ msg })
     else
-      print(msg)
+      self.model.output:write_error(msg)
     end
   end
   --- an edit in progress is resolved first (FR1.2): opening
@@ -2225,9 +2247,7 @@ function ConsoleController:edit(name, must_exist)
     text = got
   end
   if must_exist and not ex then
-    self.editor:refuse({
-      filename .. ' was not found in the project.'
-    })
+    self.editor:refuse({ PS.messages.not_in_project(filename) })
     return
   end
   --- admission (IS1.2): text that is not UTF-8 stays shut,

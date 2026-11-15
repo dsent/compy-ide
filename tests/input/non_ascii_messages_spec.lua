@@ -61,11 +61,14 @@ describe("text outside ASCII in messages #input", function()
     end
   end)
 
+  --- a run's error is said in the output (the maintainer's
+  --- ruling of November 15, 2026)
   it("a console error holding a byte that is not UTF-8 " ..
     "shows a replacement", function()
     K.type('error("\\195")')
     K.keys("return")
-    local msg = console_message()
+    K.frame(100)
+    local msg = K.console_text():match("[^\n]*L1:[^\n]*") or ""
     assert.truthy(msg:find(R, 1, true), msg)
     assert.is_true(valid(msg), msg)
     all_text(K.screen())

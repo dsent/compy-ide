@@ -1,14 +1,23 @@
--- The console shows an error as the editor does (the
--- maintainer's ruling of November 15, 2026): in the notice
--- band directly above the status line, over the output's last
--- rows, which do not move; the field keeps the draft and its
--- cursor, and the next key dismisses the message and still
--- acts. Keys only, through tests/helpers/editor_keys.lua, and
--- the screen through its real draw functions (K.screen).
+-- The console's notice band is the field's, as the editor's
+-- is (the maintainer's rulings of November 15, 2026): directly
+-- above the status line, over the output's last rows, which do
+-- not move, it says why a line was not taken, and in orange a
+-- hint that is no error; what a line that ran did, its error
+-- or a command's refusal included, is said in the output. The
+-- field keeps the draft and its cursor, and the next key
+-- dismisses the message and still acts. Keys only, through
+-- tests/helpers/editor_keys.lua, and the screen through its
+-- real draw functions (K.screen).
 
 local K = require("tests.helpers.editor_keys")
 local marks = require("tests.helpers.spec_marks")
 local spec_it = marks.spec_it
+
+--- a band message too long for its rows, set as the field's
+--- message (no line the console refuses says as much)
+local function long_message(msg)
+  K.cc.input:set_error({ msg })
+end
 
 --- a program that an error pauses; its handler goes as it
 --- fails
@@ -123,16 +132,17 @@ describe("the console's errors in the notice band #editor #spec",
     end)
 
     spec_it("NFR4.3 Understandable submission outcome: a "
-        .. "console line that fails while it runs shows its "
-        .. "message in the band, the line kept in the field",
-      function()
+        .. "console line that fails while it runs says so in the "
+        .. "output, in red, and not in the band, the line kept in "
+        .. "the field", function()
         K.reset()
         local before = K.screen()
         K.type('error("boom")')
         K.keys("return")
+        K.frame(100)
         local s = K.screen()
-        assert.truthy(band_text(s):find("boom", 1, true))
-        assert.same("error", K.cc.input:message_kind())
+        assert.is_nil(K.cc.view.input:notice_rows())
+        assert.truthy(K.console_text():find("L1:boom", 1, true))
         assert.same('error("boom")', K.console_draft())
         assert.truthy(field(s):find('error("boom")', 1, true))
         assert.same(before.field_y, s.field_y)
@@ -188,8 +198,7 @@ describe("the console's errors in the notice band #editor #spec",
         .. "the band shows three rows, broken between words, the "
         .. "last cut", function()
       K.reset()
-      K.type('error(string.rep("seven77 ", 40))')
-      K.keys("return")
+      long_message(string.rep("seven77 ", 40))
       local rows = band(K.screen())
       assert.same(3, #rows)
       for _, r in ipairs(rows) do
@@ -203,16 +212,15 @@ describe("the console's errors in the notice band #editor #spec",
         .. "lines takes a row for each, three at most",
       function()
         K.reset()
-        K.type('error("one\\ntwo\\nthree\\nfour", 0)')
-        K.keys("return")
+        long_message("one\ntwo\nthree\nfour")
         local rows = band(K.screen())
         assert.same({ "one", "two", "three…" },
           { rows[1].text, rows[2].text, rows[3].text })
       end)
 
     spec_it("NFR4.3 Understandable submission outcome: a "
-        .. "program paused by an error shows the error in the "
-        .. "console's band", function()
+        .. "program paused by an error says it in the output, the "
+        .. "band left empty", function()
       K.reset({ ["main.lua"] = PAUSES })
       K.open()
       K.keys("lctrl", "t")
@@ -222,18 +230,17 @@ describe("the console's errors in the notice band #editor #spec",
       -- context
       K.cc:suspend()
       assert.same("inspect", K.app_state())
-      local s = K.screen()
-      assert.truthy(band_text(s):find("Execution error", 1,
+      K.frame(100)
+      assert.is_nil(K.cc.view.input:notice_rows())
+      assert.truthy(K.console_text():find("Execution error", 1,
         true))
-      assert.same("error", K.cc.input:message_kind())
       K.type("a")
-      assert.is_false(K.cc.input:has_error())
       assert.same("a", K.console_draft())
     end)
   end)
 
   describe("a refusal said by the line that ran", function()
-    --- A program paused by an error, its message dismissed
+    --- A program paused by an error
     local function paused()
       K.reset({ ["main.lua"] = PAUSES })
       K.open()
@@ -241,32 +248,35 @@ describe("the console's errors in the notice band #editor #spec",
       K.frame()
       K.cc:suspend()
       assert.same("inspect", K.app_state())
-      K.keys("escape")
       assert.is_false(K.cc.input:has_error())
     end
 
     for _, line in ipairs({ "run()", 'run("other")',
       "run_project()" }) do
       spec_it("IS3.14 Explain a refusal: " .. line .. " while "
-          .. "a program is paused shows a notice in the band "
-          .. "until the next key, the line run and stored",
+          .. "a program is paused says it in the output, in red, "
+          .. "not in the band, the line run and stored",
         function()
           paused()
           K.type(line)
           K.keys("return")
-          local s = K.screen()
-          assert.same("A project is already running: Ctrl+Q "
-            .. "stops it.", band_text(s))
-          assert.same("notice", K.cc.input:message_kind())
-          assert.is_true(same_colour(
-            colors().input.notice.warning,
-            band(s)[1].colour))
+          K.frame(100)
+          assert.is_nil(K.cc.view.input:notice_rows())
+          local t = K.cc.model.output.terminal
+          local found
+          for y, r in ipairs(t.buffer) do
+            if table.concat(r):find("A project is already running: "
+                .. "Ctrl+Q stops it.", 1, true) then
+              found = t.state_buffer[y][1].color
+            end
+          end
+          assert.is_not_nil(found)
+          assert.is_true(same_colour(colors().terminal.error, found))
           -- the call returned: the line ran, so it is stored
           -- and the field is cleared
           assert.same("", K.console_draft())
           assert.same("inspect", K.app_state())
           K.keys("up")
-          assert.is_false(K.cc.input:has_error())
           assert.same(line, K.console_draft())
         end)
     end
@@ -293,10 +303,10 @@ describe("the console's errors in the notice band #editor #spec",
   end)
 
   describe("the next key", function()
-    --- Leave a run error showing over `line`
-    local function fails(line)
+    --- Leave the message of a line Lua does not load showing
+    local function fails()
       K.reset()
-      K.type(line or 'error("boom")')
+      K.type("break")
       K.keys("return")
       assert.is_true(K.cc.input:has_error())
     end
@@ -307,7 +317,7 @@ describe("the console's errors in the notice band #editor #spec",
         fails()
         K.type("x")
         assert.is_false(K.cc.input:has_error())
-        assert.same('error("boom")x', K.console_draft())
+        assert.same("breakx", K.console_draft())
       end)
 
     spec_it("IS3.14 Explain a refusal: a letter whose text "
@@ -316,16 +326,18 @@ describe("the console's errors in the notice band #editor #spec",
         fails()
         K.type_text_first("x")
         assert.is_false(K.cc.input:has_error())
-        assert.same('error("boom")x', K.console_draft())
+        assert.same("breakx", K.console_draft())
       end)
 
     spec_it("IS3.14 Explain a refusal: Enter in the console "
         .. "dismisses the message and runs the line", function()
-      fails("n = (n or 0) + 1 assert(n > 1)")
+      K.reset()
+      K.type("n = 7")
+      K.cc.input:set_error({ "an older message" })
       K.keys("return")
       assert.is_false(K.cc.input:has_error())
       assert.same("", K.console_draft())
-      assert.same(2, K.cc:get_project_env().n)
+      assert.same(7, K.cc:get_project_env().n)
     end)
 
     spec_it("IS3.14 Explain a refusal: an arrow in the console "
@@ -333,7 +345,7 @@ describe("the console's errors in the notice band #editor #spec",
       fails()
       K.keys("left")
       assert.is_false(K.cc.input:has_error())
-      assert.same({ 1, 13 }, cursor())
+      assert.same({ 1, 5 }, cursor())
     end)
 
     spec_it("IS3.14 Explain a refusal: Escape in the console "
@@ -353,7 +365,7 @@ describe("the console's errors in the notice band #editor #spec",
         assert.is_true(K.cc.input:has_error(), k)
       end
       K.keys("capslock")
-      assert.same('error("boom")', K.console_draft())
+      assert.same("break", K.console_draft())
     end)
 
     spec_it("IS3.16 Show the key card: the card covers the "
@@ -363,10 +375,10 @@ describe("the console's errors in the notice band #editor #spec",
       K.hold("f1")
       assert.is_not_nil(K.key_card())
       local s = K.screen()
-      assert.is_nil(K.screen_text(s.texts):find("boom", 1, true))
+      assert.is_nil(K.screen_text(s.texts):find("loop", 1, true))
       K.release("f1")
       assert.is_true(K.cc.input:has_error())
-      assert.truthy(band_text(K.screen()):find("boom", 1, true))
+      assert.truthy(band_text(K.screen()):find("loop", 1, true))
     end)
   end)
 end)

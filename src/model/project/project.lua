@@ -43,9 +43,14 @@ local messages = {
     local n = name or ''
     return n .. ' does not exist'
   end,
-  no_open_project     = 'No project is open',
-  no_microbit_board   = 'No micro:bit is plugged in',
-  flash_no_data       = 'No firmware data to flash',
+  --- a file the open project does not hold, in one sentence
+  --- wherever it is asked for
+  not_in_project      = function(name)
+    return 'There is no ' .. tostring(name) .. ' in this project.'
+  end,
+  no_open_project     = 'No project is open: project("name") opens one.',
+  no_microbit_board   = 'No micro:bit is plugged in.',
+  flash_no_data       = 'No firmware data to flash.',
   kept_as             = function(name, kept)
     return 'Your old ' .. name .. ' is kept as the project '
         .. kept .. '.'
@@ -138,7 +143,7 @@ function Project:readfile(name)
   end
 
   if not FS.exists(fp, "file", self.play) then
-    return false, messages.file_does_not_exist(name)
+    return false, messages.not_in_project(name)
   end
   --- the device's read gives the text or nil; the desktop's a
   --- flag, then the text or the reason

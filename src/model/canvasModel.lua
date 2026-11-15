@@ -102,13 +102,19 @@ function CanvasModel:echo(lines)
   t.dirty = true
 end
 
---- An accepted line's error, after what it printed, on a row
---- of its own in the output's color
+--- A refusal or an error, on a row of its own after what was
+--- printed, in the output's error color: the one way the
+--- console says that something did not happen (the
+--- maintainer's ruling of November 15, 2026)
 --- @param msg string
 function CanvasModel:write_error(msg)
   local t = self.terminal
+  local colors = self.cfg.view.colors.terminal
   t:fresh_row()
-  t:print(tostring(msg) .. '\n')
+  t:set_cursor_color(colors.error)
+  --- a byte that is not UTF-8 shows as U+FFFD, as in the band
+  t:print(string.scrub(tostring(msg)) .. '\n')
+  t:set_cursor_color(colors.fg)
   t.dirty = true
 end
 

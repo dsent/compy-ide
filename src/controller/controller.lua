@@ -107,8 +107,9 @@ local function user_error_handler(CC, msg)
   Log.debug('user error: ' .. msg)
   local err = LANG.get_call_error(msg) or ''
   local user_msg = messages.exec_error(err)
-  CC:suspend_run(user_msg)
-  print(user_msg)
+  --- said once, in the output: the pause adds nothing
+  CC:suspend_run()
+  CC.model.output:write_error(user_msg)
 end
 
 --- @param f function

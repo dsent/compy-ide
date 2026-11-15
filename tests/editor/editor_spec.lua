@@ -447,10 +447,17 @@ describe('Editor #editor', function()
             return FS.write(path, text)
           end,
         }
-        console = setmetatable({
-          model = { projects = { current = project } },
-        }, ConsoleController)
         printed = {}
+        require("model.project.project")
+        console = setmetatable({
+          model = {
+            projects = { current = project,
+              messages = ProjectService.messages },
+            output = { write_error = function(_, s)
+              table.insert(printed, s)
+            end },
+          },
+        }, ConsoleController)
         stub(_G, 'print', function(s) table.insert(printed, s) end)
       end)
 

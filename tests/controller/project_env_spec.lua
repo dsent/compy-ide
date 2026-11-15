@@ -216,14 +216,16 @@ describe('ConsoleController project env #project', function()
       CC:open_project(ProjectService.DEFAULT)
       local env = CC:get_project_env()
       local said = { }
-      local print_ = _G.print
-      _G.print = function(s) said[#said + 1] = s end
+      local out = CC.model.output
+      local write_error = out.write_error
+      out.write_error = function(_, s) said[#said + 1] = s end
       local loud = env.readfile('nothere.lua')
       local quiet = env.readfile('nothere.lua', true)
-      _G.print = print_
+      out.write_error = write_error
       assert.is_nil(loud)
       assert.is_nil(quiet)
-      assert.are.same({ 'nothere.lua does not exist' }, said)
+      assert.are.same({ 'There is no nothere.lua in this project.' },
+        said)
     end)
 
   it('get_effective_env is always the project env #project', function()
@@ -386,11 +388,12 @@ describe('ConsoleController project env #project', function()
       love.state.app_state = 'inspect'
       CC:close_project()
       local said = { }
-      local print_ = _G.print
-      _G.print = function(s) said[#said + 1] = s end
+      local out = CC.model.output
+      local write_error = out.write_error
+      out.write_error = function(_, s) said[#said + 1] = s end
       CC:get_project_env().continue()
-      _G.print = print_
-      assert.are.same({ 'No project halted' }, said)
+      out.write_error = write_error
+      assert.are.same({ 'Nothing is paused.' }, said)
       assert.are.equal('ready', love.state.app_state)
     end)
 

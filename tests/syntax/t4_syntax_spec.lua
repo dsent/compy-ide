@@ -185,7 +185,8 @@ describe("a fourth syntax, through keys #syntax #editor", function()
     K.keys("return")
     assert.same("x &\n  ", K.console_draft())
     assert.same({ 2, 3 }, { console.model:get_cursor_pos() })
-    assert.is_false(console:has_error())
+    -- no error: the hint that the statement goes on
+    assert.same("notice", console:message_kind())
     assert.is_nil(console.model:get_highlight().parse_err)
   end)
 

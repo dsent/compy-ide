@@ -17,7 +17,11 @@ describe('console error message #input', function()
   teardown(function() F.teardown() end)
   before_each(function() F.reset() end)
 
-  local failing = 'require("nosuch")'
+  --- a line the console does not take: it parses, and Lua
+  --- refuses to load it, so its message shows in the band (a
+  --- line that runs and fails says so in the output; the
+  --- maintainer's ruling of November 15, 2026)
+  local failing = 'break'
 
   --- One keystroke of a character, as a keyboard sends it.
   --- @param ch string
@@ -246,8 +250,8 @@ describe('console error message #input', function()
         assert.equal('', text())
       end)
 
-    -- the failing line loaded and ran, so it is the newest
-    -- entry: Up shows it, and Up again the line before
+    -- the failing line was not taken, so the history holds
+    -- the line before it: Up shows that one
     it('Up dismisses the message and walks the history',
       function()
         type_line('x=1')
@@ -255,8 +259,6 @@ describe('console error message #input', function()
         fail()
         stroke('up')
         assert.is_false(F.console:has_error())
-        assert.equal(failing, text())
-        stroke('up')
         assert.equal('x=1', text())
       end)
 

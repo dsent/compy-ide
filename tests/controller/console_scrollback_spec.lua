@@ -847,8 +847,8 @@ describe("the echo of an entered line #console", function()
     assert.is_nil(row_of("for i = 1, 2 do"))
   end)
 
-  it("is followed by the line's error, in the output's color",
-    function()
+  it("is followed by the line's error, in the output's error "
+    .. "color", function()
       run("print('a') error('boom')")
       local e = row_of("print('a') error('boom')")
       assert.is_not_nil(e)
@@ -856,8 +856,8 @@ describe("the echo of an entered line #console", function()
       local s, t = screen(), output().terminal
       local err = s[e + 2]
       assert.truthy(err:find("boom", 1, true), err)
-      assert.same(colors().fg, t.state_buffer[e + 2][1].color)
-      assert.is_true(K.cc.input:has_error())
+      assert.same(colors().error, t.state_buffer[e + 2][1].color)
+      assert.is_false(K.cc.input:has_error())
     end)
 
   it("writes each line of a command on a row of its own",
@@ -1290,10 +1290,11 @@ describe("the scrolled view's rule #console", function()
     end)
 end)
 
---- The console's messages show in the notice band above the
---- status line, over the output's bottom rows (the editor
---- branch's ruling of November 15, 2026); the next key that is
---- not lone dismisses the message and does its work
+--- The console's field shows why a line was not taken in the
+--- notice band above the status line, over the output's bottom
+--- rows (the maintainer's rulings of November 15, 2026); the
+--- next key that is not lone dismisses the message and does
+--- its work. A run's error is said in the output alone.
 describe("the scrollback and the console's notice #console",
   function()
     before_each(function() reset() end)
@@ -1305,15 +1306,15 @@ describe("the scrollback and the console's notice #console",
       return e
     end
 
-    it("shows a run error in the output and in the band", function()
+    it("shows a run error in the output alone", function()
       run("print('a') error('boom')")
       local s = screen()
       local a
       for y, r in ipairs(s) do if r == "a" then a = y end end
       assert.is_not_nil(a)
       assert.truthy(s[a + 1]:find("boom", 1, true))
-      assert.is_true(K.cc.input:has_error())
-      assert.truthy(tostring(message()):find("boom", 1, true))
+      assert.is_false(K.cc.input:has_error())
+      assert.is_nil(message())
       assert.is_false(output():is_scrolled())
     end)
 

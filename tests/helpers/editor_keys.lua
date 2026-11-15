@@ -59,6 +59,7 @@ local function memory_project()
     required = { },
     get_path = path_of,
     readfile = read,
+    load_file = Project.load_file,
     writefile = write
   }
 end
