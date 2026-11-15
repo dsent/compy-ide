@@ -106,7 +106,7 @@ describe("the console's errors in the notice band #editor #spec",
       assert.same("error", K.cc.input:message_kind())
       assert.same(s.field_y - fh(), rows[#rows].y)
       for _, r in ipairs(rows) do
-        assert.is_true(same_colour(colors().input.error,
+        assert.is_true(same_colour(colors().input.notice.error,
           r.colour))
       end
       -- no header, and nothing of the message in the field
@@ -177,7 +177,7 @@ describe("the console's errors in the notice band #editor #spec",
       local gone = K.screen()
       assert.is_nil(K.cc.view.input:notice_rows())
       for _, f in ipairs(gone.fills) do
-        assert.is_false(same_colour(colors().input.error_bg,
+        assert.is_false(same_colour(colors().input.notice.bg,
           f.colour or { }) and f.y + f.h == gone.field_y)
       end
       assert.same(text, K.console_text())
@@ -229,6 +229,66 @@ describe("the console's errors in the notice band #editor #spec",
       K.type("a")
       assert.is_false(K.cc.input:has_error())
       assert.same("a", K.console_draft())
+    end)
+  end)
+
+  describe("a refusal said by the line that ran", function()
+    --- A program paused by an error, its message dismissed
+    local function paused()
+      K.reset({ ["main.lua"] = PAUSES })
+      K.open()
+      K.keys("lctrl", "t")
+      K.frame()
+      K.cc:suspend()
+      assert.same("inspect", K.app_state())
+      K.keys("escape")
+      assert.is_false(K.cc.input:has_error())
+    end
+
+    for _, line in ipairs({ "run()", 'run("other")',
+      "run_project()" }) do
+      spec_it("IS3.14 Explain a refusal: " .. line .. " while "
+          .. "a program is paused shows a notice in the band "
+          .. "until the next key, the line run and stored",
+        function()
+          paused()
+          K.type(line)
+          K.keys("return")
+          local s = K.screen()
+          assert.same("A project is already running: Ctrl+Q "
+            .. "stops it.", band_text(s))
+          assert.same("notice", K.cc.input:message_kind())
+          assert.is_true(same_colour(
+            colors().input.notice.warning,
+            band(s)[1].colour))
+          -- the call returned: the line ran, so it is stored
+          -- and the field is cleared
+          assert.same("", K.console_draft())
+          assert.same("inspect", K.app_state())
+          K.keys("up")
+          assert.is_false(K.cc.input:has_error())
+          assert.same(line, K.console_draft())
+        end)
+    end
+
+    spec_it("IS3.14 Explain a refusal: a message shown before "
+        .. "Enter goes with that Enter, though the line runs "
+        .. "and sets none", function()
+      K.reset()
+      K.type("x = = 1")
+      K.keys("return")
+      assert.is_true(K.cc.input:has_error())
+      K.keys("home")
+      K.keys("delete")
+      K.type("y")
+      K.keys("end")
+      for _ = 1, 3 do K.keys("left") end
+      K.keys("backspace")
+      K.keys("backspace")
+      K.cc.input:set_error({ "an older message" })
+      K.keys("return")
+      assert.same("", K.console_draft())
+      assert.is_false(K.cc.input:has_error())
     end)
   end)
 

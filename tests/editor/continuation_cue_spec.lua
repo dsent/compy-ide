@@ -130,7 +130,7 @@ describe("the continuation cue #editor", function()
       local s = K.screen()
       local c = view_cues(s)
       assert.is_table(c.bottom)
-      local bg = view_cfg().colors.input.error_bg
+      local bg = view_cfg().colors.input.notice.bg
       local covered = false
       local after = false
       for _, f in ipairs(s.fills) do

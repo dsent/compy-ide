@@ -143,6 +143,13 @@ function UserInputController:clear()
   self:clear_error()
 end
 
+--- Empty the field and keep its message: one the line that
+--- just ran set, such as a refusal, is news (IS3.14). Any
+--- message shown before the line's Enter went with that key.
+function UserInputController:clear_text()
+  self.model:clear_input()
+end
+
 --- @param cs CustomStatus
 function UserInputController:set_custom_status(cs)
   self.model:set_custom_status(cs)

@@ -102,10 +102,9 @@ end
 local function theme()
   local colors = K.ed.view.cfg.colors
   return {
-    -- as the console's status line has '[no sd card]'
-    warning = colors.statusline.console.warning,
-    error = colors.input.error,
-    bg = colors.input.error_bg
+    warning = colors.input.notice.warning,
+    error = colors.input.notice.error,
+    bg = colors.input.notice.bg
   }
 end
 
@@ -354,7 +353,7 @@ describe("status line, notice and key card drawn #editor",
     -- the console's message is in its notice band now, above
     -- its status line (the ruling "The console shows an error
     -- as the editor does"), no longer in its field
-    it("the console's error stays in the error colour",
+    it("the console's error is in the band's error colour",
         function()
       K.reset({ ["main.lua"] = "x = 1\n" })
       K.type("x = = 1")
@@ -365,7 +364,7 @@ describe("status line, notice and key card drawn #editor",
       for _, t in ipairs(s.texts) do
         if t.text:find("expression", 1, true) then
           found = true
-          assert.is_true(same_colour(colors.input.error,
+          assert.is_true(same_colour(colors.input.notice.error,
             t.colour))
         end
       end

@@ -73,6 +73,9 @@ Project-author guide: `doc/input_api.md`.
   after a project moves it with `compy.input`.
 - **A notice is orange, the parser's message red.** The message above the status
   line has no frame.
+- **The band above the status line is dark gray**, in the editor and the console, so
+  that it stands apart from the console's black status line; its red and orange are
+  lighter, to read on it. A program's own field shows its errors as before.
 - **Leaving waits for the edit to end.** Ctrl+T, Ctrl+Q and Ctrl+R are refused
   with a notice while there is text in the field or a block is being replaced; submit
   it or drop it first. Ctrl+J is refused the same way.
@@ -210,7 +213,9 @@ Project-author guide: `doc/input_api.md`.
   red from a syntax failure, and the status line no longer moves. The message blocks
   nothing: the next key dismisses it and does its work, so Enter runs the line again,
   Escape clears it and Up recalls the history. A program's own input field shows its
-  errors as before.
+  errors as before. `run()` while a project is paused now says so in that band, "A
+  project is already running: Ctrl+Q stops it.", where before its message was cleared
+  as it appeared.
 - **The console's history works as a classic shell's.** It holds only the lines that ran:
   Up no longer adds the line being typed, an edit to a recalled line no longer replaces
   the line that ran, and Escape no longer stores the line it clears. The line being typed

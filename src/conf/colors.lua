@@ -42,6 +42,18 @@ require("util.color")
 --- @field cursor RGB
 --- @field error RGB  -- TODO pair these
 --- @field error_bg RGB  -- TODO pair these
+--- @field notice NoticeColors
+
+--- The notice band above the status line, in the editor and
+--- the console: dark gray, so that it stands apart from the
+--- console's black status line, with its text in the light
+--- red and orange that read on it (the maintainer's question
+--- of November 15, 2026). A program's field shows its error
+--- on `error_bg`, in `error`, as before.
+--- @class NoticeColors
+--- @field bg RGB
+--- @field error RGB --- a syntax or run error
+--- @field warning RGB --- a notice: a refusal
 
 --- @class SyntaxColors
 --- @field indices table<string, integer>
@@ -117,6 +129,11 @@ return {
     cursor = Color[Color.white + Color.bright],
     error = Color[Color.red],
     error_bg = Color[Color.black],
+    notice = {
+      bg = Color[Color.black + Color.bright],
+      error = Color[Color.salmon + Color.bright],
+      warning = Color[Color.orange + Color.bright],
+    },
   },
   lua_syntax = {
     indices = lua_i,

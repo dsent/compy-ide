@@ -62,7 +62,7 @@ When Enter is pressed in the REPL (`ConsoleController:keypressed`, line 1009):
 4. The line is accepted: it enters the history, and `CanvasModel:echo` writes it to the output in `colors.terminal.echo` (blue), on a row of its own, before it runs. A line the parse refuses or continues is not echoed.
 5. `run_user_code(f, self)` executes the chunk inside `use_canvas` — so any `gfx.*` calls go to the virtual canvas
 6. Output from `print()` goes to the terminal via the `redirect_to` mechanism (set up in `src/main.lua`)
-7. On success: input is cleared. On error: `CanvasModel:write_error` writes the error to the output after what the line printed, in the output's own color, and the error is also set on the input model and shown in the notice band directly above the status line, as the file editor shows its messages; the line stays in the field (`user_input.md`, "Error state").
+7. On success: the input is cleared (`clear_text`), and a message the line itself set, such as `run()`'s refusal while a project is paused, stays in the notice band until the next key; any message shown before the line's Enter went with that key. On error: `CanvasModel:write_error` writes the error to the output after what the line printed, in the output's own color, and the error is also set on the input model and shown in the notice band directly above the status line, as the file editor shows its messages; the line stays in the field (`user_input.md`, "Error state").
 
 During `inspect` state, the REPL runs code in `project_env`, allowing the user to inspect and mutate the paused project's state.
 
