@@ -35,7 +35,7 @@ describe("every chord is its own key #input", function()
       }
     end
 
-    it("Ctrl+Up and Ctrl+Down neither move nor recall",
+    it("Ctrl+Up and Ctrl+Down neither move the cursor nor recall",
       function()
         console()
         local before = snapshot()

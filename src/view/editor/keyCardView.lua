@@ -28,11 +28,12 @@ end
 
 --- The console's card.
 --- @param live boolean? --- a program is not stopped
+--- @param empty boolean? --- the field holds no text
 --- @return string[]
-function KeyCardView:console_lines(live)
+function KeyCardView:console_lines(live, empty)
   local rows, width = self:size()
   return KeyCard.lines_of(
-    KeyCard.console_cells(live), rows, width)
+    KeyCard.console_cells(live, empty), rows, width)
 end
 
 --- @param state EditorStateName
@@ -48,9 +49,10 @@ end
 --- @param statusline Statusline
 --- @param status Status
 --- @param live boolean? --- a program is not stopped
-function KeyCardView:draw_console(statusline, status, live)
+--- @param empty boolean? --- the field holds no text
+function KeyCardView:draw_console(statusline, status, live, empty)
   local colors = self.cfg.colors.statusline.console
-  local cells = KeyCard.console_cells(live)
+  local cells = KeyCard.console_cells(live, empty)
   self:draw_cells(cells, colors, statusline, status)
 end
 

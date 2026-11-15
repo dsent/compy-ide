@@ -51,7 +51,8 @@ function ConsoleView:draw(terminal, canvas, snapshot)
     if self.controller:key_card() then
       local c = self.controller
       return self.editor.key_card:draw_console(
-        self.input.statusline, c.input:get_status(), c.run_live)
+        self.input.statusline, c.input:get_status(), c.run_live,
+        c.input:is_empty())
     end
     local tc = self.controller.model.output.term_canvas
     self.canvas:draw(

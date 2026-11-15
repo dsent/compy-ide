@@ -2298,7 +2298,8 @@ end
 function ConsoleController:key_card()
   if love.state.app_state == 'editor' then return nil end
   if not KeyCard.shows(self.pressed) then return nil end
-  return self.view.editor.key_card:console_lines(self.run_live)
+  return self.view.editor.key_card:console_lines(self.run_live,
+    self.input:is_empty())
 end
 
 --- Whether a key card shows, the console's or the file
@@ -2333,6 +2334,7 @@ function ConsoleController:textinput(t)
     --- its key press. A chord's own glyph never comes here:
     --- the event gate stops it (Key.chord_text)
     input:clear_error()
+    self.model.output:to_rest()
     input:textinput(t)
   end
 end
@@ -2363,6 +2365,23 @@ local ACTIONS = {
     if not cc.input:has_error() then cc:evaluate_input() end
   end,
   clear_terminal = function(cc) cc.model.output:erase() end,
+  scroll_row = function(cc, k)
+    cc.model.output:scroll_row(k == 'up' and -1 or 1)
+  end,
+  scroll_page = function(cc, k)
+    cc.model.output:scroll_page(k == 'pageup' and -1 or 1)
+  end,
+  --- with text in the field, the field's Home and End
+  scroll_end = function(cc, k)
+    local out = cc.model.output
+    if not cc.input:is_empty() then
+      cc.input:keypressed(k)
+    elseif k == 'home' then
+      out:to_oldest()
+    else
+      out:to_rest()
+    end
+  end,
   terminal_test = function(cc)
     if love.DEBUG then cc:_terminal_test() end
   end,
@@ -2377,6 +2396,33 @@ local CLOSE_ONLY = {
   escape = true, up = true, down = true,
 }
 
+--- The keys that move the output's view (consoleKeys.lua);
+--- Home and End only while the field is empty
+local SCROLLS = {
+  scroll_row = true, scroll_page = true, scroll_end = true,
+}
+
+--- Keys that leave a scrolled view where it is: a modifier or a
+--- lock pressed on its own, and the help key
+local KEEPS_VIEW = {
+  capslock = true, numlock = true, scrolllock = true,
+}
+
+--- Every key but the ones that scroll brings the screen back
+--- before it does its work, so that no one types under an
+--- output whose newest row is hidden
+--- @param k string
+--- @param entry table? --- the console's table's entry
+function ConsoleController:_back_to_screen(k, entry)
+  local scrolls = entry and SCROLLS[entry.act]
+      and (entry.act ~= 'scroll_end' or self.input:is_empty())
+  if scrolls or Key.is_mod(k) or KEEPS_VIEW[k]
+      or k == KeyCard.KEY then
+    return
+  end
+  self.model.output:to_rest()
+end
+
 --- In the console a key is looked up by its full chord in the
 --- table of the console's state (consoleKeys.lua), then in the
 --- text field's (fieldKeys.lua); a chord neither names does
@@ -2387,6 +2433,9 @@ local CLOSE_ONLY = {
 function ConsoleController:keypressed(k, sc, isrepeat)
   local input = self.input
   if love.state.app_state == 'editor' then
+    --- a key that took the console to the editor, as Ctrl+T,
+    --- brings its screen back too
+    self.model.output:to_rest()
     self.editor:keypressed(k, sc, isrepeat)
     input:update_view()
     return
@@ -2415,6 +2464,7 @@ function ConsoleController:keypressed(k, sc, isrepeat)
     self:_terminal_test()
     return
   end
+  self:_back_to_screen(k, entry)
 
   -- doc/development/internals/user_input.md, "Error state":
   -- the line under the error is the one that failed, kept to

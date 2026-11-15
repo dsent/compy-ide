@@ -400,3 +400,266 @@ describe("the console's scrolled view #console", function()
       assert.same({ ["^"] = true, v = true }, marks)
     end)
 end)
+
+describe("the console's scrolling keys #console", function()
+  before_each(function() reset() end)
+  after_each(K.cleanup)
+
+  local H = 16
+
+  local function field()
+    local l, c = K.cc.input:get_cursor_pos()
+    return { K.console_draft(), l, c }
+  end
+
+  it("Ctrl+Up and Ctrl+Down move the view a row, the draft and "
+    .. "its cursor stay", function()
+      print_lines(1, 40)
+      K.type("half typed")
+      K.keys("left")
+      local before = field()
+      K.keys("lctrl", "up")
+      local one = view()
+      assert.is_not_nil(one)
+      K.keys("lctrl", "up")
+      assert.same(slice(one, 1, H - 1), slice(view(), 2, H))
+      K.keys("lctrl", "down")
+      assert.same(one, view())
+      K.keys("lctrl", "down")
+      assert.is_nil(view())
+      assert.same(before, field())
+    end)
+
+  it("PgUp and PgDn page the view, 15 rows with one carried "
+    .. "over", function()
+      print_lines(1, 80)
+      local s = screen()
+      K.keys("pageup")
+      local p1 = view()
+      assert.equal(s[1], p1[H])
+      K.keys("pageup")
+      assert.equal(p1[1], view()[H])
+      K.keys("pagedown")
+      assert.same(p1, view())
+      K.keys("pagedown")
+      assert.is_nil(view())
+    end)
+
+  it("Home and End go to the oldest and the newest row while the "
+    .. "field is empty", function()
+      print_lines(1, 80)
+      K.keys("home")
+      assert.same(slice(kept(), 1, H), view())
+      K.keys("end")
+      assert.is_nil(view())
+    end)
+
+  it("Home and End with text in the field are the field's keys, "
+    .. "and bring the screen back", function()
+      print_lines(1, 80)
+      K.type("abc")
+      K.keys("pageup")
+      K.keys("home")
+      assert.is_nil(view())
+      assert.same({ "abc", 1, 1 }, field())
+      K.keys("pageup")
+      K.keys("end")
+      assert.is_nil(view())
+      assert.same({ "abc", 1, 4 }, field())
+    end)
+
+  it("keep scrolling while held", function()
+    print_lines(1, 80)
+    K.hold("lctrl")
+    K.hold("up")
+    local one = view()
+    K.repeat_key("up")
+    K.repeat_key("up")
+    K.release("up")
+    K.release("lctrl")
+    assert.same(slice(one, 1, H - 2), slice(view(), 3, H))
+    K.hold("pageup")
+    local p = view()
+    K.repeat_key("pageup")
+    K.release("pageup")
+    assert.equal(p[1], view()[H])
+  end)
+
+  it("do nothing while no row is kept", function()
+    print_lines(1, 3)
+    for _, k in ipairs({ { "lctrl", "up" }, { "pageup" },
+      { "home" } }) do
+      K.keys(unpack(k))
+      assert.is_nil(view())
+    end
+  end)
+
+  it("a typed character, Enter, Escape, an arrow and Ctrl+T "
+    .. "bring the screen back", function()
+      print_lines(1, 40)
+      local function scrolled() K.keys("lctrl", "up") end
+      scrolled()
+      K.type("x")
+      assert.is_nil(view())
+      assert.equal("x", K.console_draft())
+      scrolled()
+      K.keys("left")
+      assert.is_nil(view())
+      scrolled()
+      K.keys("escape")
+      assert.is_nil(view())
+      scrolled()
+      K.type("y = 1")
+      K.keys("return")
+      assert.is_nil(view())
+      scrolled()
+      K.keys("lctrl", "t")
+      K.keys("lctrl", "t")
+      assert.same("ready", K.app_state())
+      assert.is_nil(view())
+    end)
+
+  it("a modifier alone and F1 leave the view where it is",
+    function()
+      print_lines(1, 40)
+      K.keys("lctrl", "up")
+      local v = view()
+      K.keys("lshift")
+      K.keys("lalt")
+      K.hold("f1")
+      K.release("f1")
+      assert.same(v, view())
+    end)
+
+  it("are the field's to a program that shows its field",
+    function()
+      reset({ ["main.lua"] =
+        "for i = 1, 40 do print('L' .. i) end\n"
+        .. "compy.input.show { }\n" })
+      run("run()")
+      assert.is_true(#kept() > 0)
+      K.keys("lctrl", "up")
+      K.keys("pageup")
+      assert.is_nil(view())
+    end)
+
+  it("are a program's that takes keys", function()
+    reset({ ["main.lua"] =
+      "for i = 1, 40 do print('L' .. i) end\n"
+      .. "function love.update() end\n"
+      .. "function love.keypressed(k) end\n" })
+    run("run()")
+    assert.is_true(#kept() > 0)
+    K.keys("lctrl", "up")
+    assert.is_nil(view())
+    -- the fixture keeps a program's love table for the next
+    -- run in this file: its handlers go with it
+    local lv = K.cc:get_project_env().love
+    lv.update, lv.keypressed = nil, nil
+  end)
+
+  it("scroll the output of a program that shows no field and "
+    .. "takes no keys", function()
+      reset({ ["main.lua"] =
+        "for i = 1, 40 do print('L' .. i) end\n"
+        .. "function love.update() end\n" })
+      run("run()")
+      assert.same("running", K.app_state())
+      K.keys("lctrl", "up")
+      assert.is_not_nil(view())
+    end)
+
+  it("scroll the output of a program that finished and idles "
+    .. "behind the console", function()
+      reset({ ["main.lua"] =
+        "for i = 1, 40 do print('L' .. i) end\n" })
+      run("run()")
+      assert.is_true(K.cc.run_live)
+      K.keys("lctrl", "up")
+      assert.is_not_nil(view())
+    end)
+
+  it("scroll the output while a program is paused", function()
+    reset({ ["main.lua"] =
+      "for i = 1, 40 do print('L' .. i) end\n"
+      .. "function love.update() love.update = nil; error('x') end\n" })
+    run("run()")
+    K.frame()
+    K.cc:suspend()
+    assert.same("inspect", K.app_state())
+    K.keys("lctrl", "up")
+    assert.is_not_nil(view())
+  end)
+
+  it("are on the console's card, paging left off", function()
+    local KeyCard = require("model.editor.keyCard")
+    local function card(empty)
+      return table.concat(KeyCard.lines_of(
+        KeyCard.console_cells(false, empty), 17, 64), "\n")
+    end
+    local empty = card(true)
+    assert.truthy(empty:find("Ctrl+Up/Down", 1, true))
+    assert.truthy(empty:find("scroll a row", 1, true))
+    assert.truthy(empty:find("Home/End", 1, true))
+    assert.truthy(empty:find("oldest/newest", 1, true))
+    assert.falsy(empty:find("PgUp", 1, true))
+    local typed = card(false)
+    assert.truthy(typed:find("scroll a row", 1, true))
+    assert.falsy(typed:find("oldest/newest", 1, true))
+  end)
+end)
+
+describe("the console's kept rows under any mix #console",
+  function()
+    before_each(function() reset() end)
+    after_each(K.cleanup)
+
+    it("hold every row that scrolled off since Ctrl+L, once and "
+      .. "in order, the newest 1,000, and scrolling changes "
+      .. "neither them nor the screen", function()
+        local t = output().terminal
+        local left = { }
+        local keep = t.on_row_leaving
+        t.on_row_leaving = function(chars, states)
+          left[#left + 1] = (table.concat(chars):gsub("%s+$", ""))
+          keep(chars, states)
+        end
+        local tty = K.cc:get_project_env().compy.terminal
+        local n = 0
+        local seed = 20261115
+        math.randomseed(seed)
+        local SCROLLS = { { "lctrl", "up" }, { "lctrl", "down" },
+          { "pageup" }, { "pagedown" }, { "home" }, { "end" } }
+        for step = 1, 300 do
+          local op = math.random(1, 10)
+          if op <= 4 then
+            for _ = 1, math.random(1, op == 4 and 400 or 20) do
+              n = n + 1
+              output():push("L" .. n)
+            end
+          elseif op == 5 then
+            tty.clear()
+          elseif op == 6 then
+            K.keys("lctrl", "l")
+            K.frame(100)
+            left = { }
+          else
+            K.frame(100)
+            local before = contents()
+            K.keys(unpack(SCROLLS[math.random(1, #SCROLLS)]))
+            assert.same(before, contents(), "step " .. step)
+          end
+          K.frame(100)
+          local want = { }
+          for i = math.max(1, #left - 999), #left do
+            want[#want + 1] = left[i]
+          end
+          assert.same(want, kept(), "step " .. step)
+          local m = marks(kept())
+          for i = 2, #m do
+            assert.is_true(m[i - 1] < m[i], "step " .. step)
+          end
+        end
+        assert.is_true(n > 1000)
+      end)
+  end)

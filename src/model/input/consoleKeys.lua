@@ -5,8 +5,7 @@
 --- nothing if that does not name it either: Ctrl with Enter is
 --- not Enter, Ctrl with Up is not Up (the maintainer's ruling
 --- of November 14, 2026). Shift+Ins, the file editor's
---- submit-and-keep, does nothing here, and neither do PgUp and
---- PgDn until they page the output (his rulings of the same
+--- submit-and-keep, does nothing here (his ruling of the same
 --- day).
 ---
 --- An action names ConsoleController's (`ACTIONS` in
@@ -48,7 +47,25 @@ local DEFS = {
   with(both('field', 'earlier/later'),
     { chords = { 'up', 'down' }, card = 'Up/Down',
       repeats = true }),
-  --- the output cleared
+  --- the output and its kept rows scrolled, a row at a time;
+  --- the draft stays (the maintainer's ruling "Console
+  --- scrollback, first version")
+  with(both('scroll_row', 'scroll a row'),
+    { chords = { 'ctrl+up', 'ctrl+down' }, card = 'Ctrl+Up/Down',
+      repeats = true }),
+  --- a page of 15 rows, one carried over ("PgUp and PgDn page
+  --- by the view")
+  with(both('scroll_page'),
+    { chords = { 'pageup', 'pagedown' }, repeats = true,
+      trivial = true }),
+  --- with the field empty, the oldest and the newest row; with
+  --- text in it, the field's own keys (trivial there)
+  with(both('scroll_end', function(empty)
+      return empty and 'oldest/newest' or nil
+    end),
+    { chords = { 'home', 'end' }, card = 'Home/End',
+      repeats = true }),
+  --- the screen and the kept rows cleared
   with(both('clear_terminal', 'clear screen'),
     { chords = { 'ctrl+l' }, card = 'Ctrl+L' }),
   --- IS3.16: its press brings up the card

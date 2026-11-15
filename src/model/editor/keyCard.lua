@@ -116,10 +116,11 @@ end
 --- paused or idles behind the console; with none it does
 --- nothing, and the card lists it among the other keys.
 --- @param live boolean? --- a program is not stopped
+--- @param empty boolean? --- the field holds no text
 --- @return table[]
-function KeyCard.console_cells(live)
+function KeyCard.console_cells(live, empty)
   return split('console',
-    KeyCard.rows(ConsoleKeys, live and 'live' or 'idle'))
+    KeyCard.rows(ConsoleKeys, live and 'live' or 'idle', empty))
 end
 
 --- The cells laid out in as few columns as fit `rows`, each
