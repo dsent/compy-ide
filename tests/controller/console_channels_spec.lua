@@ -244,6 +244,46 @@ describe("the console's channels #console", function()
       end)
   end
 
+  --- With no project open, which only an SD card that cannot
+  --- hold scratchpad leaves (closing a project, or the IDE's
+  --- start, cannot open or make it), every command that needs a
+  --- project says so in one sentence, and nothing else
+  describe("with no project open", function()
+    local NONE = "No project is open: the SD card cannot be used."
+
+    --- the state a card that cannot hold scratchpad leaves
+    local function no_project()
+      reset()
+      K.cc:_close_project()
+      assert.is_nil(K.cc.model.projects.current)
+    end
+
+    for _, cmd in ipairs({ "edit()", "edit('main.lua')",
+      "readfile('main.lua')", "readlines('main.lua')",
+      "writefile('a.txt', 'x')", "tidy()", "dofile('main.lua')",
+      "loadfile('main.lua')", "current_project()",
+      "list_contents()", "run()", "run_project()" }) do
+      it(cmd .. " says so", function()
+        no_project()
+        run(cmd)
+        said(NONE, colors().refusal, cmd)
+        local t = K.console_text()
+        assert.is_nil(t:find("nil", 1, true), t)
+        assert.is_nil(t:find("attempt to", 1, true), t)
+        assert.is_nil(t:find("Filename invalid", 1, true), t)
+        assert.same("ready", K.app_state())
+      end)
+    end
+
+    it("Ctrl+T says so", function()
+      no_project()
+      K.keys("lctrl", "t")
+      K.frame(100)
+      said(NONE, colors().refusal)
+      assert.same("ready", K.app_state())
+    end)
+  end)
+
   it("an answer stays in the output's own color", function()
     reset()
     K.next_project("other", { ["main.lua"] = "b = 1\n" })

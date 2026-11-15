@@ -25,6 +25,8 @@ local messages = {
   nothing_paused  = 'Nothing is paused.',
   already_running = 'A project is already running: Ctrl+Q stops it.',
   needs_a_name    = 'A project needs a name: project("name").',
+  --- only a card that cannot hold scratchpad leaves none open
+  no_project      = 'No project is open: the SD card cannot be used.',
 }
 --- @class ConsoleController
 --- @field time number
@@ -301,6 +303,20 @@ local function close_project(cc)
   end
 end
 
+--- The open project, or nil after saying why there is none.
+--- A project is always open (open_project); only an SD card
+--- that cannot hold scratchpad, when a project closes or the
+--- IDE starts, leaves none, and every command that needs one
+--- asks here.
+--- @return Project?
+function ConsoleController:open_or_refuse()
+  local p = self.model.projects.current
+  if not p then
+    self.model.output:write_refusal(messages.no_project)
+  end
+  return p
+end
+
 --- Format a project file the way the editor's Alt+F
 --- formats it, at a Compy's width: the REPL's `tidy(name)`.
 --- The file is written with LF line ends (BufferModel:save).
@@ -310,7 +326,8 @@ end
 --- @return boolean tidy --- the file is formatted now
 function ConsoleController:tidy(name)
   local PS = self.model.projects
-  local p = PS.current
+  local p = self:open_or_refuse()
+  if not p then return false end
   local said = self.model.output
   if not FS.exists(p:get_path(name)) then
     said:write_refusal(PS.messages.not_in_project(name))
@@ -438,8 +455,7 @@ end
 --- @return boolean? success
 --- @return string? err
 function ConsoleController:flash_to_drive(content)
-  local P = self.model.projects
-  local p = P.current
+  local p = self:open_or_refuse()
   if not p then
     return false
   end
@@ -499,6 +515,7 @@ function ConsoleController:run_project(name)
   self.model.output:to_rest()
   local P   = self.model.projects
   local cur = P.current
+  if not name and not self:open_or_refuse() then return end
   local ok
   if cur and (not name or cur.name == name) then
     ok = true
@@ -1548,9 +1565,20 @@ function ConsoleController.prepare_project_env(cc)
   project_env.require          = function(name)
     return project_require(name)
   end
-  project_env.dofile           = function(name)
-    return project_dofile(cc, name, cc:get_project_env())
+  --- `f`, for a command that needs a project: with none open
+  --- it says why and does nothing (ConsoleController:open_or_refuse)
+  --- @param f function
+  --- @return function
+  local function needs_project(f)
+    return function(...)
+      if not cc:open_or_refuse() then return end
+      return f(...)
+    end
   end
+
+  project_env.dofile           = needs_project(function(name)
+    return project_dofile(cc, name, cc:get_project_env())
+  end)
 
   --- project management
 
@@ -1579,9 +1607,9 @@ function ConsoleController.prepare_project_env(cc)
     close_project(cc)
   end
 
-  project_env.current_project  = function()
+  project_env.current_project  = needs_project(function()
     print('Currently open project: ' .. P.current.name)
-  end
+  end)
 
   project_env.example_projects = function()
     local ok, err = P:deploy_examples()
@@ -1604,36 +1632,36 @@ function ConsoleController.prepare_project_env(cc)
 
   --- file access
 
-  project_env.list_contents    = function()
+  project_env.list_contents    = needs_project(function()
     local p = P.current
     local items = p:contents()
     print(P.messages.project_header(p.name))
     for _, f in pairs(items) do
       print('• ' .. f.name)
     end
-  end
+  end)
 
   --- @param name string
   --- @param quiet boolean? says nothing when there is no such
   ---   file, for a caller that says it in its own words
   --- @return string?
-  project_env.readfile         = function(name, quiet)
+  project_env.readfile         = needs_project(function(name, quiet)
     --- @diagnostic disable-next-line: invisible
     return cc:_readfile(name, quiet)
-  end
+  end)
 
   --- @param name string
   --- @return string[]?
-  project_env.readlines        = function(name)
+  project_env.readlines        = needs_project(function(name)
     --- @diagnostic disable-next-line: invisible
     return cc:_readlines(name)
-  end
+  end)
 
   --- @param name string
   --- @param content string[]
-  project_env.writefile        = function(name, content)
+  project_env.writefile        = needs_project(function(name, content)
     return cc:writefile(name, content)
-  end
+  end)
 
   --- @param content string
   --- @param on table? see ConsoleController:flash_microbit
@@ -1652,9 +1680,9 @@ function ConsoleController.prepare_project_env(cc)
 
   --- @param name string
   --- @return function? chunk
-  project_env.loadfile         = function(name)
+  project_env.loadfile         = needs_project(function(name)
     return cc:loadfile(name)
-  end
+  end)
 
   --- @param name string
   project_env.edit             = function(name)
@@ -2194,7 +2222,7 @@ function ConsoleController:edit(name, must_exist)
   if self.stopping then return end
 
   local PS = self.model.projects
-  local p  = PS.current
+  local p  = self:open_or_refuse()
   if not p then return end
   local filename = name or ProjectService.MAIN
   local fpath = p:get_path(filename)

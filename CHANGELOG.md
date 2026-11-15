@@ -232,7 +232,9 @@ Project-author guide: `doc/input_api.md`.
   files, and left none open, so commands that need one refused until another was opened.
   Such a name is now refused before anything is closed: the program and the files stay
   as they were, and only the reason is said. If a project cannot be opened or made on the
-  SD card, the one that was open is opened again. `dofile()` of a file Lua does not load says Lua's error instead of saying the file
+  SD card, the one that was open is opened again. Only an SD card that cannot hold
+  `scratchpad` leaves no project open; every command that needs one then says "No
+  project is open: the SD card cannot be used." `dofile()` of a file Lua does not load says Lua's error instead of saying the file
   is not there.
 - **The console's history works as a classic shell's.** It holds only the lines that ran:
   Up no longer adds the line being typed, an edit to a recalled line no longer replaces
