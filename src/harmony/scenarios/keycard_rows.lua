@@ -13,7 +13,9 @@ local KeyCard = require('model.editor.keyCard')
 --- read and its key not pressed, since it would end the run.
 --- The trivial keys (the arrows in a draft, Home and End on its
 --- row, Backspace, Delete, paging) are on no card (the ruling
---- of November 14, late); fields.lua tries them. Also: Ctrl+Q
+--- of November 14, late); fields.lua tries them, and
+--- scrollback.lua the console's PgUp, PgDn, and Home and End
+--- with the field empty. Also: Ctrl+Q
 --- acts while F1 is held in the console, and is held back
 --- while the editor's card shows (the ruling of November 14).
 
@@ -409,6 +411,23 @@ local CONSOLE = {
   ['Ctrl+R'] = { 'run anew', function(wait)
     D.key(wait, 'escape')
     runs(wait, 'C-r')
+  end },
+  ['Ctrl+Up/Down'] = { 'scroll a row', function(wait)
+    D.key(wait, 'escape')
+    D.enter(wait, "for i = 1, 40 do print('row ' .. i) end")
+    wait(1)
+    D.type(wait, D0)
+    local out = P.cc().model.output
+    D.key(wait, 'C-up')
+    assert(out:is_scrolled(), 'Ctrl+Up did not scroll')
+    local t = out:top()
+    D.key(wait, 'C-up')
+    D.eq(out:top(), t - 1, 'Ctrl+Up, a row older')
+    D.key(wait, 'C-down')
+    D.eq(out:top(), t, 'Ctrl+Down, a row newer')
+    D.eq(P.console_draft(), D0, 'the draft stays')
+    D.key(wait, 'escape')
+    assert(not out:is_scrolled(), 'Esc brings the screen back')
   end },
   ['Ctrl+L'] = { 'clear screen', function(wait)
     D.key(wait, 'escape')
