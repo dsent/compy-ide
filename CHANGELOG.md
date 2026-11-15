@@ -73,10 +73,9 @@ Project-author guide: `doc/input_api.md`.
   after a project moves it with `compy.input`.
 - **A notice is orange, the parser's message red.** The message above the status
   line has no frame.
-- **The console's status line is dark gray**, so that the black band of an error or a
-  notice above it stands apart; its key card is dark gray with it, and its
-  `[no sd card]` is gold, which reads on the gray. The editor's status line and
-  a paused program's are as before.
+- **The console's status line is a near-black gray**, so that the black band of an
+  error or a notice above it stands apart; its key card is the same gray. The editor's
+  status line and a paused program's are as before.
 - **Leaving waits for the edit to end.** Ctrl+T, Ctrl+Q and Ctrl+R are refused
   with a notice while there is text in the field or a block is being replaced; submit
   it or drop it first. Ctrl+J is refused the same way.

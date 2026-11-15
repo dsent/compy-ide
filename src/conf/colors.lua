@@ -154,16 +154,17 @@ return {
     end)()
   },
   statusline = {
-    --- dark gray, so that the black notice band above it
-    --- stands apart (the maintainer's ruling of November 15,
-    --- 2026); its warning, '[no sd card]', is gold, which
-    --- reads on the gray where the other lines' orange does not
+    --- a near-black gray, #181818, so that the black notice
+    --- band above it stands apart while '[no sd card]' keeps
+    --- the orange of the other status lines (the maintainer's
+    --- ruling of November 15, 2026); the palette has no such
+    --- gray, so it is given as it is
     console = {
       fg = Color[Color.white + Color.bright],
-      bg = Color[Color.black + Color.bright],
+      bg = { 24 / 255, 24 / 255, 24 / 255, 1 },
       indicator = indicator,
       special = special,
-      warning = Color[Color.gold + Color.bright],
+      warning = warning,
       error = error,
     },
     user = {
