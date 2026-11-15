@@ -154,7 +154,7 @@ left from its first row to its last.
 When the editor cannot do what a key asks, it shows a notice
 just above the status line that says why and what would work.
 A text that is not valid Lua gets the parser's message there,
-in light red on dark gray; a notice is orange. The next key dismisses the message
+in red; a notice is orange. The next key dismisses the message
 and does its usual work. The editor asks no questions.
 
 Happy with the modifications now, we can leave the editor by

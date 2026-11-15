@@ -42,11 +42,9 @@ require("util.color")
 --- @field notice NoticeColors
 
 --- The notice band above the status line, in the editor and
---- the console: dark gray, so that it stands apart from the
---- console's black status line, with its text in the light
---- red and orange that read on it (the maintainer's question
---- of November 15, 2026). A program's field shows its error
---- on `error_bg`, in `error`, as before.
+--- the console: black, an error in red and a notice in orange.
+--- It is set apart from a program's own error display
+--- (`error_bg`, `error`), which has the same colours today.
 --- @class NoticeColors
 --- @field bg RGB
 --- @field error RGB --- a syntax or run error
@@ -124,9 +122,9 @@ return {
     error = Color[Color.red],
     error_bg = Color[Color.black],
     notice = {
-      bg = Color[Color.black + Color.bright],
-      error = Color[Color.salmon + Color.bright],
-      warning = Color[Color.orange + Color.bright],
+      bg = Color[Color.black],
+      error = Color[Color.red],
+      warning = Color[Color.orange],
     },
   },
   lua_syntax = {
@@ -150,12 +148,16 @@ return {
     end)()
   },
   statusline = {
+    --- dark gray, so that the black notice band above it
+    --- stands apart (the maintainer's ruling of November 15,
+    --- 2026); its warning, '[no sd card]', is lighter than the
+    --- other status lines' orange, to read on the gray
     console = {
       fg = Color[Color.white + Color.bright],
-      bg = Color[Color.black],
+      bg = Color[Color.black + Color.bright],
       indicator = indicator,
       special = special,
-      warning = warning,
+      warning = Color[Color.tan + Color.bright],
       error = error,
     },
     user = {
