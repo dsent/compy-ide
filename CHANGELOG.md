@@ -189,11 +189,13 @@ Project-author guide: `doc/input_api.md`.
   a row at a time, PageUp / PageDown a page of 15 rows with one carried over, and, while the
   field is empty, Home and End go to the oldest and the newest row. A scrolled view fills
   the screen, carries the editor's continuation cue at an edge with more beyond, and stays
-  where it is while new output arrives; any other key brings the screen back. The field
+  where it is while new output arrives; any other key but a modifier, a lock key or F1
+  brings the screen back, and so does a program's start, stop or pause. The field
   keeps its text and cursor. PageUp and PageDown no longer recall the history, which Up and
   Down still do. While a program's input field shows, or the program takes the keys
   itself, the keys are the program's. The key card lists Ctrl+Up/Down and Home/End.
-- **Ctrl+L also forgets the kept output**; a program's `compy.terminal.clear()` clears the
+- **Ctrl+L empties the console**: the screen, the kept output, and output still waiting
+  to be written when it is pressed. A program's `compy.terminal.clear()` clears the
   screen alone, and what was on it is gone. `list_projects()` no longer clears the screen:
   it lists below what is there.
 - **Each line the console runs is written to its output**, in blue, before it runs, so that

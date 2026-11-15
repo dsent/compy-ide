@@ -78,8 +78,10 @@ store (`src/model/keptRows.lua`): its text with a style (color, back
 color, reversal) for each run of characters, the newest
 `output_kept` rows (1,000, `src/main.lua`). Nothing else enters
 the kept rows: `CanvasModel:reset` (a clear from code,
-`compy.terminal.clear()`, closing a project) erases the 16 rows
-alone, and `CanvasModel:erase` (Ctrl+L) forgets the kept rows too.
+`compy.terminal.clear()`, and the play mode's quit) erases the 16
+rows alone, and `CanvasModel:erase` (Ctrl+L) also drops what still
+waits to be written and forgets the kept rows. Closing or opening
+a project leaves both as they are.
 
 The console's text is one sequence: the kept rows, numbered from
 `kept.first` to `kept.last`, then the screen's rows down to the
