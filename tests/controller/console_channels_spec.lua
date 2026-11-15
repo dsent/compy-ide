@@ -219,6 +219,31 @@ describe("the console's channels #console", function()
         end)
     end)
 
+  --- a refused command changes nothing: a name that cannot be
+  --- a project's is refused before the open project closes
+  for _, name in ipairs({ "'a/b'", "''" }) do
+    it("project(" .. name .. ") leaves a paused program paused and "
+      .. "its files open", function()
+        reset({ ["main.lua"] =
+          "function love.update() love.update = nil; error('x') end\n" })
+        K.open()
+        K.keys("lctrl", "t")
+        K.frame()
+        K.cc:suspend()
+        assert.same("inspect", K.app_state())
+        local open = K.cc.model.projects.current
+        local buffer = K.cc.editor:get_active_buffer()
+        assert.is_not_nil(buffer)
+        run("project(" .. name .. ")")
+        assert.same("inspect", K.app_state())
+        assert.is_true(K.cc.run_live)
+        assert.equal(open, K.cc.model.projects.current)
+        assert.equal(buffer, K.cc.editor:get_active_buffer())
+        local t = K.console_text()
+        assert.truthy(t:find("Filename invalid", 1, true), t)
+      end)
+  end
+
   it("an answer stays in the output's own color", function()
     reset()
     K.next_project("other", { ["main.lua"] = "b = 1\n" })

@@ -1945,6 +1945,16 @@ function ConsoleController:open_project(name, play)
     self.model.output:write_refusal(messages.needs_a_name)
     return false
   end
+  --- a refused command changes nothing: a name that cannot be
+  --- a project's is refused before the open project closes,
+  --- its run stopped and its files with it
+  if not play then
+    local valid, invalid = ProjectService.valid_name(name)
+    if not valid then
+      self.model.output:write_refusal(invalid)
+      return false
+    end
+  end
   local cur = P.current
   if cur then
     --- close directly: no redirect to the default project here,
@@ -1968,8 +1978,9 @@ function ConsoleController:open_project(name, play)
     --- env resets on every project switch
     self:_reset_executor_env()
   elseif cur then
-    --- a project is always open: one that cannot be opened
-    --- leaves the one that was open, its loader back in place
+    --- a project is always open: one that cannot be opened or
+    --- made on the card leaves the one that was open, its
+    --- loader back in place
     P.current = cur
     local lf = self:get_loader(cur.name)
     if lf and not table.is_member(package.loaders, lf) then

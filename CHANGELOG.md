@@ -228,9 +228,11 @@ Project-author guide: `doc/input_api.md`.
   asked for; and `project()` with no name says "A project needs a name:
   project("name").".
 - **A project is always open.** `project()` with a name that cannot be a project's, such
-  as `project("a/b")`, left no project open, and commands that need one refused until
-  another was opened; the project that was open now stays open, and only the reason is
-  said. `dofile()` of a file Lua does not load says Lua's error instead of saying the file
+  as `project("a/b")`, closed the open project, stopping its program and closing its
+  files, and left none open, so commands that need one refused until another was opened.
+  Such a name is now refused before anything is closed: the program and the files stay
+  as they were, and only the reason is said. If a project cannot be opened or made on the
+  SD card, the one that was open is opened again. `dofile()` of a file Lua does not load says Lua's error instead of saying the file
   is not there.
 - **The console's history works as a classic shell's.** It holds only the lines that ran:
   Up no longer adds the line being typed, an edit to a recalled line no longer replaces

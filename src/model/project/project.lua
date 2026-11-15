@@ -289,6 +289,9 @@ ProjectService.DEFAULT = 'scratchpad'
 --- what the default project was called before it was renamed
 ProjectService.FORMER_DEFAULT = 'scratch'
 ProjectService.messages = messages
+--- whether `name` can be a project's, and why not; asked before
+--- anything is closed, so that a refused name changes nothing
+ProjectService.valid_name = validate_filename
 
 --- @param name string
 --- @return string? path
