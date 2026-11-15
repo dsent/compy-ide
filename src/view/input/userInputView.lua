@@ -141,17 +141,16 @@ function UserInputView:notice_rows()
   return rows
 end
 
---- The colour of a message's text: an error in the error
---- colour, a notice in the status line's warning colour, as
---- the console's status line has its '[no sd card]'.
+--- The colour of a message's text in the band: an error's
+--- or a notice's (`colors.input.notice`).
 --- @private
 --- @return RGB
 function UserInputView:_notice_color()
   local colors = self.cfg.colors
   if self.controller:message_kind() == 'notice' then
-    return colors.statusline.editor.warning
+    return colors.input.notice.warning
   end
-  return colors.input.error
+  return colors.input.notice.error
 end
 
 --- The notice band: a message, a notice or an error's,
@@ -178,7 +177,7 @@ function UserInputView:draw_notice(pitch, origin)
 
   gfx.push('all')
   gfx.setFont(cf.font)
-  gfx.setColor(cf.colors.input.error_bg)
+  gfx.setColor(cf.colors.input.notice.bg)
   gfx.rectangle('fill', 0, from, width, bottom - from)
   gfx.setColor(self:_notice_color())
   for i, row in ipairs(rows) do

@@ -61,7 +61,7 @@ When Enter is pressed in the REPL (`ConsoleController:keypressed`, line 1009):
 3. If parse succeeds: `codeload(code, run_env)` compiles the string into a chunk with the appropriate `fenv` (console env normally; project env during `inspect`)
 4. `run_user_code(f, self)` executes the chunk inside `use_canvas` — so any `gfx.*` calls go to the virtual canvas
 5. Output from `print()` goes to the terminal via the `redirect_to` mechanism (set up in `src/main.lua`)
-6. On success: input is cleared. On error: error is set on the input model and shown in the notice band directly above the status line, as the file editor shows its messages; the line stays in the field (`user_input.md`, "Error state").
+6. On success: the input is cleared (`clear_text`), and a message the line itself set, such as `run()`'s refusal while a project is paused, stays in the notice band until the next key; any message shown before the line's Enter went with that key. On error: error is set on the input model and shown in the notice band directly above the status line, as the file editor shows its messages; the line stays in the field (`user_input.md`, "Error state").
 
 During `inspect` state, the REPL runs code in `project_env`, allowing the user to inspect and mutate the paused project's state.
 

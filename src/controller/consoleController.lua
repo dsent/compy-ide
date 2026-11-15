@@ -491,7 +491,7 @@ function ConsoleController:run_project(name)
       love.state.app_state == 'running'
   then
     self.input:notice(
-      { "There's already a project running!" })
+      { 'A project is already running: Ctrl+Q stops it.' })
     return
   end
   local P   = self.model.projects
@@ -1821,7 +1821,7 @@ function ConsoleController:evaluate_input()
         if err then
           inter:set_error({ err })
         else
-          inter:clear()
+          inter:clear_text()
         end
       else
         Log.error('Load error:', LANG.get_call_error(load_err))

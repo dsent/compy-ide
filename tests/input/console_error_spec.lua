@@ -107,6 +107,29 @@ describe('console error message #input', function()
         assert.truthy(rows[2].s:find("module 'nosuch' not found"))
       end)
 
+    it('keeps a program\'s own colours: the theme\'s error on '
+      .. 'error_bg, not the notice band\'s', function()
+      fail()
+      local fills, texts, colour = { }, { }, nil
+      local prev = _G.gfx
+      _G.gfx = setmetatable({
+        getHeight = function() return 600 end,
+        setColor = function(c) colour = c end,
+        rectangle = function() fills[#fills + 1] = colour end,
+        print = function() texts[#texts + 1] = colour end,
+      }, { __index = function() return function() end end })
+      local ok, err = pcall(function()
+        local view = UserInputView(F.cfg.view, F.widget)
+        view:render_error(F.widget:get_wrapped_error())
+      end)
+      _G.gfx = prev
+      assert(ok, err)
+      local c = F.cfg.view.colors.input
+      assert.equal(c.error_bg, fills[#fills])
+      assert.equal(c.error, texts[#texts])
+      assert.are_not.same(c.notice.bg, c.error_bg)
+    end)
+
     it('fits the rows the input area has', function()
       fail()
       local rows = draw_error()
