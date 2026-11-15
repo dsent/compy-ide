@@ -20,6 +20,8 @@ require("util.lua")
 --- @field evaluator Evaluator
 --- @field cursor Cursor
 --- @field error string[]?
+--- @field message_band boolean --- its messages show as
+--- notices in a band above the status line (IS3.14)
 --- @field visible VisibleContent
 --- @field selection InputSelection
 --- @field cfg Config
@@ -48,11 +50,12 @@ UserInputModel = class.create()
 --- @param editing boolean? --- the file editor's field: its
 --- height (half the rows it shares with the document view),
 --- Up on its first row and Down on its last going to the
---- draft's ends (IS3.8), and a notice that blocks no key. The
---- keys are every field's (fieldKeys.lua).
+--- draft's ends (IS3.8), and its messages in the notice band.
+--- The keys are every field's (fieldKeys.lua).
 function UserInputModel.new(cfg, eval, custom_label, editing)
   local self = setmetatable({
     editing = editing or false,
+    message_band = editing or false,
     entered = InputText(),
     history = History(cfg.input_history),
     edit_history = EditHistory(),
@@ -1351,6 +1354,55 @@ function UserInputModel:set_error(errors)
   for _, e in ipairs(errors) do
     table.insert(self.error, error_text(e))
   end
+end
+
+--- What a message is in the notice band: a notice says why an
+--- action was refused and what would work; an error is a
+--- parser's or a run's message. The band draws each in its
+--- own colour.
+--- @alias MessageKind 'notice'|'error'
+
+--- Show a message in the notice band (IS3.14): a notice,
+--- unless `kind` says it is an error. Each line of it breaks
+--- between words at the field's width (the ruling "A notice
+--- too long for one row wraps between words"). It changes no
+--- state; the next key dismisses it.
+--- @param msg any|any[] --- a text, an error, or a list
+--- @param kind MessageKind?
+function UserInputModel:set_notice(msg, kind)
+  local w = self.visible and self.visible.wrap_w or 64
+  local parts = msg
+  if type(msg) ~= 'table' or msg.msg ~= nil then
+    parts = { msg }
+  end
+  local rows = { }
+  for _, part in ipairs(parts) do
+    local s = error_text(part):gsub('\r\n?', '\n')
+    local lines = string.lines(s)
+    --- a message that ends in a line break has no row after it
+    if #lines > 1 and lines[#lines] == '' then
+      lines[#lines] = nil
+    end
+    for _, line in ipairs(lines) do
+      --- a word wider than a row is left to the field's wrap
+      for _, row in ipairs(string.wrap_words(line, w)) do
+        rows[#rows + 1] = row
+      end
+    end
+  end
+  self.error = rows
+  rows.notice = true
+  rows.kind = kind or 'notice'
+end
+
+--- The kind of the message shown, nil when none shows. A
+--- message shown another way than through `set_notice` is an
+--- error.
+--- @return MessageKind?
+function UserInputModel:message_kind()
+  local e = self.error
+  if type(e) ~= 'table' or #e == 0 then return nil end
+  return e.kind or 'error'
 end
 
 --- @return boolean

@@ -4,6 +4,7 @@ require("view.canvas.canvasView")
 require("view.input.userInputView")
 
 local class = require("util.class")
+local Layout = require("view.layout")
 require("util.color")
 require("util.view")
 require("util.debug")
@@ -62,6 +63,10 @@ function ConsoleView:draw(terminal, canvas, snapshot)
 
     if ViewUtils.conditional_draw('show_input') then
       self.input:draw()
+      --- the notice band over the output's last rows, on
+      --- the output's row grid (IS3.14)
+      local v = self.cfg.view
+      self.input:draw_notice(v.fh, Layout(v).top)
     end
   end
 

@@ -207,9 +207,29 @@ function UserInputController:clear_error()
   self.model:clear_error()
 end
 
+--- An error to show: in the notice band where this field has
+--- one (the file editor's and the console's, IS3.14), else in
+--- the field's place
 --- @param error string[]|Error[]?
 function UserInputController:set_error(error)
-  self.model:set_error(error)
+  if error ~= nil and self.model.message_band then
+    self.model:set_notice(error, 'error')
+  else
+    self.model:set_error(error)
+  end
+end
+
+--- A message in the notice band: a notice unless `kind` says
+--- it is an error (UserInputModel:set_notice)
+--- @param msg any|any[]
+--- @param kind MessageKind?
+function UserInputController:notice(msg, kind)
+  self.model:set_notice(msg, kind)
+end
+
+--- @return MessageKind?
+function UserInputController:message_kind()
+  return self.model:message_kind()
 end
 
 --- @return string[]?
@@ -569,6 +589,16 @@ function UserInputController:always_shown()
   return self
 end
 
+--- Show this field's messages in the notice band above its
+--- status line, as the file editor does (IS3.14): the field
+--- stays as it is, and the next key dismisses the message
+--- and still acts
+--- @return UserInputController
+function UserInputController:messages_above()
+  self.model.message_band = true
+  return self
+end
+
 --- Seat this owner's lifecycle flags at construction, and
 --- return self for inline construction. The class default is
 --- all four off; an owner that wants an outcome asks for it
@@ -724,14 +754,11 @@ function UserInputController:keypressed(k, sc, isr)
 
   -- doc/development/internals/user_input.md, "Error state":
   -- locked-on-reject unlocks on Enter/Space/arrows.
-  -- The editor's field shows a notice without blocking input:
-  -- the next key dismisses it and does its work (IS3.14).
-  -- A modifier or a lock on its own leaves it showing.
-  local lone = Key.is_mod(k) or k == 'capslock'
-      or k == 'numlock' or k == 'scrolllock'
-      or k == 'lgui' or k == 'rgui'
-  if input:has_error() and input.editing then
-    if not lone then input:clear_error() end
+  -- A field with a notice band blocks no input: the next key
+  -- dismisses its message and does its work (IS3.14). A
+  -- modifier or a lock on its own leaves it showing.
+  if input:has_error() and input.message_band then
+    if not Key.is_lone(k) then input:clear_error() end
   elseif input:has_error() then
     if UNLOCKS[chord] then input:clear_error() end
     return
@@ -755,8 +782,8 @@ function UserInputController:textinput(t)
   end
   self:update_view()
   if self.model:has_error() then
-    if not self.model.editing then return end
-    --- the editor's notice blocks no input (IS3.14)
+    if not self.model.message_band then return end
+    --- a notice blocks no input (IS3.14)
     self.model:clear_error()
   end
   self.model:add_text(t)

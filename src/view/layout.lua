@@ -3,9 +3,9 @@
 --- line's, the field's. What they leave of the height goes to
 --- the status line and to a strip at the bottom, as
 --- conf/display.lua says; the rest lies at the top. The status
---- line's text keeps a row's place in its own row, and the
---- pixels the line gains split evenly above and below it (an
---- odd one goes below).
+--- line's text keeps a row's place in its own row; of the
+--- pixels the line gains, conf/display.lua's `status_above`
+--- lie above it, at most all of them, and the rest below.
 local display = require("conf.display")
 
 --- @class ScreenLayout
@@ -24,6 +24,6 @@ return function(cfg)
     top = spare - extra - bottom,
     bottom = bottom,
     status_h = cfg.fh + extra,
-    status_pad = math.floor(extra / 2),
+    status_pad = math.min(display.status_above, extra),
   }
 end

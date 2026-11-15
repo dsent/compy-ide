@@ -136,8 +136,9 @@ Project-author guide: `doc/input_api.md`.
   the other states it does nothing.
 - **The status line shows a block's lines as `L2-21`**, without the count that
   followed in brackets.
-- **The status line is 37 pixels high**, a row's 33 and two pixels above and below its
-  text, and a strip of two pixels stays under the field at the screen's bottom.
+- **The status line is 37 pixels high**: its text sits in a row's 33 at the line's top,
+  four pixels lie under it, and a strip of two pixels stays under the field at the
+  screen's bottom.
 - **A block that goes on beyond the editor's edge is marked there.** While the
   highlighted block or the block being replaced has rows above or below the view, the
   edge row fades toward the edge and its last column carries a translucent `^` or `v`;
@@ -201,6 +202,14 @@ Project-author guide: `doc/input_api.md`.
 - **Each line the console runs is written to its output**, in blue, before it runs, so that
   what it prints follows it; a line that fails also has its error written there, after its
   output. A line the syntax check refuses is not written and stays in the field.
+- **The console shows an error as the file editor does**: a line the syntax refuses,
+  one Lua does not load, one that fails while it runs, and a paused program's error
+  show their message in a band directly above the status line, over the output's last
+  rows, without the `Errors:` heading. The line stays in the field with its cursor,
+  red from a syntax failure, and the status line no longer moves. The message blocks
+  nothing: the next key dismisses it and does its work, so Enter runs the line again,
+  Escape clears it and Up recalls the history. A program's own input field shows its
+  errors as before.
 - **The console's history works as a classic shell's.** It holds only the lines that ran:
   Up no longer adds the line being typed, an edit to a recalled line no longer replaces
   the line that ran, and Escape no longer stores the line it clears. The line being typed

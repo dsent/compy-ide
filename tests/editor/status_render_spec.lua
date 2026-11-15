@@ -133,12 +133,13 @@ describe("status line, notice and key card drawn #editor",
     assert.truthy(field(K.screen()):find("replacing", 1, true))
   end)
 
-  -- the maintainer's ruling of November 14, late: four pixels
-  -- for the status line, two over its text and two under it
-  -- (the text keeps a row's 33), and two at the very bottom
-  it("the status line is 37 pixels high, its text 2 under its "
-      .. "top, and the field's rows end 2 above the screen's "
-      .. "bottom", function()
+  -- the maintainer's rulings of November 14, late, and 15:
+  -- four pixels for the status line, all under its text (the
+  -- text keeps a row's 33 from the line's top), and two at the
+  -- very bottom
+  it("the status line is 37 pixels high, its text at its top, "
+      .. "and the field's rows end 2 above the screen's bottom",
+      function()
     K.browse_to(1)
     local s = K.screen()
     local band
@@ -149,7 +150,7 @@ describe("status line, notice and key card drawn #editor",
     local named = false
     for _, t in ipairs(s.field) do
       if t.text:find("main.lua", 1, true) then
-        assert.same(2, t.y)
+        assert.same(0, t.y)
         named = true
       end
     end
@@ -350,6 +351,9 @@ describe("status line, notice and key card drawn #editor",
       assert.is_nil(K.message_kind())
     end)
 
+    -- the console's message is in its notice band now, above
+    -- its status line (the ruling "The console shows an error
+    -- as the editor does"), no longer in its field
     it("the console's error stays in the error colour",
         function()
       K.reset({ ["main.lua"] = "x = 1\n" })
@@ -358,7 +362,7 @@ describe("status line, notice and key card drawn #editor",
       local s = K.screen()
       local colors = K.cc.view.cfg.view.colors
       local found = false
-      for _, t in ipairs(s.field) do
+      for _, t in ipairs(s.texts) do
         if t.text:find("expression", 1, true) then
           found = true
           assert.is_true(same_colour(colors.input.error,

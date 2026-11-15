@@ -152,6 +152,21 @@ local function is_mod(k)
   return fold_mod[k] ~= nil
 end
 
+--- A lock or a system key, which types nothing
+local LOCKS = {
+  capslock = true, numlock = true, scrolllock = true,
+  lgui = true, rgui = true,
+}
+
+--- Whether a key does nothing pressed on its own: a modifier,
+--- a lock or a system key. It leaves a message showing
+--- (IS3.14).
+--- @param k string
+--- @return boolean
+local function is_lone(k)
+  return is_mod(k) or LOCKS[k] == true
+end
+
 --- @return boolean
 local function is_shift(k)
   return table.is_member(shift_k, k)
@@ -254,6 +269,7 @@ Key = {
   is_enter    = is_enter,
   any_pressed = any_pressed,
   is_mod      = is_mod,
+  is_lone     = is_lone,
   shift       = shift,
   is_shift    = is_shift,
   ctrl        = ctrl,

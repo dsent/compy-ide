@@ -60,6 +60,10 @@ function ConsoleController.new(M, main_ctrl)
     -- D-LIFECYCLE-FLAGS, statement 3). The line never ran, so
     -- the history does not keep it.
     :seat_lifecycle({ clear_on_cancel = true })
+    -- its errors show as the editor's do, in the notice band
+    -- above the status line (the ruling "The console shows an
+    -- error as the editor does")
+    :messages_above()
   -- Console history navigation: at the vertical boundary the
   -- widget fires on_limit_reached; the console maps up/down to
   -- history back/forward (doc/development/decisions/input.md,
@@ -486,7 +490,7 @@ function ConsoleController:run_project(name)
   if love.state.app_state == 'inspect' or
       love.state.app_state == 'running'
   then
-    self.input:set_error(
+    self.input:notice(
       { "There's already a project running!" })
     return
   end
@@ -2401,25 +2405,10 @@ local ACTIONS = {
   end,
 }
 
---- The chords that only close an error: the line under it is
---- the one that failed, kept to be corrected
-local CLOSE_ONLY = {
-  ['return'] = true, kpenter = true,
-  ['shift+return'] = true, ['shift+kpenter'] = true,
-  ['alt+return'] = true, ['alt+kpenter'] = true,
-  escape = true, up = true, down = true,
-}
-
 --- The keys that move the output's view (consoleKeys.lua);
 --- Home and End only while the field is empty
 local SCROLLS = {
   scroll_row = true, scroll_page = true, scroll_end = true,
-}
-
---- Keys that leave a scrolled view where it is: a modifier or a
---- lock pressed on its own, and the help key
-local KEEPS_VIEW = {
-  capslock = true, numlock = true, scrolllock = true,
 }
 
 --- Every key but the ones that scroll brings the screen back
@@ -2430,8 +2419,9 @@ local KEEPS_VIEW = {
 function ConsoleController:_back_to_screen(k, entry)
   local scrolls = entry and SCROLLS[entry.act]
       and (entry.act ~= 'scroll_end' or self.input:is_empty())
-  if scrolls or Key.is_mod(k) or KEEPS_VIEW[k]
-      or k == KeyCard.KEY then
+  --- a modifier or a lock on its own, and the help key, leave
+  --- the view where it is
+  if scrolls or Key.is_lone(k) or k == KeyCard.KEY then
     return
   end
   self.model.output:to_rest()
@@ -2480,20 +2470,11 @@ function ConsoleController:keypressed(k, sc, isrepeat)
   end
   self:_back_to_screen(k, entry)
 
-  -- doc/development/internals/user_input.md, "Error state":
-  -- the line under the error is the one that failed, kept to
-  -- be corrected. Enter (with Shift or Alt too), Escape, Up
-  -- and Down only close the error; any other key closes it
-  -- and does its usual work. A modifier alone leaves it up.
-  if input:has_error() then
-    if Key.is_mod(k) then
-      return
-    end
+  -- A message is a hint that blocks nothing (IS3.14): the
+  -- next key dismisses it and does its usual work, Enter and
+  -- Escape included. A modifier or a lock alone leaves it.
+  if input:has_error() and not Key.is_lone(k) then
     input:clear_error()
-    if CLOSE_ONLY[chord] then
-      input:update_view()
-      return
-    end
   end
 
   if entry then
