@@ -1152,18 +1152,41 @@ describe("the scrolled view's rule #console", function()
     return K.cc:get_project_env().compy.terminal
   end
 
-  --- the sequence's numbers the view shows, and whether all its
-  --- rows lie in the sequence
+  --- the sequence's numbers the view shows; whether all its
+  --- rows lie in the sequence; the rows' texts; and whether
+  --- each of its rows in the sequence is drawn from the kept
+  --- row or the screen's row of its number
   local function shown()
     local out = output()
     local rows = out:window()
+    local k = out.kept
     local last = out:view_bounds()
-    local ns, inside = { }, true
-    for _, r in ipairs(rows) do
-      ns[#ns + 1] = r.n
-      if r.n < out.kept.first or last < r.n then inside = false end
+    local scr = screen()
+    local ns, texts, inside, drawn = { }, { }, true, true
+    for i, r in ipairs(rows) do
+      ns[i] = r.n
+      local got = r.kept and (r.kept.text:gsub("%s+$", ""))
+          or r.y and scr[r.y]
+      texts[i] = got
+      if r.n < k.first or last < r.n then
+        inside = false
+      else
+        local want = r.n <= k.last
+            and (k:get(r.n).text:gsub("%s+$", ""))
+            or scr[r.n - k.last]
+        if got ~= want then drawn = false end
+      end
     end
-    return ns, inside
+    return ns, inside, texts, drawn
+  end
+
+  --- the `L<n>` rows among `texts` are each the next
+  local function in_order(texts, what)
+    local m = marks(texts)
+    for i = 2, #m do
+      assert.equal(m[i - 1] + 1, m[i], what .. ": rows in order")
+    end
+    return m
   end
 
   --- Home, then PgDn until rest: every row of the sequence is
@@ -1176,7 +1199,9 @@ describe("the scrolled view's rule #console", function()
     K.keys("home")
     for _ = 1, 200 do
       if not out:is_scrolled() then break end
-      for _, n in ipairs((shown())) do seen[n] = true end
+      local ns, _, _, drawn = shown()
+      assert.is_true(drawn, what .. ": a page drawn from its rows")
+      for _, n in ipairs(ns) do seen[n] = true end
       K.keys("pagedown")
     end
     assert.is_false(out:is_scrolled(), what .. ": PgDn reached rest")
@@ -1202,9 +1227,13 @@ describe("the scrolled view's rule #console", function()
       K.keys("lctrl", "up")
       tty().clear()
       K.frame(100)
-      local ns, inside = shown()
+      local ns, inside, texts, drawn = shown()
       assert.equal(H, #ns)
       assert.is_true(inside)
+      assert.is_true(drawn)
+      -- the screen's 16 rows went with the clear: the window is
+      -- the newest 16 kept, L10 to L25
+      assert.same(upto(10, 25), in_order(texts, "after a clear"))
     end)
 
   it("pages up from an empty screen to a full window", function()
@@ -1212,9 +1241,11 @@ describe("the scrolled view's rule #console", function()
     tty().clear()
     K.frame(100)
     K.keys("pageup")
-    local ns, inside = shown()
+    local ns, inside, texts, drawn = shown()
     assert.equal(H, #ns)
     assert.is_true(inside)
+    assert.is_true(drawn)
+    assert.same(upto(10, 25), in_order(texts, "a page up"))
   end)
 
   it("holds under any mix of prints, clears, Ctrl+L and the "
@@ -1247,9 +1278,11 @@ describe("the scrolled view's rule #console", function()
           assert.is_true(out.kept.first <= t and t <= filled, what)
           local last = out:view_bounds()
           if last - out.kept.first + 1 >= H then
-            local ns, inside = shown()
+            local ns, inside, texts, drawn = shown()
             assert.equal(H, #ns, what)
             assert.is_true(inside, what .. ": a row past the end")
+            assert.is_true(drawn, what .. ": a row drawn from another")
+            assert.is_true(#marks(texts) > 0, what .. ": no row of text")
           end
         end
         if step % 40 == 0 then pages_cover(what) end
