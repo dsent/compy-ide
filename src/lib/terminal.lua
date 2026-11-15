@@ -96,6 +96,12 @@ local function terminal_set_cursor_backcolor(terminal, red, blue, green, alpha)
 end
 
 
+-- What comes next starts a row of its own: on the next row when
+-- the cursor's row already holds text, else at its start
+local function terminal_fresh_row(terminal)
+    table.insert(terminal.stdin, { type = "fresh_row" })
+end
+
 local function terminal_move_to(terminal, x, y)
     table.insert(terminal.stdin, {
         type = "move",
@@ -225,6 +231,16 @@ local function terminal_update(terminal, dt)
             terminal.cursor_backcolor[2] = char_or_command.blue
             terminal.cursor_backcolor[3] = char_or_command.green
             terminal.cursor_backcolor[4] = char_or_command.alpha
+        elseif char_or_command.type == "fresh_row" then
+            local holds = false
+            for _, c in ipairs(terminal.buffer[terminal.cursor_y]) do
+                if c ~= " " then holds = true break end
+            end
+            terminal.cursor_x = 1
+            if holds then
+                terminal.cursor_y = terminal.cursor_y + 1
+                wrap_if_bottom(terminal)
+            end
         elseif char_or_command.type == "move" then
             terminal.cursor_x = on_grid(char_or_command.x, terminal.width)
             terminal.cursor_y = on_grid(char_or_command.y, terminal.height)
@@ -490,6 +506,7 @@ local function terminal(self, width, height,
     instance.save_position = terminal_save_position
     instance.load_position = terminal_load_position
     instance.move_to = terminal_move_to
+    instance.fresh_row = terminal_fresh_row
     instance.hide_cursor = terminal_hide_cursor
     instance.show_cursor = terminal_show_cursor
     instance.reverse_cursor = terminal_reverse

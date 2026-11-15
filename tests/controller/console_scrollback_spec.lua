@@ -68,15 +68,27 @@ end
 --- output, as the IDE redirects print before it builds them
 --- (model.io.redirect); the fixture built them before
 --- @param contents table<string, string>?
+local unrouted
 local function reset(contents)
   K.reset(contents)
-  K.cc:get_base_env().print = print
-  K.cc:get_project_env().print = print
+  local base, project = K.cc:get_base_env(), K.cc:get_project_env()
+  unrouted = unrouted or { base.print, project.print }
+  base.print, project.print = print, print
+end
+
+--- the console's print as the fixture had it, for later files
+local function cleanup()
+  if unrouted then
+    K.cc:get_base_env().print = unrouted[1]
+    K.cc:get_project_env().print = unrouted[2]
+    unrouted = nil
+  end
+  K.cleanup()
 end
 
 describe("the console's kept rows #console", function()
   before_each(function() reset() end)
-  after_each(K.cleanup)
+  after_each(cleanup)
 
   it("are the rows that scrolled off the top, each once and "
     .. "in order", function()
@@ -136,15 +148,21 @@ describe("the console's kept rows #console", function()
 
   it("take nothing from a clear from code", function()
     print_lines(1, 30)
-    local before = kept()
     run("compy.terminal.clear()")
-    assert.same(before, kept())
     for _, r in ipairs(screen()) do assert.equal("", r) end
-    print_lines(31, 40)
-    local k = marks(kept())
-    for _, n in ipairs(k) do
-      assert.is_true(n <= 30, "a cleared row was kept: L" .. n)
+    local after = kept()
+    print_lines(31, 60)
+    local k = kept()
+    local older, newer = { }, { }
+    for i, r in ipairs(k) do
+      if i <= #after then older[#older + 1] = r
+      else newer[#newer + 1] = r end
     end
+    assert.same(after, older)
+    for _, n in ipairs(marks(newer)) do
+      assert.is_true(n > 30, "a cleared row was kept: L" .. n)
+    end
+    assert.is_true(#newer > 0)
   end)
 
   it("are forgotten by Ctrl+L, with the screen", function()
@@ -247,7 +265,7 @@ end
 
 describe("the console's scrolled view #console", function()
   before_each(function() reset() end)
-  after_each(K.cleanup)
+  after_each(cleanup)
 
   local H = 16
 
@@ -403,7 +421,7 @@ end)
 
 describe("the console's scrolling keys #console", function()
   before_each(function() reset() end)
-  after_each(K.cleanup)
+  after_each(cleanup)
 
   local H = 16
 
@@ -612,7 +630,7 @@ end)
 describe("the console's kept rows under any mix #console",
   function()
     before_each(function() reset() end)
-    after_each(K.cleanup)
+    after_each(cleanup)
 
     it("hold every row that scrolled off since Ctrl+L, once and "
       .. "in order, the newest 1,000, and scrolling changes "
@@ -666,7 +684,7 @@ describe("the console's kept rows under any mix #console",
 
 describe("the sign of a scrolled view #console", function()
   before_each(function() reset() end)
-  after_each(K.cleanup)
+  after_each(cleanup)
 
   --- the cue's marks drawn on the whole screen
   local function marks_drawn()
@@ -702,5 +720,119 @@ describe("the sign of a scrolled view #console", function()
     K.keys("pageup")
     K.keys("lctrl", "up")
     assert.same({ ["^"] = true, v = true }, marks_drawn())
+  end)
+end)
+
+describe("the echo of an entered line #console", function()
+  before_each(function() reset() end)
+  after_each(cleanup)
+
+  local function colors() return K.cc.cfg.view.colors.terminal end
+
+  --- the screen row whose text is `text`, and its first cell's
+  --- color
+  local function row_of(text)
+    local t = output().terminal
+    for y, r in ipairs(screen()) do
+      if r == text then
+        return y, t.state_buffer[y][1].color
+      end
+    end
+  end
+
+  it("writes an accepted line in blue before it runs, its output "
+    .. "after it", function()
+      run("print('hi')")
+      local e, ec = row_of("print('hi')")
+      local o, oc = row_of("hi")
+      assert.is_not_nil(e)
+      assert.equal(e + 1, o)
+      assert.same(colors().echo, ec)
+      assert.same(colors().fg, oc)
+      assert.same(require("util.color") and Color[Color.blue], ec)
+    end)
+
+  it("starts on a row of its own when the cursor's row holds "
+    .. "text", function()
+      -- io.write's path (model.io.redirect)
+      output():write("partial")
+      K.frame(100)
+      run("x = 1")
+      assert.is_not_nil(row_of("partial"))
+      local p = row_of("partial")
+      assert.equal(p + 1, row_of("x = 1"))
+    end)
+
+  it("is not written for a line the syntax check refuses",
+    function()
+      K.type("x = = 1")
+      K.keys("return")
+      K.frame(100)
+      assert.is_nil(row_of("x = = 1"))
+      assert.equal("x = = 1", K.console_draft())
+    end)
+
+  it("is not written for a line the syntax continues", function()
+    K.type("for i = 1, 2 do")
+    K.keys("return")
+    K.frame(100)
+    assert.is_nil(row_of("for i = 1, 2 do"))
+  end)
+
+  it("is followed by the line's error, in the output's color",
+    function()
+      run("print('a') error('boom')")
+      local e = row_of("print('a') error('boom')")
+      assert.is_not_nil(e)
+      assert.equal(e + 1, row_of("a"))
+      local s, t = screen(), output().terminal
+      local err = s[e + 2]
+      assert.truthy(err:find("boom", 1, true), err)
+      assert.same(colors().fg, t.state_buffer[e + 2][1].color)
+      assert.is_true(K.cc.input:has_error())
+    end)
+
+  it("writes each line of a command on a row of its own",
+    function()
+      K.type("x = 1")
+      K.keys("lshift", "return")
+      K.type("y = 2")
+      K.keys("return")
+      K.frame(100)
+      local a, ac = row_of("x = 1")
+      local b, bc = row_of("y = 2")
+      assert.equal(a + 1, b)
+      assert.same(colors().echo, ac)
+      assert.same(colors().echo, bc)
+    end)
+
+  it("is erased by its own line's clear", function()
+    print_lines(1, 5)
+    run("compy.terminal.clear()")
+    for _, r in ipairs(screen()) do assert.equal("", r) end
+  end)
+
+  it("is not written for what a program's input field takes",
+    function()
+      reset({ ["main.lua"] = "compy.input.show { }\n" })
+      run("run()")
+      K.type("sent")
+      K.keys("return")
+      K.frame(100)
+      assert.is_nil(row_of("sent"))
+    end)
+
+  it("is kept with its color once it scrolls off", function()
+    run("print('first')")
+    print_lines(1, 30)
+    local k = output().kept
+    local found
+    for i = k.first, k.last do
+      if k:get(i).text:match("^print%('first'%)") then
+        found = k:get(i)
+      end
+    end
+    assert.is_not_nil(found)
+    assert.same(colors().echo, found.runs[1].style.color)
   end)
 end)

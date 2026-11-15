@@ -12,6 +12,9 @@ require("util.color")
 --- @field bg RGB
 --- @field fg RGB
 
+--- @class TerminalColors : BaseColors
+--- @field echo RGB --- an accepted line written to the output
+
 --- @class EditorColors : BaseColors
 --- @field highlight RGB
 --- @field highlight_loaded RGB
@@ -63,7 +66,7 @@ local md_i = require('conf.md')
 
 --- @class Colors
 --- @field debug RGB
---- @field terminal BaseColors
+--- @field terminal TerminalColors
 --- @field editor EditorColors
 --- @field lua_syntax SyntaxColors
 --- @field md_syntax SyntaxColors
@@ -74,6 +77,9 @@ return {
   terminal = {
     fg = Color[Color.black],
     bg = Color[Color.white],
+    --- the maintainer's ruling "Console scrollback, first
+    --- version": an echoed line reads as code
+    echo = Color[Color.blue],
   },
   editor = {
     fg = Color[Color.black],

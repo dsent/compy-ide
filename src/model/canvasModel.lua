@@ -87,6 +87,31 @@ function CanvasModel:push(newResult)
   end
 end
 
+--- An accepted console line, written to the output before it
+--- runs: on a row of its own, each of its lines on a row, in
+--- the echo's color (the maintainer's ruling "Console
+--- scrollback, first version")
+--- @param lines string[]
+function CanvasModel:echo(lines)
+  local t = self.terminal
+  local colors = self.cfg.view.colors.terminal
+  t:fresh_row()
+  t:set_cursor_color(colors.echo)
+  t:print(string.unlines(lines) .. '\n')
+  t:set_cursor_color(colors.fg)
+  t.dirty = true
+end
+
+--- An accepted line's error, after what it printed, on a row
+--- of its own in the output's color
+--- @param msg string
+function CanvasModel:write_error(msg)
+  local t = self.terminal
+  t:fresh_row()
+  t:print(tostring(msg) .. '\n')
+  t.dirty = true
+end
+
 --- Clear the 16 rows, as a clear from code does: what was on
 --- them is gone, and the kept rows stay
 function CanvasModel:reset()

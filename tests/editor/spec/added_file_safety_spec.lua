@@ -314,6 +314,9 @@ describe("text safety #editor #spec", function()
         .. "folder is refused in the console", function()
       K.open("lib/util.lua")
       assert.same("ready", K.app_state())
+      -- the notice on screen whole: read half written and half
+      -- queued, a row's end would cut it
+      K.frame(100)
       assert.truthy(K.console_text():find(
         "lib/util.lua cannot be saved", 1, true))
       assert.same("v = 1\n", K.file("lib/util.lua"))
