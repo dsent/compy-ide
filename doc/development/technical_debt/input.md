@@ -1235,9 +1235,10 @@ future author adding an editor branch meets the constraint at the site).
   the same process without a stop). A pause gives the console that mouse and
   `continue()` gives the program back its own.
 - **Keyboard modes and audio are reset at a terminate (2026-11-16).** The
-  terminate flush (`flush_program_state`) stops all audio and puts key repeat
-  and text input back as `main.lua` set them on every stop path, the
-  first-lines error and `reset()`; a program that ends by itself keeps them.
+  terminate flush (`flush_program_state`) ends looping on what plays and lets
+  it play out (`reset()` stops it), and puts key repeat and text input back as
+  `main.lua` set them, on every stop path, the first-lines error and
+  `reset()`; a program that ends by itself keeps them.
 
 ### `compy.before_exit` is a closure slot
 

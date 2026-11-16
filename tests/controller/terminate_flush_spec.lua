@@ -37,14 +37,57 @@ end
 
 local RUNS = "g = 1\nfunction love.update() end\n"
 
---- `love.audio.stop` and the keyboard's two settings, counted
---- and recorded, for the test's length
+--- A source as LÖVE 11 keeps one, in memory: it plays, loops,
+--- pauses and stops; `finish()` is its end coming, which a
+--- looping one meets by starting again
+local function source(sources, looping)
+  local s = { looping = looping, playing = false, plays = 0 }
+  function s:setLooping(on) self.looping = on end
+  function s:isLooping() return self.looping end
+  function s:isPlaying() return self.playing end
+  function s:play()
+    self.playing, self.plays = true, self.plays + 1
+    return true
+  end
+  function s:pause() self.playing = false end
+  function s:stop() self.playing = false end
+  function s:finish() self.playing = self.looping end
+  sources[#sources + 1] = s
+  return s
+end
+
+--- `love.audio` with its sources in memory (`newSource` makes
+--- one, `pause` and `stop` act on all, as on LÖVE 11.5), and the
+--- keyboard's two settings recorded, for the test's length
 local function devices()
-  local seen = { stops = 0 }
-  local audio = love.audio
-  love.audio = setmetatable({
-    stop = function() seen.stops = seen.stops + 1 end,
-  }, { __index = audio })
+  local seen = { stops = 0, sources = { } }
+  local fake = {
+    newSource = function() return source(seen.sources, false) end,
+    pause = function()
+      local paused = { }
+      for _, s in ipairs(seen.sources) do
+        if s.playing then
+          s:pause()
+          paused[#paused + 1] = s
+        end
+      end
+      return paused
+    end,
+    stop = function()
+      seen.stops = seen.stops + 1
+      for _, s in ipairs(seen.sources) do s:stop() end
+    end,
+  }
+  -- the IDE's audio, and the copy a run's environment is made
+  -- from, each given the fake's functions
+  local swapped = { }
+  for _, audio in ipairs({ love.audio,
+    K.cc:get_base_env().love.audio }) do
+    for name, f in pairs(fake) do
+      swapped[#swapped + 1] = { audio, name, audio[name] }
+      audio[name] = f
+    end
+  end
   -- the IDE's keyboard, and the copy a run's environment is
   -- made from
   local saved = { }
@@ -55,7 +98,10 @@ local function devices()
     kb.setTextInput = function(on) seen.text_input = on end
   end
   finally(function()
-    love.audio = audio
+    for i = #swapped, 1, -1 do
+      local s = swapped[i]
+      s[1][s[2]] = s[3]
+    end
     for i = #saved, 1, -1 do
       local s = saved[i]
       s[1].setKeyRepeat, s[1].setTextInput = s[2], s[3]
@@ -118,13 +164,46 @@ describe("the terminate flush #console", function()
     K.keys("lctrl", "q")
   end)
 
-  it("stops the sound a program started at Ctrl+Q", function()
-    reset({ ["main.lua"] = RUNS })
-    local seen = devices()
-    run("run()")
-    K.keys("lctrl", "q")
-    assert.is_true(seen.stops >= 1)
-  end)
+  --- the maintainer's ruling of November 16, 2026: "clear the
+  --- repeat, but what is there, still there"
+  local SOUNDS = "loop = love.audio.newSource('a.ogg', 'static')\n"
+    .. "loop:setLooping(true)\n"
+    .. "loop:play()\n"
+    .. "shot = love.audio.newSource('b.ogg', 'static')\n"
+    .. "held = love.audio.newSource('c.ogg', 'static')\n"
+    .. "held:play()\n"
+    .. "held:pause()\n"
+    .. "function love.update() end\n"
+
+  it("lets a loop play to its end once at Ctrl+Q, and not again",
+    function()
+      reset({ ["main.lua"] = SOUNDS })
+      local seen = devices()
+      run("run()")
+      local loop = seen.sources[1]
+      assert.is_true(loop:isPlaying())
+      K.keys("lctrl", "q")
+      assert.equal(0, seen.stops)
+      assert.is_true(loop:isPlaying())
+      assert.is_false(loop:isLooping())
+      loop:finish()
+      assert.is_false(loop:isPlaying())
+    end)
+
+  it("leaves a one-shot playing at stop(), a paused one paused",
+    function()
+      reset({ ["main.lua"] = SOUNDS })
+      local seen = devices()
+      run("run()")
+      local held = seen.sources[3]
+      local held_plays = held.plays
+      run("shot:play()")
+      run("stop()")
+      local shot = seen.sources[2]
+      assert.is_true(shot:isPlaying())
+      assert.is_false(held:isPlaying())
+      assert.equal(held_plays, held.plays)
+    end)
 
   it("puts key repeat and text input back at Ctrl+Q", function()
     reset({ ["main.lua"] = "love.keyboard.setKeyRepeat(false)\n"
@@ -168,6 +247,23 @@ describe("the terminate flush #console", function()
         assert.is_false(K.cc.run_live)
         assert.is_nil(env().g)
         assert.is_true(seen.stops >= 1)
+      end)
+
+    it("silences a loop and a one-shot", function()
+      reset({ ["main.lua"] = SOUNDS })
+      local seen = devices()
+      run("run()")
+      run("shot:play()")
+      run("reset()")
+      for _, s in ipairs(seen.sources) do
+        assert.is_false(s:isPlaying())
+      end
+    end)
+
+    it("empties the console", function()
+        reset({ ["main.lua"] = "print('from the run')\n" .. RUNS })
+        run("run()")
+        run("reset()")
         local text = K.console_text()
         assert.is_nil(text:find("from the run", 1, true), text)
         assert.same({ }, (function()

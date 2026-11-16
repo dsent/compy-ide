@@ -147,9 +147,10 @@ Closing a project returns to `scratchpad`.
   reset. A program that ends by itself leaves its variables
   for the console to look at until the next run. Stopping a
   program, by `stop()`, Ctrl+Q, an error in its first lines or
-  closing its project, clears them too, stops the sounds it
-  started and puts the keyboard back as the IDE set it; a pause
-  keeps everything for `continue()`. `dofile()` runs in the
+  closing its project, clears them too and puts the keyboard
+  back as the IDE set it; a sound it started plays to its end,
+  and one set to repeat plays once more and stops. A pause keeps
+  everything for `continue()`. `dofile()` runs in the
   environment as it stands.
 
 - `example_projects()`
@@ -164,7 +165,8 @@ Closing a project returns to `scratchpad`.
 - `reset()`
 
   Stop the program if one runs, clear what it and the lines
-  typed before left (variables, handlers, sounds, settings),
+  typed before left (variables, handlers, settings), silence
+  every sound,
   and empty the console as <kbd>Ctrl</kbd>+<kbd>L</kbd> does. The
   history and the editor's files stay. Only `reset()` with
   nothing between the brackets exists yet.

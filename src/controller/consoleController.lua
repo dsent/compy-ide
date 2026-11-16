@@ -2011,6 +2011,10 @@ function ConsoleController:reset()
   else
     self:flush_program_state(false)
   end
+  --- a reset is the explicit silence: what a stop lets play out
+  --- stops here (the reset specification: a runtime reset stops
+  --- audio)
+  if love.audio and love.audio.stop then love.audio.stop() end
   self.model.output:erase()
   print(messages.reset_done)
 end
@@ -2277,6 +2281,21 @@ function ConsoleController:stop_project_run()
   end
 end
 
+--- Whatever plays goes on to its end, and no longer repeats.
+--- LÖVE 11's love.audio.pause() pauses every playing source and
+--- returns them, which lists them without a registry; each is
+--- made a one-shot and played again from where it was. A source
+--- the program paused or stopped is not playing, and stays as it
+--- is. One that cannot loop (a queueable one) plays on.
+local function end_looping()
+  local audio = love.audio
+  if not (audio and audio.pause) then return end
+  for _, source in ipairs(audio.pause() or { }) do
+    pcall(source.setLooping, source, false)
+    source:play()
+  end
+end
+
 --- The mouse as the console needs it (CONSOLE_MOUSE): the
 --- flush puts it back, and so do a run's start and a program
 --- that idles with nothing that answers the pointer, and
@@ -2328,9 +2347,11 @@ function ConsoleController:flush_program_state(call_exit)
   --- The transform stack is left as it is: a stop can come from
   --- inside a draw, whose own pop follows.
   reset_graphics()
-  --- what the program set playing stops; compy.audio's sounds
-  --- restart their own source on each call
-  if love.audio and love.audio.stop then love.audio.stop() end
+  --- what the program set playing plays out, and a loop stops
+  --- repeating (the maintainer's ruling of November 16, 2026:
+  --- "clear the repeat, but what is there, still there");
+  --- reset() is the explicit silence
+  end_looping()
   --- the keyboard as the IDE set it at its start (main.lua)
   local kb = love.keyboard
   if kb and kb.setKeyRepeat then kb.setKeyRepeat(true) end
