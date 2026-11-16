@@ -1233,9 +1233,13 @@ Controller = {
     -- release whatever is held by then, the card up or not).
     local delivered, owed = { }, { }
     for _, r in ipairs(require('model.input.reservedKeys')) do
-      local event = r.release and 'keyreleased' or 'keypressed'
-      RESERVED[event][r.chord] = assert(ACTS[r.name], r.name)
-      REPEATS[r.chord] = r.repeats == true
+      -- the profiling keys only where conf.lua set love.PROFILE,
+      -- which it does before love.load builds this gate
+      if love.PROFILE or not r.profiling then
+        local event = r.release and 'keyreleased' or 'keypressed'
+        RESERVED[event][r.chord] = assert(ACTS[r.name], r.name)
+        REPEATS[r.chord] = r.repeats == true
+      end
     end
 
     handlers.keypressed = function(k, sc, isr)
