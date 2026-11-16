@@ -1960,11 +1960,17 @@ end
 --- in place: the code a run was started from, and the rest of
 --- a typed line, hold this table and see the new one
 function ConsoleController:_reset_executor_env()
-  local env = self.project_env
-  local fresh = table.clone(self.base_env)
-  if not env then return self:_set_project_env(fresh) end
+  local env, base = self.project_env, self.base_env
+  if not env then
+    return self:_set_project_env(table.clone(base))
+  end
   for k in pairs(env) do env[k] = nil end
-  for k, v in pairs(fresh) do env[k] = v end
+  --- a deep copy of the base into this table: where the base
+  --- names itself (its _G), the copy names this table
+  local seen = { [base] = env }
+  for k, v in pairs(base) do
+    env[table.clone(k, seen)] = table.clone(v, seen)
+  end
 end
 
 --- Ctrl+R: the stop the run seam would make, made first, so

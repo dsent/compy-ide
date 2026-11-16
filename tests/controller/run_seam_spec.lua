@@ -270,6 +270,16 @@ observed_mouse = {
     assert.same({}, env().observed_scissor)
   end)
 
+  --- a program reaches its environment as _G (the tixy
+  --- example compiles its formulas there)
+  it('leaves _G naming the environment the run is in', function()
+    reset({['main.lua'] = "_G.flag = 7\nseen = flag\n"})
+    run('run()')
+    run('run()')
+    assert.equal(env(), env()._G)
+    assert.equal(7, env().seen)
+  end)
+
   it('restarts the same mouse counter at zero after a stop too',
     function()
       reset({['main.lua'] = [[
