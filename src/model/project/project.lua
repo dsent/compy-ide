@@ -554,8 +554,9 @@ end
 --- @return string? error
 --- @return string? path
 --- @return boolean? refused --- the error is no error of the
----   code's: there is no such project, or no main.lua to read
-function ProjectService:run(name, env)
+---   code's: there is no such project, or no file to read
+--- @param entry string? --- the file to run: main.lua when nil
+function ProjectService:run(name, env, entry)
   local p_path, err
   if not name then
     p_path = self.current.path
@@ -563,13 +564,13 @@ function ProjectService:run(name, env)
     p_path, err = self.is_project(ProjectService.path, name)
   end
   if p_path then
-    local ok, code = self.current:readfile(ProjectService.MAIN)
+    local file = entry or ProjectService.MAIN
+    local ok, code = self.current:readfile(file)
     if not ok then return nil, code, p_path, true end
     if type(code) ~= 'string' then
-      return nil, FS.messages.unreadable(ProjectService.MAIN), p_path,
-          true
+      return nil, FS.messages.unreadable(file), p_path, true
     end
-    local content, c_err = codeload(code, env, ProjectService.MAIN)
+    local content, c_err = codeload(code, env, file)
     return content, c_err, p_path
   end
   return nil, err, nil, true

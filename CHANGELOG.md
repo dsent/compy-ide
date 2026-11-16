@@ -253,6 +253,11 @@ Project-author guide: `doc/input_api.md`.
   until another project was opened or the IDE restarted. A program that ends by itself
   leaves its variables for the console to look at until the next run, and `continue()` and
   `dofile()` keep everything as it is.
+- **A project can have a second entry point.** `run(nil, "second.lua")` runs that file of
+  the open project as the program, from a clean start like any run, and
+  `run("name", "second.lua")` opens the project first. Ctrl+R, in the console or the editor,
+  runs again the file that ran last in the project. A file the project does not hold is
+  refused, "There is no second.lua in this project.", before anything changes.
 - **`reset()` starts the console clean.** Typed with nothing between the brackets, it
   stops a program that runs, clears what it and the lines typed before left, and empties
   the console as Ctrl+L does, then says "Reset."; the history and the editor's files

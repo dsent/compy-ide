@@ -71,6 +71,11 @@ local function exists_over(exists)
     if path == ROOT or path == ROOT:sub(1, -2) then
       return true
     end
+    --- a project next_project adds, asked before it opens
+    local other, of = path:match("^/memory%-k/([^/]+)/(.+)$")
+    if other and K.others and K.others[other] then
+      return K.others[other][of] ~= nil
+    end
     local f = path:match("^/memory%-k/(.+)$")
     if f then
       return files[f] ~= nil
@@ -152,9 +157,9 @@ end
 --- loader back.
 local function stub_run(projects)
   local run = projects.run
-  function projects.run(_, _, env)
-    local chunk, err = codeload(files["main.lua"] or "", env,
-      "main.lua")
+  function projects.run(_, _, env, entry)
+    local file = entry or "main.lua"
+    local chunk, err = codeload(files[file] or "", env, file)
     return chunk, err, ROOT
   end
   return function()
@@ -284,6 +289,7 @@ end
 --- Call in after_each: the project, the filesystem and the
 --- clipboard go back.
 function K.cleanup()
+  K.others = nil
   if restore then
     restore()
   end
@@ -332,6 +338,8 @@ end
 --- @param contents table<string, string>
 function K.next_project(name, contents)
   known[name] = true
+  K.others = K.others or { }
+  K.others[name] = contents
   local projects = K.cc.model.projects
   local close, opreate = projects.close, projects.opreate
   local function loader() end

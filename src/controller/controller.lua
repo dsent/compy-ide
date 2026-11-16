@@ -1067,7 +1067,7 @@ Controller = {
       elseif st == 'editor' then
         if refused() then return end
         CC:hide_editor()
-        CC:run_project()
+        CC:run_project(nil, nil, CC:last_entry())
       end
     end
 

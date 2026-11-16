@@ -127,11 +127,12 @@ The custom loader is stored in `self.loaders[name]` so it can be removed on clos
 
 ### Running a project
 
-`run_project(name)` (line 230):
-- Calls `ProjectService:run()` which loads `main.lua` via the project's filesystem mount
+`run_project(name, stopped, entry)`:
+- With `entry` (`run(nil, "second.lua")`, `run("name", "second.lua")`; Option 2 of the multi-entry-point proposal, its two-argument form only), checks the file name as file names are checked (`Project.writable_name`) and that the project holds it, before anything changes; a missing file is refused "There is no second.lua in this project." It records `self.entry` (project and file) when the file loads; `last_entry()` reads it back for the open project, and Ctrl+R (`restart()`, and the editor's run key) runs that file again
+- Calls `ProjectService:run()` which loads `main.lua`, or `entry`, via the project's filesystem mount
 - Sets state to `running`
 - Calls `run_user_code(f, cc, path)` which: executes the chunk in `use_canvas`, then calls `set_user_handlers(env['love'], cc)` to detect and register any `love.*` event handlers the project defined
-- If the project defines no blocking handlers (`love.draw`, `love.update`), state immediately returns to `ready`; with no input widget shown and no pointer handler either, nothing of the program answers the pointer while the console is on screen, so `flush_program_state` puts the mouse back, even if keys or serial handlers still reach the program
+- If the project defines no blocking handlers (`love.draw`, `love.update`), state immediately returns to `ready`; with no input widget shown and no pointer handler either, nothing of the program answers the pointer while the console is on screen, so `restore_console_mouse` puts the mouse back, even if keys or serial handlers still reach the program
 
 ### Stopping vs suspending vs quitting
 

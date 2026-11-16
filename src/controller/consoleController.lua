@@ -542,7 +542,10 @@ end
 --- @param name string?
 --- @param stopped boolean? --- the caller has just stopped
 ---   what was live (restart, Ctrl+R): the seam does not again
-function ConsoleController:run_project(name, stopped)
+--- @param entry string? --- a file of the project to run as the
+---   program, main.lua when nil (run(nil, "second.lua"), Option
+---   2 of the multi-entry-point proposal)
+function ConsoleController:run_project(name, stopped, entry)
   if love.state.app_state == 'inspect' or
       love.state.app_state == 'running'
   then
@@ -565,6 +568,22 @@ function ConsoleController:run_project(name, stopped)
     if not ProjectService.is_project(ProjectService.path, name) then
       return self.model.output:write_refusal(
         messages.no_such_project(name))
+    end
+  end
+  --- an entry point is a file the project holds, named as files
+  --- are, checked before anything changes
+  if entry then
+    local valid, invalid = Project.writable_name(entry)
+    if not valid then
+      return self.model.output:write_refusal(invalid)
+    end
+    local holder = (name and not (cur and cur.name == name))
+        and FS.join_path(
+          ProjectService.is_project(ProjectService.path, name), entry)
+        or cur:get_path(entry)
+    if not FS.exists(holder) then
+      return self.model.output:write_refusal(
+        P.messages.not_in_project(entry))
     end
   end
   local ok, opened
@@ -607,8 +626,10 @@ function ConsoleController:run_project(name, stopped)
     self.model.output:clear_canvas()
     --- the project to run is the open one by now: it is not
     --- looked for again
-    local f, load_err, path, refused = P:run(nil, runner_env)
+    local f, load_err, path, refused = P:run(nil, runner_env, entry)
     if f then
+      --- the entry point Ctrl+R restarts in this project
+      self.entry = { project = P.current.name, file = entry }
       local n = name or P.current.name or 'project'
       Log.info('Running \'' .. n .. '\'')
       self:restore_console_mouse()
@@ -1781,9 +1802,10 @@ function ConsoleController.prepare_project_env(cc)
 
   --- execution control
 
-  --- @param name string?
-  project_env.run_project      = function(name)
-    cc:run_project(name)
+  --- @param name string? --- a project, the open one when nil
+  --- @param entry string? --- its file to run, main.lua when nil
+  project_env.run_project      = function(name, entry)
+    cc:run_project(name, nil, entry)
   end
   project_env.run              = project_env.run_project
 
@@ -1997,8 +2019,18 @@ end
 --- that a run that is going or paused ends even when no run
 --- can start after it
 function ConsoleController:restart()
+  local entry = self:last_entry()
   self:stop_project_run()
-  self:run_project(nil, true)
+  self:run_project(nil, true, entry)
+end
+
+--- The entry point that ran last in the open project, the one
+--- Ctrl+R runs again: nil for main.lua
+--- @return string?
+function ConsoleController:last_entry()
+  local P, last = self.model.projects, self.entry
+  return last and P.current and last.project == P.current.name
+      and last.file or nil
 end
 
 ---@return LuaEnv
