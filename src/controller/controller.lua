@@ -267,6 +267,16 @@ end
 -- unconsumed one falls back to the console unless the project
 -- owns the screen (fall_through, above). (`userlove` rename:
 -- technical_debt.)
+--- Who has the keys now: 'console' (the console and the file
+--- editor), or the number of the program run whose route holds
+--- them; a pause and continue() keep the run's number, a new
+--- run takes the next (set_user_handlers)
+local route_owner, program_count = 'console', 0
+--- Releases a paused program is owed, by its number: a key it
+--- got the press of and that was let go while it waited. They
+--- come at continue(), and go with the run otherwise.
+local owed_releases = { }
+
 local function occupy_input(userlove, CC)
   local pic = Controller.project_input
   local compy = CC:get_project_env().compy
@@ -284,9 +294,22 @@ local function occupy_input(userlove, CC)
         if takes_screen(k, ...) then CC.model.output:to_rest() end
         return
       end
+      -- a key and its text have one receiver: a program whose
+      -- love.keypressed takes every key press keeps their text
+      -- from the console too. A key hook decides key by key, and
+      -- its text cannot wait for that (on a Compy it comes
+      -- first), so a hook's program types into the console still.
+      if k == 'textinput' and project_handler(userlove, 'keypressed')
+      then
+        return
+      end
       return fall_through(k, ...)
     end)
   end
+  route_owner = program_count
+  local due = owed_releases[route_owner]
+  owed_releases = { }
+  for k, sc in pairs(due or { }) do love.keyreleased(k, sc) end
 end
 
 --- `user_pointer` marks a non-blocking project as still
@@ -966,6 +989,7 @@ Controller = {
   --- "Dispatch chain").
   --- @param CC ConsoleController
   release_keyboard_route = function(CC)
+    route_owner = 'console'
     reset_click_state()
     Controller.project_input:deactivate()
     Controller.set_love_keypressed(CC)
@@ -991,6 +1015,7 @@ Controller = {
     -- below. The only console/PIC tie is this restore ordering
     -- + inspect suppression (doc/development/decisions/input.md
     -- #11/#12) — not a special-case beyond that.
+    route_owner = 'console'
     reset_click_state()
     Controller.project_input:deactivate()
 
@@ -1127,10 +1152,10 @@ Controller = {
     -- SECOND, PRIVILEGED table, structurally separate from a
     -- project's own compy.input.shortcuts — consulted before
     -- any route exists, and never overridable by one.
-    -- Opposite contract from a project's shortcut table: a
-    -- project's entry CONSUMES the key by returning truthy: a
-    -- reservation NEVER CONSUMES, so the key still reaches the
-    -- route afterward exactly as it did before this table.
+    -- A reservation consumes its key for its whole press: the
+    -- route sees neither its press, its repeats nor its release
+    -- (D-RESERVE-TABLE's note of 2026-11-16, which reverses its
+    -- "a reservation never consumes").
     -- The chords and what the key cards say of them live in
     -- model/input/reservedKeys.lua; Ctrl+Escape lives on
     -- release, matching the key it quits on
@@ -1149,8 +1174,14 @@ Controller = {
     local REPEATS = { }
     -- The key card's gate (IS3.16): a key's press is passed on
     -- only while no card shows, and its repeats and release
-    -- follow its press. `delivered` holds each key from its
-    -- press passed on to its release; nothing else decides.
+    -- follow its press to its receiver. `delivered` holds each
+    -- key from its press passed on to its release, with its
+    -- receiver: the route in force at the press (route_owner),
+    -- or the IDE for a reserved chord, whose key is the IDE's
+    -- for the whole press (the maintainer's ruling of November
+    -- 16, 2026: D-RESERVE-TABLE's reservations consume). A
+    -- repeat or release whose receiver is gone goes nowhere; a
+    -- paused program's release waits for continue().
     -- Text carries no key and is held back only while the card
     -- shows: a key pressed under the card and still held when it
     -- closes types its repeats from then on, its key events
@@ -1177,30 +1208,39 @@ Controller = {
       if not isr then
         owed[k] = RESERVED.keyreleased[combo_string(k)]
       end
-      local card = CC:card_shows()
-      if isr then
-        if card or not delivered[k] then return end
-      elseif card and k ~= KeyCard.KEY then
-        delivered[k] = nil
-        return
-      else
-        delivered[k] = true
-      end
-      if CC.editor then CC.editor:key_begins() end
       -- Not a reservation: this fires on ANY key in playback
       -- while shutting down, not on one combo, so it cannot be
       -- a table entry.
       if playback and love.state.app_state == 'shutdown' then
         love.event.quit()
       end
+      local card = CC:card_shows()
+      local to = delivered[k]
       local chord = combo_string(k)
       local reservation = RESERVED.keypressed[chord]
-      -- A held reservation acts on its repeats only where it
-      -- reaches a natural stop (reservedKeys.lua): a held Ctrl+T
-      -- does not flip between the run and the editor.
-      if reservation and (not isr or REPEATS[chord]) then
+      if isr then
+        if card or not to then return end
+        -- a held reservation acts on its repeats only where it
+        -- reaches a natural stop (reservedKeys.lua): a held
+        -- Ctrl+T does not flip between the run and the editor
+        if type(to) == 'table' then
+          if to.again then to.act() end
+          return
+        end
+        if to ~= route_owner then return end
+      elseif card and k ~= KeyCard.KEY then
+        delivered[k] = nil
+        return
+      elseif reservation then
+        delivered[k] = { act = reservation, again = REPEATS[chord] }
+        if CC.editor then CC.editor:key_begins() end
         reservation()
+        if CC.editor then CC.editor:gate_key_done() end
+        return
+      else
+        delivered[k] = route_owner
       end
+      if CC.editor then CC.editor:key_begins() end
 
       -- This is `love.handlers.keypressed`, the raw
       -- event-pump entry; `love.keypressed` below holds the
@@ -1257,12 +1297,22 @@ Controller = {
       local reservation = owed[k]
       owed[k] = nil
       if reservation then reservation() end
-      -- a release goes on exactly for a press that did
-      local was = delivered[k]
+      -- a release goes on exactly for a press that did, to its
+      -- receiver: the route in force, the console behind a
+      -- program, or a paused program at its continue()
+      local to = delivered[k]
       delivered[k] = nil
-      if not was then return end
-      if love.keyreleased then
-        return love.keyreleased(k, sc)
+      if not to or type(to) == 'table' then return end
+      if to == route_owner then
+        if love.keyreleased then
+          return love.keyreleased(k, sc)
+        end
+      elseif to == 'console' then
+        local console = Controller._defaults.keyreleased
+        if console then return console(k, sc) end
+      else
+        owed_releases[to] = owed_releases[to] or { }
+        owed_releases[to][k] = sc or k
       end
     end
 
@@ -1413,7 +1463,10 @@ Controller = {
     table.protect(love.handlers)
   end,
 
-  set_user_handlers = set_handlers,
+  set_user_handlers = function(userlove, CC)
+    program_count = program_count + 1
+    set_handlers(userlove, CC)
+  end,
 
   user_is_blocking = function()
     return (user_update or user_draw)

@@ -17,10 +17,9 @@ local K = require("tests.helpers.editor_keys")
 --- and text event and fall through, so that F1 reaches the
 --- console and brings its card up.
 --- @return table log --- { kind, key-or-text }
-local function program()
-  K.reset()
+local function attach(log)
   local input = F.activate_project()
-  local log = { }
+  log = log or { }
   input.hooks.keypressed = function(k, _, isr)
     log[#log + 1] = { isr and "repeat" or "press", k }
   end
@@ -31,6 +30,11 @@ local function program()
     log[#log + 1] = { "text", t, K.cc:card_shows() }
   end
   return log
+end
+
+local function program()
+  K.reset()
+  return attach()
 end
 
 local H = function() return love.handlers end
@@ -228,6 +232,7 @@ describe("the key card's gate #input", function()
       math.randomseed(20261116)
       for run = 1, 300 do
         local log = program()
+        local logs, frozen = { log }, { }
         local down = { }
         local f1 = false
         local steps = { }
@@ -236,6 +241,12 @@ describe("the key card's gate #input", function()
           if what == "f1" then
             if f1 then release("f1") else press("f1") end
             f1 = not f1
+          elseif what == "switch" then
+            -- another program takes the keys: the one before is
+            -- gone, and gets nothing more
+            frozen[#logs] = #logs[#logs]
+            log = attach()
+            logs[#logs + 1] = log
           elseif what == "down" then
             if math.random() < 0.5 then text(KEYS[k]) end
             press(k)
@@ -251,9 +262,11 @@ describe("the key card's gate #input", function()
           end
         end
         for _ = 1, 12 do
-          local r = math.random(4)
+          local r = math.random(5)
           if r == 1 then
             act("f1")
+          elseif r == 5 then
+            act("switch")
           else
             local k = NAMES[math.random(2)]
             if not down[k] then
@@ -269,30 +282,141 @@ describe("the key card's gate #input", function()
           if down[k] then act("up", k) end
         end
         if f1 then act("f1") end
-        -- the program's view: a press opens a key, a release
-        -- closes it; a repeat needs it open
-        local open = { }
+        -- each program's view: a press opens a key, a release
+        -- closes it; a repeat needs it open. A program that is
+        -- gone gets nothing more; the last one sees a release for
+        -- every press it saw
         local trace = table.concat(steps, ", ")
-        for _, e in ipairs(log) do
-          local kind, x = e[1], e[2]
-          if x ~= "f1" then
-            if kind == "press" then
-              assert.is_nil(open[x], trace)
-              open[x] = true
-            elseif kind == "repeat" then
-              assert.is_true(open[x] == true, trace)
-            elseif kind == "release" then
-              assert.is_true(open[x] == true, trace)
-              open[x] = nil
-            else
-              -- text carries no key: it goes on only while no
-              -- card shows
-              assert.is_false(e[3], trace)
+        for n, l in ipairs(logs) do
+          local open = { }
+          if frozen[n] then
+            assert.same(frozen[n], #l, "gone, yet: " .. trace)
+          end
+          for _, e in ipairs(l) do
+            local kind, x = e[1], e[2]
+            if x ~= "f1" then
+              if kind == "press" then
+                assert.is_nil(open[x], trace)
+                open[x] = true
+              elseif kind == "repeat" then
+                assert.is_true(open[x] == true, trace)
+              elseif kind == "release" then
+                assert.is_true(open[x] == true, trace)
+                open[x] = nil
+              else
+                -- text carries no key: it goes on only while no
+                -- card shows
+                assert.is_false(e[3], trace)
+              end
             end
           end
+          if n == #logs then assert.same({ }, open, trace) end
         end
-        assert.same({ }, open, trace)
         assert.is_number(run)
       end
     end)
+end)
+
+-- A key's repeats and release go to the receiver of its press,
+-- or nowhere once that receiver is gone; a reserved chord's key
+-- is the IDE's for the whole press (the maintainer's ruling of
+-- November 16, 2026, which reverses D-RESERVE-TABLE's "a
+-- reservation never consumes"). Real runs, through the K
+-- helper.
+describe("a key's receiver #input", function()
+  setup(K.setup)
+  teardown(K.teardown)
+  after_each(K.cleanup)
+
+  --- a program that records its key events in KEYS; it runs
+  --- with love.update, so that Ctrl+Pause can pause it
+  local RECORDS = table.concat({
+    "KEYS = {}",
+    "local function note(s) KEYS[#KEYS + 1] = s end",
+    "function love.keypressed(k, _, isr)",
+    "  note((isr and 'repeat ' or 'press ') .. k)",
+    "end",
+    "function love.keyreleased(k) note('release ' .. k) end",
+    "function love.update() end",
+  }, "\n") .. "\n"
+
+  local function keys()
+    return K.cc:get_project_env().KEYS
+  end
+
+  it("gives Ctrl+R's r to neither the program it stops nor the "
+      .. "one it starts", function()
+    K.reset({ ["main.lua"] = RECORDS })
+    K.keys("lctrl", "r")
+    assert.same("running", K.app_state())
+    local before = keys()
+    F.session.press("lctrl")
+    F.session.press("r")
+    K.frame()
+    local after = keys()
+    assert.are_not.equal(before, after)
+    F.session.repeat_press("r")
+    F.session.release("r")
+    F.session.release("lctrl")
+    K.frame()
+    assert.same({ "press lctrl" }, before)
+    assert.same({ }, after)
+  end)
+
+  -- Beads compy-ide-key-release-follows-route-not-receiver
+  it("gives a key released while its program is paused its "
+      .. "release at continue(), once", function()
+    K.reset({ ["main.lua"] = RECORDS })
+    K.keys("lctrl", "r")
+    assert.same("running", K.app_state())
+    F.session.press("x")
+    K.keys("lctrl", "pause")
+    K.frame()
+    -- the fixture takes no screenshot, whose callback finishes
+    -- the pause on the device
+    if K.app_state() == "snapshot" then K.cc:suspend() end
+    assert.same("inspect", K.app_state())
+    F.session.release("x")
+    -- Ctrl went down and up on the program before the pause
+    -- took the route; Ctrl+Pause's own key is the IDE's
+    assert.same({ "press x", "press lctrl", "release lctrl" },
+      keys())
+    K.type("continue()")
+    K.keys("return")
+    assert.same("running", K.app_state())
+    assert.same({ "press x", "press lctrl", "release lctrl",
+      "release x" }, keys())
+  end)
+
+  it("gives the program run() starts no release of the Enter "
+      .. "that started it", function()
+    K.reset({ ["main.lua"] = RECORDS })
+    K.type("run()")
+    F.session.press("return")
+    K.frame()
+    assert.same("running", K.app_state())
+    F.session.release("return")
+    K.frame()
+    assert.same({ }, keys())
+  end)
+
+  -- a program that takes key presses keeps their text from the
+  -- console's field (the device run of November 16, 2026)
+  it("types nothing into the console for a program that takes "
+      .. "the keys", function()
+    K.reset({ ["main.lua"] =
+      "function love.keypressed(k) end\n" })
+    K.type("run()")
+    K.keys("return")
+    assert.is_true(K.cc.run_live)
+    for _, c in ipairs({ "z", "y" }) do
+      -- the device's order: the text before its press
+      F.session.type(c)
+      F.session.press(c)
+      F.session.release(c)
+    end
+    K.keys("lctrl", "q")
+    assert.is_false(K.cc.run_live)
+    assert.same("", K.console_draft())
+  end)
 end)

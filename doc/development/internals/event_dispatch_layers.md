@@ -152,6 +152,11 @@ Two conditions hold it back, and they are the whole of the rule:
 - **The channel must have a console handler.** The console installs ten channels; the route binds
   twelve. The two derived clicks (`singleclick`, `doubleclick`) have no console default by design,
   so an unconsumed one falls through to nothing, without raising.
+- **A key's text follows its key.** A project that defines `love.keypressed` takes every key
+  press, so its text does not fall through either (`occupy_input`): the device run of
+  2026-11-16 typed a program's keys into the console's draft. A project with a key hook alone
+  decides key by key, and its text, which on a Compy comes before the press, still falls
+  through.
 
 **Is this exact base parity?** Per channel, yes — once seeded handlers consume
 ([`../decisions/input.md`](../decisions/input.md), D-HOOKS-SEEDED, *"a seeded handler consumes"*).

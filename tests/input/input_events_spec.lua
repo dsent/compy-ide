@@ -88,6 +88,10 @@ describe('input surface: inbound events — dispatch #input',
           local input = F.activate_project()
           local fired = false
           input.hooks[event] = function() fired = true end
+          -- a release reaches the route after its press did
+          if event == 'keyreleased' then
+            F.session.handlers.keypressed('a', '', false)
+          end
           F.session.handlers[event](unpack(args))
           assert.is_true(fired)
         end)
@@ -778,6 +782,8 @@ describe('input surface: inbound events — dispatch #input',
         end
         input.shortcuts.keypressed['a'] = step('shortcut')
         input.hooks.keypressed         = step('hook')
+        -- a repeat reaches the route after its press did
+        F.session.handlers.keypressed('a', 'scan-a', false)
         F.session.handlers.keypressed('a', 'scan-a', true)
         assert.same({ 'a', 'scan-a', true }, seen.shortcut)
         assert.same({ 'a', 'scan-a', true }, seen.hook)
@@ -830,6 +836,7 @@ describe('input surface: inbound events — dispatch #input',
         F.widget.keypressed = function(_, k, sc, isr)
           seen = { k, sc, isr }
         end
+        F.session.handlers.keypressed('a', 'scan-a', false)
         F.session.handlers.keypressed('a', 'scan-a', true)
         F.widget.keypressed = nil
         assert.same({ 'a', 'scan-a', true }, seen)
@@ -847,6 +854,7 @@ describe('input surface: inbound events — dispatch #input',
         F.widget.keyreleased = function(_, k, sc)
           seen = { k, sc }
         end
+        F.session.handlers.keypressed('a', 'scan-a', false)
         F.session.handlers.keyreleased('a', 'scan-a')
         F.widget.keyreleased = nil
         assert.same({ 'a', 'scan-a' }, seen)
