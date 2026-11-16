@@ -164,7 +164,9 @@ end)
 --- signs of ASCII, Latin-1 and Russian and the box and block
 --- characters do, and the view prints at its own cell one that
 --- does not, as an arrow of the icon font or a CJK character.
---- A terminal of its own is filled and drawn by the view here.
+--- A terminal of its own is filled and drawn by the view here,
+--- and read twice: from its canvas, and from the screen, where
+--- the view puts the canvas at the place it is given.
 scenario('runs', function(wait)
   wait(.1)
   local utf8 = require('utf8')
@@ -285,5 +287,46 @@ scenario('runs', function(wait)
       differ, math.floor(first / w / ch) + 1,
       math.floor(first % w / cw) + 1))
   end
+
+  -- On the screen: the view draws the terminal over the frame,
+  -- 40 pixels down, and the screen holds the same picture there,
+  -- on the frame's own pixels above and below it.
+  local down = 40
+  local w, h = term.canvas:getDimensions()
+  local function strip(img, y, rows)
+    local part = love.image.newImageData(w, rows)
+    part:paste(img, 0, 0, 0, y, w, rows)
+    return part:getString()
+  end
+  local frame = P.capture(wait)
+  local draw = love.draw
+  love.draw = function()
+    draw()
+    -- as the console's view calls it: no transform, no tint
+    gfx.push('all')
+    gfx.reset()
+    term.dirty = true
+    TerminalView.draw(term, term.canvas, nil, down)
+    gfx.pop()
+  end
+  wait(.05)
+  local shown = P.capture(wait)
+  love.draw = draw
+  local on_screen = strip(shown, down, h)
+  if on_screen ~= cells then
+    local differ = 0
+    for i = 1, #cells, 4 do
+      if on_screen:sub(i, i + 3) ~= cells:sub(i, i + 3) then
+        differ = differ + 1
+      end
+    end
+    error(string.format('the screen %d pixels down differs from the'
+      .. ' terminal\'s picture in %d pixels', down, differ))
+  end
+  assert(strip(shown, 0, down) == strip(frame, 0, down),
+    'the view drew above the place it was given')
+  local under = shown:getHeight() - down - h
+  assert(strip(shown, down + h, under) == strip(frame, down + h, under),
+    'the view drew below the terminal\'s picture')
   hm_done()
 end)
