@@ -1148,37 +1148,56 @@ cannot be registered.
 ## Stop hook — `compy.before_exit`
 
 A settable slot on `compy` itself, not on `compy.input`: it is a
-project-*run* lifecycle hook, not an input-channel callback. It exists so a
-project can put back global device state it changed imperatively — the
-sandbox clones the `love` table but shares the underlying C functions, so
-calls like `love.keyboard.setKeyRepeat(false)` change real state that
-outlives the run.
+project-*run* lifecycle hook, not an input-channel callback. It is your
+program's last word when it is stopped: for what only your program knows to
+do, such as keeping a score in a file or telling a board on the serial line
+to stop what it is doing. Putting the IDE back is not its job: the stop
+itself ends sounds looping, sets the master volume, key repeat, text input,
+the mouse and the graphics state back as the IDE had them, clears your
+handlers, hooks, shortcuts, serial handlers, input field and modules, and
+makes the environment anew, your variables with it.
 
 ```lua
-love.keyboard.setKeyRepeat(false)
-
 compy.before_exit = function()
-  love.keyboard.setKeyRepeat(true)
+  writefile('best.txt', tostring(best))
+  -- a word the program on the board knows: it stops the motors
+  compy.serial.send('halt')
 end
 ```
 
 - **Signature:** no arguments — the project knows its own state.
 - **Return value:** ignored. It cannot suppress or defer the stop.
-- **Timing:** runs *before* the framework's own teardown, so `love.*` calls
-  inside it are still safe.
-- **Fires on:** every framework-invoked stop of a running project —
-  `Ctrl+Q`, quitting the project, switching away to the editor, and app
-  shutdown in play mode. `Ctrl+Esc` exits the IDE without a stop, and the
-  hook does not run.
-- **Does NOT fire when the project's own code raises.** A raise in top-level
-  code ends the run without a stop, and a raise inside a handler suspends it
-  instead; neither is a stop path. Do not rely on this hook to undo something
-  a crash could leave behind — see
+- **Timing:** runs at the start of the stop, before the IDE's own teardown,
+  so your variables, `love.*` calls and the input field are still there.
+  What your program queued for the board and had not sent is dropped just
+  before the hook runs, so a line the hook sends is the last one and goes
+  out.
+- **Fires on:** every stop of a live program, that is one that runs, is
+  paused, or has ended its code with its handlers or picture still there:
+  `stop()`, `Ctrl+Q`, `Ctrl+R` (before the run starts again), `Ctrl+T` from
+  the program to the editor, `edit()` from a program idle behind the console,
+  `reset()`, `run()` (your program's own, which replaces it, or a typed one
+  after your program ended its code), closing the project (`close_project()`,
+  `project("other")`, `run("other")`, `reset_scratchpad()`), a quit asked
+  while the program runs, and quitting the IDE in play mode. `Ctrl+Esc` exits
+  the IDE without a stop, and the hook does not run.
+- **Does NOT fire when the program's first lines raise.** That run ends
+  without a stop: the hook is removed, not called. A raise inside a handler
+  pauses the program instead, which is no stop either; the hook runs when the
+  paused program is then stopped. Do not rely on this hook to undo something a
+  crash could leave behind — see
   [technical debt](development/technical_debt/input.md), "A project that
   raises leaves global device state dirty".
+- **A stop or a run asked for inside the hook:** `stop()`, `reset()`,
+  `run()`, `project()`, `close_project()` and `reset_scratchpad()` end the
+  hook at once, and what they asked for is dropped: the stop under way goes
+  on. `edit()` opens nothing there, and the hook goes on. A call that is
+  refused says why, and the hook goes on.
 - **Reset:** back to the default no-op once the run ends, by whichever path
   it ended — so one project's hook never fires for the next one. Like every
   other project participant, it does not survive the run that installed it.
+  One a line typed in the console set, with no program live, is removed by
+  `reset()` or a run, not called.
 - **Default:** a no-op that logs in debug mode.
 
 ## Migration from the legacy globals
