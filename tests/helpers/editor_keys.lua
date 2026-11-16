@@ -163,7 +163,8 @@ local function stub_run(projects)
 end
 
 --- The projects the memory card holds, by name: the memory
---- project, the default one, and those next_project adds
+--- project, the default one, those next_project adds, and
+--- those a create makes
 local known
 
 --- Whether a project exists, as ProjectService.is_project
@@ -171,9 +172,12 @@ local known
 --- test neither reads nor makes a project in the real
 --- directory the fixture's service points at. The default
 --- project is read as before, since closing a project reopens
---- it; returns what puts the service's own check back.
+--- it. A project a create makes is known from then on, so that
+--- a test can see one made; returns what puts the service's
+--- own check and create back.
 local function stub_projects()
-  local is_project = ProjectService.is_project
+  local is_project, create = ProjectService.is_project,
+      ProjectService.create
   known = { [K.PROJECT] = true }
   function ProjectService.is_project(path, name, ...)
     if name == ProjectService.DEFAULT then
@@ -182,8 +186,14 @@ local function stub_projects()
     if known[name] then return ROOT .. name end
     return nil, ProjectService.messages.pr_does_not_exist(name)
   end
+  function ProjectService.create(self, name, ...)
+    local ok, err = create(self, name, ...)
+    if ok then known[name] = true end
+    return ok, err
+  end
   return function()
-    ProjectService.is_project = is_project
+    ProjectService.is_project, ProjectService.create =
+        is_project, create
   end
 end
 
