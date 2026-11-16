@@ -4,7 +4,7 @@
 -- loaded into the console, where you call them.
 --
 -- MICROBIT.hex is the firmware, built from
--- https://github.com/nagydani/microbit-lua main at 773ed3e.
+-- https://github.com/nagydani/microbit-lua main at 3166307.
 -- tpbot.lua and tpbot-radio.lua are that firmware's start-up
 -- script with the TPBot words, made from it again whenever
 -- MICROBIT.hex changes.

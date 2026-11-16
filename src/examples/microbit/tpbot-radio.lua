@@ -1,6 +1,6 @@
 -- tpbot-radio.lua: the micro:bit firmware for a robot the Compy's robot
 -- lessons drive by radio. It is tpbot.lua, the start-up script of the
--- firmware the Compy ships (773ed3e) with the lessons' words, and at
+-- firmware the Compy ships (3166307) with the lessons' words, and at
 -- every start it waits for a call: listen() without a name, so a board
 -- that calls it with connect("<this board's name>") gets it again after
 -- the robot lost power. upload("tpbot-radio.lua") puts it on the board;
@@ -562,15 +562,16 @@ function connect(name, timeout, tries)
 end
 
 -- The robot lessons' words, as the Compy's robot chapter teaches them, over
--- each TPBot's own commands: robot_info(), robot_move(left, right,
--- seconds), turn(hours) and straight(steps). Each word asks which robot
+-- each TPBot's own commands: robot_move(left, right, seconds),
+-- robot_light(r, g, b), robot_distance(), robot_turn(hours) and
+-- robot_straight(steps). They add to the firmware's modules and replace
+-- none: tpbot, tpbot2 and robot stay as the firmware gives them, and
+-- tpbot.info() says which robot answers. Each word asks which robot
 -- answers, so a robot changed or switched off between two words is met as
 -- it is; a switched-off TPBot Edu holds the bus, and the asking then takes
 -- about 5 s before the word says the robot does not answer.
 do
   local uBit = require("microbit")
-  -- Taken before the global tpbot below exists: require() would take an
-  -- existing global table of the module's name as the module itself
   local classic = require("tpbot")
   local edu = require("tpbot2")
   local NO_ROBOT = "The robot does not answer. Check that it is "
@@ -580,16 +581,12 @@ do
   -- The module that drives the robot that answers, tpbot for a TPBot
   -- Classic and tpbot2 for a TPBot Edu, and its name
   local function robot()
-    local info = classic.info()
-    if not info.connected then error(NO_ROBOT, 0) end
-    if info.robot == "TPBot Classic" then
-      return classic, info.robot
+    local connected, name = classic.info()
+    if not connected then error(NO_ROBOT, 0) end
+    if name == "TPBot Classic" then
+      return classic, name
     end
-    return edu, info.robot
-  end
-
-  function robot_info()
-    return classic.info()
+    return edu, name
   end
 
   -- The motors never start without the stop after them, and the stop goes
@@ -608,6 +605,18 @@ do
     local stopped, stop_err = pcall(bot.set_motors_speed, 0, 0)
     if not ok then error(err, 0) end
     if not stopped then error(stop_err, 0) end
+  end
+
+  -- The headlights of whichever robot answers
+  function robot_light(r, g, b)
+    local bot = robot()
+    return bot.set_car_light(r, g, b)
+  end
+
+  -- The sonar, which both robots have on the same pins: millimeters to the
+  -- nearest obstacle, or nil when nothing is within about 4 m
+  function robot_distance()
+    return classic.get_distance()
   end
 
   -- A TPBot Edu's own distance or turn, waited for: a word sent while the
@@ -629,35 +638,23 @@ do
     end
   end
 
-  -- turn(h): h hours on a clock face, 30 degrees each, the shorter way
-  -- round; a positive angle turns the Edu left, so 3 hours, to the right,
-  -- is -90
-  function turn(hours)
+  -- robot_turn(h): h hours on a clock face, 30 degrees each, the shorter
+  -- way round; a positive angle turns the Edu left, so 3 hours, to the
+  -- right, is -90
+  function robot_turn(hours)
     local h = hours % 12
     if h > 6 then h = h - 12 end
     local degrees = -30 * h
     if math.abs(degrees) < 5 then return end
-    edu_move("turn", "turn", degrees)
+    edu_move("robot_turn", "turn", degrees)
   end
 
-  -- straight(l): l steps of 14.5 cm, backward for a negative l
-  function straight(steps)
+  -- robot_straight(l): l steps of 14.5 cm, backward for a negative l
+  function robot_straight(steps)
     local mm = 145 * steps
     if math.abs(mm) < 10 then return end
-    edu_move("straight", "run_distance", mm)
+    edu_move("robot_straight", "run_distance", mm)
   end
-
-  -- tpbot at the prompt, as the lessons' cards use it: the headlights of
-  -- whichever robot answers, and the sonar, which both robots have on the
-  -- same pins. require("tpbot") is still the TPBot Classic's own module.
-  tpbot = {
-    set_car_light = function(r, g, b)
-      return (robot()).set_car_light(r, g, b)
-    end,
-    get_distance = function()
-      return classic.get_distance()
-    end
-  }
 end
 
 -- Script-level setup (runs once before the main fiber

@@ -1793,7 +1793,7 @@ describe('micro:bit exec #microbit', function()
           .. 'while true do\n  microbit.display.scroll("hi")\n'
           .. '  microbit.sleep(500)\nend\n',
         'require("tpbot")\n'
-          .. 'robot_move(50, 50, 1)\nturn(3)\nstraight(2)\n',
+          .. 'robot_move(50, 50, 1)\nrobot_turn(3)\nrobot_straight(2)\n',
         'require("microbit")\nrequire("microbit.display")\n'
           .. 'function on_event(source, value)\n'
           .. '  if source == microbit.DEVICE_ID_BUTTON_A then\n'
