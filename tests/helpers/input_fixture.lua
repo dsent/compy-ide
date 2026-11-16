@@ -231,6 +231,10 @@ function F.setup()
   -- uses F.run_project.
   widget = build_widget(cfg)
   CC = build_console(cfg)
+  -- A stop collects garbage twice (the terminate flush); over
+  -- a suite's thousands of runs and its large heap that is
+  -- minutes: a case that checks the collection counts it itself
+  CC.collect_garbage = function() end
   Controller.set_default_handlers(CC, CC.view)
   -- set_love_update (above) wires love.update, which drives the
   -- click-timer distinguishing single- from double-click

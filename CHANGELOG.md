@@ -250,9 +250,16 @@ Project-author guide: `doc/input_api.md`.
   console before it, is gone, and so is a bundled library's state the program loaded,
   such as a timer's pending calls; the graphics settings it changed are reset, though a transform
   it pushed and never popped stays. Before, a handler deleted from `main.lua` went on running
-  until another project was opened or the IDE restarted. What a run leaves stays for the
-  console to look at until the next run, and `continue()` and `dofile()` keep everything
-  as it is.
+  until another project was opened or the IDE restarted. A program that ends by itself
+  leaves its variables for the console to look at until the next run, and `continue()` and
+  `dofile()` keep everything as it is.
+- **Stopping a program clears what it left.** `stop()`, Ctrl+Q, an error in a program's
+  first lines and the close of its project now all end it through one flush: its handlers,
+  input hooks, shortcuts, `before_exit` hook, serial handlers, input field and modules go,
+  as before, and now also its variables, the sounds it started, and key repeat and text
+  input as it set them; its picture is cleared and the graphics settings reset. A pause
+  clears nothing, so `continue()` resumes as it was. The console's output and history and
+  the editor's files stay.
 - **`run("name")` makes no project.** A name no project has is refused, "There is no
   project mzae: project("mzae") creates it.", and nothing changes; before, `run` made the
   project and ran its example. `project("name")` still makes one.

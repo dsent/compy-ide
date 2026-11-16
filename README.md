@@ -139,9 +139,13 @@ Closing a project returns to `scratchpad`.
   input hooks and shortcuts go with it; then no variable,
   `love` handler or module of an earlier run, or of a line
   typed before it, is there, and the graphics settings are
-  reset. What a run leaves stays for the console to look at
-  until the next run. `continue()` and `dofile()` keep
-  everything as it is.
+  reset. A program that ends by itself leaves its variables
+  for the console to look at until the next run. Stopping a
+  program, by `stop()`, Ctrl+Q, an error in its first lines or
+  closing its project, clears them too, stops the sounds it
+  started and puts the keyboard back as the IDE set it; a pause
+  keeps everything for `continue()`. `dofile()` runs in the
+  environment as it stands.
 
 - `example_projects()`
 

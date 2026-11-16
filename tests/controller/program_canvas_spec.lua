@@ -389,7 +389,11 @@ describe('a program\'s canvas after it stops #canvas', function()
         end
       end)
       local env = F.cc:get_project_env()
-      env.mark = function() draw('typed') end
+      -- the stop on Enter makes the environment anew from the
+      -- base (the terminate flush): the line's helper is there
+      local base = F.cc:get_base_env()
+      base.mark = function() draw('typed') end
+      finally(function() base.mark = nil end)
       F.session.type('mark()')
       press({ 'return' })
       env.love.update = nil

@@ -70,6 +70,7 @@ end
 --- @field run_id integer? the current run's number
 --- @field run_live boolean? the run is not stopped
 --- @field canvas_handed integer? moves on when console code takes the canvas from a stopped run
+--- @field collect_garbage function? --- collectgarbage, or a stand-in in tests
 --- methods
 --- @field edit function
 --- @field finish_edit function
@@ -218,8 +219,8 @@ end
 --- Single invocation point by construction, so a second stop
 --- path cannot grow its own arrangement. The framework's forced
 --- restore of global device state is flush_program_state, which
---- the stop path calls after this, and the paths that never
---- reach it call on their own. See
+--- calls this first on a stop, and only removes the hook on a
+--- crash. See
 --- doc/development/technical_debt/input.md, "A project that
 --- raises leaves global device state dirty".
 ---
@@ -581,6 +582,9 @@ function ConsoleController:run_project(name, stopped)
     --- project has just done both. What a run leaves stays for
     --- inspection until the next run; continue() and dofile()
     --- never pass here.
+    --- a stop is the flush, which makes the environment anew
+    --- and resets the graphics state; with nothing live, the
+    --- seam does those itself
     if not opened then
       if stopped then
         --- the caller stopped (Ctrl+R)
@@ -588,10 +592,10 @@ function ConsoleController:run_project(name, stopped)
         self:stop_project_run()
       else
         self:evacuate_required()
+        self:_reset_executor_env()
+        reset_graphics()
       end
-      self:_reset_executor_env()
     end
-    reset_graphics()
     local runner_env = self:get_project_env()
     -- A run starts on a blank canvas, whatever the last one
     -- left there; a project that fails to load leaves the
@@ -603,7 +607,7 @@ function ConsoleController:run_project(name, stopped)
     if f then
       local n = name or P.current.name or 'project'
       Log.info('Running \'' .. n .. '\'')
-      self:flush_program_state()
+      self:restore_console_mouse()
       -- A new run, by its number: what a stopped run's calls
       -- still in flight may clear is decided against it.
       self.run_id = (self.run_id or 0) + 1
@@ -638,31 +642,11 @@ function ConsoleController:run_project(name, stopped)
         -- (doc/development/decisions/input.md,
         -- D-ROUTE-LIFETIME).
         self.main_ctrl.release_keyboard_route(self)
-        destroy_input_widget()
-        -- ...and the participants it installed before raising.
-        -- Same invariant, same reason: nothing survives the
-        -- project that installed it. before_exit is uninstalled
-        -- but NOT fired: the hook is scoped to stop paths and
-        -- excludes crash, yet a slot left holding the dead
-        -- project's function would fire for the next one.
-        self.main_ctrl.clear_user_handlers(self)
-        self:get_project_env().compy.before_exit =
-            default_before_exit
-        -- Its serial handlers go the same way, by the same
-        -- invariant, and the console is heard again. What it
-        -- queued for the board and has not sent goes too.
-        SerialPort:drop()
-        SerialPort:programEnded()
-        self:flush_program_state()
-        reset_graphics()
-        -- The run is over: what it drew before raising goes.
-        -- Only this run's own: one it started again meanwhile
-        -- owns the canvas now.
-        if self.run_id == run_id then
-          self.model.output:clear_canvas()
-          self.run_live = false
-        end
-        love.state.app_state = 'ready'
+        -- ...then the one flush, as a stop's: nothing survives
+        -- the project that raised, its globals included.
+        -- before_exit is removed but NOT called: the hook is
+        -- scoped to stop paths and excludes a crash.
+        self:flush_program_state(false)
         self.model.output:write_error('Error: ' .. tostring(run_err))
       else
         if not self.main_ctrl.user_is_blocking() then
@@ -686,7 +670,7 @@ function ConsoleController:run_project(name, stopped)
           -- screen: it needs its mouse now, even if keys or the
           -- board still reach the program.
           if not self.main_ctrl.user_is_interactive() then
-            self:flush_program_state()
+            self:restore_console_mouse()
           end
         end
       end
@@ -2058,7 +2042,9 @@ end
 --- @param name string
 --- @param play boolean?
 --- @return boolean success
-function ConsoleController:open_project(name, play)
+--- @param fresh boolean? --- the environment was just made anew
+---   (close_project's flush): it is not made again
+function ConsoleController:open_project(name, play, fresh)
   self.model.output:to_rest()
   local P = self.model.projects
   if not name then
@@ -2095,8 +2081,12 @@ function ConsoleController:open_project(name, play)
     then
       table.insert(package.loaders, 1, project_loader)
     end
-    --- env resets on every project switch
-    self:_reset_executor_env()
+    --- env resets on every project switch: closing the one
+    --- that was open stopped it, and the stop's flush made it
+    --- anew already
+    if not fresh and (not cur or self.stopping) then
+      self:_reset_executor_env()
+    end
   elseif cur then
     --- a project is always open: one that cannot be opened or
     --- made on the card leaves the one that was open, its
@@ -2169,10 +2159,14 @@ end
 --- @return boolean success
 function ConsoleController:close_project(closed)
   self.model.output:to_rest()
+  --- a project that was open was stopped as it closed, and the
+  --- stop's flush made the environment anew
+  local flushed = self.model.projects.current ~= nil
+      and not self.stopping
   local ok = self:_close_project()
   if ok then
     if closed then closed() end
-    return self:open_project(ProjectService.DEFAULT)
+    return self:open_project(ProjectService.DEFAULT, nil, flushed)
   end
   return ok
 end
@@ -2217,54 +2211,69 @@ function ConsoleController:stop_project_run()
   if not ok then
     -- A step ahead of the reset raised: the console still
     -- gets its mouse.
-    self:flush_program_state()
+    self:restore_console_mouse()
     error(err, 0)
   end
 end
 
---- Put back what a program changed and the console needs,
---- whatever the program did and however it ended: the mouse,
---- to CONSOLE_MOUSE. The IDE's own teardown, never the
---- program's: a program that crashed, or never cleans up,
---- leaves the same console as one that does. Every path that
---- ends a run calls it, and run_project again before a run
---- starts, for a path that ended one without it, and main.lua
---- once when the IDE starts.
-function ConsoleController:flush_program_state()
+--- The mouse as the console needs it (CONSOLE_MOUSE): the
+--- flush puts it back, and so do a run's start and a program
+--- that idles with nothing that answers the pointer, and
+--- main.lua once when the IDE starts.
+function ConsoleController:restore_console_mouse()
   self.paused_mouse = nil
   set_mouse(CONSOLE_MOUSE)
 end
 
-function ConsoleController:_stop_project_run()
+--- The one flush (Beads compy-ide-terminate-flush; the
+--- maintainer's invariant of 2026-06-12): terminating a program
+--- returns the IDE to its own baseline, however the program
+--- behaved. stop(), Ctrl+Q, a project's close, an error in a
+--- program's first lines, the run seam's stop and reset() all
+--- end here; a program's natural end and a pause do not.
+--- What a program left, globals included, goes; the console's
+--- output, kept rows and history and the editor's files stay.
+--- Idempotent: safe with nothing run, and twice.
+--- @param call_exit boolean? --- a stop calls the program's
+---   compy.before_exit before it goes; a crash only removes it
+function ConsoleController:flush_program_state(call_exit)
+  local ended = self.run_live
   -- What the run queued for the board and has not sent goes
   -- first: its before_exit hook may send the board a last
   -- line on purpose, and that one stays.
   SerialPort:drop()
   local compy = self:get_project_env().compy
-  framework_before_exit(compy)
+  if call_exit then
+    framework_before_exit(compy)
+  else
+    compy.before_exit = default_before_exit
+  end
   --- after the exit hook, which may itself require a module
   self:evacuate_required()
   -- After the project's own hook, which may still use the
   -- mouse as it left it.
-  self:flush_program_state()
+  self:restore_console_mouse()
   self.main_ctrl.set_default_handlers(self, self.view)
   self.main_ctrl.set_love_update(self)
-  -- After framework_before_exit above: the project's own
-  -- before_exit hook may still drive compy.input, and it must
-  -- find a widget there when it does.
+  -- After the exit hook: it may still drive compy.input, and
+  -- it must find a widget there when it does.
   destroy_input_widget()
   -- What the run drew on the console's canvas goes with it,
-  -- after the project's own hook, which may still draw. A
-  -- paused run (Ctrl+Pause, an error in a handler) has not
-  -- reached here: its canvas stays until it stops. Nor has one
-  -- that finished its top-level code with nothing live (the
-  -- sine example): it is idle, not stopped, and its picture
-  -- stays.
+  -- after the project's own hook, which may still draw.
   self.model.output:clear_canvas()
   --- the IDE draws on from here: under the program's scissor,
   --- colour or wireframe its key card and editor came out
-  --- clipped and outlined (the device night of November 16)
+  --- clipped and outlined (the device night of November 16).
+  --- The transform stack is left as it is: a stop can come from
+  --- inside a draw, whose own pop follows.
   reset_graphics()
+  --- what the program set playing stops; compy.audio's sounds
+  --- restart their own source on each call
+  if love.audio and love.audio.stop then love.audio.stop() end
+  --- the keyboard as the IDE set it at its start (main.lua)
+  local kb = love.keyboard
+  if kb and kb.setKeyRepeat then kb.setKeyRepeat(true) end
+  if kb and kb.setTextInput then kb.setTextInput(true) end
   self.run_live = false
   View.clear_snapshot()
   self.main_ctrl.set_love_draw(self, self.view)
@@ -2272,8 +2281,27 @@ function ConsoleController:_stop_project_run()
   -- The program's serial handlers go with its other handlers:
   -- a stopped project must not keep hearing the board.
   SerialPort:programEnded()
+  --- the program's globals go with it (the maintainer's ruling
+  --- of November 16, 2026: "a stop clears the globals too");
+  --- what a run that ended here held is freed now, twice for
+  --- finalizers (with nothing run there is nothing to free)
+  self:_reset_executor_env()
+  if ended then
+    local collect = self.collect_garbage or collectgarbage
+    collect('collect')
+    collect('collect')
+  end
   self.main_ctrl.report()
   love.state.app_state = 'ready'
+end
+
+--- A stop is the flush, the program's exit hook called. A
+--- paused run (Ctrl+Pause, an error in a handler) has not
+--- reached here, nor has one that finished its first lines
+--- with nothing live (the sine example): it is idle, not
+--- stopped, and its picture and globals stay.
+function ConsoleController:_stop_project_run()
+  self:flush_program_state(true)
 end
 
 function ConsoleController:quit_project()
