@@ -73,9 +73,10 @@ Project-author guide: `doc/input_api.md`.
   your text in the field.
 - **The text cursor is a blinking block.** In the file editor, the console and a
   project's input alike, the cursor is a block on the character it stands before,
-  which stays readable on it, and on the empty cell at a line's end. It blinks as
-  the `blink` setting says and stays shown for a moment after every key press, and
-  after a project moves it with `compy.input`.
+  which stays readable on it, and on the empty cell at a line's end. It blinks
+  slowly, 0.6 seconds shown and 0.6 hidden, as a terminal's cursor does, and stays
+  shown for a whole blink after every key press, and after a project moves it with
+  `compy.input`.
 - **A notice is orange, the parser's message red.** The message above the status
   line has no frame.
 - **The console's status line is a near-black gray**, so that the black band of an

@@ -262,6 +262,9 @@ describe('input surface: inbound events — global platform'
               function() project_ran = true; return true end
           F.session.press('lctrl')
           F.session.press('lshift')
+          -- a release reaches the program only after its press
+          -- did (the key card's gate)
+          F.session.press('escape')
           F.session.release('escape')
           love.event.quit = orig
           assert.equal(0, quits)

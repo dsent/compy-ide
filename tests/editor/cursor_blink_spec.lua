@@ -8,7 +8,7 @@
 local K = require("tests.helpers.editor_keys")
 local F = require("tests.helpers.input_fixture")
 
-local PERIOD, DUTY = 0.6, 0.5
+local PERIOD, DUTY = 1.2, 0.5
 -- a frame, and less than any phase
 local TICK = 0.01
 

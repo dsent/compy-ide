@@ -123,9 +123,11 @@ local config_view = function(flags)
     h = h,
     colors = colors,
 
+    --- 0.6 s shown, 0.6 s hidden, as xterm's and VTE's cursor
+    --- (the user's ruling of November 16, 2026)
     blink = {
       enable = true,
-      period = 0.666666,
+      period = 1.2,
       duty = 0.5,
     },
 
