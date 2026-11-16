@@ -253,6 +253,10 @@ Project-author guide: `doc/input_api.md`.
   until another project was opened or the IDE restarted. A program that ends by itself
   leaves its variables for the console to look at until the next run, and `continue()` and
   `dofile()` keep everything as it is.
+- **`reset()` starts the console clean.** Typed with nothing between the brackets, it
+  stops a program that runs, clears what it and the lines typed before left, and empties
+  the console as Ctrl+L does, then says "Reset."; the history and the editor's files
+  stay. Only `reset()` exists yet: with an argument it is refused.
 - **Stopping a program clears what it left.** `stop()`, Ctrl+Q, an error in a program's
   first lines and the close of its project now all end it through one flush: its handlers,
   input hooks, shortcuts, `before_exit` hook, serial handlers, input field and modules go,

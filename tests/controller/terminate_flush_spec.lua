@@ -155,6 +155,53 @@ describe("the terminate flush #console", function()
       assert.equal(2, n)
     end)
 
+  --- reset(): the flush, live or not, then the console
+  --- emptied as Ctrl+L empties it (Beads
+  --- compy-ide-reset-runtime-reset: only reset() exists yet)
+  describe("reset()", function()
+    it("stops a live program, clears its globals and the console",
+      function()
+        reset({ ["main.lua"] = "print('from the run')\n" .. RUNS })
+        local seen = devices()
+        run("run()")
+        run("reset()")
+        assert.is_false(K.cc.run_live)
+        assert.is_nil(env().g)
+        assert.is_true(seen.stops >= 1)
+        local text = K.console_text()
+        assert.is_nil(text:find("from the run", 1, true), text)
+        assert.same({ }, (function()
+          local k, out = K.cc.model.output.kept, { }
+          for i = k.first, k.last do out[#out + 1] = i end
+          return out
+        end)())
+        assert.truthy(text:find("Reset.", 1, true), text)
+      end)
+
+    it("clears what typed lines left with nothing live", function()
+      reset()
+      run("t = 5")
+      run("compy.before_exit = function() print('TYPED_EXIT') end")
+      run("reset()")
+      assert.is_nil(env().t)
+      local text = K.console_text()
+      assert.is_nil(text:find("TYPED_EXIT", 1, true), text)
+      assert.truthy(text:find("Reset.", 1, true), text)
+      K.keys("up")
+      assert.same("reset()", K.console_draft())
+    end)
+
+    it("refuses an argument in one sentence", function()
+      reset()
+      run("t = 5")
+      run("reset('globals')")
+      assert.equal(5, env().t)
+      assert.truthy(K.console_text():find(
+        "Only reset() exists yet, with nothing between the brackets.",
+        1, true), K.console_text())
+    end)
+  end)
+
   it("keeps the console's output and history", function()
     reset({ ["main.lua"] = "print('from the run')\n"
       .. "function love.update() end\n" })

@@ -25,6 +25,10 @@ local messages = {
   nothing_paused  = 'Nothing is paused.',
   already_running = 'A project is already running: Ctrl+Q stops it.',
   needs_a_name    = 'A project needs a name: project("name").',
+  --- the reset specification's scoped resets are later work
+  --- (Beads compy-ide-reset-runtime-reset)
+  reset_alone     = 'Only reset() exists yet, with nothing between the brackets.',
+  reset_done      = 'Reset.',
   --- only a card that cannot hold scratchpad leaves none open
   no_project      = 'No project is open: the SD card cannot be used.',
   --- run() makes no project: project() does
@@ -1693,6 +1697,18 @@ function ConsoleController.prepare_project_env(cc)
     end
   end
 
+  --- reset(): the flush, a program live or not, then the
+  --- console emptied as Ctrl+L empties it. A program that runs
+  --- is stopped, its before_exit called; with nothing live what
+  --- typed lines left goes, a before_exit they set removed and
+  --- not called.
+  project_env.reset            = function(...)
+    if select('#', ...) > 0 then
+      return cc.model.output:write_refusal(messages.reset_alone)
+    end
+    cc:reset()
+  end
+
   project_env.reset_scratchpad = function()
     cc:reset_scratchpad()
   end
@@ -1962,6 +1978,19 @@ end
 --- the draw wrapper's pop does
 function ConsoleController:reset_graphics()
   reset_graphics()
+end
+
+--- The console's reset(): the one flush, then the console's
+--- output and kept rows erased, as Ctrl+L erases them; the
+--- history and the editor's files stay
+function ConsoleController:reset()
+  if self.run_live then
+    self:stop_project_run()
+  else
+    self:flush_program_state(false)
+  end
+  self.model.output:erase()
+  print(messages.reset_done)
 end
 
 --- Ctrl+R: the stop the run seam would make, made first, so

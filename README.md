@@ -156,6 +156,14 @@ Closing a project returns to `scratchpad`.
   Close currently opened project and return to the default
   `scratchpad` project.
 
+- `reset()`
+
+  Stop the program if one runs, clear what it and the lines
+  typed before left (variables, handlers, sounds, settings),
+  and empty the console as <kbd>Ctrl</kbd>+<kbd>L</kbd> does. The
+  history and the editor's files stay. Only `reset()` with
+  nothing between the brackets exists yet.
+
 - `reset_scratchpad()`
 
   Set the default `scratchpad` project aside as
