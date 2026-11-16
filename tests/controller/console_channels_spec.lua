@@ -162,13 +162,15 @@ describe("the console's channels #console", function()
   --- (the maintainer's ruling of November 16, 2026)
   describe("a pause's text", function()
     local function paused_by(how)
+      -- a run starts from a fresh environment: the flag is
+      -- the program's own
       reset({ ["main.lua"] = "print('mine')\n"
+        .. "local PAUSE = " .. tostring(how == "pause") .. "\n"
         .. "local n = 0\n"
         .. "function love.update()\n"
         .. "  n = n + 1\n"
         .. "  if n == 1 and PAUSE then pause('Look here') end\n"
         .. "end\n" })
-      K.cc:get_project_env().PAUSE = how == "pause"
       run("run()")
       local before = K.console_text()
       if how == "ctrl" then K.keys("lctrl", "pause") end

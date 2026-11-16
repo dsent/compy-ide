@@ -67,7 +67,11 @@ describe("compy.terminal #console", function()
     reset({ ["main.lua"] =
       "compy.terminal.gotoxy(3, 5) io.write('x')\n" })
     -- io.write's path (model.io.redirect), as the IDE has it
-    K.cc:get_project_env().io = { write = function(s)
+    local base = K.cc:get_base_env()
+    local io_was = base.io
+    finally(function() base.io = io_was end)
+    -- in the environment each run starts from
+    base.io = { write = function(s)
       K.cc.model.output:write(s)
     end }
     run("run()")
@@ -96,7 +100,11 @@ describe("compy.terminal #console", function()
     function()
       reset({ ["main.lua"] =
         "compy.terminal.gotoxy('3', '5') io.write('x')\n" })
-      K.cc:get_project_env().io = { write = function(s)
+      local base = K.cc:get_base_env()
+      local io_was = base.io
+      finally(function() base.io = io_was end)
+      -- in the environment each run starts from
+      base.io = { write = function(s)
         K.cc.model.output:write(s)
       end }
       run("run()")

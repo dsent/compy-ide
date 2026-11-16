@@ -232,6 +232,12 @@ Project-author guide: `doc/input_api.md`.
   errors as before. `run()` while a project is paused now says "A project is
   already running: Ctrl+Q stops it." in the output, where before its message was cleared
   as it appeared.
+- **Each run starts afresh.** A run, by `run()`, `run("name")` or Ctrl+R, starts from the
+  project's environment as opening the project makes it: a variable, a `love` handler or a
+  module of an earlier run, or a variable typed in the console before it, is gone. Before,
+  a handler deleted from `main.lua` went on running until another project was opened or
+  the IDE restarted. What a run leaves stays for the console to look at until the next
+  run, and `continue()` and `dofile()` keep everything as it is.
 - **`run("name")` makes no project.** A name no project has is refused, "There is no
   project mzae: project("mzae") creates it.", and nothing changes; before, `run` made the
   project and ran its example. `project("name")` still makes one.

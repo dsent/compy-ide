@@ -541,6 +541,14 @@ function ConsoleController:run_project(name)
   end
 
   if ok then
+    --- a run starts from the environment opening the project
+    --- makes: no global, no love handler and no module of an
+    --- earlier run or of a line typed before it. What the run
+    --- leaves stays for inspection until the next run;
+    --- continue() and dofile() never pass here (the
+    --- maintainer's ruling of November 16, 2026)
+    self:evacuate_required()
+    self:_reset_executor_env()
     local runner_env = self:get_project_env()
     -- A run starts on a blank canvas, whatever the last one
     -- left there; a project that fails to load leaves the
