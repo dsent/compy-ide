@@ -36,7 +36,10 @@ return {
     console = { idle = 'quit the IDE', live = 'quit the IDE' },
   },
   { chord = 'ctrl+pause', name = 'suspend', repeats = true },
-  { chord = 'ctrl+alt+p', name = 'profile_start' },
-  { chord = 'ctrl+alt+shift+p', name = 'profile_stop' },
-  { chord = 'f10', name = 'overlay' },
+  --- reserved in a profiling build alone (conf.lua's
+  --- love.PROFILE); elsewhere a program gets them
+  { chord = 'ctrl+alt+p', name = 'profile_start', profiling = true },
+  { chord = 'ctrl+alt+shift+p', name = 'profile_stop',
+    profiling = true },
+  { chord = 'f10', name = 'overlay', profiling = true },
 }

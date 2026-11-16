@@ -1598,7 +1598,9 @@ is owed comes at its `continue()` (the gate in `controller.lua`, `delivered` and
 binding of `ctrl+pause` still runs after the suspend, and that a shortcut leaves the key to the
 route (`input_global_shortcuts_spec.lua`, `input_shortcuts_click_spec.lua`), now turned around,
 and the input guide's sentence that reservations pass the event on; no shipped program binds a
-reserved chord.
+reserved chord. The profiling keys (`f10` and the profiler pair) act only in a profiling build;
+since a reservation consumes, they are reserved there alone (`love.PROFILE`, set by `conf.lua`
+before the gate is built), and a program receives them in every other build.
 
 **Note, 2026-11-14 — the map in the table changed, by the product owner's decision.** *"What does
 not change"* below held for the change of representation it describes; this is a later change of

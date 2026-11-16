@@ -383,31 +383,75 @@ describe('input surface: inbound events — global platform'
           assert.is_nil(finished)
         end)
 
-      -- love.PROFILE is restored to false BEFORE asserting: the
-      -- module-load-time guard in controller.profiler.lua
-      -- captures love.PROFILE once, so leaving it truthy past a
-      -- failed assertion here breaks Controller.report() in
-      -- every later test's F.reset().
-      it('f10 still cycles the FPS overlay unmodified',
+      -- The profiling keys are reserved in a profiling build
+      -- alone: the gate is built anew here with love.PROFILE set,
+      -- as conf.lua sets it before love.load, and the shared
+      -- handlers go back after. love.PROFILE is restored to false
+      -- BEFORE asserting: the module-load-time guard in
+      -- controller.profiler.lua captures love.PROFILE once, so
+      -- leaving it truthy past a failed assertion breaks
+      -- Controller.report() in every later test's F.reset().
+      local function profiling(case)
+        local saved = table.clone(love.handlers)
+        love.PROFILE = { fpsc = 'off' }
+        Controller.setup_callback_handlers(F.cc)
+        local ok, err = pcall(case)
+        local fpsc = love.PROFILE.fpsc
+        love.PROFILE = false
+        for k, v in pairs(saved) do love.handlers[k] = v end
+        assert(ok, err)
+        return fpsc
+      end
+
+      --- a program that records F10's events in `log`
+      local function f10_program(log)
+        local input = F.activate_project()
+        input.hooks.keypressed = function(k, _, isr)
+          if k == 'f10' then
+            log[#log + 1] = isr and 'repeat' or 'press'
+          end
+        end
+        input.hooks.keyreleased = function(k)
+          if k == 'f10' then log[#log + 1] = 'release' end
+        end
+      end
+
+      local function hold_f10()
+        F.session.press('f10')
+        F.session.repeat_press('f10')
+        F.session.release('f10')
+      end
+
+      it('f10 cycles the FPS overlay in a profiling build, and '
+        .. 'its press, repeat and release stay the IDE\'s',
         function()
-          love.PROFILE = { fpsc = 'off' }
-          F.session.press('f10')
-          local fpsc = love.PROFILE.fpsc
-          love.PROFILE = false
+          local log = { }
+          local fpsc = profiling(function()
+            f10_program(log)
+            hold_f10()
+          end)
           assert.equal('T_L_B', fpsc)
+          assert.same({ }, log)
+        end)
+
+      it('f10 reaches a program in an ordinary build: press, '
+        .. 'repeat and release', function()
+          local log = { }
+          f10_program(log)
+          hold_f10()
+          assert.same({ 'press', 'repeat', 'release' }, log)
         end)
 
       it('ctrl+f10 no longer cycles; the project binding'
         .. ' runs instead', function()
-          love.PROFILE = { fpsc = 'off' }
           local project_ran = false
-          local input = F.activate_project()
-          input.shortcuts.keypressed['ctrl+f10'] =
-              function() project_ran = true; return true end
-          F.session.press('lctrl')
-          F.session.press('f10')
-          local fpsc = love.PROFILE.fpsc
-          love.PROFILE = false
+          local fpsc = profiling(function()
+            local input = F.activate_project()
+            input.shortcuts.keypressed['ctrl+f10'] =
+                function() project_ran = true; return true end
+            F.session.press('lctrl')
+            F.session.press('f10')
+          end)
           assert.equal('off', fpsc)
           assert.is_true(project_ran)
         end)
