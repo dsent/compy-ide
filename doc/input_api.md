@@ -840,9 +840,10 @@ sees every event on its channel; "Choosing the mechanism" below covers what to
 do when a binding and a held key have to work together.
 
 **Hooks** are the fallback after shortcuts. `compy.input.hooks.keypressed`,
-`.keyreleased`, and `.textinput` each hold one function per channel. At
-activation, an existing project `love.*` handler seeds the matching hook when
-no explicit hook was supplied, so a project that already defines
+`.keyreleased`, and `.textinput` each hold one function per channel. When
+the run begins, an existing project `love.*` handler seeds the matching hook
+when no explicit hook was supplied (once: `continue()` after a pause gives
+the hooks back as the pause left them, a hook you cleared staying clear), so a project that already defines
 `love.keypressed` keeps working without changes — and consumes its channel,
 as it did under plain LÖVE ("How events reach your project").
 

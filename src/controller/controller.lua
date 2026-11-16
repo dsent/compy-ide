@@ -327,10 +327,13 @@ local route_owner, program_count = 'console', 0
 --- come at continue(), and go with the run otherwise.
 local owed_releases = { }
 
-local function occupy_input(userlove, CC)
+--- @param resume boolean? --- continue(): the hooks are as the
+---   pause left them, and none is seeded anew (round 20)
+local function occupy_input(userlove, CC, resume)
   local pic = Controller.project_input
   local compy = CC:get_project_env().compy
-  pic:activate(project_handlers(userlove, CC), compy.input)
+  pic:activate(not resume and project_handlers(userlove, CC) or nil,
+    compy.input)
   -- with_canvas_and_errors here, not around each participant:
   -- route IS the boundary, so every tier of the walk runs with
   -- the project canvas bound and one error handler above it.
@@ -489,9 +492,10 @@ end
 -- (also used in occupy_* and hook_* above);
 --- @param userlove table
 --- @param CC ConsoleController
-local set_handlers = function(userlove, CC)
+--- @param resume boolean? --- continue(), see occupy_input
+local set_handlers = function(userlove, CC, resume)
   reset_click_state()
-  occupy_input(userlove, CC)
+  occupy_input(userlove, CC, resume)
   mark_pointer_liveness(userlove, CC)
   hook_update(userlove)
   hook_draw(userlove)
@@ -1622,7 +1626,7 @@ Controller = {
 
   --- @param CC ConsoleController
   restore_user_handlers = function(CC)
-    set_handlers(Controller._userhandlers, CC)
+    set_handlers(Controller._userhandlers, CC, true)
   end,
 
   --- @param CC ConsoleController?

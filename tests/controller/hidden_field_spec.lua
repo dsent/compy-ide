@@ -121,3 +121,28 @@ describe("the console's field behind a program that owns the keys"
     assert.is_falsy(love.state.user_input.V.field_hidden)
   end)
 end)
+
+-- round 20: continue() gives back the program's handlers as
+-- they were at the pause; it seeds no hook anew
+describe("continue() and the hook table #console", function()
+  after_each(K.cleanup)
+
+  it("does not bring back an own handler whose hook was cleared",
+    function()
+      K.reset({ ["main.lua"] = "function love.keypressed() got = true end\n"
+        .. "function love.update() end\n" })
+      run("run()")
+      local env = K.cc:get_project_env()
+      env.compy.input.hooks.keypressed = nil
+      K.cc:suspend_run()
+      K.cc:suspend()
+      assert.same("inspect", K.app_state())
+      run("continue()")
+      assert.same("running", K.app_state())
+      assert.is_nil(env.compy.input.hooks.keypressed)
+      K.keys("x")
+      assert.is_nil(env.got)
+      assert.is_false(K.cc.main_ctrl.program_owns_keys())
+      K.keys("lctrl", "q")
+    end)
+end)
