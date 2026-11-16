@@ -271,8 +271,9 @@ Project-author guide: `doc/input_api.md`.
   `reset()`, `run()`, `project()`, `close_project()` and `reset_scratchpad()`, called from a
   program or a typed line, end that code at once, and the IDE does what they ask once the
   code has returned: `stop(); print(1)` prints nothing, and statements after `stop()` in a
-  handler can no longer undo what the stop cleared. `reset()` called from code returns
-  nothing. A refused call says why and ends nothing. A program's own `pcall` around such a
+  handler can no longer undo what the stop cleared. A program's own `run()` replaces it,
+  as Ctrl+R does; a typed `run()` while a program runs is still refused. `reset()` called
+  from code returns nothing. A refused call says why and ends nothing. A program's own `pcall` around such a
   call lets its code run on until it returns.
 - **Stopping a program clears what it left.** `stop()`, Ctrl+Q, an error in a program's
   first lines and the close of its project now all end it through one flush: its handlers,

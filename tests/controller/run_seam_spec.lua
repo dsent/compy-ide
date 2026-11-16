@@ -471,13 +471,11 @@ end
     assert.is_nil(scissor())
   end)
 
-  --- design B: the stop ends the draw, and the run after it is
-  --- never asked for; the stop resets the scissor
-  it('leaves no scissor when love.draw stops before a run', function()
+  --- a program's own run() replaces it once its draw returned
+  it('starts the run love.draw started with no scissor', function()
     reset({['main.lua'] = [[
 gfx.setScissor(0, 0, 300, 300)
 function love.draw()
-  stop()
   run("menu")
 end
 ]]})
@@ -486,9 +484,9 @@ end
     K.next_project('menu', {['main.lua'] = 'function love.update() end\n'})
     K.frame()
     love.draw()
-    assert.equal('ready', K.app_state())
-    assert.same(K.PROJECT, K.cc.model.projects.current.name)
+    assert.equal('running', K.app_state())
     assert.is_nil(scissor())
+    env().love.update = nil
   end)
 
   it('lets stop() from love.draw unwind the draw', function()
@@ -501,7 +499,7 @@ end
     assert.is_false(K.cc.run_live)
   end)
 
-  it('lets a run refused in love.draw leave the draw whole',
+  it('lets a run started from love.draw unwind the draw',
     function()
       reset({['main.lua'] = [[
 function love.draw()
@@ -583,19 +581,20 @@ function love.update(dt) Timer.update(dt) end
     assert.equal(file, K.cc.editor:get_active_buffer())
   end)
 
-  --- design B: a stop in the first lines ends them, and the run
-  --- after it is never asked for
-  it('runs nothing after a stop in the first lines', function()
+  --- a program's own run() in its first lines ends them, and
+  --- replaces the run once it has begun
+  it('runs the new main.lua that first lines wrote and then ran',
+    function()
     reset({['main.lua'] = [[
 function love.update() print('OLD_UPDATE') end
 writefile('main.lua', "function love.update() print('NEW_UPDATE') end")
-stop()
 run()
+print('NOT_REACHED')
 ]]})
     run('run()')
     assert.is_false(said('OLD_UPDATE'), K.console_text())
-    assert.is_false(said('NEW_UPDATE'), K.console_text())
-    assert.is_false(K.cc.run_live)
+    assert.is_false(said('NOT_REACHED'), K.console_text())
+    assert.is_true(said('NEW_UPDATE'), K.console_text())
   end)
 
   it('clears graphics colour before the next run', function()

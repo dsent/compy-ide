@@ -70,6 +70,7 @@ end
 
 --- @class ConsoleController
 --- @field drawing boolean? --- the IDE has pushed around a program's draw
+--- @field typing integer? --- the depth of program code a typed line runs at
 --- @field time number
 --- @field model Model
 --- @field main_ctrl table
@@ -567,9 +568,11 @@ end
 --- @param name string?
 --- @param entry string?
 --- @return boolean accepted
-function ConsoleController:_run_accepted(name, entry)
-  if love.state.app_state == 'inspect' or
-      love.state.app_state == 'running'
+--- @param replaces boolean? --- a program's own run(): it
+---   replaces the program that runs, as Ctrl+R does
+function ConsoleController:_run_accepted(name, entry, replaces)
+  if not replaces and (love.state.app_state == 'inspect' or
+      love.state.app_state == 'running')
   then
     self.model.output:write_refusal(messages.already_running)
     return false
@@ -1847,9 +1850,21 @@ function ConsoleController.prepare_project_env(cc)
 
   --- @param name string? --- a project, the open one when nil
   --- @param entry string? --- its file to run, main.lua when nil
+  --- A typed run() while a program runs or is paused is
+  --- refused; a program's own replaces it once its code has
+  --- returned: the stop, then the run, as Ctrl+R makes them.
   project_env.run_project      = function(name, entry)
-    if not cc:_run_accepted(name, entry) then return end
-    End.request(function() cc:run_project(name, nil, entry) end)
+    local replaces = End.user > 0 and End.user ~= cc.typing
+        and cc.run_live
+    if not cc:_run_accepted(name, entry, replaces) then return end
+    End.request(function()
+      if replaces then
+        cc:stop_project_run()
+        cc:run_project(name, true, entry)
+      else
+        cc:run_project(name, nil, entry)
+      end
+    end)
   end
   project_env.run              = project_env.run_project
 
@@ -2024,7 +2039,12 @@ function ConsoleController:_evaluate_input()
         --- a typed line leaves state for a flush to end, as a
         --- live run does
         self.state_left = true
+        --- the typed line's own depth of program code: a run()
+        --- there is the console's, one deeper the program's
+        local was = self.typing
+        self.typing = End.user + 1
         local _, err = run_user_code(f, self)
+        self.typing = was
         if err then
           self.model.output:write_error(err)
         end

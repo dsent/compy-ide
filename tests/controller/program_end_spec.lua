@@ -111,6 +111,41 @@ describe("a lifecycle call ends the code that made it #console",
       assert.is_false(K.cc.run_live)
     end)
 
+    it("run() from love.update replaces the program once the"
+      .. " update returns", function()
+        reset({ ["main.lua"] = EXIT .. "note('start')\n"
+          .. "function love.update()\n"
+          .. "if once() then run(); note('after') end\n"
+          .. "end\n" })
+        local said = notes()
+        local base, asked = K.cc:get_base_env(), false
+        base.once = function()
+          local first = not asked
+          asked = true
+          return first
+        end
+        finally(function() base.once = nil end)
+        run("run()")
+        K.frame()
+        assert.equal(0, count(said, "after"))
+        assert.equal(1, count(said, "exit"))
+        assert.equal(2, count(said, "start"))
+        assert.is_true(K.cc.run_live)
+        assert.same("running", K.app_state())
+        K.keys("lctrl", "q")
+      end)
+
+    it("run() in before_exit ends the hook and runs nothing",
+      function()
+        reset({ ["main.lua"] = "compy.before_exit = function()\n"
+          .. "note('exit')\nrun()\nnote('after')\nend\n" .. LIVE })
+        local said = notes()
+        run("run()")
+        K.keys("lctrl", "q")
+        assert.same({ "exit" }, said)
+        assert.is_false(K.cc.run_live)
+      end)
+
     it("ends a function the handler called, and the handler", function()
       reset({ ["main.lua"] = EXIT
         .. "local function quit() stop(); note('in') end\n"
@@ -232,15 +267,13 @@ describe("a lifecycle call ends the code that made it #console",
         assert.same(K.PROJECT, K.cc.model.projects.current.name)
       end)
 
-    it("a run() while a program runs is refused, from its own code"
-      .. " too, and the code goes on", function()
-        reset({ ["main.lua"] = "function love.update()\n"
-          .. "run(); note('after')\nend\n" })
+    it("a typed run() while a program runs is refused, and the line"
+      .. " goes on", function()
+        reset({ ["main.lua"] = LIVE })
         local said = notes()
         run("run()")
-        K.frame()
-        --- every frame's update: each run() refused, the code on
-        assert.is_true(count(said, "after") >= 1)
+        run("run(); note('after')")
+        assert.same({ "after" }, said)
         assert.truthy(K.console_text():find("already running", 1, true))
         assert.is_true(K.cc.run_live)
         K.keys("lctrl", "q")

@@ -147,8 +147,9 @@ returns.
   opening a project starts from `main.lua` again. _proj_ must exist: `run` makes no
   project, and a name no project has is refused with a hint to
   make it with `project()` first. While a program runs or is
-  paused, `run()` is refused, and Ctrl+R stops it and runs
-  again. Each run starts afresh: a program idle behind the
+  paused, a typed `run()` is refused, and Ctrl+R stops it and
+  runs again; a program's own `run()` replaces it, as Ctrl+R
+  does, once its code has returned. Each run starts afresh: a program idle behind the
   console ends first, as `stop()` ends it, and its handlers,
   input hooks and shortcuts go with it; then no variable,
   `love` handler or module of an earlier run, or of a line
