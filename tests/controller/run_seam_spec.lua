@@ -191,7 +191,7 @@ writefile("main.lua", "this does not parse (")
 stop()
 run()
 function love.update()
-  ghost = (ghost or 0) + 1
+  writefile("ghost.txt", "it ran")
 end
 ]]})
       run('run()')
@@ -199,12 +199,71 @@ end
       K.keys('lctrl', 'q')
       for _ = 1, 3 do K.frame() end
       assert.is_false(K.cc.run_live)
-      local seen = 0
-      for _, e in ipairs({ env(), K.cc:get_base_env() }) do
-        seen = seen + (rawget(e, 'ghost') or 0)
-      end
-      assert.equal(0, seen)
+      -- seen outside any environment: the file it would write
+      assert.is_nil(K.file('ghost.txt'))
     end)
+
+  --- a run started from inside a drawing or a handler leaves
+  --- the graphics stack to its callers: the draw wrapper's
+  --- push('all') and a program's own balanced push both pop
+  --- after it (the tenth review round)
+  local function counted_stack()
+    local depth = 0
+    local graphics = { love.graphics, K.cc:get_base_env().gfx,
+      K.cc:get_base_env().love.graphics }
+    local saved = { }
+    for _, g in ipairs(graphics) do
+      saved[#saved + 1] = { g, g.push, g.pop, g.getStackDepth }
+      g.push = function() depth = depth + 1 end
+      g.pop = function()
+        if depth == 0 then error('Minimum stack depth reached') end
+        depth = depth - 1
+      end
+      g.getStackDepth = function() return depth end
+    end
+    finally(function()
+      for _, s in ipairs(saved) do
+        s[1].push, s[1].pop, s[1].getStackDepth = s[2], s[3], s[4]
+      end
+    end)
+  end
+
+  it('lets a run started from love.draw unwind the draw',
+    function()
+      reset({['main.lua'] = [[
+function love.draw()
+  stop()
+  run("menu")
+end
+]]})
+      counted_stack()
+      run('run()')
+      K.next_project('menu', {['main.lua'] = 'function love.update() end\n'})
+      K.frame()
+      local ok, err = pcall(love.draw)
+      assert.is_true(ok, tostring(err))
+      env().love.update = nil
+    end)
+
+  it('lets a handler pop what it pushed around a run', function()
+    reset({['main.lua'] = [[
+function love.keypressed(k)
+  if k == 'x' then
+    gfx.push()
+    stop()
+    run("menu")
+    gfx.pop()
+  end
+end
+]]})
+    counted_stack()
+    run('run()')
+    K.next_project('menu', {['main.lua'] = 'function love.update() end\n'})
+    K.keys('x')
+    K.frame()
+    assert.equal('running', K.app_state())
+    env().love.update = nil
+  end)
 
   --- a bundled library the program loaded first is its own:
   --- the next run gets a new copy. (One the IDE had loaded

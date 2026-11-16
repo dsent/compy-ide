@@ -39,13 +39,14 @@ local program_loaded = { }
 --- What a program set in the graphics state goes before the
 --- next run: LÖVE's own reset (colour, background colour,
 --- blending, colour mask, scissor, shader, stencil test,
---- wireframe, lines, points, the transform), and the transform
---- stack emptied of what a program pushed and never popped.
---- The canvas is the IDE's: the one bound stays bound. The font
---- is the IDE's too, and run_project sets it after.
+--- wireframe, lines, points, the current transform). The
+--- transform stack is left to its callers: a run can start
+--- inside the IDE's drawing or a program's push, which pop
+--- after it. The canvas is the IDE's: the one bound stays
+--- bound. The font is the IDE's too, and run_project sets it
+--- after.
 local function reset_graphics()
   local canvas = gfx.getCanvas()
-  while gfx.getStackDepth() > 0 do gfx.pop() end
   gfx.reset()
   if canvas then gfx.setCanvas({ canvas, stencil = true }) end
 end

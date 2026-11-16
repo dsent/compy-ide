@@ -239,7 +239,8 @@ Project-author guide: `doc/input_api.md`.
   Then it starts from the project's environment as opening the project makes it: a
   variable, a `love` handler or a module of an earlier run, or a variable typed in the
   console before it, is gone, and so is a bundled library's state the program loaded,
-  such as a timer's pending calls; the graphics settings it changed are reset. Before, a handler deleted from `main.lua` went on running
+  such as a timer's pending calls; the graphics settings it changed are reset, though a transform
+  it pushed and never popped stays. Before, a handler deleted from `main.lua` went on running
   until another project was opened or the IDE restarted. What a run leaves stays for the
   console to look at until the next run, and `continue()` and `dofile()` keep everything
   as it is.

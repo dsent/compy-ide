@@ -135,10 +135,11 @@ Closing a project returns to `scratchpad`.
   make it with `project()` first. While a program runs or is
   paused, `run()` is refused, and Ctrl+R stops it and runs
   again. Each run starts afresh: a program idle behind the
-  console ends first, as `stop()` ends it; then no variable,
-  `love` handler, input hook or shortcut, module or graphics
-  setting of an earlier run, or of a line typed before it, is
-  there. What a run leaves stays for the console to look at
+  console ends first, as `stop()` ends it, and its handlers,
+  input hooks and shortcuts go with it; then no variable,
+  `love` handler or module of an earlier run, or of a line
+  typed before it, is there, and the graphics settings are
+  reset. What a run leaves stays for the console to look at
   until the next run. `continue()` and `dofile()` keep
   everything as it is.
 
