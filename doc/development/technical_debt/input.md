@@ -1224,16 +1224,20 @@ future author adding an editor branch meets the constraint at the site).
   `reset_before_exit` only, deliberately, since a partially initialised project
   runs no teardown. Wiring the force-reset means calling the framework half on
   the crash path too, which is a decision this entry does not pre-empt.
-- **The mouse is force-reset (2026-09-30).** `flush_program_state`
-  (`consoleController.lua`), a step of its own beside `framework_before_exit`,
-  puts the mouse back — relative mode off, not grabbed, visible, the system
+- **The mouse is force-reset (2026-09-30).** `restore_console_mouse`
+  (`consoleController.lua`, named `flush_program_state` until the terminate
+  flush of 2026-11-16 took that name), a step of its own beside
+  `framework_before_exit`, puts the mouse back — relative mode off, not grabbed, visible, the system
   cursor — on every stop path after the project's hook, on the failed-run
   branch (the reset alone: the hook still does not fire there), when a
   program's code ends with no widget shown and no pointer handler left,
   before every run starts, and when the IDE starts (Ctrl+Esc restarts it in
   the same process without a stop). A pause gives the console that mouse and
-  `continue()` gives the program back its own. Keyboard modes and audio are
-  still as this entry describes.
+  `continue()` gives the program back its own.
+- **Keyboard modes and audio are reset at a terminate (2026-11-16).** The
+  terminate flush (`flush_program_state`) stops all audio and puts key repeat
+  and text input back as `main.lua` set them on every stop path, the
+  first-lines error and `reset()`; a program that ends by itself keeps them.
 
 ### `compy.before_exit` is a closure slot
 
