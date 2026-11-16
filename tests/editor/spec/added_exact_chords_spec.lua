@@ -190,6 +190,73 @@ describe("every chord is its own key #editor #spec", function()
       assert.is_true(K.cc.run_live)
     end)
 
+    -- the review's program (round 4): it writes a file when X
+    -- is released. A key the card dropped has its release and
+    -- its repeats dropped too, whenever they come; a key pressed
+    -- before the card gets its release, so that no program sees
+    -- a press without its release.
+    local RELEASES = table.concat({
+      "SEEN = {}",
+      "function love.keyreleased(k)",
+      "  SEEN[#SEEN + 1] = 'up ' .. k",
+      "  if k == 'x' then writefile('answer.txt', 'x') end",
+      "end",
+      "compy.input.hooks.keypressed = function(k, _, isr)",
+      "  SEEN[#SEEN + 1] = (isr and 'again ' or 'down ') .. k",
+      "end",
+      "compy.input.hooks.textinput = function(t)",
+      "  SEEN[#SEEN + 1] = 'text ' .. t",
+      "end",
+    }, "\n") .. "\n"
+
+    local function behind_card()
+      K.reset({ ["main.lua"] = RELEASES })
+      K.keys("lctrl", "r")
+      assert.same("ready", K.app_state())
+      assert.is_true(K.cc.run_live)
+      local seen = K.cc:get_project_env().SEEN
+      return seen, #seen
+    end
+
+    spec_it("IS3.16 Show the key card: a key pressed and released "
+        .. "under the console's card reaches no program behind it",
+        function()
+      local seen, n = behind_card()
+      K.hold("f1")
+      assert.is_not_nil(K.key_card())
+      K.keys("x")
+      K.release("f1")
+      assert.is_nil(K.file("answer.txt"))
+      assert.same({ "up f1" }, { unpack(seen, n + 2) })
+    end)
+
+    spec_it("IS3.16 Show the key card: a key pressed under the "
+        .. "card has its repeats and its release dropped after "
+        .. "the card", function()
+      local seen, n = behind_card()
+      K.hold("f1")
+      K.hold("x")
+      K.release("f1")
+      -- a held key's repeat brings its glyph again
+      K.repeat_key("x")
+      F.session.type("x")
+      K.release("x")
+      assert.is_nil(K.file("answer.txt"))
+      assert.same({ "up f1" }, { unpack(seen, n + 2) })
+    end)
+
+    spec_it("IS3.16 Show the key card: a key pressed before the "
+        .. "card gets its release under it", function()
+      local seen, n = behind_card()
+      K.hold("x")
+      K.hold("f1")
+      assert.is_not_nil(K.key_card())
+      K.release("x")
+      K.release("f1")
+      assert.same({ "down x", "down f1", "up x", "up f1" },
+        { unpack(seen, n + 1) })
+    end)
+
     spec_it("IS3.16 Show the key card: Ctrl+Escape asks to quit "
         .. "while the console's card shows", function()
       K.reset()
