@@ -112,6 +112,12 @@ local function enrich_gfx()
   gfx.setColorMask = function() end
   gfx.push      = function() end
   gfx.pop       = function() end
+  -- what a run's start puts back (consoleController.lua,
+  -- reset_graphics)
+  for _, k in ipairs({ 'setLineWidth', 'setLineStyle', 'setPointSize',
+    'setBlendMode', 'setShader', 'origin' }) do
+    gfx[k] = gfx[k] or function() end
+  end
   -- love.update walks into the snapshot branch as soon as a
   -- project raise sets 'snapshot', so this has to exist. It is
   -- a no-op that never invokes its callback, modelling "the

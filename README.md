@@ -132,11 +132,13 @@ Closing a project returns to `scratchpad`.
   Run either _proj_ or the currently open project if no
   arguments are passed. _proj_ must exist: `run` makes no
   project, and a name no project has is refused with a hint to
-  make it with `project()` first. Each run starts afresh: no
-  variable, `love` handler or module of an earlier run, or of a
-  line typed before it, is there. What a run leaves stays for
-  the console to look at until the next run. `continue()` and
-  `dofile()` keep everything as it is.
+  make it with `project()` first. Each run starts afresh: a run
+  still going, paused or idle behind the console ends first, as
+  `stop()` ends it; then no variable, `love` handler, input hook
+  or shortcut, module or graphics setting of an earlier run, or
+  of a line typed before it, is there. What a run leaves stays
+  for the console to look at until the next run. `continue()`
+  and `dofile()` keep everything as it is.
 
 - `example_projects()`
 

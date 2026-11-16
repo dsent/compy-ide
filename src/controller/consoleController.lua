@@ -33,6 +33,25 @@ local messages = {
       name, name)
   end,
 }
+--- the modules programs loaded first, by name
+local program_loaded = { }
+
+--- What a program set in the graphics state goes before the
+--- next run: colour, scissor, lines, points, blending, shader,
+--- colour mask and transform. The font and the canvas are the
+--- IDE's, and it sets them itself.
+local function reset_graphics()
+  gfx.setColor(1, 1, 1, 1)
+  gfx.setScissor()
+  gfx.setLineWidth(1)
+  gfx.setLineStyle('smooth')
+  gfx.setPointSize(1)
+  gfx.setBlendMode('alpha')
+  gfx.setShader()
+  gfx.setColorMask(true, true, true, true)
+  gfx.origin()
+end
+
 --- @class ConsoleController
 --- @field time number
 --- @field model Model
@@ -149,13 +168,16 @@ local function run_user_code(f, cc, project_path)
   local env = cc:get_base_env()
 
   local ok, call_err
+  local run_id = cc.run_id
   -- console code owns no run: the unwind clear is for programs
   cc:use_canvas(function()
     if project_path then
       env = cc:get_project_env()
     end
     ok, call_err = pcall(f)
-    if project_path and ok then -- user project exec
+    --- a run the code started of its own has installed its
+    --- handlers: this one's are not installed over them
+    if project_path and ok and cc.run_id == run_id then
       if love.PROFILE then
         love.PROFILE.frame = 0
         love.PROFILE.report = {}
@@ -508,7 +530,9 @@ end
 -- it only by discarding the return, which nothing needed.)
 
 --- @param name string?
-function ConsoleController:run_project(name)
+--- @param stopped boolean? --- the caller has just stopped
+---   what was live (restart, Ctrl+R): the seam does not again
+function ConsoleController:run_project(name, stopped)
   if love.state.app_state == 'inspect' or
       love.state.app_state == 'running'
   then
@@ -533,22 +557,28 @@ function ConsoleController:run_project(name)
         messages.no_such_project(name))
     end
   end
-  local ok
+  local ok, opened
   if cur and (not name or cur.name == name) then
     ok = true
   else
     ok = self:open_project(name or '', false)
+    opened = true
   end
 
   if ok then
-    --- a run starts from the environment opening the project
-    --- makes: no global, no love handler and no module of an
-    --- earlier run or of a line typed before it. What the run
-    --- leaves stays for inspection until the next run;
-    --- continue() and dofile() never pass here (the
-    --- maintainer's ruling of November 16, 2026)
-    self:evacuate_required()
-    self:_reset_executor_env()
+    --- The run seam, one thing (the maintainer's ruling "A run
+    --- starts from a clean environment"): end whatever is live
+    --- exactly as a stop does (its handlers, input hooks and
+    --- shortcuts, before_exit, serial handlers, widget,
+    --- modules), then make the environment anew in place, then
+    --- start. Opening another project has just done both.
+    --- What a run leaves stays for inspection until the next
+    --- run; continue() and dofile() never pass here.
+    if not opened then
+      if not stopped then self:stop_project_run() end
+      self:_reset_executor_env()
+    end
+    reset_graphics()
     local runner_env = self:get_project_env()
     -- A run starts on a blank canvas, whatever the last one
     -- left there; a project that fails to load leaves the
@@ -579,6 +609,13 @@ function ConsoleController:run_project(name)
       SerialPort:programStarted()
       gfx.setFont(self.cfg.view.font)
       local rok, run_err = run_user_code(f, self, path)
+      if self.run_id ~= run_id then
+        --- the code started a run of its own: that run is the
+        --- live one, and this one ended at its seam
+        if not rok then self.model.output:write_error(
+          'Error: ' .. tostring(run_err)) end
+        return
+      end
       if not rok then
         -- Top-level code raised, so the route was never
         -- connected. Release, then take down any widget the
@@ -657,9 +694,14 @@ local function project_require(name, run)
   end
   if _G.web and name == 'bit' then
     return o_require('util.luabit')
-  else
-    return o_require(name)
   end
+  --- a module no one had loaded is the program's: the next
+  --- run loads it afresh (ConsoleController:evacuate_required).
+  --- One the IDE loaded itself stays shared.
+  local first = package.loaded[name] == nil
+  local m = o_require(name)
+  if first then program_loaded[name] = true end
+  return m
 end
 
 _G.o_dofile = _G.dofile
@@ -1914,13 +1956,23 @@ function ConsoleController:evaluate_input()
   end
 end
 
+--- Make the project's environment anew, as the base makes it,
+--- in place: the code a run was started from, and the rest of
+--- a typed line, hold this table and see the new one
 function ConsoleController:_reset_executor_env()
-  self:_set_project_env(table.clone(self.base_env))
+  local env = self.project_env
+  local fresh = table.clone(self.base_env)
+  if not env then return self:_set_project_env(fresh) end
+  for k in pairs(env) do env[k] = nil end
+  for k, v in pairs(fresh) do env[k] = v end
 end
 
+--- Ctrl+R: the stop the run seam would make, made first, so
+--- that a run that is going or paused ends even when no run
+--- can start after it
 function ConsoleController:restart()
   self:stop_project_run()
-  self:run_project()
+  self:run_project(nil, true)
 end
 
 ---@return LuaEnv
@@ -2084,10 +2136,9 @@ function ConsoleController:_close_project()
   local open = P.current
   if open then
     local name = P.current.name
-    --- the project's modules go with it: the next project, or
-    --- this one reopened, starts from a new env, and require
-    --- must run its files again to fill it
-    self:evacuate_required()
+    --- the project's modules went with the stop above: the
+    --- next project, or this one reopened, starts from a new
+    --- env, and require runs its files again to fill it
     local ok = P:close()
     local lf = self:get_loader(name)
     if lf then
@@ -2123,6 +2174,12 @@ end
 --- only those: a module of the IDE's that shares a project
 --- file's name stays, and one from a subfolder goes
 function ConsoleController:evacuate_required()
+  --- a bundled library a program loaded first, so that the
+  --- next run gets its own copy, its timers and state gone
+  for modname in pairs(program_loaded) do
+    package.loaded[modname] = nil
+  end
+  program_loaded = { }
   local open = self:get_current_project()
   if not open then return end
   for modname in pairs(open.required or {}) do
@@ -2170,9 +2227,10 @@ function ConsoleController:_stop_project_run()
   -- first: its before_exit hook may send the board a last
   -- line on purpose, and that one stays.
   SerialPort:drop()
-  self:evacuate_required()
   local compy = self:get_project_env().compy
   framework_before_exit(compy)
+  --- after the exit hook, which may itself require a module
+  self:evacuate_required()
   -- After the project's own hook, which may still use the
   -- mouse as it left it.
   self:flush_program_state()

@@ -484,6 +484,8 @@ describe('input surface: inbound events — a project stays live'
         local calls = stub_stop()
         F.quits()
         F.run_source(how)
+        -- the run's own start counts a stop (its seam)
+        calls.n = 0
         local got = F.quits()
         assert.are.equal(1, #got)
         local system, window = love.system, love.window

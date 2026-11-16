@@ -69,7 +69,10 @@ describe("compy.terminal #console", function()
     -- io.write's path (model.io.redirect), as the IDE has it
     local base = K.cc:get_base_env()
     local io_was = base.io
-    finally(function() base.io = io_was end)
+    finally(function()
+      base.io = io_was
+      K.cc:get_project_env().io = io_was
+    end)
     -- in the environment each run starts from
     base.io = { write = function(s)
       K.cc.model.output:write(s)
@@ -102,7 +105,10 @@ describe("compy.terminal #console", function()
         "compy.terminal.gotoxy('3', '5') io.write('x')\n" })
       local base = K.cc:get_base_env()
       local io_was = base.io
-      finally(function() base.io = io_was end)
+      finally(function()
+        base.io = io_was
+        K.cc:get_project_env().io = io_was
+      end)
       -- in the environment each run starts from
       base.io = { write = function(s)
         K.cc.model.output:write(s)
