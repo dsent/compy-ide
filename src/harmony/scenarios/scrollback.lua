@@ -135,8 +135,8 @@ scenario('echo', function(wait)
   is(err, t.terminal.error, 'its error is in the output\'s error color')
   assert(P.console_text():find('boom', 1, true), 'the error is written')
   assert(P.console_message() == nil, 'the error is not in the band')
-  -- the line kept in the field goes
-  D.key(wait, 'escape')
+  -- the line that ran left the field, error or not
+  D.eq(P.console_draft(), '', 'the field, emptied')
   hm_done()
 end)
 

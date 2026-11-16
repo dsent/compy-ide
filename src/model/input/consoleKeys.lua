@@ -36,8 +36,8 @@ end
 
 local DEFS = {
   --- IS3.6
-  --- once per press: a line that fails as it runs keeps its
-  --- text, and a repeat would run it again at repeat speed
+  --- once per press: a repeat would run the line again, or
+  --- the next line typed, at repeat speed
   with(both('run', 'run the line'),
     { chords = { 'return', 'kpenter' }, card = 'Enter' }),
   --- the field's Escape, which clears the line (its

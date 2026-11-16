@@ -555,8 +555,8 @@ binding to apply, deliberately not a rule the tier enforces.
   recalled line is kept for that entry while the walk moves away and back. A line is stored when
   it is accepted: `evaluate_input` calls `remember` once the line parses and loads, before it
   runs, so a line that fails while running is stored; a program's widget stores in `submit_flow`
-  once its validator takes the line. Storing a line, or a cleared field (Escape, a successful
-  run), ends the walk and forgets the kept line and every edit. A line the syntax refuses, or a
+  once its validator takes the line. Storing a line, or a cleared field (Escape, or any line that
+  ran, error or not), ends the walk and forgets the kept line and every edit. A line the syntax refuses, or a
   draft it continues on a new line, is not stored and leaves the walk as it was. A recalled line
   shows with the cursor at its end. An empty or blank line is no entry, nor is a line equal to the
   newest entry, every line of it compared exactly (the ruling "The history skips a repeated

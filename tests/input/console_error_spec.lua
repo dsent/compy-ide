@@ -2,9 +2,9 @@
 -- own place, and what the console's keys do while its message
 -- shows in the notice band (the ruling "The console shows an
 -- error as the editor does"; doc/development/internals/
--- user_input.md, "Error state"). A line that fails stays in
--- the field to be corrected, and the next key dismisses the
--- message and does its work.
+-- user_input.md, "Error state"). A line the console does not
+-- take stays in the field to be corrected, and the next key
+-- dismisses the message and does its work.
 --
 -- Every case drives the full route (F.session), the way a
 -- keystroke arrives from LÖVE: key press, then its glyph, then
