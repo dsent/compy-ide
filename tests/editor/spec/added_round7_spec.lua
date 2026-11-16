@@ -72,7 +72,8 @@ describe("round seven #editor #spec", function()
       -- editor's does (the maintainer's ruling of November 16)
       spec_it("IS3.16 Show the key card: the console's card for "
           .. "a bare F1 stays when Ctrl is pressed over a program "
-          .. "with a Ctrl shortcut, and Ctrl+Q waits under it",
+          .. "with a Ctrl shortcut, and Ctrl+Q does nothing under "
+          .. "it",
           function()
         K.reset({ ["main.lua"] = CTRL_CLASS })
         K.open()
