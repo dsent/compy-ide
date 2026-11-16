@@ -232,6 +232,7 @@ end
         s[1].push, s[1].pop, s[1].getStackDepth = s[2], s[3], s[4]
       end
     end)
+    return function() return depth end
   end
 
   --- LÖVE's reset counted, on every table the run reaches
@@ -470,7 +471,9 @@ end
     assert.is_nil(scissor())
   end)
 
-  it('starts the run love.draw started with no scissor', function()
+  --- design B: the stop ends the draw, and the run after it is
+  --- never asked for; the stop resets the scissor
+  it('leaves no scissor when love.draw stops before a run', function()
     reset({['main.lua'] = [[
 gfx.setScissor(0, 0, 300, 300)
 function love.draw()
@@ -483,9 +486,9 @@ end
     K.next_project('menu', {['main.lua'] = 'function love.update() end\n'})
     K.frame()
     love.draw()
-    assert.equal('running', K.app_state())
+    assert.equal('ready', K.app_state())
+    assert.same(K.PROJECT, K.cc.model.projects.current.name)
     assert.is_nil(scissor())
-    env().love.update = nil
   end)
 
   it('lets stop() from love.draw unwind the draw', function()
@@ -498,11 +501,10 @@ end
     assert.is_false(K.cc.run_live)
   end)
 
-  it('lets a run started from love.draw unwind the draw',
+  it('lets a run refused in love.draw leave the draw whole',
     function()
       reset({['main.lua'] = [[
 function love.draw()
-  stop()
   run("menu")
 end
 ]]})
@@ -515,24 +517,25 @@ end
       env().love.update = nil
     end)
 
-  it('lets a handler pop what it pushed around a run', function()
+  --- design B: stop() ends the handler before its pop, and the
+  --- stop pops what the program pushed
+  it('pops what a handler pushed before its stop()', function()
     reset({['main.lua'] = [[
+function love.update() end
 function love.keypressed(k)
   if k == 'x' then
     gfx.push()
     stop()
-    run("menu")
     gfx.pop()
   end
 end
 ]]})
-    counted_stack()
+    local depth = counted_stack()
     run('run()')
-    K.next_project('menu', {['main.lua'] = 'function love.update() end\n'})
     K.keys('x')
     K.frame()
-    assert.equal('running', K.app_state())
-    env().love.update = nil
+    assert.equal('ready', K.app_state())
+    assert.equal(0, depth())
   end)
 
   --- a bundled library the program loaded first is its own:
@@ -580,7 +583,9 @@ function love.update(dt) Timer.update(dt) end
     assert.equal(file, K.cc.editor:get_active_buffer())
   end)
 
-  it('keeps the nested new run handlers when the old top-level returns', function()
+  --- design B: a stop in the first lines ends them, and the run
+  --- after it is never asked for
+  it('runs nothing after a stop in the first lines', function()
     reset({['main.lua'] = [[
 function love.update() print('OLD_UPDATE') end
 writefile('main.lua', "function love.update() print('NEW_UPDATE') end")
@@ -589,7 +594,8 @@ run()
 ]]})
     run('run()')
     assert.is_false(said('OLD_UPDATE'), K.console_text())
-    assert.is_true(said('NEW_UPDATE'), K.console_text())
+    assert.is_false(said('NEW_UPDATE'), K.console_text())
+    assert.is_false(K.cc.run_live)
   end)
 
   it('clears graphics colour before the next run', function()

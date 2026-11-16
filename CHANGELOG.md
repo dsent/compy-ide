@@ -251,8 +251,8 @@ Project-author guide: `doc/input_api.md`.
   Then it starts from the project's environment as opening the project makes it: a
   variable, a `love` handler or a module of an earlier run, or a variable typed in the
   console before it, is gone, and so is a bundled library's state the program loaded,
-  such as a timer's pending calls; the graphics settings it changed are reset, though a transform
-  it pushed and never popped stays. Before, a handler deleted from `main.lua` went on running
+  such as a timer's pending calls; the graphics settings it changed are reset, and a transform it
+  pushed and never popped is popped. Before, a handler deleted from `main.lua` went on running
   until another project was opened or the IDE restarted. A program that ends by itself
   leaves its variables for the console to look at until the next run, and `continue()` and
   `dofile()` keep everything as it is.
@@ -264,10 +264,16 @@ Project-author guide: `doc/input_api.md`.
   is no second.lua in this project.", before anything changes.
 - **`reset()` starts the console clean.** Typed with nothing between the brackets, it
   stops a program that runs, clears what it and the lines typed before left, silences every
-  sound, and empties
-  the console as Ctrl+L does, then says "Runtime reset for <project>. All files kept." and
-  returns `{ scope = "runtime", project = "<project>" }`; the history and the editor's files
-  stay. Only `reset()` exists yet: with an argument it is refused.
+  sound, and empties the console as Ctrl+L does, then says "Runtime reset for <project>.
+  All files kept."; the history and the editor's files stay. Only `reset()` exists yet:
+  with an argument it is refused.
+- **A call that stops or starts a program ends the code that made it.** `stop()`,
+  `reset()`, `run()`, `project()`, `close_project()` and `reset_scratchpad()`, called from a
+  program or a typed line, end that code at once, and the IDE does what they ask once the
+  code has returned: `stop(); print(1)` prints nothing, and statements after `stop()` in a
+  handler can no longer undo what the stop cleared. `reset()` called from code returns
+  nothing. A refused call says why and ends nothing. A program's own `pcall` around such a
+  call lets its code run on until it returns.
 - **Stopping a program clears what it left.** `stop()`, Ctrl+Q, an error in a program's
   first lines and the close of its project now all end it through one flush: its handlers,
   input hooks, shortcuts, `before_exit` hook, serial handlers, input field and modules go,

@@ -8,6 +8,7 @@ local class = require('util.class')
 local Blink = require('view.input.cursorBlink')
 local LANG = require("util.eval")
 local FS = require('util.filesystem')
+local End = require('util.program_end')
 local display = require('conf.display')
 local Application = require('util.application')
 local usb = require('util.usb')
@@ -48,20 +49,27 @@ local program_loaded = { }
 --- a project's close) and again before the next run, never at
 --- a pause: LÖVE's own reset (colour, background colour,
 --- blending, colour mask, scissor, shader, stencil test,
---- wireframe, lines, points, the current transform). The
---- transform stack is left to its callers: a run can start
---- inside the IDE's drawing or a program's push, which pop
---- after it. The canvas is the IDE's: the one bound stays
---- bound. The font is the IDE's too, and run_project sets it
---- after.
-local function reset_graphics()
+--- wireframe, lines, points, the current transform), and what
+--- it pushed and never popped, first, so that no pop('all')
+--- brings its state back: a stop, a run or a reset a program
+--- asks for is made once its code has returned
+--- (util.program_end), so no push of the program's own is still
+--- to be popped. The IDE's own push, around a program's draw,
+--- stays: `cc.drawing` says one is under way. The canvas is the
+--- IDE's: the one bound stays bound. The font is the IDE's too,
+--- and run_project sets it after.
+--- @param cc ConsoleController
+local function reset_graphics(cc)
+  if not cc.drawing and gfx.getStackDepth then
+    while gfx.getStackDepth() > 0 do gfx.pop() end
+  end
   local canvas = gfx.getCanvas()
   gfx.reset()
   if canvas then gfx.setCanvas({ canvas, stencil = true }) end
 end
 
 --- @class ConsoleController
---- @field reset_graphics function
+--- @field drawing boolean? --- the IDE has pushed around a program's draw
 --- @field time number
 --- @field model Model
 --- @field main_ctrl table
@@ -74,9 +82,7 @@ end
 --- @field view ConsoleView?
 --- @field cfg Config
 --- @field paused_mouse table? the paused program's, see suspend
---- @field run_id integer? the current run's number
 --- @field run_live boolean? the run is not stopped
---- @field canvas_handed integer? moves on when console code takes the canvas from a stopped run
 --- @field collect_garbage function? --- collectgarbage, or a stand-in in tests
 --- @field state_left boolean? --- a typed line left state the flush has not ended
 --- @field entry table? --- the entry point that ran last, while its project stays open
@@ -180,19 +186,15 @@ local function run_user_code(f, cc, project_path)
   local env = cc:get_base_env()
 
   local ok, call_err
-  local run_id = cc.run_id
-  -- console code owns no run: the unwind clear is for programs
   cc:use_canvas(function()
     if project_path then
       env = cc:get_project_env()
     end
-    ok, call_err = pcall(f)
-    --- only while this invocation's run is the live one: a
-    --- run the code started of its own has installed its
-    --- handlers, and code that stopped its own run installs
-    --- nothing Ctrl+Q could not stop
-    if project_path and ok and cc.run_id == run_id
-        and cc.run_live then
+    --- a stop, a run or a reset the code asked for ends it
+    --- here, no error, and is made once it has returned
+    --- (util.program_end): the run is still the one that began
+    ok, call_err = End.call(f)
+    if project_path and ok then
       if love.PROFILE then
         love.PROFILE.frame = 0
         love.PROFILE.report = {}
@@ -200,7 +202,7 @@ local function run_user_code(f, cc, project_path)
       cc.main_ctrl.set_user_handlers(env['love'], cc)
     end
     output:restore_main()
-  end, not project_path)
+  end)
   if not ok then
     local msg = LANG.get_call_error(call_err)
     return false, msg
@@ -239,7 +241,9 @@ end
 local function framework_before_exit(compy)
   local project_hook = compy.before_exit
   if project_hook then
-    local ok, err = pcall(project_hook)
+    --- a lifecycle call in the hook ends it and is dropped: the
+    --- stop under way goes on (util.program_end)
+    local ok, err = End.call(project_hook)
     if not ok then
       Log.error('compy.before_exit raised: '
         .. tostring(err))
@@ -551,28 +555,39 @@ end
 ---   program, main.lua when nil (run(nil, "second.lua"), Option
 ---   2 of the multi-entry-point proposal)
 function ConsoleController:run_project(name, stopped, entry)
+  --- what the program's first lines ask for (a stop, a run) is
+  --- made once the run has begun (util.program_end)
+  return End.held(self._run_project, self, name, stopped, entry)
+end
+
+--- Whether a run of `name`'s `entry` can start, said in the
+--- output when it cannot; nothing changes either way. Asked
+--- again when the run is made: a program's run() is refused at
+--- the call, its code going on, and made after the code ends.
+--- @param name string?
+--- @param entry string?
+--- @return boolean accepted
+function ConsoleController:_run_accepted(name, entry)
   if love.state.app_state == 'inspect' or
       love.state.app_state == 'running'
   then
     self.model.output:write_refusal(messages.already_running)
-    return
+    return false
   end
-  --- a program takes the keys from here: the screen at rest
-  --- under it, never a scrolled view no key reaches
-  self.model.output:to_rest()
   local P   = self.model.projects
   local cur = P.current
-  if not name and not self:open_or_refuse() then return end
+  if not name and not self:open_or_refuse() then return false end
   --- a run opens a project it names and makes none: a name
   --- no project has is refused, and nothing changes
   if name and not (cur and cur.name == name) then
     local valid, invalid = ProjectService.valid_name(name)
     if not valid then
-      return self.model.output:write_refusal(invalid)
+      self.model.output:write_refusal(invalid)
+      return false
     end
     if not ProjectService.is_project(ProjectService.path, name) then
-      return self.model.output:write_refusal(
-        messages.no_such_project(name))
+      self.model.output:write_refusal(messages.no_such_project(name))
+      return false
     end
   end
   --- an entry point is a file the project holds, named as files
@@ -580,17 +595,29 @@ function ConsoleController:run_project(name, stopped, entry)
   if entry then
     local valid, invalid = Project.writable_name(entry)
     if not valid then
-      return self.model.output:write_refusal(invalid)
+      self.model.output:write_refusal(invalid)
+      return false
     end
     local holder = (name and not (cur and cur.name == name))
         and FS.join_path(
           ProjectService.is_project(ProjectService.path, name), entry)
         or cur:get_path(entry)
     if not FS.exists(holder, 'file') then
-      return self.model.output:write_refusal(
-        P.messages.not_in_project(entry))
+      self.model.output:write_refusal(P.messages.not_in_project(entry))
+      return false
     end
   end
+  return true
+end
+
+--- @private
+function ConsoleController:_run_project(name, stopped, entry)
+  if not self:_run_accepted(name, entry) then return end
+  --- a program takes the keys from here: the screen at rest
+  --- under it, never a scrolled view no key reaches
+  self.model.output:to_rest()
+  local P   = self.model.projects
+  local cur = P.current
   local ok, opened
   if cur and (not name or cur.name == name) then
     ok = true
@@ -621,7 +648,7 @@ function ConsoleController:run_project(name, stopped, entry)
       else
         self:evacuate_required()
         self:_reset_executor_env()
-        reset_graphics()
+        reset_graphics(self)
       end
     end
     local runner_env = self:get_project_env()
@@ -638,10 +665,6 @@ function ConsoleController:run_project(name, stopped, entry)
       local n = name or P.current.name or 'project'
       Log.info('Running \'' .. n .. '\'')
       self:restore_console_mouse()
-      -- A new run, by its number: what a stopped run's calls
-      -- still in flight may clear is decided against it.
-      self.run_id = (self.run_id or 0) + 1
-      local run_id = self.run_id
       self.run_live = true
       love.state.app_state = 'running'
       -- Before the project's top-level code, which may show the
@@ -655,14 +678,9 @@ function ConsoleController:run_project(name, stopped, entry)
       -- console's own listeners wait until it has stopped.
       SerialPort:programStarted()
       gfx.setFont(self.cfg.view.font)
+      --- a stop or a run the first lines ask for is made after
+      --- this one has finished starting (util.program_end)
       local rok, run_err = run_user_code(f, self, path)
-      if self.run_id ~= run_id then
-        --- the code started a run of its own: that run is the
-        --- live one, and this one ended at its seam
-        if not rok then self.model.output:write_error(
-          'Error: ' .. tostring(run_err)) end
-        return
-      end
       if not rok then
         -- Top-level code raised, so the route was never
         -- connected. Release, then take down any widget the
@@ -1695,13 +1713,25 @@ function ConsoleController.prepare_project_env(cc)
     end
   end
 
+  --- The calls that end or replace a run, made from code, end
+  --- that code and are made once it has returned
+  --- (util.program_end). A refusal is said at the call, and the
+  --- code goes on: nothing ended.
+
   --- @param name string
   project_env.project          = function(name)
-    return cc:open_project(name)
+    if not name then
+      return cc.model.output:write_refusal(messages.needs_a_name)
+    end
+    local valid, invalid = ProjectService.valid_name(name)
+    if not valid then
+      return cc.model.output:write_refusal(invalid)
+    end
+    return End.request(function() return cc:open_project(name) end)
   end
 
   project_env.close_project    = function()
-    close_project(cc)
+    End.request(function() close_project(cc) end)
   end
 
   project_env.current_project  = needs_project(function()
@@ -1732,11 +1762,11 @@ function ConsoleController.prepare_project_env(cc)
     if select('#', ...) > 0 then
       return cc.model.output:write_refusal(messages.reset_alone)
     end
-    return cc:reset()
+    return End.request(function() return cc:reset() end)
   end
 
   project_env.reset_scratchpad = function()
-    cc:reset_scratchpad()
+    End.request(function() cc:reset_scratchpad() end)
   end
 
   --- file access
@@ -1793,8 +1823,16 @@ function ConsoleController.prepare_project_env(cc)
     return cc:loadfile(name)
   end)
 
+  --- An edit from a program idle behind the console stops it
+  --- first: that edit is made once the program's code returns.
+  --- During a stop (in compy.before_exit) it opens nothing and
+  --- the hook goes on, as edit() has always done there.
   --- @param name string
   project_env.edit             = function(name)
+    if not End.ending and love.state.app_state ~= 'running'
+        and cc:_program_live() then
+      return End.request(function() return cc:edit(name) end)
+    end
     return cc:edit(name)
   end
 
@@ -1810,7 +1848,8 @@ function ConsoleController.prepare_project_env(cc)
   --- @param name string? --- a project, the open one when nil
   --- @param entry string? --- its file to run, main.lua when nil
   project_env.run_project      = function(name, entry)
-    cc:run_project(name, nil, entry)
+    if not cc:_run_accepted(name, entry) then return end
+    End.request(function() cc:run_project(name, nil, entry) end)
   end
   project_env.run              = project_env.run_project
 
@@ -1825,7 +1864,7 @@ function ConsoleController.prepare_project_env(cc)
     if not cc.run_live then
       return cc.model.output:write_refusal(messages.nothing_running)
     end
-    cc:stop_project_run()
+    End.request(function() cc:stop_project_run() end)
   end
   project_env.continue         = function()
     if love.state.app_state == 'inspect' then
@@ -1949,6 +1988,13 @@ end
 local UNFINISHED = 'Unfinished code: type the rest, then press Enter.'
 
 function ConsoleController:evaluate_input()
+  --- what the line asks for (a stop, a run, a reset) is made
+  --- once the line and its echo are done (util.program_end)
+  return End.held(self._evaluate_input, self)
+end
+
+--- @private
+function ConsoleController:_evaluate_input()
   local inter = self.input
 
   local text = inter:get_text()
@@ -2002,12 +2048,6 @@ end
 
 function ConsoleController:_reset_executor_env()
   self:_set_project_env(table.clone(self.base_env))
-end
-
---- for a caller that restores a run's state after it ended, as
---- the draw wrapper's pop does
-function ConsoleController:reset_graphics()
-  reset_graphics()
 end
 
 --- The console's reset(): the one flush, then the console's
@@ -2298,6 +2338,7 @@ function ConsoleController:stop_project_run()
   local ok, res = pcall(self._stop_project_run, self)
   self.stopping = false
   if not ok then
+    End.ending = false
     -- A step ahead of the reset raised: the console still
     -- gets its mouse.
     self:restore_console_mouse()
@@ -2356,6 +2397,8 @@ function ConsoleController:flush_program_state(call_exit)
   --- raise, play mode's quit and its close) finds nothing to
   --- end. Putting the IDE's baseline back is idempotent and
   --- happens every time.
+  local was_ending = End.ending
+  End.ending = true
   local ended = self.run_live
   local st = love.state.app_state
   local to_end = ended or self.state_left
@@ -2388,10 +2431,8 @@ function ConsoleController:flush_program_state(call_exit)
   self.model.output:clear_canvas()
   --- the IDE draws on from here: under the program's scissor,
   --- colour or wireframe its key card and editor came out
-  --- clipped and outlined (the device night of November 16).
-  --- The transform stack is left as it is: a stop can come from
-  --- inside a draw, whose own pop follows.
-  reset_graphics()
+  --- clipped and outlined (the device night of November 16)
+  reset_graphics(self)
   --- what the program set playing plays out, and a loop stops
   --- repeating (the maintainer's ruling of November 16, 2026:
   --- "clear the repeat, but what is there, still there");
@@ -2427,6 +2468,7 @@ function ConsoleController:flush_program_state(call_exit)
   end
   self.main_ctrl.report()
   love.state.app_state = 'ready'
+  End.ending = was_ending
   return to_end
 end
 
@@ -2943,35 +2985,19 @@ function ConsoleController:get_canvas()
   return self.model.output.canvas
 end
 
+--- A stop a program's call asks for is made once the call has
+--- returned, off the canvas (util.program_end): nothing the call
+--- draws comes after the stop's clear.
 --- @param f function
---- @param console boolean? console code, which owns no run
 --- @return any ... result of f
-function ConsoleController:use_canvas(f, console)
+function ConsoleController:use_canvas(f)
   local canvas = self.model.output.canvas
   gfx.setCanvas({
     canvas, -- this is actually [1] = canvas
     stencil = true
   })
-  local live, handed = self.run_live, self.canvas_handed
   local r = { pcall(f) }
   gfx.setCanvas()
-  -- A program's call that stopped its own run and went on
-  -- drawing repainted the canvas after the stop's clear: the
-  -- clear is final for that call. A run still live (restart)
-  -- owns the canvas and is left alone.
-  -- Console code owns no run: what it draws after a stop stays.
-  -- The keypress that submits it runs inside the program's own
-  -- call, so the console hands the canvas over by moving
-  -- canvas_handed on, and that call leaves it alone. It does so
-  -- whenever no run is live afterwards: a program's input hook
-  -- may have stopped the run before the console line began.
-  if not self.run_live then
-    if console then
-      self.canvas_handed = (self.canvas_handed or 0) + 1
-    elseif live and self.canvas_handed == handed then
-      self.model.output:clear_canvas()
-    end
-  end
   if not r[1] then error(r[2], 0) end
   return unpack(r, 2)
 end

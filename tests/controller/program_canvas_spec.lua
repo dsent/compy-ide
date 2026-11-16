@@ -350,8 +350,9 @@ describe('a program\'s canvas after it stops #canvas', function()
     end)
   end)
 
-  -- One console line that stops and then draws: the console
-  -- owns no run, so its drawing after the stop stays.
+  -- One console line that stops and then would draw: the stop
+  -- ends the line (design B), so nothing after it draws, and
+  -- the stop's clear is the last word on the canvas.
   --- The line is submitted with Enter, which runs inside the
   --- program's own call while a run exists, idle or not.
   local function submit_stop_and_draw()
@@ -360,25 +361,26 @@ describe('a program\'s canvas after it stops #canvas', function()
     press({ 'return' })
   end
 
-  it('a console line that stops and then draws keeps what it'
-    .. ' drew', function()
+  it('a console line whose stop is refused, nothing running,'
+    .. ' draws on', function()
       paint('old')
       submit_stop_and_draw()
       assert.equal('typed', who())
     end)
 
-  it('the same line after a run that finished keeps what it'
-    .. ' drew', function()
+  it('the same line after a run that finished: the stop clears'
+    .. ' its picture, and nothing after it draws', function()
       F.run_project(function() draw('prog') end)
       assert.equal('prog', who())
       submit_stop_and_draw()
-      assert.equal('typed', who())
+      assert.is_false(shown())
     end)
 
-  -- Enter reaches the console through the program's input hook,
-  -- which here stops the run and lets the key fall through.
-  it('a console line keeps what it drew when the program\'s input'
-    .. ' hook stopped the run on Enter', function()
+  -- Enter reaches the program's input hook, which here stops the
+  -- run and lets the key fall through: the key is the stop's
+  -- (design B), and the console's line waits for the next Enter.
+  it('a key whose input hook stopped the run is the stop\'s; the'
+    .. ' console\'s line runs at the next Enter', function()
       F.run_project(function()
         local env = F.cc:get_project_env()
         draw('prog')
@@ -399,6 +401,8 @@ describe('a program\'s canvas after it stops #canvas', function()
       env.love.update = nil
       env.compy.input.hooks.keypressed = nil
       assert.equal('ready', love.state.app_state)
+      assert.is_false(shown())
+      press({ 'return' })
       assert.equal('typed', who())
     end)
 
@@ -412,7 +416,7 @@ describe('a program\'s canvas after it stops #canvas', function()
       submit_stop_and_draw()
       F.cc:get_project_env().love.update = nil
       assert.equal('ready', love.state.app_state)
-      assert.equal('typed', who())
+      assert.is_false(shown())
     end)
 
   it('the same line over a run with a live handler keeps what'
@@ -422,7 +426,7 @@ describe('a program\'s canvas after it stops #canvas', function()
         F.cc:get_project_env().love.mousepressed = function() end
       end)
       submit_stop_and_draw()
-      assert.equal('typed', who())
+      assert.is_false(shown())
     end)
 
   it('console code run over a live program keeps what it draws'
@@ -435,27 +439,21 @@ describe('a program\'s canvas after it stops #canvas', function()
       assert.equal('typed', who())
     end)
 
-  -- Top-level code that stops its run, starts it again, and
-  -- then fails: the failed call is the old run's, the canvas
-  -- the new one's.
-  it('a top-level error after a rerun leaves the rerun\'s'
-    .. ' picture', function()
-      local calls = 0
+  -- Top-level code that stops its run and would then fail: the
+  -- stop ends it (design B), so no error comes, and the stop
+  -- clears what it drew.
+  it('top-level code that stops draws and fails no more', function()
       local undo = project(function()
-        calls = calls + 1
-        if calls == 1 then
-          F.cc:get_project_env().stop()
-          F.cc:run_project()
-          error('outgoing')
-        else
-          draw('new')
-        end
+        draw('old')
+        F.cc:get_project_env().stop()
+        draw('after')
+        error('outgoing')
       end)
       local ok, err = pcall(F.cc.run_project, F.cc)
       undo()
       assert(ok, err)
-      assert.equal(2, calls)
-      assert.equal('new', who())
+      assert.equal('ready', love.state.app_state)
+      assert.is_false(shown())
     end)
 
   it('a paused program keeps it, and continue() gives it its'

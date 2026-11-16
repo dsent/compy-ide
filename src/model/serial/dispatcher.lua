@@ -19,6 +19,8 @@
 Dispatcher = {}
 Dispatcher.__index = Dispatcher
 
+local End = require('util.program_end')
+
 local FIELDS = {
   connect = 'onConnect',
   disconnect = 'onDisconnect',
@@ -122,7 +124,9 @@ function Dispatcher:pump()
       if not self.suspended[env] then
         local fn = t[field]
         if type(fn) == 'function' then
-          local ok, e = pcall(fn, ev.arg)
+          --- a stop the handler asks for ends it, no fault, and
+          --- is made once the frame's update returns
+          local ok, e = End.call(fn, ev.arg)
           if not ok then
             errors[#errors + 1] =
                 { env = env, err = failed(t, field, fn, e) }

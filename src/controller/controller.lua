@@ -6,6 +6,7 @@ require("util.string.string")
 require("util.key")
 require("util.lua")
 local LANG = require("util.eval")
+local End = require("util.program_end")
 local FS = require("util.filesystem")
 local Application = require("util.application")
 local Blink = require("view.input.cursorBlink")
@@ -141,14 +142,23 @@ end
 --
 -- `select('#')`, not `#args`: an explicit nil argument is an
 -- argument, and the two disagree about that.
+---
+--- A lifecycle call in the program (stop(), run(), ...) ends it
+--- with util.program_end's ENDED, which is no error: nothing is
+--- said, and the call reports success with no result.
 local function wrap(f, CC, ...)
   local function on_error(msg)
+    if End.is(msg) then return msg end
     user_error_handler(CC, msg)
   end
   local args, n = { ... }, select('#', ...)
-  return xpcall(function()
+  End.enter()
+  local ok, res = xpcall(function()
     return f(unpack(args, 1, n))
   end, on_error)
+  End.leave()
+  if not ok and End.is(res) then return true end
+  return ok, res
 end
 
 --- Run `fn` the way project code must always be run: drawing
@@ -167,9 +177,13 @@ end
 local function with_canvas_and_errors(CC, fn)
   return function(...)
     local args = { ... }
-    return CC:use_canvas(function()
-      local ok, res = wrap(fn, CC, unpack(args))
-      if ok then return res end
+    --- what the program asked for is made off the canvas, once
+    --- the route has returned (util.program_end)
+    return End.held(function()
+      return CC:use_canvas(function()
+        local ok, res = wrap(fn, CC, unpack(args))
+        if ok then return res end
+      end)
     end)
   end
 end
@@ -294,6 +308,10 @@ local function occupy_input(userlove, CC)
         if takes_screen(k, ...) then CC.model.output:to_rest() end
         return
       end
+      --- an event whose handler asked to stop or replace the run
+      --- is that request's: the console does not get it before
+      --- the run ends (util.program_end)
+      if End.pending then return end
       -- a key and its text have one receiver: a program whose
       -- love.keypressed takes every key press keeps their text
       -- from the console too. A key hook decides key by key, and
@@ -317,7 +335,9 @@ local function deliver_owed()
   local due = owed_releases[run]
   owed_releases = { }
   for k, sc in pairs(due or { }) do
-    if route_owner ~= run then return end
+    --- a release that asked to stop or replace the run is the
+    --- last the program sees (util.program_end)
+    if End.pending then return end
     love.keyreleased(k, sc)
   end
 end
@@ -645,7 +665,14 @@ Controller = {
   --- @private
   --- @param CC ConsoleController
   set_love_update = function(CC)
+    local update_body
+    --- what the program's update, its serial handlers or a timer
+    --- ask for is made once the frame's update has returned
+    --- (util.program_end)
     local function update(dt)
+      return End.held(update_body, dt)
+    end
+    update_body = function(dt)
       if love.PROFILE then
         Prof.update()
       end
@@ -663,23 +690,23 @@ Controller = {
       local ddr = View.prev_draw
       local ldr = love.draw
       if ldr ~= ddr then
+        --- a stop the program's draw asks for is made after its
+        --- pop (util.program_end): the IDE draws on from the
+        --- stop's own reset
         local draw = function()
-          if ldr then
-            local run_id = CC.run_id
-            gfx.push('all')
-            wrap(ldr, CC)
-            gfx.pop()
-            --- the pop put back the state of a run this draw
-            --- ended or replaced: a line typed next, or the run
-            --- it started, would draw under it
-            if CC.run_id ~= run_id or not CC.run_live then
-              CC:reset_graphics()
+          End.held(function()
+            if ldr then
+              gfx.push('all')
+              CC.drawing = true
+              wrap(ldr, CC)
+              CC.drawing = false
+              gfx.pop()
             end
-          end
-          local ui = get_user_input()
-          if ui then
-            draw_field(CC, ui.V)
-          end
+            local ui = get_user_input()
+            if ui then
+              draw_field(CC, ui.V)
+            end
+          end)
         end
 
         View.prev_draw = draw

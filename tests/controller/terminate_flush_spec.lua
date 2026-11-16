@@ -285,20 +285,20 @@ describe("the terminate flush #console", function()
         assert.same(1, #rows, text)
       end)
 
-    it("returns what API4.1 says, and the console prints none of it",
-      function()
+    --- design B: the call ends the line, so API4.1's table
+    --- reaches no caller in code; the IDE's own call has it
+    it("does not return to code; the IDE's own call has API4.1's"
+      .. " table", function()
         reset()
-        -- a global the line set would go with the environment the
-        -- reset makes anew: the value is kept by a function
-        local r
-        env().keep = function(v) r = v end
+        local kept = false
+        env().keep = function() kept = true end
         run("keep(reset())")
+        assert.is_false(kept)
+        local r = K.cc:get_project_env().reset()
         assert.same({ scope = "runtime", project = K.PROJECT }, r)
         assert.is_nil(r.snapshot)
-        run("reset()")
         local text = K.console_text()
         assert.is_nil(text:find("table:", 1, true), text)
-        assert.is_nil(text:find("runtime\n", 1, true), text)
       end)
 
     it("clears what typed lines left with nothing live", function()

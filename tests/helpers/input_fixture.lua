@@ -434,6 +434,8 @@ end
 -- state production never creates, or content production keeps
 -- on purpose between runs.
 function F.reset()
+  -- no request or count of an earlier case is left
+  require('util.program_end').reset()
   -- Undo a show_multiline_widget swap before teardown runs, so
   -- stop_project_run tears down the fixture's widget rather
   -- than a case-local one.

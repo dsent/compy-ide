@@ -113,6 +113,15 @@ There is always a project open: the application starts on the
 default `scratchpad` project, which can be used to persist files.
 Closing a project returns to `scratchpad`.
 
+`stop()`, `reset()`, `run()`, `project()`, `close_project()` and
+`reset_scratchpad()`, called from a program or from a line typed
+in the console, end that code at once: nothing after the call
+runs, and the IDE does what it asks once the code has returned.
+A call that is refused, such as `stop()` with nothing running,
+says why and ends nothing. A program's own `pcall` around such a
+call lets its code run on, and the call is done when that code
+returns.
+
 - `list_projects()`
 
   List available projects.
@@ -169,8 +178,8 @@ Closing a project returns to `scratchpad`.
   typed before left (variables, handlers, settings), silence
   every sound, and empty the console as
   <kbd>Ctrl</kbd>+<kbd>L</kbd> does; then it says
-  `Runtime reset for <project>. All files kept.` and returns
-  `{ scope = "runtime", project = "<project>" }`. The history
+  `Runtime reset for <project>. All files kept.`; like `stop()`,
+  it ends the code that called it and returns nothing. The history
   and the editor's files stay. Only `reset()` with
   nothing between the brackets exists yet.
 
