@@ -132,19 +132,44 @@ describe("the console's channels #console", function()
       end)
   end)
 
-  it("a pause's message is said in the output, in its own color",
-    function()
-      reset({ ["main.lua"] =
-        "function love.update() love.update = nil; pause('Look here') end\n" })
+  --- a pause is the debugger's: its text shows in the band as
+  --- an orange notice, and the program's screen is not touched
+  --- (the maintainer's ruling of November 16, 2026)
+  describe("a pause's text", function()
+    local function paused_by(how)
+      reset({ ["main.lua"] = "print('mine')\n"
+        .. "local n = 0\n"
+        .. "function love.update()\n"
+        .. "  n = n + 1\n"
+        .. "  if n == 1 and PAUSE then pause('Look here') end\n"
+        .. "end\n" })
+      K.cc:get_project_env().PAUSE = how == "pause"
       run("run()")
+      local before = K.console_text()
+      if how == "ctrl" then K.keys("lctrl", "pause") end
       K.frame()
       K.cc:suspend()
       K.frame(100)
       assert.same("inspect", K.app_state())
-      said("Look here", colors().fg)
-      no_band()
-      K.cc:get_project_env().continue()
-    end)
+      return before
+    end
+
+    for _, case in ipairs({ { "pause", "Look here" },
+      { "ctrl", "BREAK into program" } }) do
+      it((case[1] == "pause" and "pause('Look here')" or "Ctrl+Pause")
+        .. " shows in the band, orange, the output untouched",
+        function()
+          local before = paused_by(case[1])
+          assert.same({ case[2] }, band())
+          assert.same("notice", K.cc.input:message_kind())
+          assert.same(before, K.console_text())
+          K.cc:get_project_env().continue()
+          K.frame(100)
+          assert.same(before, K.console_text())
+          K.cc:get_project_env().love.update = nil
+        end)
+    end
+  end)
 
   it("a line that does not parse is said in the band alone",
     function()
@@ -284,6 +309,42 @@ describe("the console's channels #console", function()
     end)
   end)
 
+  --- run() of a name no project has refuses and changes
+  --- nothing; project() creates (the maintainer's ruling of
+  --- November 16, 2026)
+  describe("run() of a name", function()
+    it("no project has refuses, and changes nothing", function()
+      reset()
+      local open = K.cc.model.projects.current
+      run("run('mzae')")
+      said('There is no project mzae: project("mzae") creates it.',
+        colors().refusal)
+      assert.equal(open, K.cc.model.projects.current)
+      assert.same("ready", K.app_state())
+      assert.is_falsy(K.cc.run_live)
+      assert.is_nil(ProjectService.is_project(ProjectService.path,
+        "mzae"), "no project made")
+    end)
+
+    it("that cannot be a project's is refused for its name",
+      function()
+        reset()
+        local open = K.cc.model.projects.current
+        run("run('a/b')")
+        said("Filename invalid: Forbidden characters", colors().refusal)
+        assert.equal(open, K.cc.model.projects.current)
+      end)
+
+    it("a project has opens and runs it", function()
+      reset()
+      K.next_project("other", { ["main.lua"] = "print('other ran')\n" })
+      run("run('other')")
+      said("Project other opened", colors().fg)
+      said("other ran", colors().fg)
+      K.cc:close_project()
+    end)
+  end)
+
   it("an answer stays in the output's own color", function()
     reset()
     K.next_project("other", { ["main.lua"] = "b = 1\n" })
@@ -302,7 +363,7 @@ describe("the console's channels #console", function()
         run("for i = 1, 3 do")
         assert.same("for i = 1, 3 do\n", K.console_draft())
         assert.same("notice", K.cc.input:message_kind())
-        assert.same({ "Not finished yet: Enter runs it once it is." },
+        assert.same({ "Unfinished code: type the rest, then press Enter." },
           band())
         assert.is_nil((K.console_text():find("for i", 1, true)))
       end)

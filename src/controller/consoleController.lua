@@ -27,6 +27,11 @@ local messages = {
   needs_a_name    = 'A project needs a name: project("name").',
   --- only a card that cannot hold scratchpad leaves none open
   no_project      = 'No project is open: the SD card cannot be used.',
+  --- run() makes no project: project() does
+  no_such_project = function(name)
+    return string.format('There is no project %s: project(%q) creates it.',
+      name, name)
+  end,
 }
 --- @class ConsoleController
 --- @field time number
@@ -516,6 +521,18 @@ function ConsoleController:run_project(name)
   local P   = self.model.projects
   local cur = P.current
   if not name and not self:open_or_refuse() then return end
+  --- a run opens a project it names and makes none: a name
+  --- no project has is refused, and nothing changes
+  if name and not (cur and cur.name == name) then
+    local valid, invalid = ProjectService.valid_name(name)
+    if not valid then
+      return self.model.output:write_refusal(invalid)
+    end
+    if not ProjectService.is_project(ProjectService.path, name) then
+      return self.model.output:write_refusal(
+        messages.no_such_project(name))
+    end
+  end
   local ok
   if cur and (not name or cur.name == name) then
     ok = true
@@ -1836,7 +1853,7 @@ end
 
 --- What Enter says on a statement that is not finished, when
 --- it begins the statement's next line instead of running it
-local UNFINISHED = 'Not finished yet: Enter runs it once it is.'
+local UNFINISHED = 'Unfinished code: type the rest, then press Enter.'
 
 function ConsoleController:evaluate_input()
   local inter = self.input
@@ -1936,11 +1953,12 @@ function ConsoleController:suspend()
   Log.info('Suspending project run')
   love.state.app_state = 'inspect'
   self.model.output:to_rest()
-  --- what the program said as it paused is said in the
-  --- output, as the rest of what it printed
+  --- a pause is the debugger's: what it says shows in the
+  --- band as a notice, and the program's screen is not touched
+  --- (the maintainer's ruling of November 16, 2026)
   local msg = love.state.suspend_msg
   if msg then
-    print(tostring(msg))
+    self.input:notice({ tostring(msg) })
     love.state.suspend_msg = nil
   end
 

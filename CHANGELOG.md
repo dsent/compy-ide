@@ -217,16 +217,21 @@ Project-author guide: `doc/input_api.md`.
   needs in a band above the status line.** A typed line's error and a program's error are
   written to the output in red, which is for errors alone; a console command's refusal,
   which is no error, in a burnt orange; answers such as "Project x opened" keep the
-  output's colour, and so does the message of a program's `pause("text")`. A line the syntax refuses or Lua does not load shows its message in
+  output's colour. A line the syntax refuses or Lua does not load shows its message in
   the band, over the output's last rows, without the `Errors:` heading; the line stays
   in the field with its cursor, red from a syntax failure, and the status line no longer
   moves. The message blocks nothing: the next key dismisses it and does its work, so
   Enter tries the line again, Escape clears it and Up recalls the history. Enter on a
   statement that is not finished begins its next line, as before, and the band now says
-  so in orange: "Not finished yet: Enter runs it once it is." A program's own input field
-  shows its errors as before. `run()` while a project is paused now says "A project is
+  so in orange: "Unfinished code: type the rest, then press Enter." A pause's text, from
+  `pause("text")` or Ctrl+Pause's "BREAK into program", shows in the band in orange too,
+  and the program's screen is left as it was. A program's own input field shows its
+  errors as before. `run()` while a project is paused now says "A project is
   already running: Ctrl+Q stops it." in the output, where before its message was cleared
   as it appeared.
+- **`run("name")` makes no project.** A name no project has is refused, "There is no
+  project mzae: project("mzae") creates it.", and nothing changes; before, `run` made the
+  project and ran its example. `project("name")` still makes one.
 - **One sentence for each refusal.** `stop()` and `pause()` with nothing running say
   "Nothing is running.", and `continue()` with nothing paused "Nothing is paused."; a file
   the open project does not hold is "There is no NAME in this project." wherever it is

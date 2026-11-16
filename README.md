@@ -130,7 +130,9 @@ Closing a project returns to `scratchpad`.
 - `run_project(proj?)` / `run(proj?)`
 
   Run either _proj_ or the currently open project if no
-  arguments are passed.
+  arguments are passed. _proj_ must exist: `run` makes no
+  project, and a name no project has is refused with a hint to
+  make it with `project()` first.
 
 - `example_projects()`
 
