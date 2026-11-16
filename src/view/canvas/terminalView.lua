@@ -227,8 +227,10 @@ local function terminal_draw(terminal, canvas, overlay, window)
   if terminal.cursor_visible then
     gfx.setFont(terminal.font)
     if love.timer.getTime() % 1 > 0.5 then
-      gfx.print("_",
-        (terminal.cursor_x - 1) * char_width,
+      --- past a full row the cursor waits a column beyond the
+      --- grid: it shows on the last column
+      local column = math.min(terminal.cursor_x, terminal.width)
+      gfx.print("_", (column - 1) * char_width,
         (terminal.cursor_y - 1) * char_height)
     end
   end

@@ -382,6 +382,71 @@ describe("a blank row in the output #console", function()
   end)
 end)
 
+--- A line as wide as the screen takes its row and no more: the
+--- row wraps when a character follows it, so the line end after
+--- it leaves no blank row.
+describe("a line as wide as the screen #console", function()
+  before_each(function() reset() end)
+  after_each(cleanup)
+
+  local function wide(ch)
+    return string.rep(ch, output().terminal.width)
+  end
+
+  --- the screen's rows from the row that is `first`, `n` of
+  --- them
+  local function from(first, n)
+    local rows, out = screen(), nil
+    for _, r in ipairs(rows) do
+      if r == first then out = { } end
+      if out and #out < n then out[#out + 1] = r end
+    end
+    return out
+  end
+
+  it("has the next line right under it", function()
+    run("print(('x'):rep(64)) print('b')")
+    assert.same({ wide("x"), "b" }, from(wide("x"), 2))
+  end)
+
+  it("has one blank row under it for one empty print", function()
+    run("print(('x'):rep(64)) print('') print('b')")
+    assert.same({ wide("x"), "", "b" }, from(wide("x"), 3))
+  end)
+
+  it("wraps its 65th character", function()
+    run("print(('x'):rep(65)) print('b')")
+    assert.same({ wide("x"), "x", "b" }, from(wide("x"), 3))
+  end)
+
+  it("has the echo of the next entered line right under it when "
+    .. "it was left open", function()
+    output():write(wide("x"))
+    K.frame(100)
+    run("print('b')")
+    assert.same({ wide("x"), "print('b')", "b" }, from(wide("x"), 3))
+  end)
+
+  it("is kept as one row, and the scrolled view shows it so",
+    function()
+      run("for i = 1, 40 do print(i == 5 and ('w'):rep(64) "
+        .. "or 'L' .. i) end")
+      local rows, at = kept(), nil
+      for i, r in ipairs(rows) do
+        if r == "L4" then at = i end
+      end
+      assert.same({ "L4", wide("w"), "L6" },
+        { rows[at], rows[at + 1], rows[at + 2] })
+      output():to_oldest()
+      local shown = view()
+      for i, r in ipairs(shown) do
+        if r == "L4" then at = i end
+      end
+      assert.same({ "L4", wide("w"), "L6" },
+        { shown[at], shown[at + 1], shown[at + 2] })
+    end)
+end)
+
 describe("the console's scrolled view #console", function()
   before_each(function() reset() end)
   after_each(cleanup)

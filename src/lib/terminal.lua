@@ -223,16 +223,21 @@ local function terminal_update(terminal, dt)
                 terminal.cursor_y = terminal.cursor_y + 1
                 wrap_if_bottom(terminal)
             else
-                terminal_update_character(terminal,
-                    terminal.cursor_x,
-                    terminal.cursor_y,
-                    char_or_command)
-                terminal.cursor_x = terminal.cursor_x + 1
+                -- A row filled to its last column leaves the
+                -- cursor a column past it, and wraps only now
+                -- that a character follows: a line end after a
+                -- full row moves down once, and a full last row
+                -- rolls the grid when something comes after it.
                 if terminal.cursor_x > terminal.width then
                     terminal.cursor_x = 1
                     terminal.cursor_y = terminal.cursor_y + 1
                     wrap_if_bottom(terminal)
                 end
+                terminal_update_character(terminal,
+                    terminal.cursor_x,
+                    terminal.cursor_y,
+                    char_or_command)
+                terminal.cursor_x = terminal.cursor_x + 1
                 terminal.dirty = true
             end
         elseif char_or_command.type == "clear" then
@@ -407,7 +412,8 @@ local function terminal_draw(terminal)
         love.graphics.setFont(terminal.font)
         if love.timer.getTime() % 1 > 0.5 then
             love.graphics.print("_",
-                (terminal.cursor_x - 1) * char_width,
+                (math.min(terminal.cursor_x, terminal.width) - 1)
+                    * char_width,
                 (terminal.cursor_y - 1) * char_height)
         end
     end
@@ -467,7 +473,7 @@ end
 --- @field height integer
 --- @field update function
 --- @field cursor_visible boolean
---- @field cursor_x integer
+--- @field cursor_x integer --- up to width + 1, while a full row waits
 --- @field cursor_y integer
 --- @field saved_cursor_x integer
 --- @field saved_cursor_y integer

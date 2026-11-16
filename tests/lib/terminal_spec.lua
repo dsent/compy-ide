@@ -103,7 +103,8 @@ describe("terminal scrolling", function()
   end
 
   --- Print `n` rows, each as wide as the grid, so that each
-  --- wraps to the next by itself, in styles taking turns
+  --- wraps to the next when the row after it starts, in styles
+  --- taking turns
   --- @return table terminal, string[] texts, table[] styles
   local function print_rows(n)
     local t = new_term()
@@ -135,9 +136,10 @@ describe("terminal scrolling", function()
   for _, rolls in ipairs({ 1, 8 }) do
     it("keeps each row's colors after " .. rolls .. " rolls",
       function()
-        local t, texts, styles = print_rows(19 + rolls)
+        -- the last row is full and has not wrapped yet
+        local t, texts, styles = print_rows(20 + rolls)
         assert.equal(t.height, t.cursor_y)
-        for y = 1, t.height - 1 do
+        for y = 1, t.height do
           local line = y + rolls
           assert_cells(t, y, 1, t.width,
             string.sub(texts[line], 1, 1), styles[line])
@@ -373,8 +375,9 @@ describe("terminal cursor moves", function()
     --- move_to floored a fraction before the clamp too: this
     --- case pins that, and passes without the clamp
     { 2.7, 3.2, 2, 3 },
-    --- the last cell's character wraps the grid up a row
-    { huge, huge, 20, 20, 19 },
+    --- the last cell's character stays there: the row wraps
+    --- when a character follows it
+    { huge, huge, 20, 20 },
     { -huge, -huge, 1, 1 },
     { nan, nan, 1, 1 },
     { nan, 5, 1, 5 },
@@ -390,7 +393,7 @@ describe("terminal cursor moves", function()
         assert.same({ c[3], c[4] }, { t.cursor_x, t.cursor_y })
         t:print("h")
         t:update(1000)
-        assert.equal("h", t.buffer[c[5] or c[4]][c[3]])
+        assert.equal("h", t.buffer[c[4]][c[3]])
       end)
   end
 
@@ -452,6 +455,121 @@ end)
 
 --- bounded() puts the JIT and the hook before it back, wherever
 --- its count runs out: in the body, or just after it returns
+--- A row filled to its last column wraps when the next character
+--- comes, not before: the cursor waits a column past the last,
+--- as a terminal's does. A line end after a full row goes to the
+--- next row once, so a line as wide as the grid is not followed
+--- by a blank row; and a full last row rolls the grid only when
+--- something follows it.
+describe("terminal full row", function()
+  --- the grid's rows, spaces at their ends left out
+  local function rows(t)
+    local out = { }
+    for y, row in ipairs(t.buffer) do
+      out[y] = (table.concat(row):gsub(" +$", ""))
+    end
+    return out
+  end
+
+  local function written(text)
+    local t = new_term()
+    t:print(text)
+    t:update(1000)
+    return t, rows(t)
+  end
+
+  it("leaves the cursor a column past the last", function()
+    local t = written(string.rep("x", 20))
+    assert.same({ 21, 1 }, { t.cursor_x, t.cursor_y })
+  end)
+
+  it("puts what follows a line end on the next row, with no "
+    .. "blank row", function()
+    local full = string.rep("x", 20)
+    local t, r = written(full .. "\nb")
+    assert.same({ full, "b", "" }, { r[1], r[2], r[3] })
+    assert.same({ 2, 2 }, { t.cursor_x, t.cursor_y })
+  end)
+
+  it("wraps when one more character comes", function()
+    local full = string.rep("x", 20)
+    local t, r = written(full .. "y")
+    assert.same({ full, "y" }, { r[1], r[2] })
+    assert.same({ 2, 2 }, { t.cursor_x, t.cursor_y })
+  end)
+
+  it("is followed by one blank row for two line ends", function()
+    local full = string.rep("x", 20)
+    local _, r = written(full .. "\n\nb")
+    assert.same({ full, "", "b" }, { r[1], r[2], r[3] })
+  end)
+
+  it("does not roll the grid when it is the last row", function()
+    local full = string.rep("x", 20)
+    local t, r = written(string.rep("L\n", 19) .. full)
+    assert.same({ "L", full }, { r[1], r[20] })
+    assert.same({ 21, 20 }, { t.cursor_x, t.cursor_y })
+  end)
+
+  it("rolls the grid once at a line end after the last row",
+    function()
+      local full = string.rep("x", 20)
+      local t, r = written(string.rep("L\n", 19) .. full .. "\n")
+      assert.same({ "L", full, "" }, { r[1], r[19], r[20] })
+      assert.same({ 1, 20 }, { t.cursor_x, t.cursor_y })
+    end)
+
+  it("rolls the grid once when a character follows the last row",
+    function()
+      local full = string.rep("x", 20)
+      local _, r = written(string.rep("L\n", 19) .. full .. "y")
+      assert.same({ "L", full, "y" }, { r[1], r[19], r[20] })
+    end)
+
+  it("is followed on the next row by what starts a row of its "
+    .. "own", function()
+    local full = string.rep("x", 20)
+    local t = new_term()
+    t:print(full)
+    t:fresh_row()
+    t:print("b")
+    t:update(1000)
+    local r = rows(t)
+    assert.same({ full, "b", "" }, { r[1], r[2], r[3] })
+  end)
+
+  it("lets a move put the cursor on a column of the grid",
+    function()
+      local t = new_term()
+      t:print(string.rep("x", 20))
+      t:move_to(3, 1)
+      t:print("y")
+      t:update(1000)
+      assert.equal("xxy" .. string.rep("x", 17), rows(t)[1])
+      assert.same({ 4, 1 }, { t.cursor_x, t.cursor_y })
+    end)
+
+  it("lets a backspace bring the cursor back onto the last "
+    .. "column", function()
+    local t = written(string.rep("x", 20) .. "\by")
+    assert.equal(string.rep("x", 19) .. "y", rows(t)[1])
+    assert.equal("", rows(t)[2])
+  end)
+
+  it("keeps the wait across a saved and a restored position",
+    function()
+      local t = new_term()
+      t:print(string.rep("x", 20))
+      t:save_position()
+      t:move_to(1, 5)
+      t:load_position()
+      t:print("y")
+      t:update(1000)
+      assert.same({ string.rep("x", 20), "y" },
+        { rows(t)[1], rows(t)[2] })
+    end)
+end)
+
 --- The queue of what waits to be written. A frame writes a few
 --- characters of it; what the frame costs must not depend on how
 --- much still waits behind them (a program that prints 2,000 lines
@@ -706,6 +824,18 @@ describe("terminal view", function()
     t:print(" →")
     local row = drawn(t, 0)
     assert.same({ "0 ", "1 →" }, { row[2], row[3] })
+  end)
+
+  it("shows the cursor on the last column while a full row "
+    .. "waits to wrap", function()
+    local t = view_term()
+    t:print(string.rep("x", 20))
+    t:show_cursor()
+    local now = love.timer.getTime
+    love.timer.getTime = function() return 0.75 end
+    local all = drawn(t)
+    love.timer.getTime = now
+    assert.equal("0,19 _", all[#all])
   end)
 
   it("draws all the backgrounds before any character", function()

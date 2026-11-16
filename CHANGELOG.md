@@ -334,6 +334,10 @@ Project-author guide: `doc/input_api.md`.
 
 ### Fixed
 
+- **A line as wide as the screen is not followed by a blank row.** The console moved to
+  the next row as soon as a row's 64th character was written, so the line end after a
+  64-character line left a row empty, and a full last row scrolled the screen at once.
+  The row now wraps when the next character comes; a line end still scrolls at once.
 - **An empty `print` makes a blank row.** `print("")`, `print()` and any output of only
   spaces and line ends, from `print` or `io.write`, was dropped: `print("a") print("")
   print("b")` showed `b` right under `a`. It is now written like any other output.

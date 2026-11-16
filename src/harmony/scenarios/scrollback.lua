@@ -156,7 +156,8 @@ end)
 
 --- An empty print makes a blank row: entered in the console and
 --- printed by a program, the two lines around it have a row
---- between them.
+--- between them. A line as wide as the screen makes none: the
+--- line after it is on the next row.
 scenario('blank-row', function(wait)
   wait(.1)
   D.key(wait, 'escape')
@@ -186,6 +187,22 @@ scenario('blank-row', function(wait)
   settle(wait)
   D.eq(from_to('five', 'six'), 'five||six', 'io.write of two line ends')
   D.shot(wait, 'blank-rows')
+
+  -- a line as wide as the screen takes its row and no more: the
+  -- next line is right under it, and one empty print makes one
+  -- blank row
+  D.key(wait, 'C-l')
+  local full = string.rep('x', output().terminal.width)
+  D.enter(wait, "print(('x'):rep(64)) print('under')")
+  settle(wait)
+  D.eq(from_to(full, 'under'), full .. '|under',
+    'a line of 64 characters, then a line')
+  D.key(wait, 'C-l')
+  D.enter(wait, "print(('x'):rep(64)) print('') print('under')")
+  settle(wait)
+  D.eq(from_to(full, 'under'), full .. '||under',
+    'a line of 64 characters, an empty print, then a line')
+  D.shot(wait, 'full-row')
 
   D.enter(wait, "project('h-blank')")
   P.put('h-blank', 'main.lua',
