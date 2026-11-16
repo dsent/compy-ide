@@ -173,7 +173,8 @@ setmetatable(_G, {
     end)
 
   --- with nothing live there is nothing to end: what a typed
-  --- line queued for the board, and an exit hook it set, stay
+  --- line queued for the board stays, and an exit hook it set
+  --- is not called (round 21: nor does it reach the run)
   it('ends nothing when nothing is live', function()
     reset({['main.lua'] = 'fresh = true\n'})
     local drops, drop = 0, SerialPort.drop
@@ -581,18 +582,38 @@ function love.update(dt) Timer.update(dt) end
     assert.is_false(said('OLD_TIMER'), K.console_text())
   end)
 
-  --- with nothing live, reset() clears what typed lines set on
-  --- compy.input; Ctrl+R, which did, restarts a live program
-  --- only since November 16
-  it('cleans registrations typed before reset() and a run', function()
+  --- a run starts clean (round 21): with nothing live, what
+  --- typed lines set on the slots every environment shares, an
+  --- exit hook, input hooks and shortcuts, and serial handlers,
+  --- goes at the run, as at reset()
+  it('cleans registrations typed before a run with nothing live',
+    function()
     reset({['main.lua'] = 'fresh = true\n'})
     run("compy.input.shortcuts.keypressed.f2 = function() print('OLD_TYPED') end")
-    run('reset()')
     run('run()')
     assert.is_true(env().fresh)
     K.keys('f2')
     assert.is_false(said('OLD_TYPED'), K.console_text())
   end)
+
+  it('calls no exit hook typed before a run with nothing live',
+    function()
+      reset({['main.lua'] = 'function love.update() end\n'})
+      run("compy.before_exit = function() print('OLD' .. 'EXIT') end")
+      run('run()')
+      K.keys('lctrl', 'q')
+      assert.is_false(said('OLDEXIT'), K.console_text())
+    end)
+
+  it('drops a serial handler typed before a run with nothing live',
+    function()
+      reset({['main.lua'] = 'fresh = true\n'})
+      run("compy.serial.onLine = function() end")
+      assert.is_function(SerialPort:table_for('program').onLine)
+      run('run()')
+      assert.is_true(env().fresh)
+      assert.is_nil(SerialPort:table_for('program').onLine)
+    end)
 
   it('keeps project files open across editor run and return', function()
     reset({['main.lua'] = 'x = 42\n'})

@@ -669,6 +669,13 @@ function ConsoleController:_run_project(name, stopped, entry)
         self:evacuate_required()
         self:_reset_executor_env()
         reset_graphics()
+        --- the slots every environment shares, which a new one
+        --- does not clear: what typed lines set there goes, as
+        --- at reset(), an exit hook removed and not called
+        --- (round 21: a run starts clean)
+        self:get_project_env().compy.before_exit = default_before_exit
+        self.main_ctrl.clear_user_handlers(self)
+        SerialPort:programEnded()
       end
     end
     local runner_env = self:get_project_env()
