@@ -1619,6 +1619,14 @@ behaviour. The table now holds:
 The table's contract is unchanged: privileged, exact, consulted before any route, and never
 consuming.
 
+**Note, 2026-11-16 — `ctrl+r` restarts a live program only, by the maintainer's ruling.** *"Ctrl+R
+should do nothing at the console. End of story."* It restarts a program that runs, is paused or
+idles behind the console, the same condition under which `ctrl+q` stops one (`program_live` in
+`controller.lua`), from the entry point it runs from, which lives with the run and goes when the
+run ends. With none live it does nothing, in the console and the file editor alike, and the
+editor's key card no longer lists it. `ctrl+t` from the editor runs `main.lua` ("main.lua only for
+now"). A packaged build restarts as before.
+
 **Owner ruling, 2026-08-16.** **Amends D-ASK-THE-DEVICE point 3**, which named this
 table, declined to commit to it, and required that if it were ever built it be
 "visibly a second, privileged table, structurally separate from a project's own".

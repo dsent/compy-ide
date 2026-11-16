@@ -31,10 +31,12 @@ local mock = require('tests.mock')
 -- (2026-11-14): the stub keeps it to show nothing calls it.
 -- @param combo string  mock.keystroke syntax, e.g. 'C-r'
 -- @return table  {restart = true?, reset = true?}
-local function drive_stub(combo)
+--- @param live boolean? --- a program is live behind the stub
+local function drive_stub(combo, live)
   local calls = { }
   local stub  = {
     cfg     = { mode = 'dev' },
+    run_live = live,
     restart = function() calls.restart = true end,
     reset   = function() calls.reset = true end,
     card_shows = function() return false end,
@@ -458,9 +460,13 @@ describe('input surface: inbound events — global platform'
 
       -- run anew is Ctrl+R since the ruling of November 14,
       -- late; Ctrl+Alt+R, the teacher's family, is nobody's
-      it('ctrl+r restarts', function()
-        local calls = drive_stub('C-r')
-        assert.is_true(calls.restart)
+      --- and only a live program (November 16)
+      it('ctrl+r restarts a live program', function()
+        local st = love.state.app_state
+        love.state.app_state = 'ready'
+        finally(function() love.state.app_state = st end)
+        assert.is_true(drive_stub('C-r', true).restart)
+        assert.is_nil(drive_stub('C-r').restart)
       end)
 
       it('ctrl+alt+r no longer restarts', function()

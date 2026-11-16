@@ -83,13 +83,59 @@ describe("run's second entry point #console", function()
     K.keys("lctrl", "q")
   end)
 
-  it("runs that entry point again with Ctrl+R from the editor",
-    function()
+  --- the maintainer's ruling of November 16, 2026: Ctrl+T from
+  --- the editor runs "main.lua only for now"
+  it("runs main.lua with Ctrl+T from the editor after a second.lua"
+    .. " run", function()
       reset(FILES)
       run("run(nil, 'second.lua')")
       K.keys("lctrl", "q")
       run("edit('main.lua')")
       assert.same("editor", K.app_state())
+      K.keys("lctrl", "t")
+      K.frame()
+      assert.same("main", env().which)
+    end)
+
+  --- "Ctrl+R should do nothing at the console. End of story."
+  it("does nothing with Ctrl+R with no live program", function()
+    reset(FILES)
+    run("x = 1")
+    local before = K.console_text()
+    K.type("draft")
+    K.keys("lctrl", "r")
+    K.frame()
+    assert.is_falsy(K.cc.run_live)
+    assert.same("ready", K.app_state())
+    assert.is_nil(env().which)
+    assert.same(before, K.console_text():gsub("draft$", ""))
+    assert.same("draft", K.console_draft())
+  end)
+
+  it("does nothing with Ctrl+R in the editor", function()
+    reset(FILES)
+    K.open("main.lua")
+    for _, typed in ipairs({ "", "y = 2" }) do
+      K.type(typed)
+      K.keys("lctrl", "r")
+      K.frame()
+      assert.same("editor", K.app_state())
+      assert.is_falsy(K.cc.run_live)
+      assert.is_nil(env().which)
+      assert.same(typed, K.draft())
+    end
+  end)
+
+  it("restarts a program idle behind the console with Ctrl+R",
+    function()
+      reset({ ["main.lua"] = "which = 'main'\n"
+        .. "function love.keypressed() end\n",
+        ["second.lua"] = "which = 'second'\n"
+        .. "function love.keypressed() end\n" })
+      run("run(nil, 'second.lua')")
+      assert.same("ready", K.app_state())
+      assert.is_true(K.cc.run_live)
+      env().which = "changed"
       K.keys("lctrl", "r")
       K.frame()
       assert.same("second", env().which)
@@ -135,20 +181,21 @@ describe("run's second entry point #console", function()
 
   --- the entry point is remembered while its project stays
   --- open; opening a project starts from main.lua again
-  it("forgets the entry point when the project is opened again",
-    function()
-      reset(FILES)
-      run("run(nil, 'second.lua')")
-      K.keys("lctrl", "q")
-      K.next_project("other", { ["main.lua"] = "which = 'other'\n" })
-      run("project('other')")
-      K.next_project(K.PROJECT, FILES)
-      run("project('" .. K.PROJECT .. "')")
-      run("edit('main.lua')")
-      K.keys("lctrl", "r")
-      K.frame()
-      assert.same("main", env().which)
-    end)
+  --- the entry point "should only be remembered as long as the
+  --- program is running from a particular entry point"
+  it("restarts main.lua after Ctrl+Q and run()", function()
+    reset(FILES)
+    run("run(nil, 'second.lua')")
+    K.keys("lctrl", "q")
+    K.write_outside("main.lua", "which = 'main'\n"
+      .. "function love.update() end\n")
+    run("run()")
+    env().which = "changed"
+    K.keys("lctrl", "r")
+    K.frame()
+    assert.same("main", env().which)
+    K.keys("lctrl", "q")
+  end)
 
   it("leaves run() to main.lua", function()
     reset(FILES)

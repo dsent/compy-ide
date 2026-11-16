@@ -1,7 +1,8 @@
 -- Run anew is Ctrl+R (the maintainer's ruling of November 14,
--- late): the gate's reserved chord, in the console, the file
--- editor and over a running program; Ctrl+Alt+R does nothing
--- anywhere. The chord's letter, which the device also sends as
+-- late): the gate's reserved chord, over a live program only;
+-- in the console and the file editor with none it does nothing
+-- ("Ctrl+R should do nothing at the console. End of story.",
+-- November 16). Ctrl+Alt+R does nothing anywhere. The chord's letter, which the device also sends as
 -- text before or after the press, reaches no field and no
 -- program. Keys through the production gateway (F.session, the
 -- K helper).
@@ -43,23 +44,24 @@ describe("run anew is Ctrl+R #input", function()
   teardown(K.teardown)
   after_each(K.cleanup)
 
-  it("runs the project from the console", function()
+  it("does nothing in the console with no program", function()
     K.reset({ ["main.lua"] = PROGRAM })
     K.keys("lctrl", "r")
-    assert.same("running", K.app_state())
-    assert.is_true(K.cc.run_live)
+    assert.same("ready", K.app_state())
+    assert.is_falsy(K.cc.run_live)
   end)
 
-  it("runs the project from the editor, browsing", function()
+  it("does nothing in the editor, browsing", function()
     K.reset({ ["main.lua"] = PROGRAM })
     K.open()
     K.keys("lctrl", "r")
-    assert.same("running", K.app_state())
+    assert.same("editor", K.app_state())
+    assert.is_falsy(K.cc.run_live)
   end)
 
   it("runs a running program anew", function()
     K.reset({ ["main.lua"] = PROGRAM })
-    K.keys("lctrl", "r")
+    K.start()
     local count, undo = counting_restarts()
     K.keys("lctrl", "r")
     undo()
@@ -102,7 +104,7 @@ describe("run anew is Ctrl+R #input", function()
 
     it("over a running program", function()
       K.reset({ ["main.lua"] = PROGRAM })
-      K.keys("lctrl", "r")
+      K.start()
       local count, undo = counting_restarts()
       K.keys("lctrl", "lalt", "r")
       undo()

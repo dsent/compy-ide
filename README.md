@@ -143,12 +143,14 @@ returns.
   file of the open project as the program, from a clean start
   as `run()` does, and `run("proj", "second.lua")` opens _proj_
   first; a file the project does not hold is refused. Ctrl+R
-  then runs that file again while the project stays open;
-  opening a project starts from `main.lua` again. _proj_ must exist: `run` makes no
+  restarts a program that runs, is paused or idles behind the
+  console, from the file it runs from, and does nothing when
+  none does; Ctrl+T from the editor runs `main.lua`. _proj_
+  must exist: `run` makes no
   project, and a name no project has is refused with a hint to
   make it with `project()` first. While a program runs or is
   paused, a typed `run()` is refused, and Ctrl+R stops it and
-  runs again; a program's own `run()` replaces it, as Ctrl+R
+  runs it again; a program's own `run()` replaces it, as Ctrl+R
   does, once its code has returned. Each run starts afresh: a program idle behind the
   console ends first, as `stop()` ends it, and its handlers,
   input hooks and shortcuts go with it; then no variable,

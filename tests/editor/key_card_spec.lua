@@ -123,7 +123,7 @@ describe("the key card #editor", function()
     -- the editor's own keys, the field's, and the reserved
     -- chords that act in the editor; in a draft without Up/Down
     -- and Home/End, which move its cursor there
-    local COUNT = { browsing = 26, inserting = 24, replacing = 24 }
+    local COUNT = { browsing = 25, inserting = 23, replacing = 23 }
     for _, state in ipairs({
       "browsing", "inserting", "replacing"
     }) do
@@ -162,37 +162,43 @@ describe("the key card #editor", function()
     end
   end)
 
-  it("lists Ctrl+Q in the console as exit program: among the "
-      .. "keys now while a program is not stopped, after them "
-      .. "with none", function()
+  --- Ctrl+R alike since November 16: it restarts a live
+  --- program only
+  it("lists Ctrl+Q and Ctrl+R in the console: among the keys now"
+      .. " while a program is not stopped, after them with none",
+      function()
     local now, other = group_of(KeyCard.console_cells(true))
     assert.same("exit program", now["Ctrl+Q"])
+    assert.same("run anew", now["Ctrl+R"])
     assert.same({ }, other)
     local function after_them(cells)
       local n, o = group_of(cells)
       assert.is_nil(n["Ctrl+Q"])
-      assert.same({ ["Ctrl+Q"] = "exit program" }, o)
+      assert.is_nil(n["Ctrl+R"])
+      assert.same({ ["Ctrl+Q"] = "exit program",
+        ["Ctrl+R"] = "run anew" }, o)
     end
     after_them(KeyCard.console_cells(false))
     after_them(KeyCard.console_cells())
     local lines = KeyCard.lines_of(KeyCard.console_cells(),
       ROWS, WIDTH)
-    -- the last two of the card's second column, nothing after
-    -- them
+    -- the last three of the card's second column, nothing
+    -- after them
     local at
     for i, l in ipairs(lines) do
       if l:find(" Other keys:$") then at = i end
     end
     assert.truthy(at)
     assert.truthy(lines[at + 1]:find(" Ctrl%+Q +exit program$"))
-    for i = at + 2, #lines do
+    assert.truthy(lines[at + 2]:find(" Ctrl%+R +run anew$"))
+    for i = at + 3, #lines do
       assert.same("", (lines[i]:sub(WIDTH / 2 + 1):gsub(" ", "")))
     end
   end)
 
   it("takes one column where two do not fit", function()
     local lines = KeyCard.lines("browsing", true, 40, 40)
-    assert.same(28, #lines)
+    assert.same(27, #lines)
     assert.same(" Keys now, browsing:", lines[1])
   end)
 end)

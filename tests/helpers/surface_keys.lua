@@ -44,8 +44,11 @@ function S.bound(keys, state)
       for _, c in ipairs(d.chords) do out[c] = d end
     end
   end
+  --- a reserved chord the editor's card has no words for does
+  --- nothing there (Ctrl+R since November 16); one with no card
+  --- at all is the gate's alone
   for _, r in ipairs(Reserved) do
-    out[r.chord] = r
+    if r.editor or not r.card then out[r.chord] = r end
   end
   return out
 end

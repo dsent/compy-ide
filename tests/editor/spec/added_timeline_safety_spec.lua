@@ -132,14 +132,15 @@ describe("timeline safety #editor #spec", function()
         assert.same("q", K.draft())
       end)
 
-    spec_it("IS1.4 Resume after running a project: a run with "
-        .. "Ctrl+R keeps the timeline for Ctrl+T's return",
-      function()
+    spec_it("IS1.4 Resume after running a project: a run "
+        .. "restarted with Ctrl+R keeps the timeline for Ctrl+T's "
+        .. "return", function()
         K.reset({ ["main.lua"] = "x = 1\ny = 2\n" })
         K.open()
         K.browse_to(1)
         K.keys("lctrl", "delete")
         K.keys("escape")
+        K.keys("lctrl", "t")
         K.keys("lctrl", "r")
         assert.are_not.same("editor", K.app_state())
         K.keys("lctrl", "t")

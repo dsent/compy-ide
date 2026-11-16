@@ -79,7 +79,10 @@ local TRIPS = {
     K.keys("lctrl", "t")
     K.keys("lctrl", "t")
   end,
+  --- a run, Ctrl+R on it (it restarts a live program only),
+  --- and back
   restart = function()
+    K.keys("lctrl", "t")
     K.keys("lctrl", "r")
     K.keys("lctrl", "t")
   end,

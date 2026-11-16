@@ -1130,7 +1130,9 @@ Controller = {
       elseif st == 'editor' then
         if refused() then return end
         CC:hide_editor()
-        CC:run_project(nil, nil, CC:last_entry())
+        --- "main.lua only for now" (the maintainer's ruling of
+        --- November 16, 2026)
+        CC:run_project()
       end
     end
 
@@ -1148,25 +1150,33 @@ Controller = {
     -- it does nothing. No key closes the project
     -- (doc/development/decisions/input.md, D-RESERVE-TABLE,
     -- the 2026-11-14 note).
+    --- A program is live for Ctrl+Q and Ctrl+R alike: it runs,
+    --- it is paused, or it idles behind the console with its
+    --- picture or its handlers still there (run_live)
+    --- @return boolean
+    local function program_live()
+      local st = love.state.app_state
+      return st == 'running' or st == 'inspect'
+          or (st == 'ready' and CC.run_live == true)
+    end
+
     local function reserved_stop()
       if playback then return end
-      local st = love.state.app_state
-      if st == 'editor' then
+      if love.state.app_state == 'editor' then
         if refused() then return end
         CC:finish_edit()
-      elseif st == 'running' or st == 'inspect'
-          or (st == 'ready' and CC.run_live) then
+      elseif program_live() then
         CC:stop_project_run()
       end
     end
 
-    -- Restart stays live in playback too (matches the old
-    -- restart() call, made in both branches). From the
-    -- editor it is a run as Ctrl+T's: Ctrl+T comes back to
-    -- its files (IS1.4).
+    -- Ctrl+R restarts a live program from the entry point it
+    -- runs from, and does nothing otherwise, in the console and
+    -- in the editor ("Ctrl+R should do nothing at the console.
+    -- End of story.", the maintainer's ruling of November 16,
+    -- 2026). Playback restarts as before.
     local function reserved_restart()
-      if refused() then return end
-      CC:restart()
+      if playback or program_live() then CC:restart() end
     end
 
     local function reserved_profile_start()

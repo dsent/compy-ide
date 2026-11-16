@@ -162,9 +162,9 @@ describe("round four #editor #spec", function()
   end)
 
   describe("a notice and the key that hides the editor", function()
+    --- Ctrl+R does nothing in the editor since November 16
     local RUNS = {
       ["Ctrl+T"] = { "lctrl", "t" },
-      ["Ctrl+R"] = { "lctrl", "r" },
     }
     for run, keys in pairs(RUNS) do
       spec_it("IS3.14 Explain a refusal: a notice shown before "

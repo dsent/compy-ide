@@ -167,7 +167,6 @@ describe('the editor across files #input', function()
     for _, c in ipairs({
       { 'Ctrl+T', { 'lctrl', 't' }, 'run_project' },
       { 'Ctrl+Q', { 'lctrl', 'q' } },
-      { 'Ctrl+R', { 'lctrl', 'r' }, 'restart' },
     }) do
       it(c[1] .. ' waits for the edit to end, and asks nothing',
         function()

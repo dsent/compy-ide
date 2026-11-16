@@ -82,7 +82,7 @@ Project-author guide: `doc/input_api.md`.
 - **The console's status line is a near-black gray**, so that the black band of an
   error or a notice above it stands apart; its key card is the same gray. The editor's
   status line and a paused program's are as before.
-- **Leaving waits for the edit to end.** Ctrl+T, Ctrl+Q and Ctrl+R are refused
+- **Leaving waits for the edit to end.** Ctrl+T and Ctrl+Q are refused
   with a notice while there is text in the field or a block is being replaced; submit
   it or drop it first. Ctrl+J is refused the same way.
 - **Ctrl+Q stops the program and returns to the console; the project stays open.**
@@ -258,10 +258,14 @@ Project-author guide: `doc/input_api.md`.
   `dofile()` keep everything as it is.
 - **A project can have a second entry point.** `run(nil, "second.lua")` runs that file of
   the open project as the program, from a clean start like any run, and
-  `run("name", "second.lua")` opens the project first. Ctrl+R, in the console or the editor,
-  runs again the file that ran last while the project stays open; opening a project starts
-  from `main.lua` again. A file the project does not hold, or a folder, is refused, "There
-  is no second.lua in this project.", before anything changes.
+  `run("name", "second.lua")` opens the project first. Ctrl+R restarts that file while its
+  program is live; Ctrl+T from the editor runs `main.lua`. A file the project does not hold,
+  or a folder, is refused, "There is no second.lua in this project.", before anything
+  changes.
+- **Ctrl+R restarts a live program only.** It restarts a program that runs, is paused or
+  idles behind the console, from the file it runs from; in the console with no program, and
+  in the editor, it does nothing and its key cards no longer list it there. A run started
+  from the editor is Ctrl+T's, which runs `main.lua`.
 - **`reset()` starts the console clean.** Typed with nothing between the brackets, it
   stops a program that runs, clears what it and the lines typed before left, silences every
   sound, and empties the console as Ctrl+L does, then says "Runtime reset for <project>.

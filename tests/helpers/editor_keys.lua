@@ -316,6 +316,13 @@ function K.open(name)
   K.ed = K.cc.editor
 end
 
+--- Run the project as the user does from the console: type
+--- run() and press Enter (Ctrl+R restarts only a live program)
+function K.start()
+  K.type("run()")
+  K.keys("return")
+end
+
 --- Change a file on the card, not through the editor: as
 --- another program, or another device, would.
 function K.write_outside(name, text)

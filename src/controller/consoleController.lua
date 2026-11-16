@@ -86,7 +86,7 @@ end
 --- @field run_live boolean? the run is not stopped
 --- @field collect_garbage function? --- collectgarbage, or a stand-in in tests
 --- @field state_left boolean? --- a typed line left state the flush has not ended
---- @field entry table? --- the entry point that ran last, while its project stays open
+--- @field entry string? --- the file the live run runs from, nil for main.lua
 --- methods
 --- @field edit function
 --- @field finish_edit function
@@ -663,8 +663,9 @@ function ConsoleController:_run_project(name, stopped, entry)
     --- looked for again
     local f, load_err, path, refused = P:run(nil, runner_env, entry)
     if f then
-      --- the entry point Ctrl+R restarts in this project
-      self.entry = { project = P.current.name, file = entry }
+      --- the entry point this run runs from, which Ctrl+R
+      --- restarts while it is live; the run's end forgets it
+      self.entry = entry
       local n = name or P.current.name or 'project'
       Log.info('Running \'' .. n .. '\'')
       self:restore_console_mouse()
@@ -2092,22 +2093,14 @@ function ConsoleController:reset()
   return { scope = 'runtime', project = name, snapshot = nil }
 end
 
---- Ctrl+R: the stop the run seam would make, made first, so
---- that a run that is going or paused ends even when no run
---- can start after it
+--- Ctrl+R on a live program: the stop the run seam would make,
+--- made first, so that a run that is going or paused ends even
+--- when no run can start after it, then a run from the entry
+--- point the program was running from (the stop forgets it)
 function ConsoleController:restart()
-  local entry = self:last_entry()
+  local entry = self.entry
   self:stop_project_run()
   self:run_project(nil, true, entry)
-end
-
---- The entry point that ran last in the open project, the one
---- Ctrl+R runs again: nil for main.lua
---- @return string?
-function ConsoleController:last_entry()
-  local P, last = self.model.projects, self.entry
-  return last and P.current and last.project == P.current.name
-      and last.file or nil
 end
 
 ---@return LuaEnv
@@ -2221,9 +2214,6 @@ function ConsoleController:open_project(name, play, fresh)
     then
       table.insert(package.loaders, 1, project_loader)
     end
-    --- an opened project runs from main.lua: the entry point is
-    --- remembered only while its project stays open
-    self.entry = nil
     --- env resets on every project switch, once: when closing
     --- the one that was open made it anew, not again
     if not fresh and not closed_fresh then
@@ -2468,6 +2458,9 @@ function ConsoleController:flush_program_state(call_exit)
   if kb and kb.setKeyRepeat then kb.setKeyRepeat(true) end
   if kb and kb.setTextInput then kb.setTextInput(true) end
   self.run_live = false
+  --- the entry point lives with the run (the maintainer's
+  --- ruling of November 16, 2026)
+  self.entry = nil
   View.clear_snapshot()
   self.main_ctrl.set_love_draw(self, self.view)
   self.main_ctrl.clear_user_handlers(self)

@@ -857,7 +857,7 @@ yourself.
 | Combo | What the platform does | When |
 |---|---|---|
 | `ctrl+escape` (on **release**) | exits the whole IDE at once: the run is not stopped first, and `compy.before_exit` does not run | always |
-| `ctrl+r` | restarts the project | always |
+| `ctrl+r` | restarts a program that runs, is paused or idles behind the console, from the file it runs from; does nothing when none does (a packaged build restarts always) | always |
 | `ctrl+t` | switches between running and the editor | development only |
 | `ctrl+q` | stops the run and returns to the console; the project stays open. From the editor, leaves it for the console | development only |
 | `ctrl+pause` | suspends the run | development only |
@@ -888,8 +888,8 @@ overlay uses Alt+H (`doc/development/keyboard.md` is the per-key availability
 table, measured on a stock Compy).
 
 Ctrl+Q leaves the editor for the console, with every file you had opened in
-it, and the project stays open. Ctrl+R leaves the editor too, and so does Ctrl+T while you browse the file. Ctrl+Shift+R does nothing
-in the editor. None of the exits asks a
+it, and the project stays open. Ctrl+T while you browse the file leaves it to run
+`main.lua`. Ctrl+R and Ctrl+Shift+R do nothing in the editor. None of the exits asks a
 question. While there is text in the editor's field, or a block is
 loaded to be replaced, each is refused with a notice: submit the text with
 Enter or drop it with Escape first, and the exit works. A text whose save

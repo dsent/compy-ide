@@ -24,10 +24,10 @@ return {
     console = { live = 'exit program' },
   },
   --- run anew (the maintainer's ruling of November 14, late:
-  --- Ctrl is the family of the global keys)
+  --- Ctrl is the family of the global keys); a live program
+  --- only (November 16): no words where it does nothing
   { chord = 'ctrl+r', name = 'restart', card = 'Ctrl+R',
-    editor = { browsing = 'run anew' },
-    console = { idle = 'run anew', live = 'run anew' },
+    console = { live = 'run anew' },
   },
   { chord = 'ctrl+escape', name = 'exit', card = 'Ctrl+Esc',
     release = true,

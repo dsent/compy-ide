@@ -292,11 +292,13 @@ describe('editor key contract #input', function()
       assert.same('main.lua', ed:get_active_buffer().name)
     end)
 
-    it('Ctrl+R keeps the way back for Ctrl+T', function()
+    --- Ctrl+R restarts a live program only, and there is none
+    --- while the editor is in front (November 16)
+    it('Ctrl+R does nothing in the editor', function()
       F.session.press('lctrl')
       F.session.press('r')
 
-      assert.is_not.equal('editor', love.state.app_state)
+      assert.same('editor', love.state.app_state)
       assert.same('main.lua', ed:get_active_buffer().name)
     end)
 

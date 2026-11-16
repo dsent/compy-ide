@@ -1096,8 +1096,9 @@ describe("the scrolled view at a transition #console", function()
     assert.is_false(output():is_scrolled(), what)
   end
 
-  it("a run started by Ctrl+R", function()
-    reset({ ["main.lua"] = FIELD })
+  it("a run started anew by Ctrl+R", function()
+    reset({ ["main.lua"] = RUNS })
+    K.start()
     scrolled()
     K.keys("lctrl", "r")
     at_rest("Ctrl+R")

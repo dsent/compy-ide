@@ -263,9 +263,10 @@ describe("held keys #editor #spec", function()
     -- the reserved chords that would switch or run anew at
     -- repeat speed act once per press; Ctrl+Q stops by itself
     spec_it("IS1.4 Resume after running a project: a held Ctrl+R "
-        .. "runs the project once", function()
+        .. "runs the project anew once", function()
         K.reset({ ["main.lua"] =
           "RUNS = (RUNS or 0) + 1\nfunction love.update() end\n" })
+        K.start()
         local runs, orig = 0, K.cc.restart
         K.cc.restart = function(...)
           runs = runs + 1
@@ -289,7 +290,7 @@ describe("held keys #editor #spec", function()
         .. "stops the program and then does nothing more",
       function()
         K.reset({ ["main.lua"] = "function love.update() end\n" })
-        K.keys("lctrl", "r")
+        K.start()
         assert.same("running", K.app_state())
         K.type("ab")
         held({ "lctrl" }, "q", 3)

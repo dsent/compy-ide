@@ -175,7 +175,7 @@ describe("every chord is its own key #editor #spec", function()
         "end",
         "compy.input.hooks.mousepressed = function() end",
       }, "\n") .. "\n" })
-      K.keys("lctrl", "r")
+      K.start()
       assert.same("ready", K.app_state())
       assert.is_true(K.cc.run_live)
       local keys = K.cc:get_project_env().KEYS
@@ -211,7 +211,7 @@ describe("every chord is its own key #editor #spec", function()
 
     local function behind_card()
       K.reset({ ["main.lua"] = RELEASES })
-      K.keys("lctrl", "r")
+      K.start()
       assert.same("ready", K.app_state())
       assert.is_true(K.cc.run_live)
       local seen = K.cc:get_project_env().SEEN

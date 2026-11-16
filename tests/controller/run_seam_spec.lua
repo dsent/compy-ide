@@ -560,10 +560,14 @@ function love.update(dt) Timer.update(dt) end
     assert.is_false(said('OLD_TIMER'), K.console_text())
   end)
 
-  it('cleans registrations typed before Ctrl+R when no run is live', function()
+  --- with nothing live, reset() clears what typed lines set on
+  --- compy.input; Ctrl+R, which did, restarts a live program
+  --- only since November 16
+  it('cleans registrations typed before reset() and a run', function()
     reset({['main.lua'] = 'fresh = true\n'})
     run("compy.input.shortcuts.keypressed.f2 = function() print('OLD_TYPED') end")
-    K.keys('lctrl', 'r')
+    run('reset()')
+    run('run()')
     assert.is_true(env().fresh)
     K.keys('f2')
     assert.is_false(said('OLD_TYPED'), K.console_text())
@@ -574,7 +578,7 @@ function love.update(dt) Timer.update(dt) end
     K.open('main.lua')
     local file = K.cc.editor:get_active_buffer()
     assert.is_not_nil(file)
-    K.keys('lctrl', 'r')
+    K.keys('lctrl', 't')
     assert.equal(42, env().x)
     K.keys('lctrl', 't')
     assert.equal('editor', K.app_state())

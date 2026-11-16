@@ -561,11 +561,12 @@ describe("IS1 files #editor #spec", function()
     -- the maintainer's confirmation): the exit is refused with
     -- a notice and the state kept, as Ctrl+J is above.
     -- Ctrl+Shift+R and Ctrl+Shift+S left this list on
-    -- 2026-11-14, when the keys were dropped.
+    -- 2026-11-14, when the keys were dropped, and Ctrl+R on
+    -- 2026-11-16, when it came to restart a live program only:
+    -- in the editor it does nothing.
     for _, exit in ipairs({
       { "Ctrl+T", { "lctrl", "t" } },
       { "Ctrl+Q", { "lctrl", "q" } },
-      { "Ctrl+R", { "lctrl", "r" } },
     }) do
       spec_it("IS3.11 Preserve state on refusal: " .. exit[1] ..
           " during an insertion is refused with a notice",
