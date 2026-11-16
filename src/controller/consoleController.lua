@@ -54,6 +54,7 @@ local function reset_graphics()
 end
 
 --- @class ConsoleController
+--- @field reset_graphics function
 --- @field time number
 --- @field model Model
 --- @field main_ctrl table
@@ -1971,6 +1972,12 @@ end
 
 function ConsoleController:_reset_executor_env()
   self:_set_project_env(table.clone(self.base_env))
+end
+
+--- for a caller that restores a run's state after it ended, as
+--- the draw wrapper's pop does
+function ConsoleController:reset_graphics()
+  reset_graphics()
 end
 
 --- Ctrl+R: the stop the run seam would make, made first, so

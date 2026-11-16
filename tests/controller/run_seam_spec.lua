@@ -378,6 +378,44 @@ function love.update() end
     end)
   end)
 
+  --- the IDE's drawing is its own, but what a typed line or
+  --- the next run draws under is the state left after the
+  --- draw: a run the draw ended or replaced leaves none, though
+  --- the draw's own pop puts back what it saved
+  it('leaves no scissor after stop() from love.draw', function()
+    reset({['main.lua'] = [[
+gfx.setScissor(0, 0, 300, 300)
+function love.draw()
+  stop()
+end
+]]})
+    local scissor = stateful_scissor()
+    run('run()')
+    K.frame()
+    assert.is_not_nil(scissor())
+    love.draw()
+    assert.is_false(K.cc.run_live)
+    assert.is_nil(scissor())
+  end)
+
+  it('starts the run love.draw started with no scissor', function()
+    reset({['main.lua'] = [[
+gfx.setScissor(0, 0, 300, 300)
+function love.draw()
+  stop()
+  run("menu")
+end
+]]})
+    local scissor = stateful_scissor()
+    run('run()')
+    K.next_project('menu', {['main.lua'] = 'function love.update() end\n'})
+    K.frame()
+    love.draw()
+    assert.equal('running', K.app_state())
+    assert.is_nil(scissor())
+    env().love.update = nil
+  end)
+
   it('lets stop() from love.draw unwind the draw', function()
     reset({['main.lua'] = 'function love.draw() stop() end\n'})
     counted_stack()

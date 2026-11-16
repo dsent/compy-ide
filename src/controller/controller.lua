@@ -636,9 +636,16 @@ Controller = {
       if ldr ~= ddr then
         local draw = function()
           if ldr then
+            local run_id = CC.run_id
             gfx.push('all')
             wrap(ldr, CC)
             gfx.pop()
+            --- the pop put back the state of a run this draw
+            --- ended or replaced: a line typed next, or the run
+            --- it started, would draw under it
+            if CC.run_id ~= run_id or not CC.run_live then
+              CC:reset_graphics()
+            end
           end
           local ui = get_user_input()
           if ui then
