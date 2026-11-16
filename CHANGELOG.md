@@ -265,9 +265,9 @@ Project-author guide: `doc/input_api.md`.
   changes.
 - **A program that takes keys owns the keyboard.** While a program has its own key or text
   handler, a key or text hook or shortcut, or its own field shown, no key or text it leaves
-  reaches the console's prompt: behind such a program that draws nothing, the prompt shows and
-  takes no typing until Ctrl+Q stops the program. A program that wants typing shows its own
-  field. Before, a key or text its hook did not take was typed into the console, as was a key
+  reaches the console's prompt: behind such a program that draws nothing, the prompt and its
+  cursor are hidden, the output and the status line staying, until the program stops, pauses
+  or takes keys no more. A program that wants typing shows its own field. Before, a key or text its hook did not take was typed into the console, as was a key
   hook's text on a Compy.
 - **Ctrl+R restarts a live program only.** It restarts a program that runs, is paused or
   idles behind the console, from the file it runs from; in the console with no program, and

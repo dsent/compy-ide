@@ -713,8 +713,10 @@ any way of taking keys or text, its own `love.keypressed`,
 shortcut, or its own shown field, a key or text that nothing of yours
 takes goes nowhere: it does not fall through to the console's prompt.
 Behind a program that takes keys and draws nothing, the console's field
-is visible and takes no typing until the program stops (Ctrl+Q); a
-program that wants typing shows its own field. A program that takes no
+and its cursor are hidden while it runs, the output and the status line
+staying on show; the field comes back when the program stops (Ctrl+Q),
+pauses, or takes keys no more. A program that wants typing shows its
+own field. A program that takes no
 keys and draws nothing leaves the keyboard to the console. Pointer and
 touch events are not part of this.
 

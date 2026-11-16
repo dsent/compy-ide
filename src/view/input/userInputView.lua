@@ -31,6 +31,7 @@ end
 --- @field controller UserInputController
 --- @field statusline table
 --- @field canvas love.Canvas
+--- @field field_hidden boolean? --- the console's field behind a program that owns the keys: its status line alone
 UserInputView = class.create(new)
 
 local get_colors = function(cf_colors)
@@ -292,6 +293,9 @@ function UserInputView:render_input(input, status, time)
   gfx.push('all')
   self.statusline:draw(status, 0)
   gfx.pop()
+  --- hidden behind a program that owns the keyboard: the status
+  --- line alone, the field's rows background, no cursor
+  if self.field_hidden then return end
 
   local shown = vc:get_range()
   local function row_y(r) return self:row_y(field_row(r)) end
@@ -475,7 +479,8 @@ function UserInputView:render(input, status, time)
   own(self.cfg.font, self.canvas.renderTo, self.canvas, function()
     gfx.clear(0, 0, 0, 1)
     gfx.push('all')
-    if isError and not self:_message_elsewhere() then
+    if isError and not self.field_hidden
+        and not self:_message_elsewhere() then
       self:render_error(err_text, status)
     else
       self:render_input(input, status, time)

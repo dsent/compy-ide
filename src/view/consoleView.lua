@@ -62,11 +62,17 @@ function ConsoleView:draw(terminal, canvas, snapshot)
       self.controller.model.output)
 
     if ViewUtils.conditional_draw('show_input') then
+      --- behind a live program that owns the keyboard the field
+      --- and its cursor are hidden, its status line stays (the
+      --- maintainer's question of November 16, 2026, the lead's
+      --- option B): the field takes no typing there
+      local hidden = self.controller.main_ctrl.program_owns_keys()
+      self.input.field_hidden = hidden
       self.input:draw()
       --- the notice band over the output's last rows, on
       --- the output's row grid (IS3.14)
       local v = self.cfg.view
-      self.input:draw_notice(v.fh, Layout(v).top)
+      if not hidden then self.input:draw_notice(v.fh, Layout(v).top) end
     end
   end
 

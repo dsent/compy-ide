@@ -327,7 +327,11 @@ local route_owner, program_count = 'console', 0
 --- come at continue(), and go with the run otherwise.
 local owed_releases = { }
 
+--- the love table of the program whose route holds the keys
+local route_love
+
 local function occupy_input(userlove, CC)
+  route_love = userlove
   local pic = Controller.project_input
   local compy = CC:get_project_env().compy
   pic:activate(project_handlers(userlove, CC), compy.input)
@@ -1586,6 +1590,16 @@ Controller = {
   --- exits the IDE) stops it back to the console.
   user_is_interactive = function()
     return (love.state.user_input ~= nil) or user_pointer
+  end,
+
+  --- A program's route holds the keys and the program takes
+  --- keys (takes_keys): it owns the keyboard, and the console's
+  --- field is hidden (ConsoleView:draw). False at a pause, a
+  --- stop, and once the program takes keys no more.
+  --- @return boolean
+  program_owns_keys = function()
+    if route_owner == 'console' or not route_love then return false end
+    return takes_keys(route_love, Controller.project_input.compy_input)
   end,
 
   --- @param userlove table
