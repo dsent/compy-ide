@@ -70,25 +70,25 @@ describe("round seven #editor #spec", function()
 
       -- the console's card suspends the reserved chords as the
       -- editor's does (the maintainer's ruling of November 16)
-      spec_it("IS3.16 Show the key card: the console's card for "
-          .. "a bare F1 stays when Ctrl is pressed over a program "
-          .. "with a Ctrl shortcut, and Ctrl+Q does nothing under "
-          .. "it",
+      --- turned around on November 16: a program with a key
+      --- shortcut takes keys and owns the keyboard, F1 included,
+      --- so the console's card does not come up behind it; Ctrl+Q,
+      --- reserved, stops it with F1 held
+      spec_it("IS3.16 Show the key card: no console card comes up "
+          .. "over a program with a Ctrl shortcut, and Ctrl+Q "
+          .. "stops it with F1 held",
           function()
         K.reset({ ["main.lua"] = CTRL_CLASS })
         K.open()
         K.keys("lctrl", "t")
         assert.same("ready", K.app_state())
         K.hold("f1")
-        assert.is_not_nil(K.key_card())
+        assert.is_nil(K.key_card())
         K.hold("lctrl")
-        assert.is_not_nil(K.key_card())
+        assert.is_nil(K.key_card())
         K.keys("q")
         K.release("lctrl")
-        assert.is_true(K.cc.run_live)
         K.release("f1")
-        assert.is_nil(K.key_card())
-        K.keys("lctrl", "q")
         assert.is_false(K.cc.run_live)
       end)
 

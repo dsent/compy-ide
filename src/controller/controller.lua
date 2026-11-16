@@ -242,11 +242,47 @@ end
 --- also answers true for a project that hooks only `update`,
 --- which is exactly the class this serves.
 --- @param event string
+--- The keys whose press fell through to the console: the gate
+--- records the console as their receiver, so that their repeats
+--- and release go there and never to the program, which saw no
+--- press of them (handlers.keypressed)
+local fell_through = { }
+
 local function fall_through(event, ...)
   if user_draw then return end
   local console = Controller._defaults[event]
   if not console then return end
+  if event == 'keypressed' then fell_through[(...)] = true end
   return console(...)
+end
+
+--- The key and text events, the keyboard's
+local KEYBOARD = { keypressed = true, keyreleased = true,
+  textinput = true }
+
+--- Whether a live program takes keys, asked as each key or text
+--- event comes, since hooks and shortcuts come and go: its own
+--- love.keypressed, keyreleased or textinput, a key or text
+--- hook, a key or text shortcut, or its own shown field. Such a
+--- program owns the keyboard: what its chain leaves goes
+--- nowhere, not to the console (the maintainer's ruling of
+--- November 16, 2026). An empty shortcut table, and a hook or a
+--- shortcut for the pointer or a touch, take no keys.
+--- @param userlove table
+--- @param compy_input table?
+--- @return boolean
+local function takes_keys(userlove, compy_input)
+  for event in pairs(KEYBOARD) do
+    if project_handler(userlove, event) then return true end
+    if compy_input then
+      if compy_input.hooks[event] then return true end
+      if next(compy_input.shortcuts[event] or { }) then
+        return true
+      end
+    end
+  end
+  local field = love.state.user_input_controller
+  return field ~= nil and field:is_shown() == true
 end
 
 --- A key or a text that a running program takes brings the
@@ -312,13 +348,9 @@ local function occupy_input(userlove, CC)
       --- is that request's: the console does not get it before
       --- the run ends (util.program_end)
       if End.pending then return end
-      -- a key and its text have one receiver: a program whose
-      -- love.keypressed takes every key press keeps their text
-      -- from the console too. A key hook decides key by key, and
-      -- its text cannot wait for that (on a Compy it comes
-      -- first), so a hook's program types into the console still.
-      if k == 'textinput' and project_handler(userlove, 'keypressed')
-      then
+      --- a program that takes keys owns the keyboard: no key,
+      --- repeat, release or text it leaves reaches the console
+      if KEYBOARD[k] and takes_keys(userlove, pic.compy_input) then
         return
       end
       return fall_through(k, ...)
@@ -1287,6 +1319,13 @@ Controller = {
           if to.again then to.act() end
           return
         end
+        --- a key whose press fell through to the console repeats
+        --- there, whoever has the keys now
+        if to == 'console' and route_owner ~= 'console' then
+          local console = Controller._defaults.keypressed
+          if console then return console(k, sc, isr) end
+          return
+        end
         if to ~= route_owner then return end
       elseif card and k ~= KeyCard.KEY then
         delivered[k] = nil
@@ -1314,9 +1353,16 @@ Controller = {
       -- love[name].) See doc/development/decisions/input.md #1
       -- "route-centric routing" + #11.
       local handled
+      fell_through[k] = nil
       if love.keypressed then
         handled = love.keypressed(k, sc, isr)
       end
+      --- a press the program's route left to the console is the
+      --- console's: its repeats and release go there
+      if fell_through[k] and route_owner ~= 'console' then
+        delivered[k] = 'console'
+      end
+      fell_through[k] = nil
       -- a refusal at the gate holds back this key press alone
       -- (EditorController:refuse_to_leave), never a later one
       if CC.editor then CC.editor:gate_key_done() end

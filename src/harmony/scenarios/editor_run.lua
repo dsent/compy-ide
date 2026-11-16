@@ -12,11 +12,11 @@ local PROJECT = 'h-run'
 --- a program that runs until it is stopped
 local RUNS = 'n = 0\nfunction love.update() n = n + 1 end\n'
 --- a program that idles behind the console, and opens a file
---- on F3
+--- on F3; its key hook makes it take keys, so it owns the
+--- keyboard and a key it leaves goes nowhere (November 16)
 local OPENS_ON_F3 = [[
 compy.input.hooks.keypressed = function(k)
   if k == 'f3' then edit('notes.txt') end
-  return true
 end
 ]]
 
@@ -121,6 +121,10 @@ scenario('program-edit', function(wait)
   D.key(wait, 'C-t')
   D.in_state('ready')
   assert(P.cc().run_live, 'the program idles behind the console')
+  -- the program takes keys: what its hook leaves reaches no
+  -- console, its text neither
+  D.type(wait, 'x')
+  D.eq(P.console_draft(), '', 'a key the program left types nothing')
   D.key(wait, 'f3')
   D.in_state('editor')
   D.shot(wait, 'opened')

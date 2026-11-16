@@ -163,8 +163,12 @@ describe("every chord is its own key #editor #spec", function()
       assert.same("ab", K.console_draft())
     end)
 
+    --- turned around on November 16: a program that takes keys
+    --- owns the keyboard, F1 included, so no card of the
+    --- console's comes up behind it, and its keys are its own
     spec_it("IS3.16 Show the key card: a program idling behind "
-        .. "the console's card gets no key under it", function()
+        .. "the console that takes keys keeps F1, and no card "
+        .. "comes up", function()
       K.reset({ ["main.lua"] = table.concat({
         "KEYS = {}",
         "compy.input.hooks.keypressed = function(k)",
@@ -180,21 +184,22 @@ describe("every chord is its own key #editor #spec", function()
       assert.is_true(K.cc.run_live)
       local keys = K.cc:get_project_env().KEYS
       K.hold("f1")
-      assert.is_not_nil(K.key_card())
+      assert.is_nil(K.key_card())
       local before = #keys
       K.type("x")
       K.keys("left")
-      K.keys("lctrl", "q")
       K.release("f1")
-      assert.same(before, #keys)
+      --- x's text comes with its key
+      assert.same({ "f1", "x", "x", "left" }, { unpack(keys, before) })
       assert.is_true(K.cc.run_live)
+      K.keys("lctrl", "q")
+      assert.is_false(K.cc.run_live)
     end)
 
     -- the review's program (round 4): it writes a file when X
-    -- is released. A key the card dropped has its release and
-    -- its repeats dropped too, whenever they come; a key pressed
-    -- before the card gets its release, so that no program sees
-    -- a press without its release.
+    -- is released. It takes keys, so it owns the keyboard
+    -- (November 16): F1 is its own, no card comes up, and every
+    -- key it presses it also releases, F1 held or not.
     local RELEASES = table.concat({
       "SEEN = {}",
       "function love.keyreleased(k)",
@@ -219,40 +224,38 @@ describe("every chord is its own key #editor #spec", function()
     end
 
     spec_it("IS3.16 Show the key card: a key pressed and released "
-        .. "under the console's card reaches no program behind it",
+        .. "with F1 held reaches the program that takes keys, and "
+        .. "no card comes up", function()
+      local seen, n = behind_card()
+      K.hold("f1")
+      assert.is_nil(K.key_card())
+      K.keys("x")
+      K.release("f1")
+      assert.same("x", K.file("answer.txt"))
+      assert.same({ "down f1", "down x", "text x", "up x", "up f1" },
+        { unpack(seen, n + 1) })
+    end)
+
+    spec_it("IS3.16 Show the key card: a key pressed with F1 held "
+        .. "has its repeats and its release at the program",
         function()
       local seen, n = behind_card()
       K.hold("f1")
-      assert.is_not_nil(K.key_card())
-      K.keys("x")
-      K.release("f1")
-      assert.is_nil(K.file("answer.txt"))
-      assert.same({ "up f1" }, { unpack(seen, n + 2) })
-    end)
-
-    spec_it("IS3.16 Show the key card: a key pressed under the "
-        .. "card has its repeats and its release dropped after "
-        .. "the card", function()
-      local seen, n = behind_card()
-      K.hold("f1")
       K.hold("x")
       K.release("f1")
-      -- a held key's repeat brings its glyph again; text
-      -- carries no key and goes on once the card is gone (the
-      -- known limit), while the key's own events stay dropped
       K.repeat_key("x")
-      F.session.type("x")
       K.release("x")
-      assert.is_nil(K.file("answer.txt"))
-      assert.same({ "up f1", "text x" }, { unpack(seen, n + 2) })
+      assert.same("x", K.file("answer.txt"))
+      assert.same({ "down f1", "down x", "up f1", "again x", "up x" },
+        { unpack(seen, n + 1) })
     end)
 
-    spec_it("IS3.16 Show the key card: a key pressed before the "
-        .. "card gets its release under it", function()
+    spec_it("IS3.16 Show the key card: a key pressed before F1 "
+        .. "gets its release at the program", function()
       local seen, n = behind_card()
       K.hold("x")
       K.hold("f1")
-      assert.is_not_nil(K.key_card())
+      assert.is_nil(K.key_card())
       K.release("x")
       K.release("f1")
       assert.same({ "down x", "down f1", "up x", "up f1" },

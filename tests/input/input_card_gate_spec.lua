@@ -14,11 +14,15 @@ local F = require("tests.helpers.input_fixture")
 local K = require("tests.helpers.editor_keys")
 
 --- A program behind the console: its hooks record every key
---- and text event and fall through, so that F1 reaches the
---- console and brings its card up.
+--- and text event. A program that takes keys owns the keyboard
+--- (the maintainer's ruling of November 16, 2026), so F1 reaches
+--- the console, and brings its card up, only while the program
+--- takes none: the program here gains its hooks once the card
+--- shows (`gain`), as one whose update sets them then would.
+--- @param input table? --- the run's compy.input, when it runs
 --- @return table log --- { kind, key-or-text }
-local function attach(log)
-  local input = F.activate_project()
+local function attach(log, input)
+  input = input or F.activate_project()
   log = log or { }
   input.hooks.keypressed = function(k, _, isr)
     log[#log + 1] = { isr and "repeat" or "press", k }
@@ -32,9 +36,20 @@ local function attach(log)
   return log
 end
 
-local function program()
+--- A program that takes keys from the start: F1 is its
+local function program_with_keys()
   K.reset()
   return attach()
+end
+
+--- A program that takes no keys yet: F1 brings the console's
+--- card up, and `gain()` gives the program its hooks then
+--- @return table log, function gain
+local function program()
+  K.reset()
+  local input = F.activate_project()
+  local log = { }
+  return log, function() attach(log, input) end
 end
 
 local H = function() return love.handlers end
@@ -66,58 +81,79 @@ describe("the key card's gate #input", function()
   teardown(K.teardown)
   after_each(K.cleanup)
 
-  it("brings the console's card up over the program", function()
+  it("brings the console's card up over a program that takes no"
+    .. " keys", function()
     program()
     press("f1")
     assert.is_true(K.cc:card_shows())
     release("f1")
   end)
 
+  it("brings no card over a program that takes keys: F1 is the"
+    .. " program's", function()
+    local log = program_with_keys()
+    press("f1")
+    assert.is_false(K.cc:card_shows())
+    release("f1")
+    assert.same({ "press f1", "release f1" },
+      { log[1][1] .. " " .. log[1][2], log[2][1] .. " " .. log[2][2] })
+  end)
+
+  --- turned around: a key pressed before the card went to the
+  --- console, the program taking none then; its repeats and
+  --- release follow it there, and the program that gains keys
+  --- under the card sees none of them
   describe("a key pressed before the card", function()
-    it("gets its release under the card, its repeat there "
-        .. "dropped", function()
-      local log = program()
+    it("is the console's: its release goes there, the program"
+        .. " sees nothing of it", function()
+      local log, gain = program()
       press("x")
       press("f1")
+      gain()
       rep("x")
       release("x")
       release("f1")
-      assert.same({ "press x", "release x" }, seen(log))
+      assert.same({ }, seen(log))
     end)
 
-    it("repeats again once F1 is released, and gets its "
-        .. "release", function()
-      local log = program()
+    it("stays the console's once F1 is released", function()
+      local log, gain = program()
       press("x")
       press("f1")
+      gain()
       rep("x")
       release("f1")
       rep("x")
       release("x")
-      assert.same({ "press x", "repeat x", "release x" },
-        seen(log))
+      assert.same({ }, seen(log))
     end)
   end)
 
   describe("a key pressed under the card", function()
     it("has no release, then or after the card (round 4)",
       function()
-        local log = program()
+        --- turned around: once the program has gained keys, F1
+        --- is its own and brings no card, so the second x is
+        --- the program's, press and release
+        local log, gain = program()
         press("f1")
+        gain()
         press("x")
         release("x")
         release("f1")
         press("f1")
+        assert.is_false(K.cc:card_shows())
         press("x")
         release("f1")
         release("x")
-        assert.same({ }, seen(log))
+        assert.same({ "press x", "release x" }, seen(log))
       end)
 
     it("has no key event after the card: Space, its text "
         .. "before the repeat", function()
-      local log = program()
+      local log, gain = program()
       press("f1")
+      gain()
       text(" ")
       press("space")
       release("f1")
@@ -128,8 +164,9 @@ describe("the key card's gate #input", function()
     end)
 
     it("has no key event after the card: keypad 1", function()
-      local log = program()
+      local log, gain = program()
       press("f1")
+      gain()
       press("kp1")
       release("f1")
       rep("kp1")
@@ -143,8 +180,9 @@ describe("the key card's gate #input", function()
   -- the card held or not
   describe("text after the card", function()
     it("arrives with Shift held from under the card", function()
-      local log = program()
+      local log, gain = program()
       press("f1")
+      gain()
       press("lshift")
       release("f1")
       text("A")
@@ -157,8 +195,9 @@ describe("the key card's gate #input", function()
 
     it("arrives while Space pressed under the card is held",
       function()
-        local log = program()
+        local log, gain = program()
         press("f1")
+        gain()
         press("space")
         release("f1")
         text("a")
@@ -170,8 +209,9 @@ describe("the key card's gate #input", function()
       end)
 
     it("is held back while the card shows", function()
-      local log = program()
+      local log, gain = program()
       press("f1")
+      gain()
       text("a")
       press("a")
       release("a")
@@ -231,7 +271,7 @@ describe("the key card's gate #input", function()
       local NAMES = { "a", "space" }
       math.randomseed(20261116)
       for run = 1, 300 do
-        local log = program()
+        local log = program_with_keys()
         local logs, frozen = { log }, { }
         local down = { }
         local f1 = false

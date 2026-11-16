@@ -44,7 +44,10 @@ end
     run('run()')
     assert.equal('ready', K.app_state())
     K.write_outside('main.lua', 'fresh = true\n')
-    run('run()')
+    -- the idle program takes keys, so no line reaches the
+    -- console: the rerun is the IDE's own call
+    K.cc:run_project()
+    K.frame()
     assert.is_true(env().fresh, K.console_text() .. '\nSTATE:' .. K.app_state())
     assert.is_nil(env().love.keyreleased)
     K.keys('f2')
@@ -60,7 +63,8 @@ end
 ]]})
     run('run()')
     K.write_outside('main.lua', 'fresh = true\n')
-    run('run()')
+    K.cc:run_project()
+    K.frame()
     assert.is_true(env().fresh)
     K.keys('f2')
     assert.is_false(said('OLD_SHORTCUT'), K.console_text())

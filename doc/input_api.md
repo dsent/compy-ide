@@ -707,6 +707,17 @@ A hook you assign yourself is the other case: you have met the truthy
 convention by writing it, so `compy.input.hooks.keypressed` falls
 through on falsey like everything else in the chain.
 
+**A program that takes keys owns the keyboard.** While your program has
+any way of taking keys or text, its own `love.keypressed`,
+`love.keyreleased` or `love.textinput`, a key or text hook, a key or text
+shortcut, or its own shown field, a key or text that nothing of yours
+takes goes nowhere: it does not fall through to the console's prompt.
+Behind a program that takes keys and draws nothing, the console's field
+is visible and takes no typing until the program stops (Ctrl+Q); a
+program that wants typing shows its own field. A program that takes no
+keys and draws nothing leaves the keyboard to the console. Pointer and
+touch events are not part of this.
+
 **What this means in practice:** if your project shows the input widget
 *and* handles keys, write `compy.input.hooks.keypressed = function(k)`
 rather than `function love.keypressed(k)`, and **return a meaningful
@@ -721,8 +732,8 @@ makes a chord, and on a Compy its character still arrives on the
 `textinput` channel, before or after the key press. That character walks
 tiers ① and ② like any other text event, so `shortcuts.textinput['ctrl+j']`,
 `'alt+*'` and your `textinput` hook all see it with its modifiers. It stops
-there: the widget never types it, and it does not fall through to the
-console's prompt either. The character of a reserved combo (the table below),
+there: the widget never types it, and it reaches no console's prompt
+either. The character of a reserved combo (the table below),
 such as Ctrl+R's `r`, reaches nothing at all. Shift alone composes text. On a Compy the right Alt
 key is an Alt like the left one, so what it sends is a chord's character
 too, whatever the character. On a computer running the IDE, the right Alt

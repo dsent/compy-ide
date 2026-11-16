@@ -77,10 +77,13 @@ describe("round four #editor #spec", function()
 
   describe("no program behind the editor", function()
     for _, ext in ipairs({ "lua", "txt", "md" }) do
+      --- the program takes keys, so it owns the keyboard and no
+      --- line reaches the console behind it (November 16): the
+      --- way back to the file is Ctrl+T, which stops it too
       spec_it("FR1.2 Resolve each edit: in a ." .. ext
-          .. " file, edit() in the console after a run stops "
-          .. "the idle program, so its Escape hook cannot close "
-          .. "the project over a cut", function()
+          .. " file, Ctrl+T after a run stops the idle program, "
+          .. "so its Escape hook cannot close the project over a "
+          .. "cut", function()
         local name = "notes." .. ext
         K.reset({
           ["main.lua"] = ESCAPE_CLOSES,
@@ -91,7 +94,7 @@ describe("round four #editor #spec", function()
         K.keys("lctrl", "t")
         assert.same("ready", K.app_state())
         assert.is_true(K.cc.run_live)
-        K.open(name)
+        K.keys("lctrl", "t")
         assert.same("editor", K.app_state())
         assert.is_false(K.cc.run_live)
         K.browse_to(1)
@@ -130,18 +133,22 @@ describe("round four #editor #spec", function()
       assert.is_nil(program_global("got"))
     end)
 
+    --- the program takes keys and owns the keyboard: the editor
+    --- comes back with Ctrl+T, which stops it (November 16)
     spec_it("IS3.11 Preserve state on refusal: a program that "
         .. "idled behind the console cannot stop or run its "
-        .. "project over an edit opened with edit()", function()
+        .. "project over an edit Ctrl+T brought back", function()
       K.reset({
         ["main.lua"] = STOPS,
         ["work.lua"] = "a = 1\nb = 2\n",
       })
-      K.type("run()")
-      K.keys("return")
+      K.open("work.lua")
+      K.keys("lctrl", "t")
       assert.same("ready", K.app_state())
       assert.is_true(K.cc.run_live)
-      K.open("work.lua")
+      K.keys("lctrl", "t")
+      assert.same("editor", K.app_state())
+      assert.same("work.lua", K.file_name())
       assert.is_false(K.cc.run_live)
       K.browse_to(1)
       K.keys("lctrl", "delete")

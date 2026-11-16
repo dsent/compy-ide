@@ -263,6 +263,12 @@ Project-author guide: `doc/input_api.md`.
   program is live; Ctrl+T from the editor runs `main.lua`. A file the project does not hold,
   or a folder, is refused, "There is no second.lua in this project.", before anything
   changes.
+- **A program that takes keys owns the keyboard.** While a program has its own key or text
+  handler, a key or text hook or shortcut, or its own field shown, no key or text it leaves
+  reaches the console's prompt: behind such a program that draws nothing, the prompt shows and
+  takes no typing until Ctrl+Q stops the program. A program that wants typing shows its own
+  field. Before, a key or text its hook did not take was typed into the console, as was a key
+  hook's text on a Compy.
 - **Ctrl+R restarts a live program only.** It restarts a program that runs, is paused or
   idles behind the console, from the file it runs from; in the console with no program, and
   in the editor, it does nothing: the idle console's key card lists it among the other keys,

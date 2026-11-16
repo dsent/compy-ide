@@ -26,7 +26,9 @@ end
 --- pauses it
 local PROGRAMS = {
   ends = "y = 0\n",
-  idles = "compy.input.hooks.keypressed = function() end\n",
+  --- a pointer hook: the program idles and leaves the keys to
+  --- the console (one that takes keys owns the keyboard)
+  idles = "compy.input.hooks.mousepressed = function() end\n",
   -- its handler goes from the project's love table as it
   -- fails, so that no later run in the file finds it there
   pauses = "function love.update()\n"

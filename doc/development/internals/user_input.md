@@ -372,7 +372,9 @@ love.handlers.keypressed (k, scancode, isrepeat)
              for that channel, unless the project owns
              love.draw (Controller._defaults[event], gated on
              user_draw; the two derived clicks have no console
-             default and fall through to nothing)
+             default and fall through to nothing), and, for a
+             key or text event, unless the program takes keys
+             (takes_keys: then it goes nowhere)
 ```
 
 **The last line is a repair, not a tier.** The walk is still three consumers; what changed is that

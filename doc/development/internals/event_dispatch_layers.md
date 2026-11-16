@@ -152,11 +152,16 @@ Two conditions hold it back, and they are the whole of the rule:
 - **The channel must have a console handler.** The console installs ten channels; the route binds
   twelve. The two derived clicks (`singleclick`, `doubleclick`) have no console default by design,
   so an unconsumed one falls through to nothing, without raising.
-- **A key's text follows its key.** A project that defines `love.keypressed` takes every key
-  press, so its text does not fall through either (`occupy_input`): the device run of
-  2026-11-16 typed a program's keys into the console's draft. A project with a key hook alone
-  decides key by key, and its text, which on a Compy comes before the press, still falls
-  through.
+- **A program that takes keys owns the keyboard** (the maintainer's ruling of 2026-11-16: "'Falling
+  through' of only unhandled keys to the console sounds quite unintuitive"). While it has any way
+  of taking keys or text (its own `love.keypressed`, `love.keyreleased` or `love.textinput`; a
+  key or text hook; a key or text shortcut; its own shown field), no key press, repeat, release
+  or text falls through to the console (`takes_keys` in `controller.lua`, asked as each key or
+  text event comes, since hooks and shortcuts come and go). An empty shortcut table, and a
+  pointer or touch hook or shortcut, take no keys. A key whose press fell through to the console
+  before the program took keys is the console's: its repeats and release go there
+  (`fell_through`, read by the gate). Pointer and touch events are not part of this: they fall
+  through as before, held back only by `user_draw`.
 
 **Is this exact base parity?** Per channel, yes — once seeded handlers consume
 ([`../decisions/input.md`](../decisions/input.md), D-HOOKS-SEEDED, *"a seeded handler consumes"*).

@@ -1268,20 +1268,22 @@ describe("the scrolled view at a transition #console", function()
     forget_program()
   end)
 
+  --- turned around on November 16, 2026: a key the program
+  --- leaves goes nowhere, the console's scrolling included (a
+  --- program that takes keys owns the keyboard)
   it("not a lone modifier a program takes, nor a key it leaves",
     function()
       reset({ ["main.lua"] = takes_later("keypressed",
         "function(k) return k == 'lshift' or k == 'x' end") })
       run("run()")
+      K.keys("home")
+      assert.is_true(output():is_scrolled())
       for _ = 1, 30 do K.frame() end
-      K.keys("lctrl", "up")
-      assert.is_true(output():is_scrolled(),
-        "Ctrl+Up the program leaves scrolls")
       local t = output():top()
+      K.keys("lctrl", "up")
+      assert.equal(t, output():top(), "Ctrl+Up the program leaves")
       K.keys("lshift")
       assert.equal(t, output():top(), "a lone Shift the program took")
-      K.keys("lctrl", "up")
-      assert.equal(t - 1, output():top(), "Ctrl+Up again")
       K.keys("x")
       at_rest("x, which the program took")
       forget_program()

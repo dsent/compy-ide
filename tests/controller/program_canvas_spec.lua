@@ -377,10 +377,11 @@ describe('a program\'s canvas after it stops #canvas', function()
     end)
 
   -- Enter reaches the program's input hook, which here stops the
-  -- run and lets the key fall through: the key is the stop's
-  -- (design B), and the console's line waits for the next Enter.
+  -- run: the key is the stop's (design B). Typed while the
+  -- program ran, the line went nowhere, the program owning the
+  -- keyboard (November 16); typed after the stop, it runs.
   it('a key whose input hook stopped the run is the stop\'s; the'
-    .. ' console\'s line runs at the next Enter', function()
+    .. ' console takes typing after it', function()
       F.run_project(function()
         local env = F.cc:get_project_env()
         draw('prog')
@@ -397,11 +398,13 @@ describe('a program\'s canvas after it stops #canvas', function()
       base.mark = function() draw('typed') end
       finally(function() base.mark = nil end)
       F.session.type('mark()')
+      assert.same({ '' }, F.console:get_text())
       press({ 'return' })
       env.love.update = nil
       env.compy.input.hooks.keypressed = nil
       assert.equal('ready', love.state.app_state)
       assert.is_false(shown())
+      F.session.type('mark()')
       press({ 'return' })
       assert.equal('typed', who())
     end)
