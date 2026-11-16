@@ -1133,9 +1133,15 @@ Controller = {
     -- The key card's gate (IS3.16): a key's press is passed on
     -- only while no card shows, and its repeats and release
     -- follow its press. `delivered` holds each key from its
-    -- press passed on to its release, `withheld` each key down
-    -- whose press was not; nothing else decides.
-    local delivered, withheld = { }, { }
+    -- press passed on to its release; nothing else decides.
+    -- Text carries no key and is held back only while the card
+    -- shows: a key pressed under the card and still held when it
+    -- closes types its repeats from then on, its key events
+    -- still dropped. `owed` holds a release reservation decided
+    -- at its key's press (Ctrl+Escape: the exit is owed once
+    -- Escape goes down with Ctrl held, and comes on Escape's
+    -- release whatever is held by then, the card up or not).
+    local delivered, owed = { }, { }
     for _, r in ipairs(require('model.input.reservedKeys')) do
       local event = r.release and 'keyreleased' or 'keypressed'
       RESERVED[event][r.chord] = assert(ACTS[r.name], r.name)
@@ -1151,14 +1157,17 @@ Controller = {
       -- either. A repeat goes on only for a key whose press did,
       -- and not under the card. Ctrl+Escape acts on its release,
       -- which is never held back: the way out that always works.
+      if not isr then
+        owed[k] = RESERVED.keyreleased[combo_string(k)]
+      end
       local card = CC:card_shows()
       if isr then
         if card or not delivered[k] then return end
       elseif card and k ~= KeyCard.KEY then
-        delivered[k], withheld[k] = nil, true
+        delivered[k] = nil
         return
       else
-        delivered[k], withheld[k] = true, nil
+        delivered[k] = true
       end
       if CC.editor then CC.editor:key_begins() end
       -- Not a reservation: this fires on ANY key in playback
@@ -1214,9 +1223,7 @@ Controller = {
     handlers.textinput = function(t)
       Blink.restart()
       if not love.textinput then return end
-      -- text has no key of its own: none goes on under the
-      -- card, nor while a key is down whose press did not
-      if CC:card_shows() or next(withheld) then return end
+      if CC:card_shows() then return end
       if Key.chord_text(t) then
         if RESERVED.keypressed[combo_string(t)] then return end
         local console = Controller._defaults.textinput
@@ -1230,11 +1237,12 @@ Controller = {
       -- here, whichever route has the keys: the help key's
       -- release ends its card wherever its press went
       CC:key_released(k)
-      local reservation = RESERVED.keyreleased[combo_string(k)]
+      local reservation = owed[k]
+      owed[k] = nil
       if reservation then reservation() end
       -- a release goes on exactly for a press that did
       local was = delivered[k]
-      delivered[k], withheld[k] = nil, nil
+      delivered[k] = nil
       if not was then return end
       if love.keyreleased then
         return love.keyreleased(k, sc)

@@ -237,12 +237,14 @@ describe("every chord is its own key #editor #spec", function()
       K.hold("f1")
       K.hold("x")
       K.release("f1")
-      -- a held key's repeat brings its glyph again
+      -- a held key's repeat brings its glyph again; text
+      -- carries no key and goes on once the card is gone (the
+      -- known limit), while the key's own events stay dropped
       K.repeat_key("x")
       F.session.type("x")
       K.release("x")
       assert.is_nil(K.file("answer.txt"))
-      assert.same({ "up f1" }, { unpack(seen, n + 2) })
+      assert.same({ "up f1", "text x" }, { unpack(seen, n + 2) })
     end)
 
     spec_it("IS3.16 Show the key card: a key pressed before the "
