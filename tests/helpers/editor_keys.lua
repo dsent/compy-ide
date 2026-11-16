@@ -162,12 +162,38 @@ local function stub_run(projects)
   end
 end
 
+--- The projects the memory card holds, by name: the memory
+--- project, the default one, and those next_project adds
+local known
+
+--- Whether a project exists, as ProjectService.is_project
+--- answers from the card, answered from the memory card: a
+--- test neither reads nor makes a project in the real
+--- directory the fixture's service points at. The default
+--- project is read as before, since closing a project reopens
+--- it; returns what puts the service's own check back.
+local function stub_projects()
+  local is_project = ProjectService.is_project
+  known = { [K.PROJECT] = true }
+  function ProjectService.is_project(path, name, ...)
+    if name == ProjectService.DEFAULT then
+      return is_project(path, name, ...)
+    end
+    if known[name] then return ROOT .. name end
+    return nil, ProjectService.messages.pr_does_not_exist(name)
+  end
+  return function()
+    ProjectService.is_project = is_project
+  end
+end
+
 -- each stands in for a boundary and returns what puts it back
 local STUBS = {
   stub_fs,
   stub_clipboard,
   stub_run,
-  stub_caps
+  stub_caps,
+  stub_projects
 }
 
 --- Open the memory project; returns what puts the previous
@@ -295,6 +321,7 @@ end
 --- @param name string
 --- @param contents table<string, string>
 function K.next_project(name, contents)
+  known[name] = true
   local projects = K.cc.model.projects
   local close, opreate = projects.close, projects.opreate
   local function loader() end

@@ -356,7 +356,6 @@ describe("the console's channels #console", function()
       run("run('other')")
       said("Project other opened", colors().fg)
       said("other ran", colors().fg)
-      K.cc:close_project()
     end)
   end)
 
@@ -367,8 +366,6 @@ describe("the console's channels #console", function()
     said("Project other opened", colors().fg)
     run("current_project()")
     said("Currently open project: other", colors().fg)
-    -- its loader goes with it, before the next file's requires
-    K.cc:close_project()
   end)
 
   describe("an unfinished statement", function()

@@ -546,7 +546,9 @@ function ConsoleController:run_project(name)
     -- left there; a project that fails to load leaves the
     -- error on a blank console, not under the old picture.
     self.model.output:clear_canvas()
-    local f, load_err, path, refused = P:run(name, runner_env)
+    --- the project to run is the open one by now: it is not
+    --- looked for again
+    local f, load_err, path, refused = P:run(nil, runner_env)
     if f then
       local n = name or P.current.name or 'project'
       Log.info('Running \'' .. n .. '\'')
