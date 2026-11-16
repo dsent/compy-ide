@@ -1112,10 +1112,12 @@ Controller = {
     }
     local RESERVED = { keypressed = { }, keyreleased = { } }
     local REPEATS = { }
-    --- the keys whose reserved press acted, until released
-    local reserved_down = { }
-    --- the keys whose press a key card dropped, until released
-    local dropped = { }
+    -- The key card's gate (IS3.16): a key's press is passed on
+    -- only while no card shows, and its repeats and release
+    -- follow its press. `delivered` holds each key from its
+    -- press passed on to its release, `withheld` each key down
+    -- whose press was not; nothing else decides.
+    local delivered, withheld = { }, { }
     for _, r in ipairs(require('model.input.reservedKeys')) do
       local event = r.release and 'keyreleased' or 'keypressed'
       RESERVED[event][r.chord] = assert(ACTS[r.name], r.name)
@@ -1127,15 +1129,18 @@ Controller = {
       Blink.restart()
       -- While a key card shows, in the editor or the console,
       -- every other key does nothing, the reserved chords
-      -- included (IS3.16), and reaches no program behind the
-      -- console either; so do its repeats and its release,
-      -- whenever they come. Ctrl+Escape acts on its release,
+      -- included, and reaches no program behind the console
+      -- either. A repeat goes on only for a key whose press did,
+      -- and not under the card. Ctrl+Escape acts on its release,
       -- which is never held back: the way out that always works.
-      if isr and dropped[k] then return end
-      dropped[k] = nil
-      if CC:card_shows() and k ~= KeyCard.KEY then
-        dropped[k] = true
+      local card = CC:card_shows()
+      if isr then
+        if card or not delivered[k] then return end
+      elseif card and k ~= KeyCard.KEY then
+        delivered[k], withheld[k] = nil, true
         return
+      else
+        delivered[k], withheld[k] = true, nil
       end
       if CC.editor then CC.editor:key_begins() end
       -- Not a reservation: this fires on ANY key in playback
@@ -1148,14 +1153,8 @@ Controller = {
       local reservation = RESERVED.keypressed[chord]
       -- A held reservation acts on its repeats only where it
       -- reaches a natural stop (reservedKeys.lua): a held Ctrl+T
-      -- does not flip between the run and the editor. A repeat
-      -- acts only where its press did: a chord pressed under a
-      -- key card was dropped, and stays dropped after F1 goes.
-      if reservation and not isr then
-        reserved_down[k] = true
-        reservation()
-      elseif reservation and REPEATS[chord] and reserved_down[k]
-      then
+      -- does not flip between the run and the editor.
+      if reservation and (not isr or REPEATS[chord]) then
         reservation()
       end
 
@@ -1197,10 +1196,9 @@ Controller = {
     handlers.textinput = function(t)
       Blink.restart()
       if not love.textinput then return end
-      if CC:card_shows() then return end
-      -- the glyph a held key repeats goes with its key: one the
-      -- card dropped sends none after the card either
-      if dropped[string.lower(t)] then return end
+      -- text has no key of its own: none goes on under the
+      -- card, nor while a key is down whose press did not
+      if CC:card_shows() or next(withheld) then return end
       if Key.chord_text(t) then
         if RESERVED.keypressed[combo_string(t)] then return end
         local console = Controller._defaults.textinput
@@ -1211,19 +1209,15 @@ Controller = {
     end
 
     handlers.keyreleased = function(k, sc)
-      reserved_down[k] = nil
       -- here, whichever route has the keys: the help key's
       -- release ends its card wherever its press went
       CC:key_released(k)
       local reservation = RESERVED.keyreleased[combo_string(k)]
       if reservation then reservation() end
-      -- a release goes where its press went: one the card
-      -- dropped reaches no route, so no program sees a release
-      -- without its press, nor a press without its release
-      if dropped[k] then
-        dropped[k] = nil
-        return
-      end
+      -- a release goes on exactly for a press that did
+      local was = delivered[k]
+      delivered[k], withheld[k] = nil, nil
+      if not was then return end
       if love.keyreleased then
         return love.keyreleased(k, sc)
       end
