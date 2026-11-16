@@ -137,8 +137,9 @@ Project-author guide: `doc/input_api.md`.
   the end of the line. With an empty field Home goes to the first block and End to the
   end of the file, where new text is added.
 - **Formatting the file is Alt+F.** Ctrl+F is kept free for a search to come.
-- **Ctrl+R runs the project anew**, in the console, the editor and over a running
-  program; Ctrl+Alt+R does nothing now. The key is the IDE's for the whole press, as
+- **Ctrl+R runs a live program anew** (a program that runs, is paused or idles behind the
+  console; with none, in the console or the editor, it does nothing); Ctrl+Alt+R does
+  nothing now. The key is the IDE's for the whole press, as
   every reserved key's is: neither the program it stops nor the one it starts sees its
   press, its repeats or its release, nor the `r` a Compy sends as text with it. Any
   other key's release goes to whoever got its press: a program paused while a key was
@@ -264,8 +265,9 @@ Project-author guide: `doc/input_api.md`.
   changes.
 - **Ctrl+R restarts a live program only.** It restarts a program that runs, is paused or
   idles behind the console, from the file it runs from; in the console with no program, and
-  in the editor, it does nothing and its key cards no longer list it there. A run started
-  from the editor is Ctrl+T's, which runs `main.lua`.
+  in the editor, it does nothing: the idle console's key card lists it among the other keys,
+  as it lists Ctrl+Q, and the editor's card leaves it off. A run started from the editor is
+  Ctrl+T's, which runs `main.lua`.
 - **`reset()` starts the console clean.** Typed with nothing between the brackets, it
   stops a program that runs, clears what it and the lines typed before left, silences every
   sound, and empties the console as Ctrl+L does, then says "Runtime reset for <project>.
