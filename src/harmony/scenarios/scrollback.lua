@@ -154,6 +154,50 @@ scenario('card', function(wait)
   hm_done()
 end)
 
+--- An empty print makes a blank row: entered in the console and
+--- printed by a program, the two lines around it have a row
+--- between them.
+scenario('blank-row', function(wait)
+  wait(.1)
+  D.key(wait, 'escape')
+  D.key(wait, 'C-l')
+
+  --- the output's rows from the row that is `first` to the row
+  --- that is `last`
+  local function from_to(first, last)
+    local t, out = output().terminal, nil
+    for _, chars in ipairs(t.buffer) do
+      local r = table.concat(chars):gsub('%s+$', '')
+      if r == first then out = { } end
+      if out then out[#out + 1] = r end
+      if out and r == last then return table.concat(out, '|') end
+    end
+    return out and table.concat(out, '|') or 'no row ' .. first
+  end
+
+  D.enter(wait, "print('one') print('') print('two')")
+  settle(wait)
+  D.eq(from_to('one', 'two'), 'one||two', 'print(\'\') in the console')
+  D.enter(wait, "print('three') print() print('four')")
+  settle(wait)
+  D.eq(from_to('three', 'four'), 'three||four',
+    'print() in the console')
+  D.enter(wait, "io.write('five') io.write('\\n\\n') io.write('six\\n')")
+  settle(wait)
+  D.eq(from_to('five', 'six'), 'five||six', 'io.write of two line ends')
+  D.shot(wait, 'blank-rows')
+
+  D.enter(wait, "project('h-blank')")
+  P.put('h-blank', 'main.lua',
+    "print('seven')\nprint('')\nprint('eight')\n")
+  D.enter(wait, 'run_project()')
+  settle(wait)
+  D.eq(from_to('seven', 'eight'), 'seven||eight',
+    'print(\'\') in a program')
+  D.key(wait, 'C-q')
+  hm_done()
+end)
+
 --- The output's view draws a row in runs: a rectangle for each
 --- run of one background, a print for each run of one color
 --- (view/canvas/terminalView.lua). Its picture is, pixel for

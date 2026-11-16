@@ -305,6 +305,83 @@ local function contents()
     last = k.last, cursor = { t.cursor_x, t.cursor_y } }
 end
 
+--- An empty print makes a blank row, as it does on any
+--- terminal: the output dropped what was only spaces and line
+--- ends, so print("") between two lines left them touching.
+describe("a blank row in the output #console", function()
+  before_each(function() reset() end)
+  after_each(cleanup)
+
+  --- the screen's rows from the row that is `first` to the row
+  --- that is `last`
+  local function from_to(first, last)
+    local rows, out = screen(), nil
+    for _, r in ipairs(rows) do
+      if r == first then out = { } end
+      if out then out[#out + 1] = r end
+      if out and r == last then return out end
+    end
+    return out
+  end
+
+  it("is what print('') prints", function()
+    run("print('a') print('') print('b')")
+    assert.same({ "a", "", "b" }, from_to("a", "b"))
+  end)
+
+  it("is what print() with nothing prints", function()
+    run("print('a') print() print('b')")
+    assert.same({ "a", "", "b" }, from_to("a", "b"))
+  end)
+
+  it("is what a print of spaces prints", function()
+    run("print('a') print('  ') print('b')")
+    assert.same({ "a", "", "b" }, from_to("a", "b"))
+  end)
+
+  it("comes twice from print('\\n'), its own line end and "
+    .. "print's", function()
+    run("print('a') print('\\n') print('b')")
+    assert.same({ "a", "", "", "b" }, from_to("a", "b"))
+  end)
+
+  it("is what two line ends written after a line make, as "
+    .. "io.write hands them to the output", function()
+    -- the fixture redirects print alone; io.write's redirection
+    -- (model/io/redirect.lua) calls the output's write
+    output():write("a")
+    output():write("\n\n")
+    output():write("b\n")
+    K.frame(100)
+    assert.same({ "a", "", "b" }, from_to("a", "b"))
+  end)
+
+  it("can be the first row of the output", function()
+    run("print() print('h')")
+    local rows = from_to("print() print('h')", "h")
+    assert.same({ "print() print('h')", "", "h" }, rows)
+  end)
+
+  it("is kept with the rows that scroll off, and the scrolled "
+    .. "view shows it", function()
+    run("for i = 1, 40 do print(i == 5 and '' or 'L' .. i) end")
+    local rows = kept()
+    local at
+    for i, r in ipairs(rows) do
+      if r == "L4" then at = i end
+    end
+    assert.same({ "L4", "", "L6" },
+      { rows[at], rows[at + 1], rows[at + 2] })
+    output():to_oldest()
+    local shown = view()
+    for i, r in ipairs(shown) do
+      if r == "L4" then at = i end
+    end
+    assert.same({ "L4", "", "L6" },
+      { shown[at], shown[at + 1], shown[at + 2] })
+  end)
+end)
+
 describe("the console's scrolled view #console", function()
   before_each(function() reset() end)
   after_each(cleanup)

@@ -71,8 +71,11 @@ function CanvasModel.new(cfg)
   return self
 end
 
+--- Text that is only spaces and line ends is written as any
+--- other: an empty print() makes a blank row.
+--- @param text string
 function CanvasModel:write(text)
-  if string.is_non_empty_string(text) then
+  if type(text) == 'string' and text ~= '' then
     self.terminal:print(text)
     self.terminal.dirty = true
   end

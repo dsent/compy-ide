@@ -334,6 +334,9 @@ Project-author guide: `doc/input_api.md`.
 
 ### Fixed
 
+- **An empty `print` makes a blank row.** `print("")`, `print()` and any output of only
+  spaces and line ends, from `print` or `io.write`, was dropped: `print("a") print("")
+  print("b")` showed `b` right under `a`. It is now written like any other output.
 - **A long output costs less while it is written.** A program that prints thousands of
   lines at once made every frame copy all the output still waiting to be written, and
   draw each of the screen's 1,024 cells in two calls to the graphics card. Now the
