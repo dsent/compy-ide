@@ -1132,6 +1132,8 @@ Controller = {
     local REPEATS = { }
     --- the keys whose reserved press acted, until released
     local reserved_down = { }
+    --- the keys whose press a key card dropped, until released
+    local dropped = { }
     for _, r in ipairs(require('model.input.reservedKeys')) do
       local event = r.release and 'keyreleased' or 'keypressed'
       RESERVED[event][r.chord] = assert(ACTS[r.name], r.name)
@@ -1144,9 +1146,15 @@ Controller = {
       -- While a key card shows, in the editor or the console,
       -- every other key does nothing, the reserved chords
       -- included (IS3.16), and reaches no program behind the
-      -- console either. Ctrl+Escape acts on its release, which
-      -- is never held back: the way out that always works.
-      if CC:card_shows() and k ~= KeyCard.KEY then return end
+      -- console either; so do its repeats and its release,
+      -- whenever they come. Ctrl+Escape acts on its release,
+      -- which is never held back: the way out that always works.
+      if isr and dropped[k] then return end
+      dropped[k] = nil
+      if CC:card_shows() and k ~= KeyCard.KEY then
+        dropped[k] = true
+        return
+      end
       if CC.editor then CC.editor:key_begins() end
       -- Not a reservation: this fires on ANY key in playback
       -- while shutting down, not on one combo, so it cannot be
@@ -1208,6 +1216,9 @@ Controller = {
       Blink.restart()
       if not love.textinput then return end
       if CC:card_shows() then return end
+      -- the glyph a held key repeats goes with its key: one the
+      -- card dropped sends none after the card either
+      if dropped[string.lower(t)] then return end
       if Key.chord_text(t) then
         if RESERVED.keypressed[combo_string(t)] then return end
         local console = Controller._defaults.textinput
@@ -1224,6 +1235,13 @@ Controller = {
       CC:key_released(k)
       local reservation = RESERVED.keyreleased[combo_string(k)]
       if reservation then reservation() end
+      -- a release goes where its press went: one the card
+      -- dropped reaches no route, so no program sees a release
+      -- without its press, nor a press without its release
+      if dropped[k] then
+        dropped[k] = nil
+        return
+      end
       if love.keyreleased then
         return love.keyreleased(k, sc)
       end
