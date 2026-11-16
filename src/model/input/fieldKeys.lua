@@ -82,7 +82,7 @@ local DEFS = {
     { chords = { 'return' }, card = 'Enter' }),
   with(key('submit'), { chords = { 'kpenter' } }),
   with(key('cancel', 'cancel'),
-    { chords = { 'escape' }, card = 'Esc' }),
+    { chords = { 'escape' }, card = 'Esc', repeats = true }),
 }
 
 return Keymap.new(DEFS, { 'field' })

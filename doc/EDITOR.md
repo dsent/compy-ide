@@ -37,28 +37,31 @@
 - Each combination is a key of its own: a key pressed with a
   modifier the table below does not name does nothing.
   <kbd>Ctrl</kbd>+<kbd>Enter</kbd> is not <kbd>Enter</kbd>.
-- While <kbd>F1</kbd> is held, the editor's keys do nothing,
+- While <kbd>F1</kbd> is held and the card shows, in the editor
+  or in the console, every other key does nothing,
   <kbd>Ctrl</kbd>+<kbd>Q</kbd> and the other reserved keys
-  included; only <kbd>Ctrl</kbd>+<kbd>Esc</kbd> acts. In the
-  console the card holds back the console's own keys alone, and
-  in your program F1 holds back nothing. While a card shows, in
-  the editor or in the console, the mouse does nothing.
+  included, and so does the mouse; only
+  <kbd>Ctrl</kbd>+<kbd>Esc</kbd> acts. In your program F1 holds
+  back nothing.
 - A click in the field places the cursor, as in the console and
   in your program's input; a click on the file does nothing. No
   field selects text: Shift with an arrow does nothing, and
   neither does a drag.
-- Held down, a key repeats only if it writes nothing and changes
-  no state: typing, moving the cursor, browsing and paging,
-  deleting in the field, <kbd>Shift</kbd>+<kbd>Enter</kbd>, and
-  <kbd>Ctrl</kbd>+<kbd>Z</kbd> and <kbd>Ctrl</kbd>+<kbd>Y</kbd>
-  through the field's own changes. Every other key acts once per
-  press: <kbd>Enter</kbd>, <kbd>Escape</kbd>, <kbd>F2</kbd>,
-  <kbd>Shift</kbd>+<kbd>Insert</kbd>,
-  <kbd>Ctrl</kbd>+<kbd>Insert</kbd>, cutting and moving a block,
-  formatting the file, following a `require`: a held
-  <kbd>Ctrl</kbd>+<kbd>Delete</kbd> cuts one block. The console
-  keeps the same rule: a held <kbd>Enter</kbd> runs the line
-  once.
+- Held down, a key repeats, and each stops by itself: a held
+  <kbd>Enter</kbd> adds an empty line per repeat, a held
+  <kbd>Ctrl</kbd>+<kbd>Delete</kbd> removes the empty lines down
+  to the next block with text, cuts it and stops, and a held
+  <kbd>Alt</kbd>+<kbd>Up</kbd> moves the block up to the file's
+  start. <kbd>Ctrl</kbd>+<kbd>Z</kbd> and
+  <kbd>Ctrl</kbd>+<kbd>Y</kbd> repeat through the field's own
+  changes only. A few keys act once per press, because a repeat
+  would do harm: <kbd>Escape</kbd> (a repeat would leave the
+  file, and with it the undo of a cut block),
+  <kbd>Shift</kbd>+<kbd>Insert</kbd> and
+  <kbd>Ctrl</kbd>+<kbd>Insert</kbd> (each repeat would add a
+  copy), <kbd>Ctrl</kbd>+<kbd>T</kbd> and
+  <kbd>Ctrl</kbd>+<kbd>R</kbd>, and in the console
+  <kbd>Enter</kbd>, which runs the line once.
 
 ### Keys
 

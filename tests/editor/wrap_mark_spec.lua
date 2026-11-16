@@ -253,6 +253,36 @@ describe("a wrapped line's marks #editor", function()
       assert.same({ 'start', first() + view_cfg().fh }, got[#got])
     end)
 
+    -- nothing selects today; the draw still paints a selection,
+    -- and a selected cell covers the mark under it
+    it("lie under a selected cell, which is painted after them "
+        .. "and covers them", function()
+        K.type(string.rep("y", W + 4))
+        local model = K.cc.input.model
+        model:start_selection(1, W - 2)
+        model:end_selection(1, W + 4)
+        local log = K.screen().field_log
+        local fw, fh = view_cfg().fw, view_cfg().fh
+        local x, y = (W - 1) * fw, first()
+        local cover
+        for i, e in ipairs(log) do
+          if e.text == "█" and e.x == x and e.y == y then
+            cover = i
+          end
+        end
+        assert.is_number(cover, "the selected last cell of row 1")
+        local seen = 0
+        for i, e in ipairs(log) do
+          if e.fill and is_mark(e) and e.y < y + fh then
+            seen = seen + 1
+            assert.is_true(i < cover, "a mark after the selection")
+            assert.is_true(x <= e.x and e.x + e.w <= x + fw)
+            assert.is_true(y <= e.y and e.y < y + fh)
+          end
+        end
+        assert.is_true(0 < seen)
+      end)
+
     it("are drawn before the draft's text and the cursor",
       function()
         K.type(string.rep("y", W + 4))

@@ -126,15 +126,77 @@ describe("every chord is its own key #editor #spec", function()
       assert.same("ready", K.app_state())
     end)
 
-    spec_it("IS3.16 Show the key card: Ctrl+Q stops a program "
-        .. "while F1 is held over it", function()
+    -- in the console as in the editor (the maintainer's ruling
+    -- of November 16): every other key does nothing under the
+    -- card, Ctrl+Escape apart
+    spec_it("IS3.16 Show the key card: in the console the "
+        .. "reserved chords wait while its card shows", function()
+      K.reset({ ["main.lua"] = "function love.update() end\n" })
+      K.type("ab")
+      K.hold("f1")
+      assert.is_not_nil(K.key_card())
+      for _, c in ipairs({ "t", "r", "q" }) do
+        K.keys("lctrl", c)
+        assert.same("ready", K.app_state(), c)
+        assert.is_falsy(K.cc.run_live, c)
+      end
+      K.release("f1")
+      assert.same("ab", K.console_draft())
+    end)
+
+    spec_it("IS3.16 Show the key card: a program idling behind "
+        .. "the console's card gets no key under it", function()
+      K.reset({ ["main.lua"] = table.concat({
+        "KEYS = {}",
+        "compy.input.hooks.keypressed = function(k)",
+        "  KEYS[#KEYS + 1] = k",
+        "end",
+        "compy.input.hooks.textinput = function(t)",
+        "  KEYS[#KEYS + 1] = t",
+        "end",
+        "compy.input.hooks.mousepressed = function() end",
+      }, "\n") .. "\n" })
+      K.keys("lctrl", "r")
+      assert.same("ready", K.app_state())
+      assert.is_true(K.cc.run_live)
+      local keys = K.cc:get_project_env().KEYS
+      K.hold("f1")
+      assert.is_not_nil(K.key_card())
+      local before = #keys
+      K.type("x")
+      K.keys("left")
+      K.keys("lctrl", "q")
+      K.release("f1")
+      assert.same(before, #keys)
+      assert.is_true(K.cc.run_live)
+    end)
+
+    spec_it("IS3.16 Show the key card: Ctrl+Escape asks to quit "
+        .. "while the console's card shows", function()
+      K.reset()
+      K.hold("f1")
+      assert.is_not_nil(K.key_card())
+      F.quits()
+      K.keys("lctrl", "escape")
+      assert.same(1, #F.quits())
+      K.release("f1")
+    end)
+
+    -- a program that runs with no key handler of its own lets
+    -- F1 fall through to the console, whose card then shows
+    spec_it("IS3.16 Show the key card: over a running program "
+        .. "that leaves F1 to the console, Ctrl+Q waits for F1's "
+        .. "release", function()
       K.reset({ ["main.lua"] = "function love.update() end\n" })
       K.type("run()")
       K.keys("return")
       assert.same("running", K.app_state())
       K.hold("f1")
+      assert.is_not_nil(K.key_card())
       K.keys("lctrl", "q")
+      assert.same("running", K.app_state())
       K.release("f1")
+      K.keys("lctrl", "q")
       assert.same("ready", K.app_state())
       assert.is_false(K.cc.run_live)
     end)

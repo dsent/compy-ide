@@ -9,6 +9,7 @@ local LANG = require("util.eval")
 local FS = require("util.filesystem")
 local Application = require("util.application")
 local Blink = require("view.input.cursorBlink")
+local KeyCard = require('model.editor.keyCard')
 
 local messages = {
   user_break = "BREAK into program",
@@ -1128,14 +1129,22 @@ Controller = {
       exit = Application.request_application_exit,
     }
     local RESERVED = { keypressed = { }, keyreleased = { } }
+    local REPEATS = { }
     for _, r in ipairs(require('model.input.reservedKeys')) do
       local event = r.release and 'keyreleased' or 'keypressed'
       RESERVED[event][r.chord] = assert(ACTS[r.name], r.name)
+      REPEATS[r.chord] = r.repeats == true
     end
 
     handlers.keypressed = function(k, sc, isr)
       --- a key press shows the text cursor (H-NFR4.4)
       Blink.restart()
+      -- While a key card shows, in the editor or the console,
+      -- every other key does nothing, the reserved chords
+      -- included (IS3.16), and reaches no program behind the
+      -- console either. Ctrl+Escape acts on its release, which
+      -- is never held back: the way out that always works.
+      if CC:card_shows() and k ~= KeyCard.KEY then return end
       if CC.editor then CC.editor:key_begins() end
       -- Not a reservation: this fires on ANY key in playback
       -- while shutting down, not on one combo, so it cannot be
@@ -1143,16 +1152,12 @@ Controller = {
       if playback and love.state.app_state == 'shutdown' then
         love.event.quit()
       end
-      local reservation = RESERVED.keypressed[combo_string(k)]
-      -- While the file editor's key card shows, its keys do
-      -- nothing, Ctrl+Q included (editor spec, IS3.16). The
-      -- console's card and a program's help suspend no
-      -- reserved chord (the maintainer's ruling of November
-      -- 14, 2026). A reservation acts on its key's press, not
-      -- on its repeats: a held Ctrl+T does not flip between the
-      -- run and the editor.
-      local held_back = CC.editor and CC.editor:card_shows()
-      if reservation and not isr and not held_back then
+      local chord = combo_string(k)
+      local reservation = RESERVED.keypressed[chord]
+      -- A held reservation acts on its repeats only where it
+      -- reaches a natural stop (reservedKeys.lua): a held Ctrl+T
+      -- does not flip between the run and the editor.
+      if reservation and (not isr or REPEATS[chord]) then
         reservation()
       end
 
@@ -1194,6 +1199,7 @@ Controller = {
     handlers.textinput = function(t)
       Blink.restart()
       if not love.textinput then return end
+      if CC:card_shows() then return end
       if Key.chord_text(t) then
         if RESERVED.keypressed[combo_string(t)] then return end
         local console = Controller._defaults.textinput

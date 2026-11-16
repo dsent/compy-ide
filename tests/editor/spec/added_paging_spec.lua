@@ -245,25 +245,28 @@ describe("paging, formatting, removed keys #editor #spec",
         assert.same("", K.draft())
       end)
 
-      spec_it("IS2.1 Browse blocks: a held Home or End acts once, "
-          .. "and the field takes no text from it", function()
+      -- a held key repeats to its natural stop (the ruling of
+      -- November 16, 2026): here the file's edge, where it stays
+      spec_it("IS2.1 Browse blocks: a held Home or End repeats "
+          .. "and stays at the file's edge, and the field takes no "
+          .. "text from it", function()
         K.reset({ ["notes.txt"] = lines_file(60) })
         K.open("notes.txt")
         K.browse_to(30)
-        -- browsed away while the key is held, so that a repeat
-        -- that acted would bring the position back
+        -- browsed away while the key is held, so that the
+        -- repeat brings the position back
         K.hold("home")
         assert.same(1, K.position())
         K.keys("lctrl", "down")
         K.repeat_key("home")
         K.release("home")
-        assert.same(2, K.position())
+        assert.same(1, K.position())
         K.hold("end")
         assert.same("end", K.position())
         K.keys("lctrl", "up")
         K.repeat_key("end")
         K.release("end")
-        assert.same(60, K.position())
+        assert.same("end", K.position())
         assert.same("", K.draft())
         assert.same("browsing", K.state())
       end)

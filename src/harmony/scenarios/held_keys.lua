@@ -1,12 +1,13 @@
 local P = require('harmony.probe')
 local D = require('harmony.drive')
 
---- Held keys (the ruling on which keys repeat): a key held
---- down is its press followed by repeat events, as LÖVE sends
---- them (the key, its scancode, isrepeat true). A key that
---- writes or changes state acts once per press; a key that
---- moves or edits the draft repeats. In the editor, the
---- console and a program's input field.
+--- Held keys (the maintainer's ruling of November 16, 2026):
+--- a key held down is its press followed by repeat events, as
+--- LÖVE sends them (the key, its scancode, isrepeat true). A
+--- held key repeats to its natural stop; the editor's Escape,
+--- the console's Enter and a program field's Enter act once per
+--- press. In the editor, the console and a program's input
+--- field.
 
 local PROJECT = 'h-held'
 local ABC = 'a = 1\nb = 2\nc = 3\n'
@@ -36,15 +37,17 @@ scenario('editor', function(wait)
   local f = 'held.lua'
   wait(.1)
   D.open(wait, PROJECT, f, { [f] = ABC })
-  -- a held Enter submits the draft once, and its repeats add
-  -- no empty lines after it
+  -- a held Enter submits the draft, and each repeat adds an
+  -- empty line after it, as Luditor's
   D.type(wait, 'd = 4')
-  D.held(wait, 'return', 4)
+  D.held(wait, 'return', 2)
   D.shot(wait, 'enter')
-  D.eq(stored(f), ABC .. 'd = 4\n', 'a held Enter submits once')
-  -- with no draft, a held Enter adds one empty line
-  D.held(wait, 'return', 4)
-  D.eq(stored(f), ABC .. 'd = 4\n\n', 'one empty line')
+  local held_text = ABC .. 'd = 4\n\n\n'
+  D.eq(stored(f), held_text, 'a held Enter submits, then adds lines')
+  -- with no draft, a held Enter adds an empty line per event
+  D.held(wait, 'return', 1)
+  held_text = held_text .. '\n\n'
+  D.eq(stored(f), held_text, 'an empty line per event')
 
   -- a held Escape drops the edit and stays in the file
   D.type(wait, 'x = 0')
@@ -67,7 +70,7 @@ scenario('editor', function(wait)
   D.eq(P.state(), 'browsing', 'browsing with no draft')
   D.eq(P.position(), 4, 'the position stays')
   D.eq(P.file(), f, 'the file stays open')
-  D.eq(stored(f), ABC .. 'd = 4\n\n', 'nothing was written')
+  D.eq(stored(f), held_text, 'nothing was written')
   D.leave(wait)
   hm_done()
 end)

@@ -35,9 +35,9 @@ end
 --- surface's own key handler, which records it in `pressed`
 --- until the release. A press a program took is recorded
 --- nowhere: the program gives its own help, and nothing is
---- suspended. While the file editor's card shows, its keys and
---- the reserved chords do nothing, Ctrl+Escape apart; the
---- console's holds back the console's own keys alone.
+--- suspended. While a card shows, the editor's or the
+--- console's, every other key and the reserved chords do
+--- nothing, Ctrl+Escape apart (the gate, controller.lua).
 --- @param pressed table<string, true> --- the surface's record
 --- @return boolean
 function KeyCard.shows(pressed)
