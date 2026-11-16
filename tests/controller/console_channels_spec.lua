@@ -78,6 +78,21 @@ describe("the console's channels #console", function()
   after_each(cleanup)
 
   describe("a run's error", function()
+    --- Enter acts once per press (the ruling of November 16,
+    --- 2026, on held keys): a line that fails keeps its text,
+    --- and no band message holds a repeat back any more
+    it("of a line Enter is held on runs it once", function()
+      reset()
+      K.type("error('boom')")
+      K.hold("return")
+      for _ = 1, 5 do K.repeat_key("return") end
+      K.release("return")
+      K.frame(100)
+      local n = select(2, K.console_text():gsub("L1:boom", ""))
+      assert.equal(1, n)
+      assert.same("error('boom')", K.console_draft())
+    end)
+
     it("of a typed line is said once, in the output, in red, and "
       .. "the line stays in the field", function()
         reset()
