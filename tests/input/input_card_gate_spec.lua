@@ -1,12 +1,13 @@
--- The key card's gate (IS3.16, the review's rounds 4 and 5): a
+-- The key card's gate (IS3.16, the review's rounds 4 to 6): a
 -- key's press is passed on only while no card shows, and the
 -- key's repeats and release follow its press. A release is
 -- passed on exactly for a press that was; a repeat for a press
--- that was, and only while no card shows; text is passed on
--- only while no card shows and no key is down whose press was
--- not. So a program behind the console's card sees a release
--- exactly for each press it saw, and no repeat or text of a key
--- whose press it did not see. Events through the production
+-- that was, and only while no card shows; text only while no
+-- card shows. So a program behind the console's card sees a
+-- release exactly for each press it saw, and no repeat or
+-- release of a key whose press it did not see. Text carries no
+-- key: a key pressed under the card and held after it types
+-- its repeats, the known limit. Events through the production
 -- gateway (love.handlers, F.session).
 
 local F = require("tests.helpers.input_fixture")
@@ -27,7 +28,7 @@ local function program()
     log[#log + 1] = { "release", k }
   end
   input.hooks.textinput = function(t)
-    log[#log + 1] = { "text", t }
+    log[#log + 1] = { "text", t, K.cc:card_shows() }
   end
   return log
 end
@@ -43,6 +44,15 @@ local function seen(log)
   local out = { }
   for _, e in ipairs(log) do
     if e[2] ~= "f1" then out[#out + 1] = e[1] .. " " .. e[2] end
+  end
+  return out
+end
+
+--- the key events alone, without text
+local function keys_of(list)
+  local out = { }
+  for _, e in ipairs(list) do
+    if not e:find("^text ") then out[#out + 1] = e end
   end
   return out
 end
@@ -100,51 +110,68 @@ describe("the key card's gate #input", function()
         assert.same({ }, seen(log))
       end)
 
-    it("sends no text after the card: Space, its text before "
-        .. "the repeat", function()
+    it("has no key event after the card: Space, its text "
+        .. "before the repeat", function()
       local log = program()
       press("f1")
       text(" ")
       press("space")
       release("f1")
-      text(" ")
       rep("space")
-      text(" ")
       rep("space")
       release("space")
-      assert.same({ }, seen(log))
-      -- pressed afresh, it types
-      text(" ")
-      press("space")
-      release("space")
-      assert.same({ "text  ", "press space", "release space" },
-        seen(log))
+      assert.same({ }, keys_of(seen(log)))
     end)
 
-    it("sends no text after the card: keypad 1", function()
+    it("has no key event after the card: keypad 1", function()
       local log = program()
       press("f1")
-      text("1")
       press("kp1")
       release("f1")
       rep("kp1")
-      text("1")
       release("kp1")
-      assert.same({ }, seen(log))
+      assert.same({ }, keys_of(seen(log)))
     end)
+  end)
 
-    -- the card needs a bare F1, so Shift comes after it
-    it("sends no text after the card: Shift+1", function()
+  -- the review's round 6: text is held back only while the
+  -- card shows, so typing after it arrives, a key from under
+  -- the card held or not
+  describe("text after the card", function()
+    it("arrives with Shift held from under the card", function()
       local log = program()
       press("f1")
       press("lshift")
-      text("!")
-      press("1")
       release("f1")
-      text("!")
-      rep("1")
-      release("1")
+      text("A")
+      press("a")
+      release("a")
       release("lshift")
+      assert.same({ "text A", "press a", "release a" },
+        seen(log))
+    end)
+
+    it("arrives while Space pressed under the card is held",
+      function()
+        local log = program()
+        press("f1")
+        press("space")
+        release("f1")
+        text("a")
+        press("a")
+        release("a")
+        release("space")
+        assert.same({ "text a", "press a", "release a" },
+          seen(log))
+      end)
+
+    it("is held back while the card shows", function()
+      local log = program()
+      press("f1")
+      text("a")
+      press("a")
+      release("a")
+      release("f1")
       assert.same({ }, seen(log))
     end)
   end)
@@ -199,11 +226,10 @@ describe("the key card's gate #input", function()
         end
         if f1 then act("f1") end
         -- the program's view: a press opens a key, a release
-        -- closes it; a repeat and a key's text need it open
-        local open, glyph_of = { }, { }
-        for k, t in pairs(KEYS) do glyph_of[t] = k end
+        -- closes it; a repeat needs it open
+        local open = { }
         local trace = table.concat(steps, ", ")
-        for i, e in ipairs(log) do
+        for _, e in ipairs(log) do
           local kind, x = e[1], e[2]
           if x ~= "f1" then
             if kind == "press" then
@@ -215,14 +241,9 @@ describe("the key card's gate #input", function()
               assert.is_true(open[x] == true, trace)
               open[x] = nil
             else
-              -- a key's text comes beside its own key event:
-              -- its press is open now, or opens next
-              local k = glyph_of[x]
-              local nxt = log[i + 1]
-              local opens = nxt and nxt[1] == "press"
-                  and nxt[2] == k
-              assert.is_true(open[k] == true or opens == true,
-                trace)
+              -- text carries no key: it goes on only while no
+              -- card shows
+              assert.is_false(e[3], trace)
             end
           end
         end
