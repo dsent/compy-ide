@@ -698,6 +698,16 @@ describe("terminal view", function()
     assert.same({ "0 ab", "2 →" }, { row[2], row[3] })
   end)
 
+  it("places a space at its own cell too where it does not "
+    .. "advance by a cell", function()
+    -- in cells of 13 a space advances by 10 and the arrow by a
+    -- cell: in a run the space would pull the arrow 3 back
+    local t = view_term(13)
+    t:print(" →")
+    local row = drawn(t, 0)
+    assert.same({ "0 ", "1 →" }, { row[2], row[3] })
+  end)
+
   it("draws all the backgrounds before any character", function()
     local t = view_term()
     t:print("ab\ncd\nef")

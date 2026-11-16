@@ -134,9 +134,12 @@ local function draw_text(terminal, chars, styles, at, overlay)
       (from - 1) * cw, top)
     from, color = nil, nil
   end
+  --- a space advances by a cell in any font the console has
+  --- had; where it does not, it stands alone as others do
+  local space_fits = not stands_alone(terminal, ' ')
   for x = 1, #chars do
     local char = chars[x]
-    if char == ' ' then
+    if char == ' ' and space_fits then
       from = from or x
     else
       local _, fore = cell_colors(styles[x])

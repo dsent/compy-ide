@@ -154,19 +154,25 @@ scenario('card', function(wait)
   hm_done()
 end)
 
---- The output prints a row's text in runs, a print for each
---- (view/canvas/terminalView.lua). That puts a character where a
---- print of its own at its cell put it, pixel for pixel, as long
---- as it advances by a cell's width: so do the letters and
+--- The output's view draws a row in runs: a rectangle for each
+--- run of one background, a print for each run of one color
+--- (view/canvas/terminalView.lua). Its picture is, pixel for
+--- pixel, the one that all the backgrounds and then a print for
+--- each cell at its own place make: a print of a run puts a
+--- character where a print of its own puts it as long as the
+--- character advances by a cell's width, as the letters and
 --- signs of ASCII, Latin-1 and Russian and the box and block
---- characters. A fallback font's character does not, and the
---- view prints it at its own cell.
+--- characters do, and the view prints at its own cell one that
+--- does not, as an arrow of the icon font or a CJK character.
+--- A terminal of its own is filled and drawn by the view here.
 scenario('runs', function(wait)
   wait(.1)
   local utf8 = require('utf8')
+  local Terminal = require('lib.terminal')
   local gfx = love.graphics
   local v = P.cc().cfg.view
   local font, cw, ch = v.font, v.fw, v.fh
+  local colors = theme().terminal
 
   --- the characters `from` to `to`, in rows of 64
   local function range(from, to)
@@ -181,28 +187,6 @@ scenario('runs', function(wait)
     return rows
   end
 
-  --- `text` on a row, in one print or a print for each cell
-  local function picture(text, by_cell)
-    local canvas = gfx.newCanvas(64 * cw, ch)
-    gfx.push('all')
-    gfx.setCanvas(canvas)
-    gfx.origin()
-    gfx.clear(0.75, 0.75, 0.75, 1)
-    gfx.setFont(font)
-    gfx.setColor(0, 0, 0, 1)
-    if by_cell then
-      local x = 0
-      for _, code in utf8.codes(text) do
-        gfx.print(utf8.char(code), x * cw, 0)
-        x = x + 1
-      end
-    else
-      gfx.print(text, 0, 0)
-    end
-    gfx.pop()
-    return canvas:newImageData():getString()
-  end
-
   local sets = {
     { 'ASCII', range(0x20, 0x7E) },
     { 'Latin-1', range(0xA1, 0xFF) },
@@ -210,6 +194,11 @@ scenario('runs', function(wait)
     { 'box characters', range(0x2500, 0x257F) },
     { 'block characters', range(0x2580, 0x259F) },
   }
+  local term = Terminal(64 * cw, 16 * ch, font, nil, ch)
+  term:hide_cursor()
+  term:set_cursor_color(unpack(colors.fg))
+  term:set_cursor_backcolor(unpack(colors.bg))
+  term:clear()
   for _, set in ipairs(sets) do
     for _, row in ipairs(set[2]) do
       for _, code in utf8.codes(row) do
@@ -217,17 +206,84 @@ scenario('runs', function(wait)
         D.eq(font:getWidth(char), cw,
           'the advance of ' .. char .. ' (' .. set[1] .. ')')
       end
-      -- once to bring the row's glyphs into the font's texture
-      picture(row, true)
-      assert(picture(row, true) == picture(row, false),
-        set[1] .. ': one print differs from a print a cell: ' .. row)
+      term:print(row .. (utf8.len(row) < 64 and '\n' or ''))
     end
   end
-  -- an arrow from the icon font and a CJK character advance by
-  -- more than a cell
+  -- characters that advance by more than a cell, among letters
   for _, char in ipairs({ '→', '日' }) do
     assert(font:getWidth(char) ~= cw,
-      char .. ' advances by a cell: the view would print it in a run')
+      char .. ' advances by a cell: it tests no placing by cell')
+  end
+  term:print('ab→cd 日ef → 日 gh→→日日ij\n')
+  -- runs of several colors and backgrounds, spaces among them
+  term:print('black ')
+  term:set_cursor_color(unpack(colors.echo))
+  term:print('blue  blue ')
+  term:set_cursor_backcolor(unpack(colors.fg))
+  term:print(' on black ')
+  term:reverse_cursor(true)
+  term:print('reversed → and back')
+  term:reverse_cursor(false)
+  term:set_cursor_color(unpack(colors.fg))
+  term:set_cursor_backcolor(unpack(colors.bg))
+  term:print(' end\n')
+  term:update(1000)
+  assert(#term.stdin == 0, 'the terminal has written everything')
+
+  --- the terminal as the view draws it
+  local function by_view()
+    term.dirty = true
+    TerminalView.draw(term, term.canvas)
+    return term.canvas:newImageData():getString()
+  end
+
+  --- the same cells: every background, then a print for each
+  --- cell at its own place
+  local function by_cell()
+    local canvas = gfx.newCanvas(term.canvas:getDimensions())
+    gfx.push('all')
+    gfx.setCanvas(canvas)
+    gfx.origin()
+    gfx.clear(term.clear_color_alpha)
+    gfx.setFont(font)
+    for pass = 1, 2 do
+      for y, chars in ipairs(term.buffer) do
+        for x, char in ipairs(chars) do
+          local st = term.state_buffer[y][x]
+          local back, fore = st.backcolor, st.color
+          if st.reversed then back, fore = fore, back end
+          local left, top = (x - 1) * cw, (y - 1) * ch
+          if pass == 1 then
+            gfx.setColor(back)
+            gfx.rectangle('fill', left, top, cw, ch)
+          else
+            gfx.setColor(fore)
+            gfx.print(char, left, top)
+          end
+        end
+      end
+    end
+    gfx.pop()
+    return canvas:newImageData():getString()
+  end
+
+  -- once each to bring every glyph into the font's texture
+  by_view()
+  by_cell()
+  local view, cells = by_view(), by_cell()
+  if view ~= cells then
+    local differ, first = 0, nil
+    for i = 1, #view, 4 do
+      if view:sub(i, i + 3) ~= cells:sub(i, i + 3) then
+        differ = differ + 1
+        first = first or (i - 1) / 4
+      end
+    end
+    local w = 64 * cw
+    error(string.format('the view\'s picture differs from a print a'
+      .. ' cell in %d pixels, the first in row %d, column %d',
+      differ, math.floor(first / w / ch) + 1,
+      math.floor(first % w / cw) + 1))
   end
   hm_done()
 end)
