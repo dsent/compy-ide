@@ -265,7 +265,8 @@ Project-author guide: `doc/input_api.md`.
 - **`reset()` starts the console clean.** Typed with nothing between the brackets, it
   stops a program that runs, clears what it and the lines typed before left, silences every
   sound, and empties
-  the console as Ctrl+L does, then says "Reset."; the history and the editor's files
+  the console as Ctrl+L does, then says "Runtime reset for <project>. All files kept." and
+  returns `{ scope = "runtime", project = "<project>" }`; the history and the editor's files
   stay. Only `reset()` exists yet: with an argument it is refused.
 - **Stopping a program clears what it left.** `stop()`, Ctrl+Q, an error in a program's
   first lines and the close of its project now all end it through one flush: its handlers,

@@ -273,7 +273,32 @@ describe("the terminate flush #console", function()
           for i = k.first, k.last do out[#out + 1] = i end
           return out
         end)())
-        assert.truthy(text:find("Reset.", 1, true), text)
+        --- the reset specification's IS4.1 words, the one line on
+        --- the erased console
+        local said = "Runtime reset for " .. K.PROJECT
+          .. ". All files kept."
+        assert.truthy(text:find(said, 1, true), text)
+        local rows = { }
+        for row in text:gmatch("[^\n]+") do
+          if row:find("%S") then rows[#rows + 1] = row end
+        end
+        assert.same(1, #rows, text)
+      end)
+
+    it("returns what API4.1 says, and the console prints none of it",
+      function()
+        reset()
+        -- a global the line set would go with the environment the
+        -- reset makes anew: the value is kept by a function
+        local r
+        env().keep = function(v) r = v end
+        run("keep(reset())")
+        assert.same({ scope = "runtime", project = K.PROJECT }, r)
+        assert.is_nil(r.snapshot)
+        run("reset()")
+        local text = K.console_text()
+        assert.is_nil(text:find("table:", 1, true), text)
+        assert.is_nil(text:find("runtime\n", 1, true), text)
       end)
 
     it("clears what typed lines left with nothing live", function()
@@ -284,7 +309,7 @@ describe("the terminate flush #console", function()
       assert.is_nil(env().t)
       local text = K.console_text()
       assert.is_nil(text:find("TYPED_EXIT", 1, true), text)
-      assert.truthy(text:find("Reset.", 1, true), text)
+      assert.truthy(text:find("Runtime reset for ", 1, true), text)
       K.keys("up")
       assert.same("reset()", K.console_draft())
     end)

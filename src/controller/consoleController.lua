@@ -28,7 +28,10 @@ local messages = {
   --- the reset specification's scoped resets are later work
   --- (Beads compy-ide-reset-runtime-reset)
   reset_alone     = 'Only reset() exists yet, with nothing between the brackets.',
-  reset_done      = 'Reset.',
+  --- the reset specification's IS4.1
+  reset_done      = function(project)
+    return 'Runtime reset for ' .. project .. '. All files kept.'
+  end,
   --- only a card that cannot hold scratchpad leaves none open
   no_project      = 'No project is open: the SD card cannot be used.',
   --- run() makes no project: project() does
@@ -1729,7 +1732,7 @@ function ConsoleController.prepare_project_env(cc)
     if select('#', ...) > 0 then
       return cc.model.output:write_refusal(messages.reset_alone)
     end
-    cc:reset()
+    return cc:reset()
   end
 
   project_env.reset_scratchpad = function()
@@ -2021,7 +2024,12 @@ function ConsoleController:reset()
   --- audio)
   if love.audio and love.audio.stop then love.audio.stop() end
   self.model.output:erase()
-  print(messages.reset_done)
+  local P = self.model.projects
+  local name = P.current and P.current.name or ProjectService.DEFAULT
+  print(messages.reset_done(name))
+  --- the reset specification's API4.1; a typed line's value is
+  --- not printed, so the console shows only the line above
+  return { scope = 'runtime', project = name, snapshot = nil }
 end
 
 --- Ctrl+R: the stop the run seam would make, made first, so

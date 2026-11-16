@@ -167,9 +167,11 @@ Closing a project returns to `scratchpad`.
 
   Stop the program if one runs, clear what it and the lines
   typed before left (variables, handlers, settings), silence
-  every sound,
-  and empty the console as <kbd>Ctrl</kbd>+<kbd>L</kbd> does. The
-  history and the editor's files stay. Only `reset()` with
+  every sound, and empty the console as
+  <kbd>Ctrl</kbd>+<kbd>L</kbd> does; then it says
+  `Runtime reset for <project>. All files kept.` and returns
+  `{ scope = "runtime", project = "<project>" }`. The history
+  and the editor's files stay. Only `reset()` with
   nothing between the brackets exists yet.
 
 - `reset_scratchpad()`
