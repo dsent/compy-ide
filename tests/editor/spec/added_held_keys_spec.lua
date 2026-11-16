@@ -5,8 +5,8 @@
 -- where the specification says so (a program field's Enter,
 -- API2.2; Ctrl+Z and Ctrl+Y beyond the draft, IS6.6) or where a
 -- repeat would do harm: the console's Enter, the editor's
--- Escape, Shift+Ins, Ctrl+Ins, Ctrl+R and Ctrl+T. Keys only,
--- through tests/helpers/editor_keys.lua.
+-- Escape, Shift+Ins, Ctrl+Ins, Ctrl+J, Ctrl+R and Ctrl+T. Keys
+-- only, through tests/helpers/editor_keys.lua.
 
 local K = require("tests.helpers.editor_keys")
 local marks = require("tests.helpers.spec_marks")
@@ -81,21 +81,29 @@ describe("held keys #editor #spec", function()
       assert.same(3, K.position())
     end)
 
-    spec_it("IS1.5 Follow a file reference: a held Ctrl+J "
-        .. "follows the reference and stops in the file it "
-        .. "opened", function()
-      K.reset({
-        ["main.lua"] = 'require("lib")\n',
-        ["lib.lua"] = "x = 1\n",
-      })
-      K.open()
-      K.browse_to(1)
-      held({ "lctrl" }, "j")
-      assert.same("lib.lua", K.file_name())
-    end)
   end)
 
   describe("in the file editor, a key that acts once", function()
+    -- the user's ruling of November 16: rushing through files
+    -- at repeat speed would confuse
+    spec_it("IS1.5 Follow a file reference: a held Ctrl+J "
+        .. "follows one reference, though the file it opens names "
+        .. "another", function()
+      K.reset({
+        ["main.lua"] = 'require("lib")\n',
+        ["lib.lua"] = 'require("other")\n',
+        ["other.lua"] = "x = 1\n",
+      })
+      K.open()
+      K.browse_to(1)
+      held({ "lctrl" }, "j", 3)
+      assert.same("lib.lua", K.file_name())
+      -- a press of its own follows the next
+      K.browse_to(1)
+      K.keys("lctrl", "j")
+      assert.same("other.lua", K.file_name())
+    end)
+
     spec_it("IS5.7 Cancel an edit with Escape: a held Escape "
         .. "aborts the edit and stays in the file: a repeat would "
         .. "leave it, and with it the timeline that holds a cut "

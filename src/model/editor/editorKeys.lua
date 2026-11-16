@@ -18,7 +18,10 @@
 --- Shift+Ins and Ctrl+Ins act once per press: each repeat
 --- would add another copy, with no stop. So does Escape: held
 --- after a cut, it would drop the edit and then leave the
---- file, whose timeline holds the cut block's only copy.
+--- file, whose timeline holds the cut block's only copy; Ctrl+Q
+--- leaves every file at once. And so does Ctrl+J: rushing
+--- through files at repeat speed confuses (the user's ruling
+--- of November 16, 2026).
 local Keymap = require('model.input.keymap')
 
 --- @alias EditorStateName 'browsing'|'inserting'|'replacing'
@@ -116,7 +119,7 @@ local DEFS = {
     { chords = { 'ctrl+y' }, card = 'Ctrl+Y', repeats = true }),
   --- IS1.5; refused during an edit
   with(each('follow_require', 'follow a link'),
-    { chords = { 'ctrl+j' }, card = 'Ctrl+J', repeats = true }),
+    { chords = { 'ctrl+j' }, card = 'Ctrl+J' }),
   --- the whole file formatted, from the browsing state (PR
   --- #28, D-FORMAT-FILE); refused with a notice in an edit
   with(each('format_file', 'format the file'),

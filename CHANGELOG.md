@@ -178,9 +178,9 @@ Project-author guide: `doc/input_api.md`.
   console: a held Enter in the editor adds an empty line per repeat, a held Ctrl+Delete
   removes the empty lines down to the next block with text, cuts it and stops, Alt+Up
   and Alt+Down move the block to the file's edge, and Ctrl+Z and Ctrl+Y repeat through
-  the field's own changes only. Escape in the editor, Shift+Insert, Ctrl+Insert, Ctrl+T,
-  Ctrl+R and the console's Enter act once per press, since a repeat would do harm. A
-  program's input field submits once per press of Enter.
+  the field's own changes only. Enter in the console and in a program's input field,
+  Escape in the editor, Shift+Insert, Ctrl+Insert, Ctrl+J, Ctrl+R and Ctrl+T act once
+  per press.
 - **Every chord is a key of its own.** A key pressed with a modifier that nothing
   binds does nothing, in the file editor, the console and a program's input field:
   Ctrl+Enter no longer submits in the console or a program's input, Ctrl+Up and

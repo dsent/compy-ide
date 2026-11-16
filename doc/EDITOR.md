@@ -54,14 +54,15 @@
   <kbd>Alt</kbd>+<kbd>Up</kbd> moves the block up to the file's
   start. <kbd>Ctrl</kbd>+<kbd>Z</kbd> and
   <kbd>Ctrl</kbd>+<kbd>Y</kbd> repeat through the field's own
-  changes only. A few keys act once per press, because a repeat
-  would do harm: <kbd>Escape</kbd> (a repeat would leave the
-  file, and with it the undo of a cut block),
-  <kbd>Shift</kbd>+<kbd>Insert</kbd> and
+  changes only. These keys act once per press:
+  <kbd>Escape</kbd> (a repeat would leave the file, and with it
+  the undo of a cut block; <kbd>Ctrl</kbd>+<kbd>Q</kbd> leaves
+  every file at once), <kbd>Shift</kbd>+<kbd>Insert</kbd> and
   <kbd>Ctrl</kbd>+<kbd>Insert</kbd> (each repeat would add a
-  copy), <kbd>Ctrl</kbd>+<kbd>T</kbd> and
-  <kbd>Ctrl</kbd>+<kbd>R</kbd>, and in the console
-  <kbd>Enter</kbd>, which runs the line once.
+  copy), <kbd>Ctrl</kbd>+<kbd>J</kbd> (rushing through files
+  confuses), <kbd>Ctrl</kbd>+<kbd>T</kbd> and
+  <kbd>Ctrl</kbd>+<kbd>R</kbd>, and <kbd>Enter</kbd> in the
+  console and in your program's input field.
 
 ### Keys
 
