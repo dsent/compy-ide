@@ -572,47 +572,45 @@ describe("terminal queue", function()
     end)
 end)
 
---- The view (view/canvas/terminalView.lua) draws a row's
---- backgrounds, then its characters, so that the GPU takes each
---- kind in one call, and keeps the picture that drawing cell by
---- cell made: a background covered what the character before it
---- painted past its own cell. The graphics here are a stand-in
---- that records the calls, and the rasterizer is synthetic: a
---- character's glyph is as wide as INK says, in a cell 10 wide.
+--- The view (view/canvas/terminalView.lua) draws the output in
+--- runs: a rectangle for each run of cells of one background, a
+--- print for each run of characters of one color, all the
+--- backgrounds before any character. The graphics here are a
+--- stand-in that records the calls, and the font is synthetic:
+--- every character advances by a cell, 10, except those WIDE
+--- names.
 describe("terminal view", function()
   require("util.color")
   require("view.canvas.terminalView")
   local gfx = love.graphics
-  local INK = { [" "] = 0, i = 4, W = 10, M = 12, ["="] = 25 }
-  local rasterizer = {
-    hasGlyphs = function() return true end,
-    getGlyphData = function(_, char)
-      local ink = INK[char]
-      return {
-        getDimensions = function() return ink, 1 end,
-        getBearing = function() return 0, 0 end,
-        getFormat = function() return "la8" end,
-        getString = function() return ("\255\255"):rep(ink) end,
-      }
-    end,
-  }
-  local saved, calls
+  local WIDE = { ["→"] = 13, ["\t"] = 40 }
+  local saved, calls, count
 
   before_each(function()
-    saved, calls = { }, { }
+    saved, calls, count = { }, { }, 0
     local stand_in = {
       getBlendMode = function() return "alpha", "alphamultiply" end,
       setBlendMode = function() end,
-      rectangle = function(_, x, y)
-        if y == 0 then calls[#calls + 1] = "back " .. x / 10 end
+      rectangle = function(_, x, y, w)
+        calls[#calls + 1] = string.format("back %d,%d %d",
+          y / 10, x / 10, w / 10)
       end,
-      print = function(char, x, y)
-        if y == 0 then calls[#calls + 1] = char .. " " .. x / 10 end
+      print = function(text, x, y)
+        calls[#calls + 1] = string.format("%d,%d %s", y / 10,
+          x / 10, (text:gsub(" +$", "")))
       end,
     }
     for name, f in pairs(stand_in) do
       saved[name] = gfx[name] or false
       gfx[name] = f
+    end
+    -- every call into love.graphics is counted
+    for name, f in pairs(gfx) do
+      if saved[name] == nil then saved[name] = f end
+      gfx[name] = function(...)
+        count = count + 1
+        return f(...)
+      end
     end
   end)
 
@@ -620,96 +618,125 @@ describe("terminal view", function()
     for name, f in pairs(saved) do gfx[name] = f or nil end
   end)
 
-  --- the first row's calls once `text` is drawn, the 20
-  --- backgrounds that open it checked and left out
-  local function drawn(text, over_a_picture, unknown_font)
-    local t = new_term()
-    t.font.getDPIScale = function() return 1 end
-    if not unknown_font then t.rasterizers = { rasterizer } end
-    t:print(text)
+  --- a terminal of 20 by 20 cells whose font advances by a cell
+  --- but for the characters WIDE names
+  local function view_term(cell_width, font)
+    font = font or { getHeight = function() return 10 end }
+    font.getWidth = function(_, text)
+      return WIDE[text] or 10
+    end
+    return Terminal(200, 200, font, cell_width or 10, 10), font
+  end
+
+  --- the calls that draw `t`, those of row `row` alone when
+  --- given
+  local function drawn(t, row, over_a_picture)
     t:update(1000)
+    for i = #calls, 1, -1 do calls[i] = nil end
+    count = 0
     TerminalView.draw(t, t.canvas, over_a_picture)
-    if over_a_picture then return calls end
-    local rest = { }
-    for i, call in ipairs(calls) do
-      if i <= 20 then
-        assert.equal("back " .. i - 1, call)
-      else
-        rest[#rest + 1] = call
+    if not row then return calls end
+    local of_row = { }
+    for _, call in ipairs(calls) do
+      local rest = call:match("^back " .. row .. ",(.*)")
+          or call:match("^" .. row .. ",(.*)")
+      if rest then
+        of_row[#of_row + 1] = (call:match("^back") and "back " or "")
+            .. rest
       end
     end
-    return rest
+    return of_row
   end
 
-  --- the calls up to the row's last character that is no space
-  local function trimmed(rest)
-    while rest[#rest] and rest[#rest]:sub(1, 1) == " " do
-      rest[#rest] = nil
-    end
-    return rest
-  end
-
-  it("draws a row's backgrounds, then its characters", function()
-    assert.same({ "i 0", "i 1", "  2", "i 3" },
-      trimmed(drawn("ii i")))
-  end)
-
-  it("draws again the background a character reaches, before "
-    .. "that cell's own character", function()
-    -- M is 2 wider than its cell and = reaches two cells on
-    assert.same({
-      "M 0", "back 1", "i 1", "i 2",
-      "= 3", "back 4", "i 4", "back 5", "i 5", "i 6",
-    }, trimmed(drawn("Mii=iii")))
-  end)
-
-  it("counts a character that fills its cell to the last column "
-    .. "as reaching the next", function()
-    assert.same({ "W 0", "back 1", "i 1", "i 2" },
-      trimmed(drawn("Wii")))
-  end)
-
-  it("measures a character again for cells of another width",
+  it("draws a rectangle for each run of cells of one background",
     function()
-      local font = {
-        getWidth = function() return 10 end,
-        getHeight = function() return 10 end,
-        getDPIScale = function() return 1 end,
-      }
-      local function first_row(cell_width)
-        local t = Terminal(200, 200, font, cell_width, 10)
-        t.rasterizers = { rasterizer }
-        t:print("Wi")
-        t:update(1000)
-        for i = #calls, 1, -1 do calls[i] = nil end
-        TerminalView.draw(t, t.canvas)
-        local after = { }
-        for _, call in ipairs(calls) do
-          if call:sub(1, 1) == "i" then break end
-          if #after > 0 or call:sub(1, 1) == "W" then
-            after[#after + 1] = call
-          end
-        end
-        return after
-      end
-      -- W is 10 wide: inside a cell of 20, to the edge of one
-      -- of 10
-      assert.same({ "W 0" }, first_row(20))
-      assert.same({ "W 0", "back 1" }, first_row(10))
+      local t = view_term()
+      t:print("ab")
+      t:set_cursor_backcolor(0, 0, 1, 1)
+      t:print("cd")
+      t:set_cursor_backcolor(unpack(t.clear_color))
+      t:print("e")
+      local row = drawn(t, 0)
+      assert.same({ "back 0 2", "back 2 2", "back 4 16" },
+        { row[1], row[2], row[3] })
     end)
+
+  it("draws a print for each run of characters of one color, a "
+    .. "space in the run it is in", function()
+    local t = view_term()
+    t:print("ab cd ")
+    t:set_cursor_color(1, 0, 0, 1)
+    t:print(" ef")
+    t:set_cursor_color(0, 0, 0, 1)
+    t:print(" g")
+    local row = drawn(t, 0)
+    assert.same({ "0 ab cd", "7 ef", "10 g" },
+      { row[#row - 2], row[#row - 1], row[#row] })
+    assert.equal(4, #row)
+  end)
+
+  it("places at its own cell a character that does not advance "
+    .. "by a cell", function()
+    local t = view_term()
+    t:print("ab→cd\te")
+    local row = drawn(t, 0)
+    assert.same({ "back 0 20", "0 ab", "2 →", "3 cd", "5 \t", "6 e" },
+      row)
+  end)
+
+  it("asks again which characters stand alone in cells of "
+    .. "another width", function()
+    -- in cells of 13 the arrow advances by a cell and a letter,
+    -- which advances by 10, does not
+    local wide, font = view_term(13)
+    wide:print("a→b")
+    local row = drawn(wide, 0)
+    assert.same({ "0 a", "1 →", "2 b" }, { row[2], row[3], row[4] })
+    local t = view_term(10, font)
+    t:print("ab→")
+    row = drawn(t, 0)
+    assert.same({ "0 ab", "2 →" }, { row[2], row[3] })
+  end)
+
+  it("draws all the backgrounds before any character", function()
+    local t = view_term()
+    t:print("ab\ncd\nef")
+    local all = drawn(t)
+    local last_back, first_text = 0, #all + 1
+    for i, call in ipairs(all) do
+      if call:match("^back") then
+        last_back = i
+      elseif i < first_text then
+        first_text = i
+      end
+    end
+    assert.is_true(last_back < first_text)
+  end)
 
   it("draws the characters alone over a program's picture",
     function()
-      assert.same({ "M 0", "i 1", "  2", "= 3", "i 4" },
-        trimmed(drawn("Mi =i", true)))
+      local t = view_term()
+      t:print("ab→c")
+      assert.same({ "0 ab", "2 →", "3 c" }, drawn(t, 0, true))
     end)
 
-  it("draws cell by cell after a character of a font whose "
-    .. "rasterizers it was not given", function()
-    local rest = drawn("ii", false, true)
-    assert.same({ "i 0", "back 1", "i 1", "back 2", "  2" },
-      { rest[1], rest[2], rest[3], rest[4], rest[5] })
-    assert.equal(20 + 19, #rest)
+  --- The Compy's interpreter makes every call into love.graphics
+  --- cost: a repaint of a full screen stays within a few calls a
+  --- row, where a call or two for each cell were some 4,000.
+  it("repaints a full screen in a few calls a row", function()
+    for _, text in ipairs({
+      "0001 ---------",
+      "The quick brown fox",
+    }) do
+      local t = view_term()
+      for y = 1, t.height do
+        t:print(text .. (y < t.height and "\n" or ""))
+      end
+      drawn(t)
+      assert.is_true(count <= 4 * t.height + 16, string.format(
+        "%d calls into love.graphics for %d rows of %q", count,
+        t.height, text))
+    end
   end)
 end)
 

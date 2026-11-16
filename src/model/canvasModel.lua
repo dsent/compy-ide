@@ -49,7 +49,6 @@ function CanvasModel.new(cfg)
   end
   local term = Terminal(w, term_h, cfg.view.font,
     nil, custom_height)
-  term.rasterizers = cfg.view.rasterizers
 
   local color = cfg.view.colors.terminal
   term:hide_cursor()

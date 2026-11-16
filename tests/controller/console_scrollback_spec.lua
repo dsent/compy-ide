@@ -447,9 +447,14 @@ describe("the console's scrolled view #console", function()
         local col, y = p.x / cw, p.y / ch
         local mark = p.text == "^" or p.text == "v"
         if col == math.floor(col) and y == math.floor(y)
-            and y < H and #p.text <= 4 and not mark then
+            and y < H and not mark then
           rows[y + 1] = rows[y + 1] or { }
-          rows[y + 1][col + 1] = p.text
+          -- a row is printed in runs: each character of a run
+          -- lands a cell after the one before it
+          for char in p.text:gmatch("[%z\1-\127\194-\244][\128-\191]*") do
+            rows[y + 1][col + 1] = char
+            col = col + 1
+          end
         end
       end
       local drawn = { }

@@ -38,6 +38,11 @@ Project-author guide: `doc/input_api.md`.
 
 ### Changed
 
+- **In the console's output a character wider than its cell shows whole.** The next
+  cell's background used to cut it at the cell's right edge. A block or a box line now
+  keeps the faint pixel it has at each side, and an arrow or a CJK character runs a few
+  pixels over the cell after it. Letters, digits and signs of ASCII, Latin-1 and Russian
+  fit their cells and look as they did.
 - Colouring, the submit gate and the submit action are three independent, optional
   keys (`highlighter`, `validator`, `on_text_entered`) rather than a choice of function
   name (`input_text` / `input_code` / `validated_input`).
@@ -302,8 +307,8 @@ Project-author guide: `doc/input_api.md`.
 - **A long output costs less while it is written.** A program that prints thousands of
   lines at once made every frame copy all the output still waiting to be written, and
   draw each of the screen's 1,024 cells in two calls to the graphics card. Now the
-  waiting output is copied once each time it has halved, and a row's cells are drawn
-  together; the picture is the same.
+  waiting output is copied once each time it has halved, and a row is drawn in a few
+  calls: a rectangle for each run of one background, a print for each run of one color.
 - **`gotoxy` given something other than a number names the program's line.**
   `compy.terminal.gotoxy('x', 'y')` stopped the program with an error about `floor` on
   a line of the IDE's terminal; it now stops it with `compy.terminal.gotoxy: x and y

@@ -8,7 +8,8 @@ local D = require('harmony.drive')
 --- continuation cue at a cut edge and none at rest; the first
 --- step from a nearly empty screen, which fills it; the echo of
 --- an entered line in blue and its error after it in the
---- output's error color; and the key card's rows.
+--- output's error color; the key card's rows; and a row printed
+--- in one print against a print for each of its cells.
 
 --- @return table
 local function theme() return P.cc().cfg.view.colors end
@@ -150,5 +151,83 @@ scenario('card', function(wait)
     assert(card:find('scroll a row', 1, true), 'Ctrl+Up/Down on the card')
     assert(card:find('oldest/newest', 1, true), 'Home/End on the card')
   end)
+  hm_done()
+end)
+
+--- The output prints a row's text in runs, a print for each
+--- (view/canvas/terminalView.lua). That puts a character where a
+--- print of its own at its cell put it, pixel for pixel, as long
+--- as it advances by a cell's width: so do the letters and
+--- signs of ASCII, Latin-1 and Russian and the box and block
+--- characters. A fallback font's character does not, and the
+--- view prints it at its own cell.
+scenario('runs', function(wait)
+  wait(.1)
+  local utf8 = require('utf8')
+  local gfx = love.graphics
+  local v = P.cc().cfg.view
+  local font, cw, ch = v.font, v.fw, v.fh
+
+  --- the characters `from` to `to`, in rows of 64
+  local function range(from, to)
+    local rows, row = { }, { }
+    for code = from, to do
+      row[#row + 1] = utf8.char(code)
+      if #row == 64 or code == to then
+        rows[#rows + 1] = table.concat(row)
+        row = { }
+      end
+    end
+    return rows
+  end
+
+  --- `text` on a row, in one print or a print for each cell
+  local function picture(text, by_cell)
+    local canvas = gfx.newCanvas(64 * cw, ch)
+    gfx.push('all')
+    gfx.setCanvas(canvas)
+    gfx.origin()
+    gfx.clear(0.75, 0.75, 0.75, 1)
+    gfx.setFont(font)
+    gfx.setColor(0, 0, 0, 1)
+    if by_cell then
+      local x = 0
+      for _, code in utf8.codes(text) do
+        gfx.print(utf8.char(code), x * cw, 0)
+        x = x + 1
+      end
+    else
+      gfx.print(text, 0, 0)
+    end
+    gfx.pop()
+    return canvas:newImageData():getString()
+  end
+
+  local sets = {
+    { 'ASCII', range(0x20, 0x7E) },
+    { 'Latin-1', range(0xA1, 0xFF) },
+    { 'Russian', range(0x410, 0x451) },
+    { 'box characters', range(0x2500, 0x257F) },
+    { 'block characters', range(0x2580, 0x259F) },
+  }
+  for _, set in ipairs(sets) do
+    for _, row in ipairs(set[2]) do
+      for _, code in utf8.codes(row) do
+        local char = utf8.char(code)
+        D.eq(font:getWidth(char), cw,
+          'the advance of ' .. char .. ' (' .. set[1] .. ')')
+      end
+      -- once to bring the row's glyphs into the font's texture
+      picture(row, true)
+      assert(picture(row, true) == picture(row, false),
+        set[1] .. ': one print differs from a print a cell: ' .. row)
+    end
+  end
+  -- an arrow from the icon font and a CJK character advance by
+  -- more than a cell
+  for _, char in ipairs({ '→', '日' }) do
+    assert(font:getWidth(char) ~= cw,
+      char .. ' advances by a cell: the view would print it in a run')
+  end
   hm_done()
 end)

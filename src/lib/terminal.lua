@@ -486,7 +486,6 @@ end
 --- @field clear_color table
 --- @field clear_color_alpha table
 --- @field canvas love.Canvas
---- @field rasterizers love.Rasterizer[]? --- of `font`, then its fallbacks
 --- @field buffer table
 --- @field state_buffer table
 --- @field on_row_leaving fun(chars: string[], states: table[])?
