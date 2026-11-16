@@ -360,6 +360,52 @@ describe("the terminate flush #console", function()
       assert.equal(1, seen.volume)
     end)
 
+  --- where the key gate meets the stop: a program sees a release
+  --- exactly for the presses it saw, so a run that a stop ended
+  --- or Ctrl+R replaced gets nothing more, and the next run gets
+  --- no release of a key it never saw pressed
+  local KEYS = "presses, releases = { }, { }\n"
+    .. "function love.keypressed(k) presses[#presses + 1] = k end\n"
+    .. "function love.keyreleased(k) releases[#releases + 1] = k end\n"
+    .. "function love.update() end\n"
+
+  it("gives a run Ctrl+R started no release of a key held across it",
+    function()
+      reset({ ["main.lua"] = KEYS })
+      run("run()")
+      local first = env()
+      K.hold("a")
+      assert.same({ "a" }, first.presses)
+      K.keys("lctrl", "r")
+      K.frame()
+      local second = env()
+      assert.is_not.equal(first, second)
+      K.release("a")
+      assert.same({ }, second.releases)
+      assert.same({ }, second.presses)
+      assert.same({ }, first.releases)
+      K.keys("lctrl", "q")
+    end)
+
+  it("gives no release after reset() of a key the paused run saw",
+    function()
+      reset({ ["main.lua"] = KEYS })
+      run("run()")
+      local first = env()
+      K.hold("x")
+      assert.same({ "x" }, first.presses)
+      K.cc:suspend_run()
+      K.cc:suspend()
+      assert.same("inspect", K.app_state())
+      run("reset()")
+      K.release("x")
+      assert.is_false(K.cc.run_live)
+      assert.same({ }, first.releases)
+      run("run()")
+      assert.same({ }, env().releases)
+      K.keys("lctrl", "q")
+    end)
+
   it("keeps the console's output and history", function()
     reset({ ["main.lua"] = "print('from the run')\n"
       .. "function love.update() end\n" })
