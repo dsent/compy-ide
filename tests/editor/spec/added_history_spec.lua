@@ -201,10 +201,10 @@ describe("the console's history #editor #spec #history", function()
         run("a = 1")
         K.type('error("boom")')
         K.keys("return")
-        -- its error is said in the output, the band left empty
+        -- its error is said in the output, the band left empty,
+        -- and the field empties as after any line that ran
         assert.is_false(K.cc.input:has_error())
-        assert.same('error("boom")', K.console_draft())
-        K.keys("escape")
+        assert.same("", K.console_draft())
         assert.same({ 'error("boom")', "a = 1" }, walk("up", 2))
       end)
 

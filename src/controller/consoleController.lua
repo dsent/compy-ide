@@ -1877,19 +1877,18 @@ function ConsoleController:evaluate_input()
       local f, load_err = codeload(code, run_env)
       if f then
         --- the line is taken: it enters the history and the
-        --- output before it runs, and stays in the field if
-        --- running it fails, its error written to the output
-        --- after what it printed, and nowhere else: the band
-        --- is the field's, for a line not taken (the
-        --- maintainer's ruling of November 15, 2026)
+        --- output before it runs, and leaves the field however
+        --- it ends; Up brings it back. Its error is written to
+        --- the output after what it printed, and nowhere else:
+        --- the band is the field's, for a line not taken (the
+        --- maintainer's rulings of November 15 and 16, 2026)
         inter:remember()
         self.model.output:echo(text)
         local _, err = run_user_code(f, self)
         if err then
           self.model.output:write_error(err)
-        else
-          inter:clear_text()
         end
+        inter:clear_text()
       else
         Log.error('Load error:', LANG.get_call_error(load_err))
         inter:set_error(load_err)

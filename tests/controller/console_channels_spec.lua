@@ -79,29 +79,39 @@ describe("the console's channels #console", function()
 
   describe("a run's error", function()
     --- Enter acts once per press (the ruling of November 16,
-    --- 2026, on held keys): a line that fails keeps its text,
-    --- and no band message holds a repeat back any more
+    --- 2026, on held keys): its repeats reach no evaluation
     it("of a line Enter is held on runs it once", function()
       reset()
+      local evals, evaluate = 0, K.cc.evaluate_input
+      K.cc.evaluate_input = function(...)
+        evals = evals + 1
+        return evaluate(...)
+      end
       K.type("error('boom')")
       K.hold("return")
       for _ = 1, 5 do K.repeat_key("return") end
       K.release("return")
+      K.cc.evaluate_input = nil
       K.frame(100)
+      assert.equal(1, evals)
       local n = select(2, K.console_text():gsub("L1:boom", ""))
       assert.equal(1, n)
-      assert.same("error('boom')", K.console_draft())
     end)
 
+    --- a line that ran empties the field, whether it ended well
+    --- or in an error; the history holds it (the maintainer's
+    --- ruling of November 16, 2026)
     it("of a typed line is said once, in the output, in red, and "
-      .. "the line stays in the field", function()
+      .. "the field empties, the line in the history", function()
         reset()
         run("error('boom')")
         said("L1:boom", colors().error)
         no_band("no copy in the band")
-        assert.same("error('boom')", K.console_draft())
+        assert.same("", K.console_draft())
         local n = select(2, K.console_text():gsub("boom'?%)?", ""))
         assert.equal(2, n, "the echo and the error, once each")
+        K.keys("up")
+        assert.same("error('boom')", K.console_draft())
       end)
 
     it("of a program's first lines is said in the output, in red",

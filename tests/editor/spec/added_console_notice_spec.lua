@@ -133,8 +133,8 @@ describe("the console's errors in the notice band #editor #spec",
 
     spec_it("NFR4.3 Understandable submission outcome: a "
         .. "console line that fails while it runs says so in the "
-        .. "output, in red, and not in the band, the line kept in "
-        .. "the field", function()
+        .. "output, in red, and not in the band, and the field "
+        .. "empties, Up bringing the line back", function()
         K.reset()
         local before = K.screen()
         K.type('error("boom")')
@@ -143,9 +143,10 @@ describe("the console's errors in the notice band #editor #spec",
         local s = K.screen()
         assert.is_nil(K.cc.view.input:notice_rows())
         assert.truthy(K.console_text():find("L1:boom", 1, true))
-        assert.same('error("boom")', K.console_draft())
-        assert.truthy(field(s):find('error("boom")', 1, true))
+        assert.same("", K.console_draft())
         assert.same(before.field_y, s.field_y)
+        K.keys("up")
+        assert.same('error("boom")', K.console_draft())
       end)
 
     spec_it("NFR4.3 Understandable submission outcome: a "

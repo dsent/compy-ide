@@ -212,8 +212,9 @@ Project-author guide: `doc/input_api.md`.
   it lists below what is there.
 - **Each line the console runs is written to its output**, in blue, before it runs, so that
   what it prints follows it; a line that fails also has its error written there, in red,
-  after its output, and the line stays in the field. A line the syntax check refuses is
-  not written and stays in the field.
+  after its output. A line that ran leaves the field, whether it ended well or in an
+  error, and Up brings it back from the history. A line the syntax check refuses is not
+  written and stays in the field, as does one Lua does not load or one not yet finished.
 - **The console says what a command did in its output, and what the line being typed
   needs in a band above the status line.** A typed line's error and a program's error are
   written to the output in red, which is for errors alone; a console command's refusal,

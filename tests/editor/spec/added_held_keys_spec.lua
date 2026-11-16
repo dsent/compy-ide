@@ -251,14 +251,13 @@ describe("held keys #editor #spec", function()
       end)
 
     spec_it("IS3.6 Execute console input: a held Enter runs a "
-        .. "line that fails as it runs once, though the line "
-        .. "stays to be corrected", function()
+        .. "line that fails as it runs once, and the field "
+        .. "empties", function()
         K.reset()
         K.type("n = (n or 0) + 1; error('x')")
         held({ }, "return", 3)
         assert.same(1, K.cc:get_project_env().n)
-        assert.same("n = (n or 0) + 1; error('x')",
-          K.console_draft())
+        assert.same("", K.console_draft())
       end)
 
     -- the reserved chords that would switch or run anew at
