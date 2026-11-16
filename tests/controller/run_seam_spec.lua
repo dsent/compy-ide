@@ -326,41 +326,56 @@ end
     return function() return scissor end
   end
 
-  --- a run a draw ended, or replaced, leaves nothing to the
-  --- IDE or to the next run, though the draw's own pop puts
-  --- back what it saved (the eleventh review round)
-  it('leaves no scissor after stop() from love.draw', function()
-    reset({['main.lua'] = [[
-gfx.setScissor(0, 0, 300, 300)
-function love.draw()
-  stop()
-end
-]]})
-    local scissor = stateful_scissor()
-    run('run()')
-    K.frame()
-    assert.is_not_nil(scissor())
-    love.draw()
-    assert.is_false(K.cc.run_live)
-    assert.is_nil(scissor())
-  end)
+  --- The IDE draws its own things in its own graphics state
+  --- (View.draw, and the program's field): a program's
+  --- scissor, running or paused, reaches none of the IDE's
+  --- pixels, and is the program's again after
+  describe("the IDE's own drawing", function()
+    it('is in its own state, the program\'s given back', function()
+      reset()
+      local scissor = stateful_scissor()
+      -- the real view module: the fixture stubs it
+      local stub, newFont = View, love.graphics.newFont
+      love.graphics.newFont = function() return { } end
+      local view = assert(loadfile('src/view/view.lua'))
+      view()
+      local real = View
+      View, love.graphics.newFont = stub, newFont
+      gfx.setScissor(0, 0, 300, 300)
+      local seen = 'not drawn'
+      local C = {
+        cfg = { view = { font = { } } },
+        get_terminal = function() end,
+        get_canvas = function() end,
+      }
+      local CV = { draw = function()
+        seen = scissor() == nil and 'clean' or 'clipped'
+      end }
+      real.draw(C, CV)
+      assert.same('clean', seen)
+      assert.same({ 0, 0, 300, 300 }, scissor())
+    end)
 
-  it('starts the run love.draw started with no scissor', function()
-    reset({['main.lua'] = [[
+    it('draws a program\'s field in its own state', function()
+      reset({['main.lua'] = [[
 gfx.setScissor(0, 0, 300, 300)
-function love.draw()
-  stop()
-  run("menu")
-end
+compy.input.show({ text = 'x' })
+function love.draw() end
+function love.update() end
 ]]})
-    local scissor = stateful_scissor()
-    run('run()')
-    K.next_project('menu', {['main.lua'] = 'function love.update() end\n'})
-    K.frame()
-    love.draw()
-    assert.equal('running', K.app_state())
-    assert.is_nil(scissor())
-    env().love.update = nil
+      local scissor = stateful_scissor()
+      run('run()')
+      K.frame()
+      local seen = 'not drawn'
+      love.state.user_input_controller.view.draw = function()
+        seen = scissor() == nil and 'clean' or 'clipped'
+      end
+      gfx.setScissor(0, 0, 300, 300)
+      love.draw()
+      assert.same('clean', seen)
+      assert.same({ 0, 0, 300, 300 }, scissor())
+      env().love.update = nil
+    end)
   end)
 
   it('lets stop() from love.draw unwind the draw', function()

@@ -318,6 +318,21 @@ local function hook_update(userlove)
   end
 end
 
+--- A program's input field, which the IDE draws over the
+--- program's picture or the console, in the IDE's own graphics
+--- state, as View.draw draws the rest of what is the IDE's:
+--- the program's state is saved, kept from the field's pixels
+--- and given back
+--- @param CC ConsoleController
+--- @param V UserInputView
+local function draw_field(CC, V)
+  gfx.push('all')
+  gfx.reset()
+  gfx.setFont(CC.cfg.view.font)
+  V:draw()
+  gfx.pop()
+end
+
 --- @param userlove table
 local function hook_draw(userlove)
   local udr = userlove.draw
@@ -621,19 +636,13 @@ Controller = {
       if ldr ~= ddr then
         local draw = function()
           if ldr then
-            local run_id = CC.run_id
             gfx.push('all')
             wrap(ldr, CC)
             gfx.pop()
-            --- the pop put back the state of a run this draw
-            --- ended or replaced: it goes again
-            if CC.run_id ~= run_id or not CC.run_live then
-              CC:reset_graphics()
-            end
           end
           local ui = get_user_input()
           if ui then
-            ui.V:draw()
+            draw_field(CC, ui.V)
           end
         end
 
@@ -690,7 +699,7 @@ Controller = {
     local function draw()
       View.draw(CC, CV)
       local ui = get_user_input()
-      if ui then ui.V:draw() end
+      if ui then draw_field(CC, ui.V) end
       View.drawFPS()
     end
     love.draw = draw

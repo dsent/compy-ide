@@ -8,10 +8,19 @@ View = {
   prev_draw = nil,
   main_draw = nil,
   end_draw = nil,
+  --- The IDE draws its own things in its own graphics state:
+  --- the console's output and the program's canvas over it,
+  --- the status line, the band, the field, the key card and
+  --- the editor. Whatever state a program left, running or
+  --- paused (scissor, wireframe, colour, shader, blending,
+  --- transform), is saved by the push, kept from the IDE's
+  --- pixels by the reset, and given back by the pop.
   --- @param C ConsoleController
   --- @param CV ConsoleView
   draw = function(C, CV)
     gfx.push('all')
+    gfx.reset()
+    gfx.setFont(C.cfg.view.font)
     local terminal = C:get_terminal()
     local canvas = C:get_canvas()
     CV:draw(terminal, canvas, View.snapshot)

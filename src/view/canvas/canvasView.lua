@@ -58,7 +58,7 @@ function CanvasView:draw(
   local cfg = self.cfg
   local test = cfg.drawtest
 
-  gfx.reset()
+  --- in the IDE's own state already (View.draw)
   gfx.push('all')
   gfx.setBlendMode('alpha', 'alphamultiply') -- default
   if ViewUtils.conditional_draw('show_snapshot') then
