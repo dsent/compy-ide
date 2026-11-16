@@ -1111,9 +1111,11 @@ Controller = {
       exit = Application.request_application_exit,
     }
     local RESERVED = { keypressed = { }, keyreleased = { } }
+    local REPEATS = { }
     for _, r in ipairs(require('model.input.reservedKeys')) do
       local event = r.release and 'keyreleased' or 'keypressed'
       RESERVED[event][r.chord] = assert(ACTS[r.name], r.name)
+      REPEATS[r.chord] = r.repeats == true
     end
 
     handlers.keypressed = function(k, sc, isr)
@@ -1132,11 +1134,12 @@ Controller = {
       if playback and love.state.app_state == 'shutdown' then
         love.event.quit()
       end
-      local reservation = RESERVED.keypressed[combo_string(k)]
-      -- A reservation acts on its key's press, not on its
-      -- repeats: a held Ctrl+T does not flip between the run
-      -- and the editor.
-      if reservation and not isr then
+      local chord = combo_string(k)
+      local reservation = RESERVED.keypressed[chord]
+      -- A held reservation acts on its repeats only where it
+      -- reaches a natural stop (reservedKeys.lua): a held Ctrl+T
+      -- does not flip between the run and the editor.
+      if reservation and (not isr or REPEATS[chord]) then
         reservation()
       end
 

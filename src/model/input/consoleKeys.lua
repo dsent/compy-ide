@@ -13,9 +13,9 @@
 --- consoleController.lua); 'field' hands the key to the
 --- console's text field, 'none' takes it and does nothing
 --- (the help key). The gate's reserved chords are in
---- reservedKeys.lua. A key repeats while held only if it
---- writes nothing and changes no state (the ruling "Which keys
---- repeat while held").
+--- reservedKeys.lua. A held key repeats to its natural stop
+--- (the maintainer's ruling of November 16, 2026); Enter acts
+--- once per press.
 local Keymap = require('model.input.keymap')
 
 local STATES = { 'idle', 'live' }
@@ -37,12 +37,14 @@ end
 
 local DEFS = {
   --- IS3.6
+  --- once per press: a line that fails as it runs keeps its
+  --- text, and a repeat would run it again at repeat speed
   with(both('run', 'run the line'),
     { chords = { 'return', 'kpenter' }, card = 'Enter' }),
   --- the field's Escape, which clears the line (its
   --- clear_on_cancel)
   with(both('field', 'clear the line'),
-    { chords = { 'escape' }, card = 'Esc' }),
+    { chords = { 'escape' }, card = 'Esc', repeats = true }),
   --- the field's Up and Down, which walk the history at the
   --- first and last row (IS7.8, as the classic shell's)
   with(both('field', 'earlier/later'),
@@ -50,7 +52,7 @@ local DEFS = {
       repeats = true }),
   --- the output cleared
   with(both('clear_terminal', 'clear screen'),
-    { chords = { 'ctrl+l' }, card = 'Ctrl+L' }),
+    { chords = { 'ctrl+l' }, card = 'Ctrl+L', repeats = true }),
   --- IS3.16: its press brings up the card
   with(both('none', 'this card'),
     { chords = { 'f1' }, card = 'F1 (hold)' }),

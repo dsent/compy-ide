@@ -1,8 +1,11 @@
 -- Which keys repeat while held (the maintainer's ruling of
--- November 14, 2026): in the file editor and the console a
--- key repeats only if it writes nothing to a file and changes
--- no state. Enter, Escape, F2, Shift+Ins, Ctrl+Ins, moving a
--- block and the commands act once per press. Keys only,
+-- November 16, 2026, which adopts the specification's and
+-- Luditor's): a held key repeats, and each key is safe to hold
+-- because it reaches a natural stop. A key acts once per press
+-- where the specification says so (a program field's Enter,
+-- API2.2; Ctrl+Z and Ctrl+Y beyond the draft, IS6.6) or where a
+-- repeat would do harm: the console's Enter, the editor's
+-- Escape, Shift+Ins, Ctrl+Ins, Ctrl+R and Ctrl+T. Keys only,
 -- through tests/helpers/editor_keys.lua.
 
 local K = require("tests.helpers.editor_keys")
@@ -26,79 +29,60 @@ end
 describe("held keys #editor #spec", function()
   after_each(K.cleanup)
 
-  describe("in the file editor, a key that acts once", function()
+  describe("in the file editor, a key that repeats to its "
+      .. "natural stop", function()
     spec_it("IS4.2 Append after the last block: a held Enter "
-        .. "submits the draft once and adds no empty line",
-      function()
-        K.reset({ ["main.lua"] = "a = 1\n" })
-        K.open()
-        K.type("b = 2")
-        held({ }, "return")
-        assert.same("a = 1\nb = 2\n", K.file())
+        .. "submits the draft, and each repeat adds an empty "
+        .. "line, as Luditor's", function()
+        K.reset({ ["notes.txt"] = "a\n" })
+        K.open("notes.txt")
+        K.type("b")
+        held({ }, "return", 2)
+        assert.same("a\nb\n\n\n", K.file("notes.txt"))
       end)
 
     spec_it("IS4.3 Submit an empty draft: a held Enter in an "
-        .. "empty field adds one empty line", function()
+        .. "empty field adds an empty line per repeat", function()
       K.reset({ ["notes.txt"] = "a\n" })
       K.open("notes.txt")
-      held({ }, "return")
-      assert.same("a\n\n", K.file("notes.txt"))
+      held({ }, "return", 2)
+      assert.same("a\n\n\n\n", K.file("notes.txt"))
     end)
 
-    spec_it("IS5.7 Cancel an edit with Escape: a held Escape "
-        .. "aborts the edit and stays in the file", function()
-      K.reset({ ["main.lua"] = "a = 1\nb = 2\n" })
-      K.open()
-      K.browse_to(1)
-      K.keys("f2")
-      assert.same("replacing", K.state())
-      held({ }, "escape")
-      assert.same("editor", K.app_state())
-      assert.same("browsing", K.state())
-      assert.same(1, K.position())
-    end)
-
-    spec_it("IS6.4 Submit and retain the field: a held Shift+Ins "
-        .. "submits once", function()
-      K.reset({ ["main.lua"] = "a = 1\n" })
-      K.open()
-      K.type("b = 2")
-      held({ "lshift" }, "insert")
-      assert.same("a = 1\nb = 2\n", K.file())
-      assert.same("b = 2", K.draft())
-    end)
-
-    spec_it("IS6.1 Copy a block: a held Ctrl+Ins copies the "
-        .. "block once", function()
-      K.reset({ ["main.lua"] = "a = 1\nb = 2\n" })
-      K.open()
-      K.browse_to(1)
-      held({ "lctrl" }, "insert")
-      assert.same("a = 1", K.draft())
+    spec_it("IS6.2 Cut a block: a held Ctrl+Delete removes the "
+        .. "empty lines down to the first block with text, cuts "
+        .. "it, and stops", function()
+      K.reset({ ["notes.txt"] = "a\n\n\nb\nc\n" })
+      K.open("notes.txt")
+      K.browse_to(2)
+      held({ "lctrl" }, "delete", 4)
+      assert.same("a\nc\n", K.file("notes.txt"))
+      assert.same("b", K.draft())
+      assert.same("inserting", K.state())
     end)
 
     spec_it("IS6.5 Move a block: a held Alt+Up moves the block "
-        .. "one place", function()
+        .. "up to the file's start, and stops", function()
       K.reset({ ["main.lua"] = "a = 1\nb = 2\nc = 3\n" })
       K.open()
       K.browse_to(3)
-      held({ "lalt" }, "up")
-      assert.same("a = 1\nc = 3\nb = 2\n", K.file())
-      assert.same(2, K.position())
+      held({ "lalt" }, "up", 3)
+      assert.same("c = 3\na = 1\nb = 2\n", K.file())
+      assert.same(1, K.position())
     end)
 
     spec_it("IS6.5 Move a block: a held Alt+Down moves the block "
-        .. "one place", function()
+        .. "down to the file's end, and stops", function()
       K.reset({ ["main.lua"] = "a = 1\nb = 2\nc = 3\n" })
       K.open()
       K.browse_to(1)
-      held({ "lalt" }, "down")
-      assert.same("b = 2\na = 1\nc = 3\n", K.file())
-      assert.same(2, K.position())
+      held({ "lalt" }, "down", 3)
+      assert.same("b = 2\nc = 3\na = 1\n", K.file())
+      assert.same(3, K.position())
     end)
 
     spec_it("IS1.5 Follow a file reference: a held Ctrl+J "
-        .. "follows once, and refuses nothing in the file it "
+        .. "follows the reference and stops in the file it "
         .. "opened", function()
       K.reset({
         ["main.lua"] = 'require("lib")\n',
@@ -108,8 +92,45 @@ describe("held keys #editor #spec", function()
       K.browse_to(1)
       held({ "lctrl" }, "j")
       assert.same("lib.lua", K.file_name())
-      assert.is_nil(K.message())
     end)
+  end)
+
+  describe("in the file editor, a key that acts once", function()
+    spec_it("IS5.7 Cancel an edit with Escape: a held Escape "
+        .. "aborts the edit and stays in the file: a repeat would "
+        .. "leave it, and with it the timeline that holds a cut "
+        .. "block", function()
+      K.reset({ ["main.lua"] = "a = 1\nb = 2\n" })
+      K.open()
+      K.browse_to(1)
+      K.keys("f2")
+      assert.same("replacing", K.state())
+      held({ }, "escape", 3)
+      assert.same("editor", K.app_state())
+      assert.same("browsing", K.state())
+      assert.same(1, K.position())
+    end)
+
+    spec_it("IS6.4 Submit and retain the field: a held Shift+Ins "
+        .. "submits once: a repeat would add a copy each time",
+      function()
+        K.reset({ ["main.lua"] = "a = 1\n" })
+        K.open()
+        K.type("b = 2")
+        held({ "lshift" }, "insert")
+        assert.same("a = 1\nb = 2\n", K.file())
+        assert.same("b = 2", K.draft())
+      end)
+
+    spec_it("IS6.1 Copy a block: a held Ctrl+Ins copies the "
+        .. "block once: a repeat would add a copy each time",
+      function()
+        K.reset({ ["main.lua"] = "a = 1\nb = 2\n" })
+        K.open()
+        K.browse_to(1)
+        held({ "lctrl" }, "insert")
+        assert.same("a = 1", K.draft())
+      end)
   end)
 
   describe("in the file editor, a key that repeats", function()
@@ -219,6 +240,54 @@ describe("held keys #editor #spec", function()
         held({ }, "return", 3)
         assert.is_true(K.cc.input:has_error())
         assert.same("x = = 1", K.console_draft())
+      end)
+
+    spec_it("IS3.6 Execute console input: a held Enter runs a "
+        .. "line that fails as it runs once, though the line "
+        .. "stays to be corrected", function()
+        K.reset()
+        K.type("n = (n or 0) + 1; error('x')")
+        held({ }, "return", 3)
+        assert.same(1, K.cc:get_project_env().n)
+        assert.same("n = (n or 0) + 1; error('x')",
+          K.console_draft())
+      end)
+
+    -- the reserved chords that would switch or run anew at
+    -- repeat speed act once per press; Ctrl+Q stops by itself
+    spec_it("IS1.4 Resume after running a project: a held Ctrl+R "
+        .. "runs the project once", function()
+        K.reset({ ["main.lua"] =
+          "RUNS = (RUNS or 0) + 1\nfunction love.update() end\n" })
+        local runs, orig = 0, K.cc.restart
+        K.cc.restart = function(...)
+          runs = runs + 1
+          return orig(...)
+        end
+        held({ "lctrl" }, "r", 3)
+        K.cc.restart = orig
+        assert.same(1, runs)
+        assert.same("running", K.app_state())
+      end)
+
+    spec_it("IS1.4 Resume after running a project: a held Ctrl+T "
+        .. "switches once", function()
+        K.reset({ ["main.lua"] = "x = 1\n" })
+        K.open()
+        held({ "lctrl" }, "t", 3)
+        assert.are_not.same("editor", K.app_state())
+      end)
+
+    spec_it("IS1.4 Resume after running a project: a held Ctrl+Q "
+        .. "stops the program and then does nothing more",
+      function()
+        K.reset({ ["main.lua"] = "function love.update() end\n" })
+        K.keys("lctrl", "r")
+        assert.same("running", K.app_state())
+        K.type("ab")
+        held({ "lctrl" }, "q", 3)
+        assert.same("ready", K.app_state())
+        assert.is_false(K.cc.run_live)
       end)
 
     -- the spec's *submission* names Shift+Ins in the console

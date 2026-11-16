@@ -109,7 +109,10 @@ describe("editor defects #editor", function()
     assert.is_not_nil(K.message())
   end)
 
-  it("a held Alt+Down moves the block once", function()
+  -- a held key repeats to its natural stop (the ruling of
+  -- November 16, 2026): the file's end
+  it("a held Alt+Down moves the block on to the file's end, "
+      .. "one step to undo per place", function()
     K.browse_to(1)
     K.hold("lalt")
     K.hold("down")
@@ -117,6 +120,8 @@ describe("editor defects #editor", function()
     K.repeat_key("down")
     K.release("down")
     K.release("lalt")
+    assert.same("y = 2\nz = 3\nx = 1\n", K.file())
+    K.keys("lctrl", "z")
     assert.same("y = 2\nx = 1\nz = 3\n", K.file())
     K.keys("lctrl", "z")
     assert.same(FILE, K.file())

@@ -174,12 +174,13 @@ Project-author guide: `doc/input_api.md`.
   files is the file's syntax processor's to say (`src/model/syntax/`, chosen by the
   file's name): its blocks, its verdict on a draft, its formatting, its colors and the
   files it names. Every file is drawn as blocks, its colors taken from the whole text.
-- **Held down, a key repeats only if it writes nothing and changes no state**, in the
-  file editor and the console: typing, moving the cursor, browsing, deleting in the
-  field, Shift+Enter, and Ctrl+Z and Ctrl+Y through the field's own changes. Enter,
-  Escape, F2, Shift+Insert, Ctrl+Insert, Ctrl+Delete, Alt+Up and Alt+Down, Ctrl+J,
-  Alt+F and the other commands act once per press: a held Enter adds one empty
-  line, and a held Ctrl+Delete cuts one block. A program's own input keeps its repeats.
+- **Held down, a key repeats until it stops by itself**, in the file editor and the
+  console: a held Enter in the editor adds an empty line per repeat, a held Ctrl+Delete
+  removes the empty lines down to the next block with text, cuts it and stops, Alt+Up
+  and Alt+Down move the block to the file's edge, and Ctrl+Z and Ctrl+Y repeat through
+  the field's own changes only. Escape in the editor, Shift+Insert, Ctrl+Insert, Ctrl+T,
+  Ctrl+R and the console's Enter act once per press, since a repeat would do harm. A
+  program's input field submits once per press of Enter.
 - **Every chord is a key of its own.** A key pressed with a modifier that nothing
   binds does nothing, in the file editor, the console and a program's input field:
   Ctrl+Enter no longer submits in the console or a program's input, Ctrl+Up and

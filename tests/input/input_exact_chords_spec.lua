@@ -180,27 +180,31 @@ describe("every chord is its own key #input", function()
   end)
 
   describe("the tables", function()
-    -- which keys repeat while held (the ruling of November
-    -- 14, 2026), for the keys whose repeat no key test can tell
-    -- from a press: a second F2, Alt+F or Ctrl+L changes
-    -- nothing the first did not
+    -- which keys repeat while held (the maintainer's ruling of
+    -- November 16, 2026: a held key repeats, each reaching a
+    -- natural stop), for the keys whose repeat no key test can
+    -- tell from a press: a second F2, Alt+F or Ctrl+L changes
+    -- nothing the first did not. Once per press: what the
+    -- specification says (a program field's Enter, API2.2) and
+    -- what has no natural stop (the console's Enter, Shift+Ins,
+    -- Ctrl+Ins), and the help key
     local ONCE = {
-      { EditorKeys, { "return", "kpenter", "escape", "f2",
-        "shift+insert", "ctrl+insert", "ctrl+delete",
-        "alt+up", "alt+down", "alt+f", "home", "end", "ctrl+j",
-        "ctrl+g", "f1", "f5" } },
-      { ConsoleKeys, { "return", "escape", "ctrl+l", "f1" } },
-      { FieldKeys, { "return", "kpenter", "escape" } },
+      { EditorKeys, { "shift+insert", "ctrl+insert", "escape",
+        "f1", "f5" } },
+      { ConsoleKeys, { "return", "kpenter", "f1" } },
+      { FieldKeys, { "return", "kpenter" } },
     }
     local REPEATS = {
       { EditorKeys, { "up", "ctrl+down", "pagedown", "pageup",
-        "ctrl+z", "ctrl+y" } },
-      { ConsoleKeys, { "up", "down" } },
+        "ctrl+z", "ctrl+y", "return", "kpenter", "f2",
+        "ctrl+delete", "alt+up", "alt+down", "alt+f", "home",
+        "end", "ctrl+j", "ctrl+g" } },
+      { ConsoleKeys, { "up", "down", "escape", "ctrl+l" } },
       { FieldKeys, { "shift+return", "alt+return", "left",
         "ctrl+right", "home", "ctrl+end", "up", "backspace",
         "shift+backspace", "delete", "ctrl+backspace", "ctrl+w",
         "ctrl+k", "alt+shift+up", "ctrl+z",
-        "ctrl+y" } },
+        "ctrl+y", "escape" } },
     }
     it("say which keys act once and which repeat", function()
       for _, set in ipairs({ { ONCE, false }, { REPEATS, true } })
