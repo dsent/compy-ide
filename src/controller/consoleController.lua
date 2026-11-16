@@ -36,8 +36,10 @@ local messages = {
 --- the modules programs loaded first, by name
 local program_loaded = { }
 
---- What a program set in the graphics state goes before the
---- next run: LÖVE's own reset (colour, background colour,
+--- What a program set in the graphics state goes when its run
+--- ends for good (a stop, Ctrl+Q, an error in its first lines,
+--- a project's close) and again before the next run, never at
+--- a pause: LÖVE's own reset (colour, background colour,
 --- blending, colour mask, scissor, shader, stencil test,
 --- wireframe, lines, points, the current transform). The
 --- transform stack is left to its callers: a run can start
@@ -651,6 +653,7 @@ function ConsoleController:run_project(name, stopped)
         SerialPort:drop()
         SerialPort:programEnded()
         self:flush_program_state()
+        reset_graphics()
         -- The run is over: what it drew before raising goes.
         -- Only this run's own: one it started again meanwhile
         -- owns the canvas now.
@@ -2251,6 +2254,10 @@ function ConsoleController:_stop_project_run()
   -- sine example): it is idle, not stopped, and its picture
   -- stays.
   self.model.output:clear_canvas()
+  --- the IDE draws on from here: under the program's scissor,
+  --- colour or wireframe its key card and editor came out
+  --- clipped and outlined (the device night of November 16)
+  reset_graphics()
   self.run_live = false
   View.clear_snapshot()
   self.main_ctrl.set_love_draw(self, self.view)

@@ -228,6 +228,79 @@ end
     end)
   end
 
+  --- LÖVE's reset counted, on every table the run reaches
+  local function counted_reset()
+    local resets = { n = 0 }
+    local graphics = { love.graphics, K.cc:get_base_env().gfx,
+      K.cc:get_base_env().love.graphics }
+    local saved = { }
+    for _, g in ipairs(graphics) do
+      saved[#saved + 1] = { g, g.reset }
+      g.reset = function() resets.n = resets.n + 1 end
+    end
+    finally(function()
+      for _, s in ipairs(saved) do s[1].reset = s[2] end
+    end)
+    return resets
+  end
+
+  --- a run that ends for good resets the graphics state the
+  --- IDE then draws under; a pause does not, so continue()
+  --- resumes with it
+  for _, case in ipairs({
+    { "Ctrl+Q", function() K.keys('lctrl', 'q') end },
+    { "stop()", function() run('stop()') end },
+    -- the close itself: close_project() would reopen the
+    -- default project from the real directory
+    { "a project's close", function() K.cc:_close_project() end },
+  }) do
+    it('resets graphics when ' .. case[1] .. ' ends a run', function()
+      reset({['main.lua'] = 'function love.update() end\n'})
+      run('run()')
+      local resets = counted_reset()
+      case[2]()
+      assert.is_true(resets.n >= 1)
+      assert.is_false(K.cc.run_live)
+    end)
+  end
+
+  it('resets graphics when the first lines raise', function()
+    reset({['main.lua'] = "error('top')\n"})
+    local resets = counted_reset()
+    run('run()')
+    -- one at the run's start, one as the error ends it
+    assert.equal(2, resets.n)
+  end)
+
+  it('keeps graphics through a pause and continue()', function()
+    reset({['main.lua'] = [[
+local n = 0
+function love.update()
+  n = n + 1
+  if n == 1 then pause() end
+end
+]]})
+    run('run()')
+    local resets = counted_reset()
+    K.frame()
+    K.cc:suspend()
+    assert.equal('inspect', K.app_state())
+    run('continue()')
+    assert.equal('running', K.app_state())
+    assert.equal(0, resets.n)
+    env().love.update = nil
+  end)
+
+  it('lets stop() from love.draw unwind the draw', function()
+    reset({['main.lua'] = 'function love.draw() stop() end\n'})
+    counted_stack()
+    run('run()')
+    K.frame()
+    local ok, err = pcall(love.draw)
+    assert.is_true(ok, tostring(err))
+    assert.is_false(K.cc.run_live)
+  end)
+
   it('lets a run started from love.draw unwind the draw',
     function()
       reset({['main.lua'] = [[
