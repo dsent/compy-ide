@@ -176,6 +176,50 @@ describe("the key card's gate #input", function()
     end)
   end)
 
+  -- the reset that always works: once Escape goes down with
+  -- Ctrl held, the exit is owed and comes on Escape's release,
+  -- whatever is held by then, the card up or not
+  describe("Ctrl+Escape", function()
+    local ORDERS = {
+      ["Escape released first"] = { "lctrl", "escape", "-escape",
+        "-lctrl" },
+      ["Ctrl released first"] = { "lctrl", "escape", "-lctrl",
+        "-escape" },
+    }
+    for name, steps in pairs(ORDERS) do
+      for _, card in ipairs({ false, true }) do
+        it("quits, " .. name .. (card and ", under the card" or ""),
+          function()
+            program()
+            if card then
+              press("f1")
+              assert.is_true(K.cc:card_shows())
+            end
+            F.quits()
+            for _, st in ipairs(steps) do
+              if st:sub(1, 1) == "-" then
+                release(st:sub(2))
+              else
+                press(st)
+              end
+            end
+            assert.same(1, #F.quits())
+            if card then release("f1") end
+          end)
+      end
+    end
+
+    it("does not quit for Escape pressed before Ctrl", function()
+      program()
+      F.quits()
+      press("escape")
+      press("lctrl")
+      release("escape")
+      release("lctrl")
+      assert.same(0, #F.quits())
+    end)
+  end)
+
   -- random interleavings: the invariant, whatever the order
   it("keeps a program's keys whole over random interleavings",
     function()

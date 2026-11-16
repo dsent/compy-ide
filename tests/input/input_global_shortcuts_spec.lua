@@ -247,6 +247,7 @@ describe('input surface: inbound events — global platform'
           local orig  = love.event.quit
           love.event.quit = function() quits = quits + 1 end
           F.session.press('lctrl')
+          F.session.press('escape')
           F.session.release('escape')
           love.event.quit = orig
           assert.equal(1, quits)

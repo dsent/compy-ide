@@ -1119,8 +1119,11 @@ Controller = {
     -- Text carries no key and is held back only while the card
     -- shows: a key pressed under the card and still held when it
     -- closes types its repeats from then on, its key events
-    -- still dropped.
-    local delivered = { }
+    -- still dropped. `owed` holds a release reservation decided
+    -- at its key's press (Ctrl+Escape: the exit is owed once
+    -- Escape goes down with Ctrl held, and comes on Escape's
+    -- release whatever is held by then, the card up or not).
+    local delivered, owed = { }, { }
     for _, r in ipairs(require('model.input.reservedKeys')) do
       local event = r.release and 'keyreleased' or 'keypressed'
       RESERVED[event][r.chord] = assert(ACTS[r.name], r.name)
@@ -1136,6 +1139,9 @@ Controller = {
       -- either. A repeat goes on only for a key whose press did,
       -- and not under the card. Ctrl+Escape acts on its release,
       -- which is never held back: the way out that always works.
+      if not isr then
+        owed[k] = RESERVED.keyreleased[combo_string(k)]
+      end
       local card = CC:card_shows()
       if isr then
         if card or not delivered[k] then return end
@@ -1213,7 +1219,8 @@ Controller = {
       -- here, whichever route has the keys: the help key's
       -- release ends its card wherever its press went
       CC:key_released(k)
-      local reservation = RESERVED.keyreleased[combo_string(k)]
+      local reservation = owed[k]
+      owed[k] = nil
       if reservation then reservation() end
       -- a release goes on exactly for a press that did
       local was = delivered[k]
