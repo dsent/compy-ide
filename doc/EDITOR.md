@@ -37,12 +37,12 @@
 - Each combination is a key of its own: a key pressed with a
   modifier the table below does not name does nothing.
   <kbd>Ctrl</kbd>+<kbd>Enter</kbd> is not <kbd>Enter</kbd>.
-- While <kbd>F1</kbd> is held, the editor's keys do nothing,
+- While <kbd>F1</kbd> is held and the card shows, in the editor
+  or in the console, every other key does nothing,
   <kbd>Ctrl</kbd>+<kbd>Q</kbd> and the other reserved keys
-  included; only <kbd>Ctrl</kbd>+<kbd>Esc</kbd> acts. In the
-  console the card holds back the console's own keys alone, and
-  in your program F1 holds back nothing. While a card shows, in
-  the editor or in the console, the mouse does nothing.
+  included, and so does the mouse; only
+  <kbd>Ctrl</kbd>+<kbd>Esc</kbd> acts. In your program F1 holds
+  back nothing.
 - A click in the field places the cursor, as in the console and
   in your program's input; a click on the file does nothing. No
   field selects text: Shift with an arrow does nothing, and

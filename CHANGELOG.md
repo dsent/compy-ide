@@ -210,9 +210,10 @@ Project-author guide: `doc/input_api.md`.
   unchanged, is not stored again.
 - **Ctrl+Z and Ctrl+Y undo and redo the typing in every input**, the console's and a
   program's as well as the editor's. Ctrl+Y no longer deletes the line.
-- **F1 holds back Ctrl+Q and the other reserved keys in the file editor only.** In the
-  console Ctrl+Q stops the program while the card shows, and holding F1 in your own
-  program blocks nothing.
+- **While the key card shows, every other key does nothing**, in the file editor and
+  in the console alike, Ctrl+Q and the other reserved keys included, and no key
+  reaches a program behind the console's card; Ctrl+Esc always quits. Holding F1 in
+  your own program, where no card shows, blocks nothing.
 
 ### Removed
 

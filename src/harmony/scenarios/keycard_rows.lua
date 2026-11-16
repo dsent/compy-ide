@@ -14,8 +14,8 @@ local KeyCard = require('model.editor.keyCard')
 --- The trivial keys (the arrows in a draft, Home and End on its
 --- row, Backspace, Delete, paging) are on no card (the ruling
 --- of November 14, late); fields.lua tries them. Also: Ctrl+Q
---- acts while F1 is held in the console, and is held back
---- while the editor's card shows (the ruling of November 14).
+--- is held back while the card shows, in the console as in the
+--- editor (IS3.16, the ruling of November 16).
 
 local PROJECT = 'h-rows'
 local FILE = 'rows.lua'
@@ -483,8 +483,8 @@ scenario('console', function(wait)
   hm_done()
 end)
 
--- Ctrl+Q while F1 is held: in the console it stops the
--- program; in the editor the card holds it back
+-- Ctrl+Q while F1 is held: the card holds it back, in the
+-- console as in the editor (IS3.16); released, it acts
 scenario('ctrl-q-held', function(wait)
   wait(.1)
   D.enter(wait, string.format('project(%q)', PROJECT))
@@ -493,9 +493,12 @@ scenario('ctrl-q-held', function(wait)
   wait(.1)
   assert(P.cc().run_live, 'no program behind the console')
   D.with_card(wait, function()
+    assert(P.card(), 'the console card shows')
     D.key(wait, 'C-q')
-    assert(not P.cc().run_live, 'Ctrl+Q under F1 did not stop it')
+    assert(P.cc().run_live, 'Ctrl+Q under F1 stopped the program')
   end)
+  D.key(wait, 'C-q')
+  assert(not P.cc().run_live, 'Ctrl+Q did not stop the program')
   fresh(wait, 'browsing')
   D.with_card(wait, function()
     assert(P.card(), 'the editor card shows')
