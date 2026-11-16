@@ -14,7 +14,8 @@
 --- the request is carried out when the outermost of them ends,
 --- once, with no program code on the stack. The first request
 --- wins: the code after it never ran, and only the program's
---- own pcall, which swallows ENDED, can reach a second. A
+--- own pcall or coroutine.resume, which swallow ENDED, can reach
+--- a second. A
 --- request made while a stop is under way (in compy.before_exit)
 --- ends that code and is dropped: the stop goes on.
 ---
@@ -33,6 +34,9 @@ local M = {
   ending = false,
   --- a request is being carried out
   carrying = false,
+  --- the IDE's own graphics pushes under way (view.ownState, the
+  --- draw wrapper): a stop pops none of them
+  ide_pushes = 0,
 }
 
 --- The private error that ends the calling code
@@ -92,6 +96,20 @@ function M.call(f, ...)
   return unpack(r, 1, r.n)
 end
 
+--- Call program code `f` from inside the IDE's own work, which
+--- goes on: as a plain call, where an end is no error and gives
+--- nothing back, and any other error goes on up
+--- @param f function
+--- @return any ...
+function M.counted(f, ...)
+  M.enter()
+  local r = pack(pcall(f, ...))
+  M.leave()
+  if r[1] then return unpack(r, 2, r.n) end
+  if M.is(r[2]) then return end
+  error(r[2], 0)
+end
+
 --- Run the IDE's `f`, which may call program code, and carry
 --- out at its end a request that code made. An error goes on
 --- up, the counts put back.
@@ -125,6 +143,7 @@ end
 function M.reset()
   M.user, M.hold = 0, 0
   M.pending, M.ending, M.carrying = nil, false, false
+  M.ide_pushes = 0
 end
 
 return M

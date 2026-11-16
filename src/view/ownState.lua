@@ -14,12 +14,19 @@
 --- @param font love.Font? --- the IDE's font, set for `f`
 --- @param f function
 --- @param ... any
+--- The push is counted while it is under way
+--- (util.program_end's ide_pushes): a stop made inside it pops
+--- none of it.
+local End = require('util.program_end')
+
 return function(font, f, ...)
   local gfx = love.graphics
   gfx.push('all')
+  End.ide_pushes = End.ide_pushes + 1
   gfx.reset()
   if font then gfx.setFont(font) end
   local ok, err = pcall(f, ...)
+  End.ide_pushes = End.ide_pushes - 1
   gfx.pop()
   if not ok then error(err, 0) end
 end

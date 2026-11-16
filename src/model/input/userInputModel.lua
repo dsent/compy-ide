@@ -6,6 +6,7 @@ require("model.lang.lua.error")
 require("view.editor.visibleContent")
 
 local class = require('util.class')
+local End = require('util.program_end')
 local cursor_map = require('model.input.cursorMap')
 require("util.wrapped_text")
 require("util.dequeue")
@@ -589,9 +590,14 @@ function UserInputModel:highlight()
   if not ev then return end
   local text = self:get_text()
 
+  --- a program's parser or highlighter is program code, which
+  --- the IDE calls here as it renders the field: a stop it asks
+  --- for ends it and is made later (util.program_end)
   local p = ev.parser
   if p then
-    local ok, p_err = p.parse(text)
+    local ok, p_err = End.counted(p.parse, text)
+    --- a parser that ended gave no answer: nothing is marked
+    if ok == nil and p_err == nil then ok = true end
     local parse_err
     if not ok then
       --- red starts at the failing character (IS3.4), where
@@ -603,7 +609,7 @@ function UserInputModel:highlight()
     end
     local hl
     if ev.highlighter then
-      hl = ev.highlighter(text)
+      hl = End.counted(ev.highlighter, text)
     end
 
     -- hl stays indexable even with no highlighter (parser but
@@ -615,7 +621,8 @@ function UserInputModel:highlight()
       -- same invariant as the parser branch above: a
       -- highlighter that returns nil must not leave `.hl` nil
       -- for the view to index
-      self._memo.highlight = { hl = ev.highlighter(text) or {} }
+      self._memo.highlight = {
+        hl = End.counted(ev.highlighter, text) or {} }
     else
       self._memo.highlight = ev:validation_hl(text)
     end

@@ -54,13 +54,13 @@ local program_loaded = { }
 --- brings its state back: a stop, a run or a reset a program
 --- asks for is made once its code has returned
 --- (util.program_end), so no push of the program's own is still
---- to be popped. The IDE's own push, around a program's draw,
---- stays: `cc.drawing` says one is under way. The canvas is the
---- IDE's: the one bound stays bound. The font is the IDE's too,
---- and run_project sets it after.
---- @param cc ConsoleController
-local function reset_graphics(cc)
-  if not cc.drawing and gfx.getStackDepth then
+--- to be popped. The IDE's own pushes (view.ownState, the draw
+--- wrapper) stay: none is popped while one is under way
+--- (util.program_end's ide_pushes). The canvas is the IDE's: the
+--- one bound stays bound. The font is the IDE's too, and
+--- run_project sets it after.
+local function reset_graphics()
+  if End.ide_pushes == 0 and gfx.getStackDepth then
     while gfx.getStackDepth() > 0 do gfx.pop() end
   end
   local canvas = gfx.getCanvas()
@@ -69,7 +69,6 @@ local function reset_graphics(cc)
 end
 
 --- @class ConsoleController
---- @field drawing boolean? --- the IDE has pushed around a program's draw
 --- @field typing integer? --- the depth of program code a typed line runs at
 --- @field time number
 --- @field model Model
@@ -610,6 +609,24 @@ function ConsoleController:_run_accepted(name, entry, replaces)
       return false
     end
   end
+  --- the file to run must give its text, as ProjectService:run
+  --- reads it (round 17): one that cannot be read is refused
+  --- before anything ends
+  local file = entry or ProjectService.MAIN
+  local holder = (name and not (cur and cur.name == name))
+      and { path = ProjectService.is_project(ProjectService.path, name) }
+      or cur
+  --- the open project reads as it reads itself; another, by
+  --- its path, as Project:readfile reads
+  local read = holder and (holder.readfile
+    or (holder.path and Project.readfile))
+  if read then
+    local readable, why = read(holder, file)
+    if not readable then
+      self.model.output:write_refusal(why)
+      return false
+    end
+  end
   return true
 end
 
@@ -651,7 +668,7 @@ function ConsoleController:_run_project(name, stopped, entry)
       else
         self:evacuate_required()
         self:_reset_executor_env()
-        reset_graphics(self)
+        reset_graphics()
       end
     end
     local runner_env = self:get_project_env()
@@ -1835,6 +1852,8 @@ function ConsoleController.prepare_project_env(cc)
   project_env.edit             = function(name)
     if not End.ending and love.state.app_state ~= 'running'
         and cc:_program_live() then
+      --- refused at the call, the code going on (round 17)
+      if not cc:_edit_admit(name) then return end
       return End.request(function() return cc:edit(name) end)
     end
     return cc:edit(name)
@@ -2442,7 +2461,7 @@ function ConsoleController:flush_program_state(call_exit)
   --- the IDE draws on from here: under the program's scissor,
   --- colour or wireframe its key card and editor came out
   --- clipped and outlined (the device night of November 16)
-  reset_graphics(self)
+  reset_graphics()
   --- what the program set playing plays out, and a loop stops
   --- repeating (the maintainer's ruling of November 16, 2026:
   --- "clear the repeat, but what is there, still there");
@@ -2524,23 +2543,15 @@ function ConsoleController:reset_scratchpad()
   return self:open_project(name)
 end
 
---- Open a file. From the console (edit("name"), or Ctrl+T
---- with no file to go back to) it starts the editor anew,
---- the file alone on its stack (IS1.1): the files a run came
---- from go, as leaving the editor takes them (IS1.6), and
---- Ctrl+T alone goes back to them (IS1.4). From the editor
---- (Ctrl+J) it opens in front of its caller (IS1.5).
+--- Whether edit() can open `name`, said where the person is
+--- when it cannot (the editor's field or the console), nothing
+--- changing either way. Asked at a program's edit() before it
+--- ends the program's code (util.program_end), and again by the
+--- edit itself.
 --- @param name string?
---- @param must_exist boolean? --- a file followed to (IS1.5)
---- is one the project holds; edit("name") creates its own
-function ConsoleController:edit(name, must_exist)
-  if love.state.app_state == 'running' then return end
-  --- a program's exit hook runs while it stops: showing the
-  --- editor stops a live program first (_enter_editor), and
-  --- this stop, already under way, returns at once, so a
-  --- file asked for then would be asked for without end
-  if self.stopping then return end
-
+--- @param must_exist boolean?
+--- @return table? admitted --- p, filename, fpath, text, from_console
+function ConsoleController:_edit_admit(name, must_exist)
   local PS = self.model.projects
   local p  = self:open_or_refuse()
   if not p then return end
@@ -2606,6 +2617,33 @@ function ConsoleController:edit(name, must_exist)
       .. ' is not UTF-8 text, so it cannot be opened.')
     return
   end
+
+  return { p = p, filename = filename, fpath = fpath, text = text,
+    from_console = from_console }
+end
+
+--- Open a file. From the console (edit("name"), or Ctrl+T
+--- with no file to go back to) it starts the editor anew,
+--- the file alone on its stack (IS1.1): the files a run came
+--- from go, as leaving the editor takes them (IS1.6), and
+--- Ctrl+T alone goes back to them (IS1.4). From the editor
+--- (Ctrl+J) it opens in front of its caller (IS1.5).
+--- @param name string?
+--- @param must_exist boolean? --- a file followed to (IS1.5)
+--- is one the project holds; edit("name") creates its own
+function ConsoleController:edit(name, must_exist)
+  if love.state.app_state == 'running' then return end
+  --- a program's exit hook runs while it stops: showing the
+  --- editor stops a live program first (_enter_editor), and
+  --- this stop, already under way, returns at once, so a
+  --- file asked for then would be asked for without end
+  if self.stopping then return end
+
+  local admitted = self:_edit_admit(name, must_exist)
+  if not admitted then return end
+  local p, filename, fpath = admitted.p, admitted.filename,
+      admitted.fpath
+  local text, from_console = admitted.text, admitted.from_console
 
   if not self:_enter_editor() then
     return self:edit(name, must_exist)

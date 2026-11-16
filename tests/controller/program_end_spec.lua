@@ -279,6 +279,47 @@ describe("a lifecycle call ends the code that made it #console",
         K.keys("lctrl", "q")
       end)
 
+    --- round 17: the field's highlighter, which the IDE calls as
+    --- it renders the field, is program code too
+    it("stop() in a field's highlighter ends it, and is made when"
+      .. " the IDE's call returns", function()
+        reset({ ["main.lua"] = EXIT .. LIVE
+          .. "compy.input.show({ highlighter = function(t)\n"
+          .. "  if t[1] == 'go' then stop(); note('after') end\n"
+          .. "  return { }\nend })\n" })
+        local said = notes()
+        run("run()")
+        local field = love.state.user_input_controller
+        field.model:set_text("go")
+        local End = require("util.program_end")
+        End.held(function() field.model:highlight() end)
+        assert.equal(0, count(said, "after"))
+        assert.equal(1, count(said, "exit"))
+        assert.is_false(K.cc.run_live)
+      end)
+
+    it("an edit() its admission refuses ends nothing", function()
+      reset({ ["main.lua"] = "compy.input.hooks.mousepressed = function() end\n" })
+      local said = notes()
+      run("run()")
+      assert.is_true(K.cc.run_live)
+      run("edit('../bad'); note('after')")
+      assert.same({ "after" }, said, K.console_text())
+      assert.is_true(K.cc.run_live)
+    end)
+
+    it("a run() whose main.lua cannot be read ends nothing",
+      function()
+        reset({ ["main.lua"] = "compy.input.hooks.mousepressed = function() end\n" })
+        local said = notes()
+        run("run()")
+        assert.is_true(K.cc.run_live)
+        K.fail_reads("main.lua")
+        run("run(); note('after')")
+        assert.same({ "after" }, said)
+        assert.is_true(K.cc.run_live)
+      end)
+
     it("a refused call ends nothing", function()
       reset()
       local said = notes()

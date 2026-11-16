@@ -515,6 +515,23 @@ end
       env().love.update = nil
     end)
 
+  --- round 17: a stop made while the IDE's own push is under way
+  --- pops nothing, so that push's pop still finds it
+  it('pops nothing of the IDE\'s own push at a stop inside it',
+    function()
+      reset({['main.lua'] = 'gfx.push()\nfunction love.update() end\n'})
+      local depth = counted_stack()
+      run('run()')
+      assert.equal(1, depth())
+      local own = require('view.ownState')
+      local ok, err = pcall(own, nil, function()
+        K.cc:stop_project_run()
+      end)
+      assert.is_true(ok, tostring(err))
+      assert.is_false(K.cc.run_live)
+      assert.equal(1, depth())
+    end)
+
   --- design B: stop() ends the handler before its pop, and the
   --- stop pops what the program pushed
   it('pops what a handler pushed before its stop()', function()

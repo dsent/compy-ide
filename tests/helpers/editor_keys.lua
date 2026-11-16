@@ -99,6 +99,11 @@ end
 --- device answers: the text, or nil when the read fails.
 local function read_over(combined_read)
   return function(path)
+    --- a project next_project adds, read before it opens
+    local other, of = path:match("^/memory%-k/([^/]+)/(.+)$")
+    if other and K.others and K.others[other] then
+      return K.others[other][of]
+    end
     local f = path:match("^/memory%-k/(.+)$")
     if not f then
       return combined_read(path)

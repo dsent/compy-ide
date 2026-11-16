@@ -697,9 +697,9 @@ Controller = {
           End.held(function()
             if ldr then
               gfx.push('all')
-              CC.drawing = true
+              End.ide_pushes = End.ide_pushes + 1
               wrap(ldr, CC)
-              CC.drawing = false
+              End.ide_pushes = End.ide_pushes - 1
               gfx.pop()
             end
             local ui = get_user_input()
@@ -759,11 +759,15 @@ Controller = {
     -- suspended project's widget stays unhonoured
     -- (doc/development/internals/user_input.md,
     -- "inspect mode").
+    --- a request a field's highlighter made as the field drew
+    --- is made once the draw is done (util.program_end)
     local function draw()
-      View.draw(CC, CV)
-      local ui = get_user_input()
-      if ui then draw_field(CC, ui.V) end
-      View.drawFPS()
+      End.held(function()
+        View.draw(CC, CV)
+        local ui = get_user_input()
+        if ui then draw_field(CC, ui.V) end
+        View.drawFPS()
+      end)
     end
     love.draw = draw
 
