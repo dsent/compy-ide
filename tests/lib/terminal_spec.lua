@@ -720,6 +720,15 @@ describe("terminal view", function()
       assert.same({ "0 ab", "2 →", "3 c" }, drawn(t, 0, true))
     end)
 
+  it("draws the output on its ground again once the program's "
+    .. "picture is gone, and then lets it be", function()
+    local t = view_term()
+    t:print("ab")
+    assert.same({ "0 ab" }, drawn(t, 0, true))
+    assert.same({ "back 0 20", "0 ab" }, drawn(t, 0))
+    assert.same({ }, drawn(t, 0))
+  end)
+
   --- The Compy's interpreter makes every call into love.graphics
   --- cost: a repaint of a full screen stays within a few calls a
   --- row, where a call or two for each cell were some 4,000.

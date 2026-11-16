@@ -157,6 +157,11 @@ local function draw_text(terminal, chars, styles, at, overlay)
   flush(#chars)
 end
 
+--- The canvases last drawn over a program's picture: faint
+--- characters and no backgrounds
+--- @type table<love.Canvas, boolean>
+local overlaid = setmetatable({ }, { __mode = 'k' })
+
 --- @param terminal table
 --- @param overlay boolean?
 --- @param window ViewRow[]? --- a scrolled view's rows; the
@@ -165,7 +170,12 @@ local function terminal_draw(terminal, canvas, overlay, window)
   local char_width, char_height =
       terminal.char_width, terminal.char_height
 
-  if terminal.dirty or overlay then
+  -- A canvas drawn over a program's picture is drawn again once
+  -- the picture is gone, though the output did not change: it
+  -- would show its faint characters on no ground until the next
+  -- output.
+  if terminal.dirty or overlay or overlaid[canvas] then
+    overlaid[canvas] = overlay or nil
     gfx.push('all')
     gfx.setCanvas(canvas)
     gfx.setFont(terminal.font)
