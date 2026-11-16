@@ -399,4 +399,24 @@ describe("a key's receiver #input", function()
     K.frame()
     assert.same({ }, keys())
   end)
+
+  -- a program that takes key presses keeps their text from the
+  -- console's field (the device run of November 16, 2026)
+  it("types nothing into the console for a program that takes "
+      .. "the keys", function()
+    K.reset({ ["main.lua"] =
+      "function love.keypressed(k) end\n" })
+    K.type("run()")
+    K.keys("return")
+    assert.is_true(K.cc.run_live)
+    for _, c in ipairs({ "z", "y" }) do
+      -- the device's order: the text before its press
+      F.session.type(c)
+      F.session.press(c)
+      F.session.release(c)
+    end
+    K.keys("lctrl", "q")
+    assert.is_false(K.cc.run_live)
+    assert.same("", K.console_draft())
+  end)
 end)

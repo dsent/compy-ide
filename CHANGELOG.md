@@ -265,6 +265,10 @@ Project-author guide: `doc/input_api.md`.
 
 ### Fixed
 
+- **A program's keys no longer type into the console.** While a program that defines
+  `love.keypressed` ran with the console behind it, it took every key and the letters
+  of those keys still landed in the console's field, to show up when it stopped. A
+  key and its text now go to the same receiver.
 - **A letter outside ASCII no longer crashes the IDE.** Enter on a Lua line such as
   `п = 1` or `x = é` in the console or the file editor stopped the IDE; the message now
   names the whole letter. A message holding bytes that are not UTF-8 shows `�` for them,

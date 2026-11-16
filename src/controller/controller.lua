@@ -275,6 +275,15 @@ local function occupy_input(userlove, CC)
       -- LÖVE discards a handler's return, so the
       -- walk's verdict is spent here or not at all.
       if pic[k](pic, ...) then return end
+      -- a key and its text have one receiver: a program whose
+      -- love.keypressed takes every key press keeps their text
+      -- from the console too. A key hook decides key by key, and
+      -- its text cannot wait for that (on a Compy it comes
+      -- first), so a hook's program types into the console still.
+      if k == 'textinput' and project_handler(userlove, 'keypressed')
+      then
+        return
+      end
       return fall_through(k, ...)
     end)
   end
