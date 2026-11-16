@@ -1130,6 +1130,8 @@ Controller = {
     }
     local RESERVED = { keypressed = { }, keyreleased = { } }
     local REPEATS = { }
+    --- the keys whose reserved press acted, until released
+    local reserved_down = { }
     for _, r in ipairs(require('model.input.reservedKeys')) do
       local event = r.release and 'keyreleased' or 'keypressed'
       RESERVED[event][r.chord] = assert(ACTS[r.name], r.name)
@@ -1156,8 +1158,14 @@ Controller = {
       local reservation = RESERVED.keypressed[chord]
       -- A held reservation acts on its repeats only where it
       -- reaches a natural stop (reservedKeys.lua): a held Ctrl+T
-      -- does not flip between the run and the editor.
-      if reservation and (not isr or REPEATS[chord]) then
+      -- does not flip between the run and the editor. A repeat
+      -- acts only where its press did: a chord pressed under a
+      -- key card was dropped, and stays dropped after F1 goes.
+      if reservation and not isr then
+        reserved_down[k] = true
+        reservation()
+      elseif reservation and REPEATS[chord] and reserved_down[k]
+      then
         reservation()
       end
 
@@ -1210,6 +1218,7 @@ Controller = {
     end
 
     handlers.keyreleased = function(k, sc)
+      reserved_down[k] = nil
       -- here, whichever route has the keys: the help key's
       -- release ends its card wherever its press went
       CC:key_released(k)

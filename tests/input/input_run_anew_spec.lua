@@ -67,7 +67,7 @@ describe("run anew is Ctrl+R #input", function()
     assert.same("running", K.app_state())
   end)
 
-  it("waits while the editor's card shows", function()
+  it("does nothing under the editor's card", function()
     K.reset({ ["main.lua"] = PROGRAM })
     K.open()
     K.hold("f1")

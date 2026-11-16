@@ -705,7 +705,7 @@ describe("IS1 files #editor #spec", function()
     spec_it("IS3.16 Show the key card: the console's " ..
         "card lists Ctrl+Q as exit program, among the keys now " ..
         "while a program is not stopped and after them with " ..
-        "none, and the key waits while the card shows",
+        "none, and the key does nothing while the card shows",
         function()
       K.reset({ ["main.lua"] = "x = 1\n" })
       assert.same({ "other", "exit program" },
@@ -732,7 +732,7 @@ describe("IS1 files #editor #spec", function()
     -- card shows there, and Ctrl+Q exits the program.
     spec_it("IS3.16 Show the key card: while a program " ..
         "is paused, the console's card lists Ctrl+Q among the " ..
-        "keys now, and the key waits while the card shows",
+        "keys now, and the key does nothing while the card shows",
         function()
       K.reset({
         ["main.lua"] = "function love.update() error('x') end\n"

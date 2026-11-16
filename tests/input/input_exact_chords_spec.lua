@@ -190,7 +190,7 @@ describe("every chord is its own key #input", function()
     -- Ctrl+Ins), and the help key
     local ONCE = {
       { EditorKeys, { "shift+insert", "ctrl+insert", "escape",
-        "f1", "f5" } },
+        "ctrl+j", "f1", "f5" } },
       { ConsoleKeys, { "return", "kpenter", "f1" } },
       { FieldKeys, { "return", "kpenter" } },
     }
@@ -198,7 +198,7 @@ describe("every chord is its own key #input", function()
       { EditorKeys, { "up", "ctrl+down", "pagedown", "pageup",
         "ctrl+z", "ctrl+y", "return", "kpenter", "f2",
         "ctrl+delete", "alt+up", "alt+down", "alt+f", "home",
-        "end", "ctrl+j", "ctrl+g" } },
+        "end", "ctrl+g" } },
       { ConsoleKeys, { "up", "down", "escape", "ctrl+l" } },
       { FieldKeys, { "shift+return", "alt+return", "left",
         "ctrl+right", "home", "ctrl+end", "up", "backspace",

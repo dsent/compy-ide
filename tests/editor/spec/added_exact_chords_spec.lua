@@ -114,8 +114,11 @@ describe("every chord is its own key #editor #spec", function()
   end)
 
   describe("the reserved chords under the card", function()
-    spec_it("IS3.16 Show the key card: Ctrl+Q waits while the "
-        .. "editor's card shows", function()
+    -- a key pressed under the card is dropped, not deferred:
+    -- releasing F1 delivers nothing
+    spec_it("IS3.16 Show the key card: Ctrl+Q pressed while the "
+        .. "editor's card shows does nothing, then or when F1 is "
+        .. "released", function()
       K.reset({ ["main.lua"] = FILE })
       K.open()
       K.hold("f1")
@@ -124,6 +127,22 @@ describe("every chord is its own key #editor #spec", function()
       assert.same("editor", K.app_state())
       K.keys("lctrl", "q")
       assert.same("ready", K.app_state())
+    end)
+
+    spec_it("IS3.16 Show the key card: Ctrl+Q pressed under the "
+        .. "card and still held when F1 is released does nothing "
+        .. "on its repeats", function()
+      K.reset({ ["main.lua"] = FILE })
+      K.open()
+      K.hold("f1")
+      K.hold("lctrl")
+      K.hold("q")
+      K.release("f1")
+      K.repeat_key("q")
+      K.repeat_key("q")
+      K.release("q")
+      K.release("lctrl")
+      assert.same("editor", K.app_state())
     end)
 
     -- in the console as in the editor (the maintainer's ruling
@@ -185,8 +204,8 @@ describe("every chord is its own key #editor #spec", function()
     -- a program that runs with no key handler of its own lets
     -- F1 fall through to the console, whose card then shows
     spec_it("IS3.16 Show the key card: over a running program "
-        .. "that leaves F1 to the console, Ctrl+Q waits for F1's "
-        .. "release", function()
+        .. "that leaves F1 to the console, Ctrl+Q under the card "
+        .. "does nothing", function()
       K.reset({ ["main.lua"] = "function love.update() end\n" })
       K.type("run()")
       K.keys("return")
@@ -196,6 +215,7 @@ describe("every chord is its own key #editor #spec", function()
       K.keys("lctrl", "q")
       assert.same("running", K.app_state())
       K.release("f1")
+      assert.same("running", K.app_state())
       K.keys("lctrl", "q")
       assert.same("ready", K.app_state())
       assert.is_false(K.cc.run_live)
