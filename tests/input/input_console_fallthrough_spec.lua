@@ -145,6 +145,35 @@ describe('input surface: inbound events — what nobody'
         assert.same({ 'abx' }, text_at_the_prompt())
       end)
 
+    --- round 19: ownership is the program's as the event comes,
+    --- not as its chain leaves it
+    it('a hook that removes itself keeps that event from the'
+      .. ' console', function()
+        local input = F.activate_project({ })
+        input.hooks.keypressed = function()
+          input.hooks.keypressed = nil
+          return false
+        end
+        assert.same({ 'ab' }, backspace_at_the_prompt())
+        input.hooks.textinput = function()
+          input.hooks.textinput = nil
+          return false
+        end
+        assert.same({ 'ab' }, text_at_the_prompt())
+      end)
+
+    --- round 19: the hook table is the one record; an own
+    --- handler whose seeded hook the program took away takes no
+    --- keys
+    it('an own handler whose hook was taken away takes no keys',
+      function()
+        local input = F.activate_project({
+          keyreleased = function() end,
+        })
+        input.hooks.keyreleased = nil
+        assert.same({ 'a' }, backspace_at_the_prompt())
+      end)
+
     it('a hook set and taken back again leaves the keys as it found'
       .. ' them', function()
         local input = F.activate_project({ })

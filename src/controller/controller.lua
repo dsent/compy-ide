@@ -261,19 +261,19 @@ local KEYBOARD = { keypressed = true, keyreleased = true,
   textinput = true }
 
 --- Whether a live program takes keys, asked as each key or text
---- event comes, since hooks and shortcuts come and go: its own
---- love.keypressed, keyreleased or textinput, a key or text
---- hook, a key or text shortcut, or its own shown field. Such a
---- program owns the keyboard: what its chain leaves goes
---- nowhere, not to the console (the maintainer's ruling of
---- November 16, 2026). An empty shortcut table, and a hook or a
---- shortcut for the pointer or a touch, take no keys.
---- @param userlove table
+--- event comes, before its chain runs, since hooks and shortcuts
+--- come and go: a key or text hook (its own love.keypressed,
+--- keyreleased or textinput among them, seeded as hooks when its
+--- run began: the hook table is the one record, round 19), a key
+--- or text shortcut, or its own shown field. Such a program owns
+--- the keyboard: what its chain leaves goes nowhere, not to the
+--- console (the maintainer's ruling of November 16, 2026). An
+--- empty shortcut table, and a hook or a shortcut for the
+--- pointer or a touch, take no keys.
 --- @param compy_input table?
 --- @return boolean
-local function takes_keys(userlove, compy_input)
+local function takes_keys(compy_input)
   for event in pairs(KEYBOARD) do
-    if project_handler(userlove, event) then return true end
     if compy_input then
       if compy_input.hooks[event] then return true end
       if next(compy_input.shortcuts[event] or { }) then
@@ -327,11 +327,7 @@ local route_owner, program_count = 'console', 0
 --- come at continue(), and go with the run otherwise.
 local owed_releases = { }
 
---- the love table of the program whose route holds the keys
-local route_love
-
 local function occupy_input(userlove, CC)
-  route_love = userlove
   local pic = Controller.project_input
   local compy = CC:get_project_env().compy
   pic:activate(project_handlers(userlove, CC), compy.input)
@@ -342,6 +338,10 @@ local function occupy_input(userlove, CC)
   -- `love.keypressed = pic.keypressed` would drop `self`.
   for _, k in ipairs(_bindable) do
     love[k] = with_canvas_and_errors(CC, function(...)
+      --- the program's as the event comes, not as its chain
+      --- leaves it: a hook that removes itself does not hand
+      --- that event on (round 19)
+      local owns = KEYBOARD[k] and takes_keys(pic.compy_input)
       -- LÖVE discards a handler's return, so the
       -- walk's verdict is spent here or not at all.
       if pic[k](pic, ...) then
@@ -354,9 +354,7 @@ local function occupy_input(userlove, CC)
       if End.pending then return end
       --- a program that takes keys owns the keyboard: no key,
       --- repeat, release or text it leaves reaches the console
-      if KEYBOARD[k] and takes_keys(userlove, pic.compy_input) then
-        return
-      end
+      if owns then return end
       return fall_through(k, ...)
     end)
   end
@@ -1362,8 +1360,9 @@ Controller = {
         handled = love.keypressed(k, sc, isr)
       end
       --- a press the program's route left to the console is the
-      --- console's: its repeats and release go there
-      if fell_through[k] and route_owner ~= 'console' then
+      --- console's: its repeats and release go there. A repeat
+      --- changes no receiver (round 19)
+      if not isr and fell_through[k] and route_owner ~= 'console' then
         delivered[k] = 'console'
       end
       fell_through[k] = nil
@@ -1598,8 +1597,8 @@ Controller = {
   --- stop, and once the program takes keys no more.
   --- @return boolean
   program_owns_keys = function()
-    if route_owner == 'console' or not route_love then return false end
-    return takes_keys(route_love, Controller.project_input.compy_input)
+    if route_owner == 'console' then return false end
+    return takes_keys(Controller.project_input.compy_input)
   end,
 
   --- @param userlove table

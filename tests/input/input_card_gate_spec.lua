@@ -89,6 +89,25 @@ describe("the key card's gate #input", function()
     release("f1")
   end)
 
+  --- round 19: a repeat changes no key's receiver: the program
+  --- that got Backspace's press, then dropped and took back its
+  --- hooks between, gets its release
+  it("keeps a key's receiver across a repeat the program left",
+    function()
+      local log = program_with_keys()
+      local input = F.compy_input()
+      local hooks = { }
+      press("backspace")
+      for _, e in ipairs({ "keypressed", "keyreleased", "textinput" }) do
+        hooks[e] = input.hooks[e]
+        input.hooks[e] = nil
+      end
+      rep("backspace")
+      for e, h in pairs(hooks) do input.hooks[e] = h end
+      release("backspace")
+      assert.same({ "press backspace", "release backspace" }, seen(log))
+    end)
+
   it("brings no card over a program that takes keys: F1 is the"
     .. " program's", function()
     local log = program_with_keys()
@@ -271,7 +290,10 @@ describe("the key card's gate #input", function()
       local NAMES = { "a", "space" }
       math.randomseed(20261116)
       for run = 1, 300 do
-        local log = program_with_keys()
+        --- the first program takes no keys until its first card
+        --- shows, so that the card comes up over it (round 19:
+        --- one that owns F1 throughout never brings it)
+        local log, gain = program()
         local logs, frozen = { log }, { }
         local down = { }
         local f1 = false
@@ -281,10 +303,13 @@ describe("the key card's gate #input", function()
           if what == "f1" then
             if f1 then release("f1") else press("f1") end
             f1 = not f1
+            if f1 and gain then gain(); gain = nil end
           elseif what == "switch" then
             -- another program takes the keys: the one before is
             -- gone, and gets nothing more
             frozen[#logs] = #logs[#logs]
+            --- a program gone gains nothing
+            gain = nil
             log = attach()
             logs[#logs + 1] = log
           elseif what == "down" then

@@ -142,7 +142,7 @@ to be spent at the binding site or not at all — `occupy_input` spends it, call
 `Controller._defaults[event]`, the console's own handler for that channel, when the walk came back
 falsey.
 
-Two conditions hold it back, and they are the whole of the rule:
+Three conditions hold it back, and they are the whole of the rule:
 
 - **The project must not own the screen.** The gate is `user_draw`, the flag `hook_draw` sets. A
   project that took over `love.draw` is painting over the console, and typing into a prompt you
@@ -157,19 +157,22 @@ Two conditions hold it back, and they are the whole of the rule:
   of taking keys or text (its own `love.keypressed`, `love.keyreleased` or `love.textinput`; a
   key or text hook; a key or text shortcut; its own shown field), no key press, repeat, release
   or text falls through to the console (`takes_keys` in `controller.lua`, asked as each key or
-  text event comes, since hooks and shortcuts come and go). An empty shortcut table, and a
+  text event comes and before the chain runs, since hooks and shortcuts come and go; the hook
+  table is the one record, a program's own handlers being seeded there, so one whose hook the
+  program took away takes no keys). An empty shortcut table, and a
   pointer or touch hook or shortcut, take no keys. A key whose press fell through to the console
   before the program took keys is the console's: its repeats and release go there
   (`fell_through`, read by the gate). Pointer and touch events are not part of this: they fall
   through as before, held back only by `user_draw`.
 
-**Is this exact base parity?** Per channel, yes — once seeded handlers consume
-([`../decisions/input.md`](../decisions/input.md), D-HOOKS-SEEDED, *"a seeded handler consumes"*).
-At the PR base, binding was per channel: a project that defined no handler for a channel left it
-with the console, and one that did displaced the console's outright. The fall-through reproduces
-both halves.
+**Is this exact base parity?** Per channel, no longer for the keyboard. At the PR base, binding
+was per channel: a project that defined no handler for a channel left it with the console, and one
+that did displaced the console's outright. The pointer and touch channels keep that. The keyboard
+does not since 2026-11-16: a program that takes keys on any keyboard channel owns all three, so a
+program with only `love.textinput` also keeps an otherwise unhandled key press from the console,
+where at the base it reached it.
 
-**With one deliberate narrowing.** At the base there was no draw gate, so a project that took over
+**With two deliberate narrowings, then; the first is the draw gate.** At the base there was no draw gate, so a project that took over
 `love.draw` and defined no keyboard handler left `love.keypressed` with the console — **you could
 type into a prompt you could not see**. The gate keeps that closed. It is not a regression to keep
 it closed: today the route eats the event anyway, so this is base-era behaviour the branch had
