@@ -291,6 +291,78 @@ end
     env().love.update = nil
   end)
 
+  --- a scissor kept as LÖVE keeps it: push('all') saves it,
+  --- pop puts it back, reset takes it off
+  local function stateful_scissor()
+    local scissor, stack = nil, { }
+    local graphics = { love.graphics, K.cc:get_base_env().gfx,
+      K.cc:get_base_env().love.graphics }
+    local saved = { }
+    for _, g in ipairs(graphics) do
+      saved[#saved + 1] = { g, g.setScissor, g.getScissor, g.push,
+        g.pop, g.reset, g.getStackDepth }
+      g.setScissor = function(x, y, w, h)
+        scissor = x and { x, y, w, h } or nil
+      end
+      g.getScissor = function()
+        if scissor then return unpack(scissor) end
+      end
+      g.push = function() stack[#stack + 1] = scissor end
+      g.pop = function()
+        assert(#stack > 0, 'Minimum stack depth reached')
+        scissor = stack[#stack]
+        stack[#stack] = nil
+      end
+      g.reset = function() scissor = nil end
+      g.getStackDepth = function() return #stack end
+    end
+    finally(function()
+      for _, s in ipairs(saved) do
+        s[1].setScissor, s[1].getScissor, s[1].push, s[1].pop,
+            s[1].reset, s[1].getStackDepth =
+            s[2], s[3], s[4], s[5], s[6], s[7]
+      end
+    end)
+    return function() return scissor end
+  end
+
+  --- a run a draw ended, or replaced, leaves nothing to the
+  --- IDE or to the next run, though the draw's own pop puts
+  --- back what it saved (the eleventh review round)
+  it('leaves no scissor after stop() from love.draw', function()
+    reset({['main.lua'] = [[
+gfx.setScissor(0, 0, 300, 300)
+function love.draw()
+  stop()
+end
+]]})
+    local scissor = stateful_scissor()
+    run('run()')
+    K.frame()
+    assert.is_not_nil(scissor())
+    love.draw()
+    assert.is_false(K.cc.run_live)
+    assert.is_nil(scissor())
+  end)
+
+  it('starts the run love.draw started with no scissor', function()
+    reset({['main.lua'] = [[
+gfx.setScissor(0, 0, 300, 300)
+function love.draw()
+  stop()
+  run("menu")
+end
+]]})
+    local scissor = stateful_scissor()
+    run('run()')
+    K.next_project('menu', {['main.lua'] = 'function love.update() end\n'})
+    K.frame()
+    love.draw()
+    assert.equal('running', K.app_state())
+    assert.is_nil(scissor())
+    env().love.update = nil
+  end)
+
   it('lets stop() from love.draw unwind the draw', function()
     reset({['main.lua'] = 'function love.draw() stop() end\n'})
     counted_stack()
