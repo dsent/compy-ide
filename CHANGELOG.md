@@ -256,8 +256,9 @@ Project-author guide: `doc/input_api.md`.
 - **A project can have a second entry point.** `run(nil, "second.lua")` runs that file of
   the open project as the program, from a clean start like any run, and
   `run("name", "second.lua")` opens the project first. Ctrl+R, in the console or the editor,
-  runs again the file that ran last in the project. A file the project does not hold is
-  refused, "There is no second.lua in this project.", before anything changes.
+  runs again the file that ran last while the project stays open; opening a project starts
+  from `main.lua` again. A file the project does not hold, or a folder, is refused, "There
+  is no second.lua in this project.", before anything changes.
 - **`reset()` starts the console clean.** Typed with nothing between the brackets, it
   stops a program that runs, clears what it and the lines typed before left, silences every
   sound, and empties
@@ -266,7 +267,8 @@ Project-author guide: `doc/input_api.md`.
 - **Stopping a program clears what it left.** `stop()`, Ctrl+Q, an error in a program's
   first lines and the close of its project now all end it through one flush: its handlers,
   input hooks, shortcuts, `before_exit` hook, serial handlers, input field and modules go,
-  as before, and now also its variables, and key repeat and text input as it set them; its
+  as before, and now also its variables, the master volume, and key repeat and text input as
+  it set them; its
   picture is cleared and the graphics settings reset. A sound it started plays to its end,
   and one set to repeat plays once more and stops; `reset()` silences them. A pause
   clears nothing, so `continue()` resumes as it was. The console's output and history and

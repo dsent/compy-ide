@@ -75,6 +75,8 @@ end
 --- @field run_live boolean? the run is not stopped
 --- @field canvas_handed integer? moves on when console code takes the canvas from a stopped run
 --- @field collect_garbage function? --- collectgarbage, or a stand-in in tests
+--- @field state_left boolean? --- a typed line left state the flush has not ended
+--- @field entry table? --- the entry point that ran last, while its project stays open
 --- methods
 --- @field edit function
 --- @field finish_edit function
@@ -581,7 +583,7 @@ function ConsoleController:run_project(name, stopped, entry)
         and FS.join_path(
           ProjectService.is_project(ProjectService.path, name), entry)
         or cur:get_path(entry)
-    if not FS.exists(holder) then
+    if not FS.exists(holder, 'file') then
       return self.model.output:write_refusal(
         P.messages.not_in_project(entry))
     end
@@ -1970,6 +1972,9 @@ function ConsoleController:evaluate_input()
         --- maintainer's rulings of November 15 and 16, 2026)
         inter:remember()
         self.model.output:echo(text)
+        --- a typed line leaves state for a flush to end, as a
+        --- live run does
+        self.state_left = true
         local _, err = run_user_code(f, self)
         if err then
           self.model.output:write_error(err)
@@ -2127,10 +2132,12 @@ function ConsoleController:open_project(name, play, fresh)
     end
   end
   local cur = P.current
+  local closed_fresh = false
   if cur then
     --- close directly: no redirect to the default project here,
     --- otherwise its loader would be inserted and leak
-    self:_close_project()
+    local _, made = self:_close_project()
+    closed_fresh = made and not self.stopping
   end
 
   local open, create, err = P:opreate(name, play)
@@ -2146,10 +2153,12 @@ function ConsoleController:open_project(name, play, fresh)
     then
       table.insert(package.loaders, 1, project_loader)
     end
-    --- env resets on every project switch: closing the one
-    --- that was open stopped it, and the stop's flush made it
-    --- anew already
-    if not fresh and (not cur or self.stopping) then
+    --- an opened project runs from main.lua: the entry point is
+    --- remembered only while its project stays open
+    self.entry = nil
+    --- env resets on every project switch, once: when closing
+    --- the one that was open made it anew, not again
+    if not fresh and not closed_fresh then
       self:_reset_executor_env()
     end
   elseif cur then
@@ -2188,10 +2197,13 @@ end
 --- The widget ends with the project too (D-WIDGET-AT-BOOT as
 --- amended): unconditional, ahead of the has-a-project check,
 --- since with no project there is no widget either.
+--- @return boolean success
+--- @return boolean? fresh --- the stop made the environment anew
 function ConsoleController:_close_project()
   local P = self.model.projects
+  local fresh
   if P.current then
-    self:stop_project_run()
+    fresh = self:stop_project_run()
   end
   --- the editor's files are this project's: they go with it,
   --- after the exit hook the stop runs
@@ -2213,9 +2225,9 @@ function ConsoleController:_close_project()
       table.delete_by_value(package.loaders, lf)
     end
     View.clear_snapshot()
-    return ok
+    return ok, fresh
   end
-  return true
+  return true, fresh
 end
 
 --- Close the current project and return to the default project.
@@ -2224,11 +2236,13 @@ end
 --- @return boolean success
 function ConsoleController:close_project(closed)
   self.model.output:to_rest()
-  --- a project that was open was stopped as it closed, and the
-  --- stop's flush made the environment anew
-  local flushed = self.model.projects.current ~= nil
-      and not self.stopping
-  local ok = self:_close_project()
+  --- a project that was open was stopped as it closed; when
+  --- that stop's flush made the environment anew (not inside
+  --- an outer stop, whose flush goes on after) the open does not
+  --- make it again
+  local reentrant = self.stopping
+  local ok, fresh = self:_close_project()
+  local flushed = fresh and not reentrant
   if ok then
     if closed then closed() end
     return self:open_project(ProjectService.DEFAULT, nil, flushed)
@@ -2271,14 +2285,15 @@ function ConsoleController:stop_project_run()
     self:hide_editor()
   end
   self.stopping = true
-  local ok, err = pcall(self._stop_project_run, self)
+  local ok, res = pcall(self._stop_project_run, self)
   self.stopping = false
   if not ok then
     -- A step ahead of the reset raised: the console still
     -- gets its mouse.
     self:restore_console_mouse()
-    error(err, 0)
+    error(res, 0)
   end
+  return res
 end
 
 --- Whatever plays goes on to its end, and no longer repeats.
@@ -2287,6 +2302,9 @@ end
 --- made a one-shot and played again from where it was. A source
 --- the program paused or stopped is not playing, and stays as it
 --- is. One that cannot loop (a queueable one) plays on.
+--- the master volume as LÖVE starts it, which the IDE keeps
+local IDE_VOLUME = 1
+
 local function end_looping()
   local audio = love.audio
   if not (audio and audio.pause) then return end
@@ -2316,17 +2334,34 @@ end
 --- Idempotent: safe with nothing run, and twice.
 --- @param call_exit boolean? --- a stop calls the program's
 ---   compy.before_exit before it goes; a crash only removes it
+--- @return boolean ended --- there was state to end, and the
+---   environment was made anew
 function ConsoleController:flush_program_state(call_exit)
+  --- Two halves. Ending what a program left happens once for
+  --- each end, by construction, as the run seam knows it: there
+  --- is something to end while a run is live, a program holds
+  --- the screen or waits paused, or a typed line has run since
+  --- the last flush, and this flush clears all three; a second
+  --- path to the same end (a stop in first lines that then
+  --- raise, play mode's quit and its close) finds nothing to
+  --- end. Putting the IDE's baseline back is idempotent and
+  --- happens every time.
   local ended = self.run_live
-  -- What the run queued for the board and has not sent goes
-  -- first: its before_exit hook may send the board a last
-  -- line on purpose, and that one stays.
-  SerialPort:drop()
-  local compy = self:get_project_env().compy
-  if call_exit then
-    framework_before_exit(compy)
-  else
-    compy.before_exit = default_before_exit
+  local st = love.state.app_state
+  local to_end = ended or self.state_left
+      or (st ~= 'ready' and st ~= 'editor')
+  self.state_left = false
+  if to_end then
+    -- What the run queued for the board and has not sent goes
+    -- first: its before_exit hook may send the board a last
+    -- line on purpose, and that one stays.
+    SerialPort:drop()
+    local compy = self:get_project_env().compy
+    if call_exit then
+      framework_before_exit(compy)
+    else
+      compy.before_exit = default_before_exit
+    end
   end
   --- after the exit hook, which may itself require a module
   self:evacuate_required()
@@ -2352,6 +2387,11 @@ function ConsoleController:flush_program_state(call_exit)
   --- "clear the repeat, but what is there, still there");
   --- reset() is the explicit silence
   end_looping()
+  --- and at the volume the IDE starts with, LÖVE's own: the IDE
+  --- sets none
+  if love.audio and love.audio.setVolume then
+    love.audio.setVolume(IDE_VOLUME)
+  end
   --- the keyboard as the IDE set it at its start (main.lua)
   local kb = love.keyboard
   if kb and kb.setKeyRepeat then kb.setKeyRepeat(true) end
@@ -2367,14 +2407,17 @@ function ConsoleController:flush_program_state(call_exit)
   --- of November 16, 2026: "a stop clears the globals too");
   --- what a run that ended here held is freed now, twice for
   --- finalizers (with nothing run there is nothing to free)
-  self:_reset_executor_env()
-  if ended then
-    local collect = self.collect_garbage or collectgarbage
-    collect('collect')
-    collect('collect')
+  if to_end then
+    self:_reset_executor_env()
+    if ended then
+      local collect = self.collect_garbage or collectgarbage
+      collect('collect')
+      collect('collect')
+    end
   end
   self.main_ctrl.report()
   love.state.app_state = 'ready'
+  return to_end
 end
 
 --- A stop is the flush, the program's exit hook called. A
@@ -2383,7 +2426,7 @@ end
 --- with nothing live (the sine example): it is idle, not
 --- stopped, and its picture and globals stay.
 function ConsoleController:_stop_project_run()
-  self:flush_program_state(true)
+  return self:flush_program_state(true)
 end
 
 function ConsoleController:quit_project()

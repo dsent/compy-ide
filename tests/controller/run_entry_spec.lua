@@ -119,6 +119,37 @@ describe("run's second entry point #console", function()
     assert.is_falsy(K.cc.run_live)
   end)
 
+  it("refuses a folder before the run that ended is touched",
+    function()
+      local files = { ["assets/a.png"] = "png",
+        ["idle.lua"] = "which = 'idle'\n" }
+      for k, v in pairs(FILES) do files[k] = v end
+      reset(files)
+      run("run(nil, 'idle.lua')")
+      run("run(nil, 'assets')")
+      assert.same("idle", env().which)
+      assert.truthy(K.console_text():find(
+        "There is no assets in this project.", 1, true),
+        K.console_text())
+    end)
+
+  --- the entry point is remembered while its project stays
+  --- open; opening a project starts from main.lua again
+  it("forgets the entry point when the project is opened again",
+    function()
+      reset(FILES)
+      run("run(nil, 'second.lua')")
+      K.keys("lctrl", "q")
+      K.next_project("other", { ["main.lua"] = "which = 'other'\n" })
+      run("project('other')")
+      K.next_project(K.PROJECT, FILES)
+      run("project('" .. K.PROJECT .. "')")
+      run("edit('main.lua')")
+      K.keys("lctrl", "r")
+      K.frame()
+      assert.same("main", env().which)
+    end)
+
   it("leaves run() to main.lua", function()
     reset(FILES)
     run("run(nil, 'second.lua')")

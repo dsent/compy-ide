@@ -134,8 +134,8 @@ Closing a project returns to `scratchpad`.
   file of the open project as the program, from a clean start
   as `run()` does, and `run("proj", "second.lua")` opens _proj_
   first; a file the project does not hold is refused. Ctrl+R
-  then runs that file again, until a run of another file or
-  project. _proj_ must exist: `run` makes no
+  then runs that file again while the project stays open;
+  opening a project starts from `main.lua` again. _proj_ must exist: `run` makes no
   project, and a name no project has is refused with a hint to
   make it with `project()` first. While a program runs or is
   paused, `run()` is refused, and Ctrl+R stops it and runs
@@ -148,7 +148,8 @@ Closing a project returns to `scratchpad`.
   for the console to look at until the next run. Stopping a
   program, by `stop()`, Ctrl+Q, an error in its first lines or
   closing its project, clears them too and puts the keyboard
-  back as the IDE set it; a sound it started plays to its end,
+  and the volume back as the IDE set them; a sound it started
+  plays to its end,
   and one set to repeat plays once more and stops. A pause keeps
   everything for `continue()`. `dofile()` runs in the
   environment as it stands.

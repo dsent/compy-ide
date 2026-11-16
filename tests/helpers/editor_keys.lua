@@ -64,21 +64,32 @@ local function memory_project()
   }
 end
 
+--- Whether `contents` holds `name` as a file, or, when `kind`
+--- is not "file", as a folder: the prefix of a file's name
+local function holds(contents, name, kind)
+  if contents[name] ~= nil then return true end
+  if kind == "file" then return false end
+  for f in pairs(contents) do
+    if f:sub(1, #name + 1) == name .. "/" then return true end
+  end
+  return false
+end
+
 --- FS.exists answered for the memory project, its folder
 --- included, `exists` asked for every other path.
 local function exists_over(exists)
-  return function(path)
+  return function(path, kind)
     if path == ROOT or path == ROOT:sub(1, -2) then
-      return true
+      return kind ~= "file"
     end
     --- a project next_project adds, asked before it opens
     local other, of = path:match("^/memory%-k/([^/]+)/(.+)$")
     if other and K.others and K.others[other] then
-      return K.others[other][of] ~= nil
+      return holds(K.others[other], of, kind)
     end
     local f = path:match("^/memory%-k/(.+)$")
     if f then
-      return files[f] ~= nil
+      return holds(files, f, kind)
     end
     return exists(path)
   end

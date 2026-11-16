@@ -60,9 +60,11 @@ end
 --- one, `pause` and `stop` act on all, as on LÖVE 11.5), and the
 --- keyboard's two settings recorded, for the test's length
 local function devices()
-  local seen = { stops = 0, sources = { } }
+  local seen = { stops = 0, sources = { }, volume = 1 }
   local fake = {
     newSource = function() return source(seen.sources, false) end,
+    setVolume = function(v) seen.volume = v end,
+    getVolume = function() return seen.volume end,
     pause = function()
       local paused = { }
       for _, s in ipairs(seen.sources) do
@@ -297,6 +299,66 @@ describe("the terminate flush #console", function()
         1, true), K.console_text())
     end)
   end)
+
+  --- the flush ends a run's state once, whichever paths reach
+  --- it: the flushes that found state to end, counted
+  local function count_flushes()
+    local n, flush = { 0 }, K.cc.flush_program_state
+    K.cc.flush_program_state = function(...)
+      local flushed = flush(...)
+      if flushed then n[1] = n[1] + 1 end
+      return flushed
+    end
+    finally(function() K.cc.flush_program_state = nil end)
+    return n
+  end
+
+  it("flushes once when play mode quits", function()
+    reset({ ["main.lua"] = RUNS })
+    run("run()")
+    local n = count_flushes()
+    -- the default project the close opens is the card's: not
+    -- opened here
+    K.cc.open_project = function() return true end
+    finally(function() K.cc.open_project = nil end)
+    K.cc:quit_project()
+    assert.equal(1, n[1])
+  end)
+
+  for _, call in ipairs({ "stop()", "reset()" }) do
+    it("flushes once when first lines call " .. call
+      .. " and then raise", function()
+        reset({ ["main.lua"] = "function love.update() end\n"
+          .. call .. "\nerror('after')\n" })
+        local n = count_flushes()
+        run("run()")
+        assert.equal(1, n[1])
+      end)
+  end
+
+  it("clears what a typed line left after a stop, at a switch",
+    function()
+      reset({ ["main.lua"] = RUNS })
+      run("run()")
+      K.keys("lctrl", "q")
+      run("t = 5")
+      K.next_project("other", { ["main.lua"] = "\n" })
+      run("project('other')")
+      assert.is_nil(env().t)
+    end)
+
+  it("puts the master volume back at a stop and at reset()",
+    function()
+      reset({ ["main.lua"] = "love.audio.setVolume(0)\n" .. RUNS })
+      local seen = devices()
+      run("run()")
+      assert.equal(0, seen.volume)
+      K.keys("lctrl", "q")
+      assert.equal(1, seen.volume)
+      run("love.audio.setVolume(0.25)")
+      run("reset()")
+      assert.equal(1, seen.volume)
+    end)
 
   it("keeps the console's output and history", function()
     reset({ ["main.lua"] = "print('from the run')\n"
