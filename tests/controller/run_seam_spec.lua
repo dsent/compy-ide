@@ -137,11 +137,74 @@ function love.update() error('later') end
     run('run()')
     K.cc:suspend()
     assert.equal('inspect', K.app_state())
+    run('typed = 7')
     local previous = env()
     run('run()')
+    assert.is_true(said('A project is already running'), K.console_text())
     assert.equal(previous, env())
-    assert.equal(42, env().x)
+    assert.equal(7, env().typed)
   end)
+
+  --- a run's environment is a new table: a metatable the last
+  --- run set on its _G goes with it
+  it('drops a metatable the last run set on its environment',
+    function()
+      reset({['main.lua'] = [[
+setmetatable(_G, {
+  __newindex = function(t, k, v) rawset(t, k, v) end,
+  __index = function() return 'LEAKED' end,
+})
+]]})
+      run('run()')
+      K.write_outside('main.lua', 'fresh = true\nprobe = missing\n')
+      run('run()')
+      assert.is_true(env().fresh, K.console_text())
+      assert.is_nil(env().probe)
+      assert.is_nil(getmetatable(env()))
+    end)
+
+  --- with nothing live there is nothing to end: what a typed
+  --- line queued for the board, and an exit hook it set, stay
+  it('ends nothing when nothing is live', function()
+    reset({['main.lua'] = 'fresh = true\n'})
+    local drops, drop = 0, SerialPort.drop
+    SerialPort.drop = function(...)
+      drops = drops + 1
+      return drop(...)
+    end
+    finally(function() SerialPort.drop = drop end)
+    run("compy.before_exit = function() print('TYPED_EXIT') end")
+    run('run()')
+    assert.is_true(env().fresh)
+    assert.equal(0, drops)
+    -- the line's own echo names it once; the hook printed nothing
+    local n = select(2, K.console_text():gsub('TYPED_EXIT', ''))
+    assert.equal(1, n, K.console_text())
+  end)
+
+  --- a stopped invocation whose nested run failed to load
+  --- installs nothing: Ctrl+Q could not stop what it would
+  it('installs nothing for code that stopped its own run',
+    function()
+      reset({['main.lua'] = [[
+writefile("main.lua", "this does not parse (")
+stop()
+run()
+function love.update()
+  ghost = (ghost or 0) + 1
+end
+]]})
+      run('run()')
+      for _ = 1, 3 do K.frame() end
+      K.keys('lctrl', 'q')
+      for _ = 1, 3 do K.frame() end
+      assert.is_false(K.cc.run_live)
+      local seen = 0
+      for _, e in ipairs({ env(), K.cc:get_base_env() }) do
+        seen = seen + (rawget(e, 'ghost') or 0)
+      end
+      assert.equal(0, seen)
+    end)
 
   --- a bundled library the program loaded first is its own:
   --- the next run gets a new copy. (One the IDE had loaded
@@ -165,13 +228,6 @@ function love.update(dt) Timer.update(dt) end
     run('run()')
     K.frame(11)
     assert.is_false(said('OLD_TIMER'), K.console_text())
-  end)
-
-  it('makes the remainder of a console line see the run globals', function()
-    reset({['main.lua'] = 'x = 42\n'})
-    run("run(); print('NEW_X:' .. tostring(x))")
-    assert.equal(42, env().x)
-    assert.is_true(said('NEW_X:42'), K.console_text())
   end)
 
   it('cleans registrations typed before Ctrl+R when no run is live', function()
@@ -216,12 +272,16 @@ gfx.setColor(1, 0, 0, 1)
       K.cc:get_base_env().love.graphics}
     local saved = {}
     for _, g in ipairs(graphics) do
-      saved[#saved + 1] = {g, g.setColor, g.getColor}
+      saved[#saved + 1] = {g, g.setColor, g.getColor, g.reset}
       g.setColor = function(...) colour = {...} end
       g.getColor = function() return unpack(colour) end
+      -- LÖVE's reset makes the colour white
+      g.reset = function() colour = {1, 1, 1, 1} end
     end
     finally(function()
-      for _, s in ipairs(saved) do s[1].setColor, s[1].getColor = s[2], s[3] end
+      for _, s in ipairs(saved) do
+        s[1].setColor, s[1].getColor, s[1].reset = s[2], s[3], s[4]
+      end
     end)
     run('run()')
     K.keys('lctrl', 'q')
@@ -256,12 +316,16 @@ observed_mouse = {
       K.cc:get_base_env().love.graphics}
     local saved = {}
     for _, g in ipairs(graphics) do
-      saved[#saved + 1] = {g, g.setScissor, g.getScissor}
+      saved[#saved + 1] = {g, g.setScissor, g.getScissor, g.reset}
       g.setScissor = function(...) scissor = {...} end
       g.getScissor = function() return unpack(scissor) end
+      -- LÖVE's reset takes the scissor off
+      g.reset = function() scissor = {} end
     end
     finally(function()
-      for _, s in ipairs(saved) do s[1].setScissor, s[1].getScissor = s[2], s[3] end
+      for _, s in ipairs(saved) do
+        s[1].setScissor, s[1].getScissor, s[1].reset = s[2], s[3], s[4]
+      end
     end)
     run('run()')
     K.keys('lctrl', 'q')

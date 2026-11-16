@@ -98,11 +98,8 @@ describe('ConsoleController project env #project', function()
       setScissor = function() end,
       getColorMask = function() return true, true, true, true end,
       setColorMask = function() end,
-      setLineWidth = function() end,
-      setLineStyle = function() end,
-      setPointSize = function() end,
-      setBlendMode = function() end,
-      setShader = function() end,
+      reset = function() end,
+      getStackDepth = function() return 0 end,
       origin = function() end,
       push = function() end,
       pop = function() end,
@@ -488,9 +485,9 @@ describe('ConsoleController project env #project', function()
       CC:run_project()
       _G.print = print_
       assert.are.equal('ready', love.state.app_state)
-      -- one at the run's start, its seam's stop, and one when
-      -- the top-level code raises
-      assert.are.equal(before + 2, fake.drops)
+      -- with nothing live the run's start drops nothing: this
+      -- one is the top-level code's raise
+      assert.are.equal(before + 1, fake.drops)
     end)
 
     it('goes before a flash begins', function()

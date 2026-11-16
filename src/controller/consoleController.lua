@@ -37,19 +37,17 @@ local messages = {
 local program_loaded = { }
 
 --- What a program set in the graphics state goes before the
---- next run: colour, scissor, lines, points, blending, shader,
---- colour mask and transform. The font and the canvas are the
---- IDE's, and it sets them itself.
+--- next run: LÖVE's own reset (colour, background colour,
+--- blending, colour mask, scissor, shader, stencil test,
+--- wireframe, lines, points, the transform), and the transform
+--- stack emptied of what a program pushed and never popped.
+--- The canvas is the IDE's: the one bound stays bound. The font
+--- is the IDE's too, and run_project sets it after.
 local function reset_graphics()
-  gfx.setColor(1, 1, 1, 1)
-  gfx.setScissor()
-  gfx.setLineWidth(1)
-  gfx.setLineStyle('smooth')
-  gfx.setPointSize(1)
-  gfx.setBlendMode('alpha')
-  gfx.setShader()
-  gfx.setColorMask(true, true, true, true)
-  gfx.origin()
+  local canvas = gfx.getCanvas()
+  while gfx.getStackDepth() > 0 do gfx.pop() end
+  gfx.reset()
+  if canvas then gfx.setCanvas({ canvas, stencil = true }) end
 end
 
 --- @class ConsoleController
@@ -175,9 +173,12 @@ local function run_user_code(f, cc, project_path)
       env = cc:get_project_env()
     end
     ok, call_err = pcall(f)
-    --- a run the code started of its own has installed its
-    --- handlers: this one's are not installed over them
-    if project_path and ok and cc.run_id == run_id then
+    --- only while this invocation's run is the live one: a
+    --- run the code started of its own has installed its
+    --- handlers, and code that stopped its own run installs
+    --- nothing Ctrl+Q could not stop
+    if project_path and ok and cc.run_id == run_id
+        and cc.run_live then
       if love.PROFILE then
         love.PROFILE.frame = 0
         love.PROFILE.report = {}
@@ -567,15 +568,23 @@ function ConsoleController:run_project(name, stopped)
 
   if ok then
     --- The run seam, one thing (the maintainer's ruling "A run
-    --- starts from a clean environment"): end whatever is live
-    --- exactly as a stop does (its handlers, input hooks and
-    --- shortcuts, before_exit, serial handlers, widget,
-    --- modules), then make the environment anew in place, then
-    --- start. Opening another project has just done both.
-    --- What a run leaves stays for inspection until the next
-    --- run; continue() and dofile() never pass here.
+    --- starts from a clean environment"): end a run that is
+    --- live exactly as a stop does (its handlers, input hooks
+    --- and shortcuts, before_exit, serial handlers, widget,
+    --- modules); with nothing live there is nothing to end, and
+    --- only the modules go. Then a new environment, as opening
+    --- the project makes it, then start. Opening another
+    --- project has just done both. What a run leaves stays for
+    --- inspection until the next run; continue() and dofile()
+    --- never pass here.
     if not opened then
-      if not stopped then self:stop_project_run() end
+      if stopped then
+        --- the caller stopped (Ctrl+R)
+      elseif self.run_live then
+        self:stop_project_run()
+      else
+        self:evacuate_required()
+      end
       self:_reset_executor_env()
     end
     reset_graphics()
@@ -1956,21 +1965,8 @@ function ConsoleController:evaluate_input()
   end
 end
 
---- Make the project's environment anew, as the base makes it,
---- in place: the code a run was started from, and the rest of
---- a typed line, hold this table and see the new one
 function ConsoleController:_reset_executor_env()
-  local env, base = self.project_env, self.base_env
-  if not env then
-    return self:_set_project_env(table.clone(base))
-  end
-  for k in pairs(env) do env[k] = nil end
-  --- a deep copy of the base into this table: where the base
-  --- names itself (its _G), the copy names this table
-  local seen = { [base] = env }
-  for k, v in pairs(base) do
-    env[table.clone(k, seen)] = table.clone(v, seen)
-  end
+  self:_set_project_env(table.clone(self.base_env))
 end
 
 --- Ctrl+R: the stop the run seam would make, made first, so

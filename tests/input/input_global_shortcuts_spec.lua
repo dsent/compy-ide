@@ -172,8 +172,6 @@ describe('input surface: inbound events — global platform'
         assert.equal('ready', love.state.app_state)
         assert.is_true(F.cc.run_live)
         local open = P.current
-        -- the run's own start counts a stop (its seam)
-        stops = 0
         ctrl_q()
         assert.equal('ready', love.state.app_state)
         assert.equal(1, stops)
