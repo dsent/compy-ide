@@ -288,9 +288,19 @@ local function occupy_input(userlove, CC)
     end)
   end
   route_owner = program_count
-  local due = owed_releases[route_owner]
+end
+
+--- The releases a paused program is owed, at its continue():
+--- after every handler is back, so that a release that stops
+--- the run is the last word, and none after it is delivered
+local function deliver_owed()
+  local run = route_owner
+  local due = owed_releases[run]
   owed_releases = { }
-  for k, sc in pairs(due or { }) do love.keyreleased(k, sc) end
+  for k, sc in pairs(due or { }) do
+    if route_owner ~= run then return end
+    love.keyreleased(k, sc)
+  end
 end
 
 --- `user_pointer` marks a non-blocking project as still
@@ -403,6 +413,7 @@ local set_handlers = function(userlove, CC)
   mark_pointer_liveness(userlove, CC)
   hook_update(userlove)
   hook_draw(userlove)
+  deliver_owed()
 end
 
 -- Teardown clears every bindable channel: else a stopped
@@ -1146,7 +1157,11 @@ Controller = {
     -- for the whole press (the maintainer's ruling of November
     -- 16, 2026: D-RESERVE-TABLE's reservations consume). A
     -- repeat or release whose receiver is gone goes nowhere; a
-    -- paused program's release waits for continue().
+    -- paused program's release waits for continue(). Text
+    -- carries no key, and the routing reads the modifiers held
+    -- now: a key that comes up from Ctrl+R's R, Ctrl let go and
+    -- R held on, types its repeats into the restarted program,
+    -- its key events still the IDE's.
     -- Text carries no key and is held back only while the card
     -- shows: a key pressed under the card and still held when it
     -- closes types its repeats from then on, its key events
@@ -1196,8 +1211,10 @@ Controller = {
       elseif card and k ~= KeyCard.KEY then
         delivered[k] = nil
         return
-      elseif reservation then
+      elseif reservation or owed[k] then
+        -- the IDE's for the whole press, Ctrl+Escape's Escape too
         delivered[k] = { act = reservation, again = REPEATS[chord] }
+        if not reservation then return end
         if CC.editor then CC.editor:key_begins() end
         reservation()
         if CC.editor then CC.editor:gate_key_done() end

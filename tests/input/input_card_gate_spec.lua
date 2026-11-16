@@ -388,6 +388,62 @@ describe("a key's receiver #input", function()
       "release x" }, keys())
   end)
 
+  -- the review's round 15: a release owed at continue() that
+  -- stops the run leaves nothing of the run running, and the
+  -- releases still owed go nowhere
+  it("lets a release owed at continue() stop the run for good",
+    function()
+      K.reset({ ["main.lua"] = table.concat({
+        "UPDATES = 0",
+        "function love.update() UPDATES = UPDATES + 1 end",
+        "function love.keyreleased(k) stop() end",
+      }, "\n") .. "\n" })
+      -- run() at the console: its Enter's release stays there
+      K.type("run()")
+      K.keys("return")
+      assert.same("running", K.app_state())
+      F.session.press("x")
+      F.session.press("y")
+      -- Ctrl+Pause's own key is the IDE's; Ctrl, held on into
+      -- the pause, is let go there and owed too
+      F.session.press("lctrl")
+      F.session.press("pause")
+      F.session.release("pause")
+      K.frame()
+      if K.app_state() == "snapshot" then K.cc:suspend() end
+      assert.same("inspect", K.app_state())
+      F.session.release("lctrl")
+      F.session.release("x")
+      F.session.release("y")
+      local env = K.cc:get_project_env()
+      K.type("continue()")
+      K.keys("return")
+      assert.same("ready", K.app_state())
+      assert.is_false(K.cc.run_live)
+      local updates = env.UPDATES
+      K.frame()
+      K.frame()
+      assert.same(updates, env.UPDATES)
+      assert.same("", K.console_draft())
+    end)
+
+  -- Escape pressed with Ctrl held is the IDE's for the whole
+  -- press, like every reserved chord's key (round 15)
+  it("gives Ctrl+Escape's Escape to no program, and quits on its "
+      .. "release", function()
+    K.reset({ ["main.lua"] = RECORDS })
+    K.keys("lctrl", "r")
+    assert.same("running", K.app_state())
+    F.quits()
+    F.session.press("lctrl")
+    F.session.press("escape")
+    F.session.repeat_press("escape")
+    F.session.release("lctrl")
+    F.session.release("escape")
+    assert.same(1, #F.quits())
+    assert.same({ "press lctrl", "release lctrl" }, keys())
+  end)
+
   it("gives the program run() starts no release of the Enter "
       .. "that started it", function()
     K.reset({ ["main.lua"] = RECORDS })
