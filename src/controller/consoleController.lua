@@ -2233,8 +2233,10 @@ end
 --- Close the current project and return to the default project.
 --- @param closed function? called once the project is closed,
 ---   before the default one opens
+--- @param stopped boolean? --- the caller's stop made the
+---   environment anew, so the close's own stop ended nothing
 --- @return boolean success
-function ConsoleController:close_project(closed)
+function ConsoleController:close_project(closed, stopped)
   self.model.output:to_rest()
   --- a project that was open was stopped as it closed; when
   --- that stop's flush made the environment anew (not inside
@@ -2242,7 +2244,7 @@ function ConsoleController:close_project(closed)
   --- make it again
   local reentrant = self.stopping
   local ok, fresh = self:_close_project()
-  local flushed = fresh and not reentrant
+  local flushed = (fresh or stopped) and not reentrant
   if ok then
     if closed then closed() end
     return self:open_project(ProjectService.DEFAULT, nil, flushed)
@@ -2430,11 +2432,11 @@ function ConsoleController:_stop_project_run()
 end
 
 function ConsoleController:quit_project()
-  self:stop_project_run()
+  local stopped = self:stop_project_run()
   --- a clean console first, so what closing says stays on it
   self.model.output:reset()
   self.input:reset()
-  self:close_project()
+  self:close_project(nil, stopped)
 end
 
 --- Set the default project aside under a backup name and start

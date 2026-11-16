@@ -353,6 +353,21 @@ describe('ConsoleController project env #project', function()
     CC._reset_executor_env = orig
   end)
 
+  it('resets the env exactly once when play mode quits #project',
+    function()
+      CC:open_project('clock')
+      CC.run_live = true
+      local n = 0
+      local orig = CC._reset_executor_env
+      CC._reset_executor_env = function(self, ...)
+        n = n + 1
+        return orig(self, ...)
+      end
+      CC:quit_project()
+      CC._reset_executor_env = orig
+      assert.are.equal(1, n)
+    end)
+
   it('eval works in the merged env #project', function()
     assert.are.equal(2, CC:get_project_env().eval('1+1'))
   end)
