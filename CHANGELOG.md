@@ -133,8 +133,11 @@ Project-author guide: `doc/input_api.md`.
   end of the file, where new text is added.
 - **Formatting the file is Alt+F.** Ctrl+F is kept free for a search to come.
 - **Ctrl+R runs the project anew**, in the console, the editor and over a running
-  program; Ctrl+Alt+R does nothing now. The `r` a Compy sends as text with the chord
-  reaches no field and no program. The terminal example restarts the micro:bit with Ctrl+M.
+  program; Ctrl+Alt+R does nothing now. The key is the IDE's for the whole press, as
+  every reserved key's is: neither the program it stops nor the one it starts sees its
+  press, its repeats or its release, nor the `r` a Compy sends as text with it. Any
+  other key's release goes to whoever got its press: a program paused while a key was
+  held gets that key's release when it continues. The terminal example restarts the micro:bit with Ctrl+M.
 - **Ctrl+G goes back to the block being replaced.** While replacing, it brings the
   highlight back to the block loaded with F2 and shows it; the field's text stays. In
   the other states it does nothing.

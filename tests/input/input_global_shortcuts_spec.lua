@@ -60,9 +60,9 @@ describe('input surface: inbound events — global platform'
     function()
 
       -- Route-preserving: suspend only flips app_state, so the
-      -- project route is still installed afterward — BOTH the
-      -- platform effect and the project's own binding run for
-      -- the same event.
+      -- project route is still installed afterward; the key is
+      -- the IDE's, and the project's own binding does not run
+      -- (the ruling of November 16, 2026: a reservation consumes)
       it('ctrl+pause suspends despite a project claiming it',
         function()
           local project_ran = false
@@ -75,7 +75,7 @@ describe('input surface: inbound events — global platform'
           F.session.press('lctrl')
           F.session.press('pause')
           assert.equal('snapshot', love.state.app_state)
-          assert.is_true(project_ran)
+          assert.is_false(project_ran)
         end)
 
       -- Route-destroying: the stop tears the project route down

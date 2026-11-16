@@ -180,6 +180,7 @@ describe('input surface: inbound events — routing #input',
       F.activate_project({ keyreleased = function()
         got = got + 1
       end })
+      F.session.press('a')
       F.session.release('a')
       assert.equal(1, got)
     end)

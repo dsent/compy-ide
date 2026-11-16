@@ -1586,6 +1586,20 @@ day).
 
 ## D-RESERVE-TABLE — the gate's reservations are combo strings in a privileged table
 
+**Note, 2026-11-16 — a reservation consumes its key, by the product owner's ruling.** This
+reverses "a reservation never consumes" below. A reserved chord's key is the IDE's for its whole
+press: the route sees neither its press, nor its repeats, nor its release, and the program that
+was running and the one `ctrl+r` just started both see none of them. The reason: run anew moved
+from `ctrl+alt+r` to `ctrl+r`, and a program handles a plain `r`, so the restarted program took
+the key as its own (seen on a Compy on 2026-11-16). With it, every key's repeats and release go
+to the receiver of its press, and nowhere once that receiver is gone; a release a paused program
+is owed comes at its `continue()` (the gate in `controller.lua`, `delivered` and
+`owed_releases`). What relied on the old contract: the input-contract tests that a project's own
+binding of `ctrl+pause` still runs after the suspend, and that a shortcut leaves the key to the
+route (`input_global_shortcuts_spec.lua`, `input_shortcuts_click_spec.lua`), now turned around,
+and the input guide's sentence that reservations pass the event on; no shipped program binds a
+reserved chord.
+
 **Note, 2026-11-14 — the map in the table changed, by the product owner's decision.** *"What does
 not change"* below held for the change of representation it describes; this is a later change of
 behaviour. The table now holds:

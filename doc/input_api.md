@@ -664,8 +664,11 @@ Vocabulary section above.
 When LÖVE fires an input event (a keypress, a mouse click, a touch), the
 framework first checks whether the platform has a reserved combo for it (see
 "Combos the framework keeps" below — these are things like Ctrl+Q to stop
-the project and Ctrl+Escape to exit the IDE). Platform reservations act **and
-pass the event on** — they never consume.
+the project and Ctrl+Escape to exit the IDE). A platform reservation acts and
+**keeps the key**: your project sees neither its press, nor its repeats, nor its
+release. Every other key's repeats and release go to whoever received its press,
+and to no one once that has gone; a release your paused project is owed comes when
+it continues.
 
 Then, while your project is running, every event walks the dispatch chain:
 
