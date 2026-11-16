@@ -235,9 +235,10 @@ Project-author guide: `doc/input_api.md`.
 - **A program's graphics settings no longer reach the IDE's own drawing.** After a program
   that set a scissor, wireframe or a colour was stopped, or while it was paused, the key
   card and the file editor were drawn under them, clipped to the program's scissor and
-  outlined; the shipped build did the same. The IDE now draws its console, status line,
-  key card, editor and a program's input field in its own settings, and gives the
-  program its own back, so a paused program resumes as it was. A run that ends for good
+  outlined; the shipped build did the same, and a program's input field it set from its
+  update came out clipped too. The IDE now draws its console, status line, key card,
+  editor and a program's input field in its own settings, and gives the program its own
+  back, so a paused program resumes as it was. A run that ends for good
   (`stop()`, Ctrl+Q, an error in its first lines, the project's close) also resets them,
   so a line typed next draws as the IDE does.
 - **Each run starts afresh.** A run, by `run()`, `run("name")`, Ctrl+R or the editor's run

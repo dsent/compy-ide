@@ -222,7 +222,8 @@ end
       g.getStackDepth = function() return depth end
     end
     finally(function()
-      for _, s in ipairs(saved) do
+      for i = #saved, 1, -1 do
+        local s = saved[i]
         s[1].push, s[1].pop, s[1].getStackDepth = s[2], s[3], s[4]
       end
     end)
@@ -239,7 +240,11 @@ end
       g.reset = function() resets.n = resets.n + 1 end
     end
     finally(function()
-      for _, s in ipairs(saved) do s[1].reset = s[2] end
+      -- the tables can be one: undone last first
+      for i = #saved, 1, -1 do
+        local s = saved[i]
+        s[1].reset = s[2]
+      end
     end)
     return resets
   end
@@ -307,17 +312,19 @@ end
       g.getScissor = function()
         if scissor then return unpack(scissor) end
       end
-      g.push = function() stack[#stack + 1] = scissor end
+      -- boxed: no scissor is a state the stack keeps too
+      g.push = function() stack[#stack + 1] = { scissor } end
       g.pop = function()
         assert(#stack > 0, 'Minimum stack depth reached')
-        scissor = stack[#stack]
+        scissor = stack[#stack][1]
         stack[#stack] = nil
       end
       g.reset = function() scissor = nil end
       g.getStackDepth = function() return #stack end
     end
     finally(function()
-      for _, s in ipairs(saved) do
+      for i = #saved, 1, -1 do
+        local s = saved[i]
         s[1].setScissor, s[1].getScissor, s[1].push, s[1].pop,
             s[1].reset, s[1].getStackDepth =
             s[2], s[3], s[4], s[5], s[6], s[7]
@@ -355,6 +362,66 @@ end
       assert.same('clean', seen)
       assert.same({ 0, 0, 300, 300 }, scissor())
     end)
+
+    --- the frame-rate overlay (COMPY_PROF) is the IDE's too
+    it('draws the frame rate in its own state', function()
+      reset()
+      local scissor = stateful_scissor()
+      local stub, newFont = View, love.graphics.newFont
+      love.graphics.newFont = function()
+        return { getWidth = function() return 10 end,
+          getHeight = function() return 10 end }
+      end
+      local view = assert(loadfile('src/view/view.lua'))
+      view()
+      local real = View
+      View, love.graphics.newFont = stub, newFont
+      local profile, timer, print_ = love.PROFILE, love.timer,
+          love.graphics.print
+      love.PROFILE = { fpsc = 'T_L' }
+      love.timer = { getFPS = function() return 60 end }
+      local seen = 'not drawn'
+      love.graphics.print = function()
+        seen = scissor() == nil and 'clean' or 'clipped'
+      end
+      finally(function()
+        love.PROFILE, love.timer, love.graphics.print =
+            profile, timer, print_
+      end)
+      gfx.setScissor(0, 0, 300, 300)
+      real.drawFPS()
+      assert.same('clean', seen)
+      assert.same({ 0, 0, 300, 300 }, scissor())
+    end)
+
+    --- a field renders into its canvas on show() and
+    --- set_text() too, called from a program's update, outside
+    --- any draw (the twelfth review round)
+    it('renders a field set from a program\'s update in its own '
+      .. 'state', function()
+        reset({['main.lua'] = [[
+gfx.setScissor(0, 0, 300, 300)
+compy.input.show({ text = 'x' })
+function love.update() compy.input.set_text('y') end
+]]})
+        run('run()')
+        local scissor = stateful_scissor()
+        local V = love.state.user_input_controller.view
+        local mock = love.graphics.mock
+        local seen = 'not rendered'
+        V.canvas = { renderTo = function(_, f) f() end }
+        V.render_input = function()
+          seen = scissor() == nil and 'clean' or 'clipped'
+        end
+        love.graphics.mock = nil
+        finally(function() love.graphics.mock = mock end)
+        gfx.setScissor(0, 0, 300, 300)
+        K.frame()
+        love.graphics.mock = mock
+        assert.same('clean', seen)
+        assert.same({ 0, 0, 300, 300 }, scissor())
+        env().love.update = nil
+      end)
 
     it('draws a program\'s field in its own state', function()
       reset({['main.lua'] = [[
@@ -536,7 +603,8 @@ gfx.setColor(1, 0, 0, 1)
       g.reset = function() colour = {1, 1, 1, 1} end
     end
     finally(function()
-      for _, s in ipairs(saved) do
+      for i = #saved, 1, -1 do
+        local s = saved[i]
         s[1].setColor, s[1].getColor, s[1].reset = s[2], s[3], s[4]
       end
     end)
@@ -580,7 +648,8 @@ observed_mouse = {
       g.reset = function() scissor = {} end
     end
     finally(function()
-      for _, s in ipairs(saved) do
+      for i = #saved, 1, -1 do
+        local s = saved[i]
         s[1].setScissor, s[1].getScissor, s[1].reset = s[2], s[3], s[4]
       end
     end)

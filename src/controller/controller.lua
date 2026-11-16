@@ -9,6 +9,7 @@ local LANG = require("util.eval")
 local FS = require("util.filesystem")
 local Application = require("util.application")
 local Blink = require("view.input.cursorBlink")
+local own = require("view.ownState")
 local KeyCard = require('model.editor.keyCard')
 
 local messages = {
@@ -320,17 +321,11 @@ end
 
 --- A program's input field, which the IDE draws over the
 --- program's picture or the console, in the IDE's own graphics
---- state, as View.draw draws the rest of what is the IDE's:
---- the program's state is saved, kept from the field's pixels
---- and given back
+--- state (view/ownState.lua)
 --- @param CC ConsoleController
 --- @param V UserInputView
 local function draw_field(CC, V)
-  gfx.push('all')
-  gfx.reset()
-  gfx.setFont(CC.cfg.view.font)
-  V:draw()
-  gfx.pop()
+  own(CC.cfg.view.font, V.draw, V)
 end
 
 --- @param userlove table

@@ -137,3 +137,38 @@ scenario('console-while-running', function(wait)
   wait(.2)
   hm_done()
 end)
+
+--- a program's field renders into its canvas on show() and
+--- set_text() too, from the program's update, outside any
+--- draw: under the program's scissor it came out clipped (the
+--- twelfth review round)
+scenario('field-set-from-update', function(wait)
+  wait(.1)
+  D.enter(wait, string.format('project(%q)', 'h-reset-f'))
+  P.put('h-reset-f', 'main.lua', 'gfx.setScissor(0, 0, 300, 300)\n'
+    .. "compy.input.show({ prompt = 'say' })\n"
+    .. 'local n = 0\n'
+    .. 'function love.update()\n'
+    .. '  n = n + 1\n'
+    .. "  compy.input.set_text('text ' .. n)\n"
+    .. 'end\n'
+    .. 'function love.draw() end\n')
+  D.key(wait, 'escape')
+  D.enter(wait, 'run()')
+  wait(.5)
+  D.in_state('running')
+  local img = P.capture(wait)
+  D.shot(wait, 'field-running')
+  local v = P.cc().cfg.view
+  local l = require('view.layout')(v)
+  -- the field's row, right of the program's 300 px scissor
+  local y = v.h - l.bottom - v.fh
+  local bg = (P.colors(img, 600, y, 200, v.fh))
+  local want = v.colors.input.user.bg
+  assert(P.near(bg, want), string.format(
+    "the field's ground right of the scissor: %s, the theme has %s",
+    P.show(bg), P.show(want)))
+  D.key(wait, 'C-q')
+  wait(.2)
+  hm_done()
+end)

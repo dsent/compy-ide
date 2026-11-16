@@ -5,6 +5,7 @@ local Layout = require("view.layout")
 local Cue = require("view.continuationCue")
 local WrapMark = require("view.wrapMark")
 local Blink = require('view.input.cursorBlink')
+local own = require('view.ownState')
 require("util.debug")
 require("util.view")
 
@@ -468,7 +469,10 @@ function UserInputView:render(input, status, time)
   local err_text = input.wrapped_error or {}
   local isError = string.is_non_empty_string_array(err_text)
 
-  self.canvas:renderTo(function()
+  --- in the IDE's own graphics state: a render also runs from
+  --- a program's show() or set_text(), or a key, outside any
+  --- draw (view/ownState.lua)
+  own(self.cfg.font, self.canvas.renderTo, self.canvas, function()
     gfx.clear(0, 0, 0, 1)
     gfx.push('all')
     if isError and not self:_message_elsewhere() then

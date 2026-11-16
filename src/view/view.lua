@@ -1,4 +1,5 @@
 local gfx = love.graphics
+local own = require('view.ownState')
 
 local FPSfont = gfx.newFont("assets/fonts/fraps.otf", 24)
 
@@ -8,23 +9,15 @@ View = {
   prev_draw = nil,
   main_draw = nil,
   end_draw = nil,
-  --- The IDE draws its own things in its own graphics state:
-  --- the console's output and the program's canvas over it,
-  --- the status line, the band, the field, the key card and
-  --- the editor. Whatever state a program left, running or
-  --- paused (scissor, wireframe, colour, shader, blending,
-  --- transform), is saved by the push, kept from the IDE's
-  --- pixels by the reset, and given back by the pop.
+  --- The console, its output and the program's canvas over
+  --- it, the status line, the band, the field, the key card
+  --- and the editor, in the IDE's own graphics state
+  --- (view/ownState.lua)
   --- @param C ConsoleController
   --- @param CV ConsoleView
   draw = function(C, CV)
-    gfx.push('all')
-    gfx.reset()
-    gfx.setFont(C.cfg.view.font)
-    local terminal = C:get_terminal()
-    local canvas = C:get_canvas()
-    CV:draw(terminal, canvas, View.snapshot)
-    gfx.pop()
+    own(C.cfg.view.font, CV.draw, CV, C:get_terminal(),
+      C:get_canvas(), View.snapshot)
   end,
 
   clear_snapshot = function()
@@ -33,6 +26,10 @@ View = {
   end,
 
   drawFPS = function()
+    own(nil, View._drawFPS)
+  end,
+
+  _drawFPS = function()
     local pr = love.PROFILE
     if type(pr) ~= 'table' then return end
     if love.PROFILE.fpsc == 'off' then return end
