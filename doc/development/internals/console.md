@@ -89,7 +89,16 @@ prints and moves there as on any row, `gotoxy` reaches it, and a
 scrolled view is 17 rows high. The status line is then the
 screen's last row and names only the project, the file the run
 started from and `running` (`ConsoleController:running_status`,
-`UserInputView.bare_status`). When a field comes back, at a
+`UserInputView.bare_status`). That line is rendered into the
+field's canvas when anything its draw reads changes, and kept
+otherwise (`UserInputView:draw`, `bare_drawn`). The status line
+gives the comparison itself (`Statusline:key`): the whole of the
+status it is given, and the IDE's state, which picks its colours
+and which its draw reads in one place (`ide_state`); the view
+adds the window's size, by which it places the line. A field
+that is drawn renders every frame, which costs a Compy about
+1.5 ms of each.
+When a field comes back, at a
 pause, a stop, or when the program shows its own, the grid loses
 that row: text or the cursor on it rolls the grid up, as a line
 end on the last row does, and the top row goes to the kept rows;

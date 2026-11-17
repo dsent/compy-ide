@@ -1391,6 +1391,20 @@ describe("the output's rows with no field under it #console",
     before_each(function() reset() end)
     after_each(cleanup)
 
+    --- What a test here puts back when it ends, however it ends.
+    --- Busted keeps one `finally` a test, the last one given, so
+    --- a test that replaces two things gives both to at_end.
+    local undo = { }
+    local function at_end(f) undo[#undo + 1] = f end
+    after_each(function()
+      local fs = undo
+      undo = { }
+      for i = #fs, 1, -1 do fs[i]() end
+      local view = K.cc and K.cc.view and K.cc.view.input
+      assert.is_nil(view and rawget(view, "render"),
+        "a test left the field's render replaced")
+    end)
+
     local RUNS = "function love.update() end\n"
     --- a program that takes the keys and shows no field
     local OWNS = "compy.input.hooks.keypressed = function()\n"
@@ -1590,6 +1604,226 @@ describe("the output's rows with no field under it #console",
     --- program's canvas (the canvas plan's stage 1), and a program
     --- that draws nothing shows its output as it is
     --- (Harmony scrollback.paused-output checks the pixels).
+
+    --- The bare status line says the same every frame, and its
+    --- render into the field's canvas cost a Compy about 1.5 ms
+    --- of each (measured on November 17, 2026): it is rendered
+    --- when what it says changes, and kept otherwise.
+    --- @return function --- the renders of one more frame's draw
+    local function renders_counted()
+      local view = K.cc.view.input
+      local n, render = 0, view.render
+      view.render = function(...)
+        n = n + 1
+        return render(...)
+      end
+      at_end(function() view.render = nil end)
+      return function()
+        n = 0
+        K.redraw()
+        return n
+      end
+    end
+
+    it("render the status line under them once, and again when "
+      .. "what it says changes", function()
+        owning()
+        local renders = renders_counted()
+        assert.equal(1, renders(), "the first frame")
+        assert.equal(0, renders())
+        assert.equal(0, renders())
+        K.cc.entry = "other.lua"
+        assert.equal(1, renders(), "another entry point")
+        assert.equal(0, renders())
+        local says = { }
+        for _, t in ipairs(K.screen().field) do says[t.text] = true end
+        assert.is_true(says["other.lua"])
+        K.cc.entry = nil
+        forget()
+      end)
+
+    it("render the status line under them again when the "
+      .. "screen's mode changes", function()
+        owning()
+        local renders = renders_counted()
+        renders()
+        assert.equal(0, renders())
+        K.cc.model.screen:set("combined")
+        assert.equal(1, renders(), "another mode")
+        assert.equal(0, renders())
+        local says = { }
+        for _, t in ipairs(K.screen().field) do says[t.text] = true end
+        assert.is_true(says["combined"])
+        K.cc.model.screen:set("text")
+        assert.equal(1, renders(), "the first mode again")
+        forget()
+      end)
+
+    --- the line's colours go by the IDE's state: a program idle
+    --- behind the console that still takes keys has the console's,
+    --- one that runs the program's (review o4: a run that idles
+    --- and its rerun that runs say the same words)
+    it("render the status line under them again when a rerun of "
+      .. "the same program runs where the first idled", function()
+        local G = getfenv(0)
+        at_end(function() G.RUNS_NOW = nil end)
+        reset({ ["main.lua"] = "compy.input.hooks.keypressed = "
+          .. "function() return true end\n"
+          .. "if getfenv(0).RUNS_NOW then\n"
+          .. "  function love.update() end\n"
+          .. "end\n" })
+        run("run()")
+        K.frame()
+        assert.same("ready", K.app_state())
+        assert.is_true(K.cc:fieldless())
+        local renders = renders_counted()
+        renders()
+        assert.equal(0, renders())
+        G.RUNS_NOW = true
+        K.keys("lctrl", "r")
+        K.frame()
+        assert.same("running", K.app_state())
+        assert.is_true(K.cc:fieldless())
+        assert.equal(1, renders(), "the rerun's colours")
+        assert.equal(0, renders())
+        forget()
+      end)
+
+    --- the line's place goes by the window's height, which a
+    --- desktop window changes (review o5)
+    it("render the status line under them again, at its new "
+      .. "place, when the window's height changes", function()
+        owning()
+        local view = K.cc.view.input
+        local renders = renders_counted()
+        renders()
+        assert.equal(0, renders())
+        local at = view.start_h
+        local gfx = love.graphics
+        local height = gfx.getHeight
+        at_end(function() gfx.getHeight = height end)
+        gfx.getHeight = function() return height() + 100 end
+        assert.equal(1, renders(), "another height")
+        assert.equal(at + 100, view.start_h)
+        assert.equal(0, renders())
+        forget()
+      end)
+
+    --- The kept line is compared by Statusline:key. Every field
+    --- of the IDE's state that a render of the bare line reads
+    --- must be in it: the render runs here over a love.state that
+    --- records what is read of it, and a change of each field
+    --- read must change the key. What it records are the reads
+    --- written as `love.state.<field>`, as all of them are; a
+    --- read through a copy of the table kept from before, or a
+    --- rawget, would pass it by.
+    it("compare the kept status line by every field of the IDE's "
+      .. "state that its render reads", function()
+        owning()
+        local view = K.cc.view.input
+        local state = love.state
+        local read, render = { }, view.render
+        view.render = function(...)
+          love.state = setmetatable({ }, {
+            __index = function(_, k)
+              read[k] = true
+              return state[k]
+            end,
+            __newindex = state,
+          })
+          local ok, e = pcall(render, ...)
+          love.state = state
+          assert(ok, e)
+        end
+        at_end(function()
+          love.state = state
+          view.render = nil
+        end)
+        K.screen()
+        view.render = nil
+        assert.is_true(read.app_state, "the render read the state")
+        for field in pairs(read) do
+          local was, key = state[field], view:_bare_key()
+          assert.is_string(key)
+          state[field] = { }
+          local changed = view:_bare_key()
+          state[field] = was
+          assert.are_not.equal(key, changed,
+            "love.state." .. field .. " is read and not compared")
+        end
+        forget()
+      end)
+
+    --- the key holds the whole status, each field of it, so a
+    --- field a later draw comes to read is compared already
+    it("compare the kept status line by every field of its "
+      .. "status, nested ones and new ones too", function()
+        local line = K.cc.view.input.statusline
+        local function status()
+          return { custom = { project = "p", name = "main.lua",
+            state = "running" }, mode = "text" }
+        end
+        local key = line:key(status())
+        assert.equal(key, line:key(status()))
+        local changes = {
+          function(s) s.custom.project = "q" end,
+          function(s) s.custom.name = "other.lua" end,
+          function(s) s.custom.state = "paused" end,
+          function(s) s.custom.state = nil end,
+          function(s) s.mode = "combined" end,
+          function(s) s.caps = "CAPS" end,
+          function(s) s.cursor = { l = 1, c = 1 } end,
+          function(s) s.custom.added = false end,
+          --- a text that looks like two fields is one
+          function(s) s.custom.project = "p\nmain.lua" end,
+        }
+        for i, change in ipairs(changes) do
+          local s = status()
+          change(s)
+          assert.are_not.equal(key, line:key(s), "change " .. i)
+        end
+      end)
+
+    it("render the field every frame again once it is back",
+      function()
+        owning()
+        local renders = renders_counted()
+        renders()
+        assert.equal(0, renders())
+        K.keys("lctrl", "q")
+        K.frame()
+        assert.equal(16, rows())
+        assert.equal(1, renders())
+        assert.equal(1, renders())
+        forget()
+      end)
+
+    it("render the status line anew after the console's field "
+      .. "was rendered behind a program's own field", function()
+        reset({ ["main.lua"] = "compy.input.hooks.keypressed = "
+          .. "function() return true end\n"
+          .. "function love.update()\n"
+          .. "  if want == 'show' then compy.input.show { } end\n"
+          .. "  if want == 'hide' then compy.input.hide() end\n"
+          .. "  want = nil\n"
+          .. "end\n" })
+        run("run()")
+        K.frame()
+        local renders = renders_counted()
+        renders()
+        assert.equal(0, renders())
+        env().want = "show"
+        K.frame()
+        --- with a field shown the line says the console's own
+        --- status, rendered each frame as before
+        assert.equal(1, renders())
+        assert.equal(1, renders())
+        env().want = "hide"
+        K.frame()
+        assert.equal(1, renders(), "the frame that hides it")
+        assert.equal(0, renders())
+        forget()
+      end)
 
     --- and the screen's mode, as the console's status line names
     --- it in every state (the program's canvas, stage 2)

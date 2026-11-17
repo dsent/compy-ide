@@ -40,13 +40,68 @@ local function shown(text)
   return string.scrub(tostring(text))
 end
 
+--- What a status line's picture takes from the IDE beside its
+--- status: the state, which picks the colours, and the debug
+--- marks. A draw reads them here and nowhere else, and
+--- Statusline:key compares by the same three.
+--- @return string? state
+--- @return any testing
+--- @return any debug
+local function ide_state()
+  return love.state.app_state, love.state.testing, love.DEBUG
+end
+
+--- `v` spelled for a comparison: a string, a number or a
+--- boolean by its value, a table by every key and value it
+--- holds, and a table deeper than any status goes, a function
+--- or an object as `tostring` gives it. Two statuses made the
+--- same way spell the same; the same fields set in another
+--- order may not, which costs one draw.
+--- @param v any
+--- @param out string[]
+--- @param depth integer
+local function spell(v, out, depth)
+  local t = type(v)
+  if t == 'table' and depth < 6 then
+    out[#out + 1] = '{'
+    for k, x in pairs(v) do
+      spell(k, out, depth + 1)
+      spell(x, out, depth + 1)
+    end
+    out[#out + 1] = '}'
+  elseif t == 'string' then
+    out[#out + 1] = 's' .. #v .. ':' .. v
+  else
+    out[#out + 1] = t:sub(1, 2) .. tostring(v)
+  end
+end
+
+--- What a draw of `status` reads that can differ between two
+--- frames, as one string: the IDE's state (ide_state) and the
+--- whole of `status`, every field of it, read by this draw or
+--- not. Two draws with equal keys draw the same line for the
+--- statuses the IDE makes, of texts, numbers and flags, so a
+--- canvas that holds one need not be drawn again for the other
+--- (UserInputView:draw). A new field of a status is in the key
+--- by itself; a new read of the IDE's state belongs in
+--- ide_state. Where the line is drawn is the caller's.
+--- @param status Status
+--- @return string
+function Statusline:key(status)
+  local out = { }
+  spell({ ide_state() }, out, 0)
+  spell(status, out, 0)
+  return table.concat(out, ' ')
+end
+
 --- @param status Status
 --- @param start_y integer?
 function Statusline:draw(status, start_y)
   local gfx = love.graphics
   local cf = self.cfg
+  local app_state, testing, debug = ide_state()
   local colors = (function()
-    local state = love.state.app_state
+    local state = app_state
     if state == 'inspect' then
       return cf.colors.statusline.inspect
     elseif state == 'running' then
@@ -123,7 +178,7 @@ function Statusline:draw(status, start_y)
   end
 
   local function drawStatus()
-    local state = love.state.app_state
+    local state = app_state
     local custom = status.custom
     local start_text = {
       x = start_box.x + margin,
@@ -180,9 +235,9 @@ function Statusline:draw(status, start_y)
       gfx.setColor(colors.fg)
       left_x = left_x + cols(text .. '  ')
     end
-    if love.DEBUG then
+    if debug then
       gfx.setColor(cf.colors.debug)
-      if love.state.testing then
+      if testing then
         gfx.print('testing',
           midX - (8 * cf.fw),
           start_text.y)

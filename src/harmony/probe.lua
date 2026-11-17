@@ -404,12 +404,19 @@ end
 local recording
 
 --- Record the text the screen draws while `wait` runs for
---- `t` seconds, a frame or more
+--- `t` seconds, a frame or more. A status line the console's
+--- field kept from an earlier frame (UserInputView:draw) is
+--- rendered anew first, so that its text is among it. That
+--- hides a kept line gone stale: what this records is the
+--- line as a fresh render makes it, and a picture of the
+--- screen taken before this call is the one that shows what
+--- was kept.
 --- @param wait function
 --- @param t number?
 --- @return string[] --- each string drawn, in order
 function Probe.drawn(wait, t)
   local gfx = love.graphics
+  Probe.cc().view.input.bare_drawn = nil
   local print_, printf_ = gfx.print, gfx.printf
   recording = {}
   local got = recording

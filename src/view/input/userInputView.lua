@@ -33,6 +33,7 @@ end
 --- @field canvas love.Canvas
 --- @field field_hidden boolean? --- the console's field behind a program that owns the input: its status line alone
 --- @field bare_status Status? --- what the status line says while no field is drawn under it; it is then the screen's last row
+--- @field bare_drawn string? --- what the canvas holds while it holds that status line alone (_bare_key)
 UserInputView = class.create(new)
 
 local get_colors = function(cf_colors)
@@ -469,6 +470,23 @@ function UserInputView:render_error(err_text, status)
   gfx.pop()
 end
 
+--- What a render of the bare status line is compared by: the
+--- status line's own key, which holds what its draw reads
+--- (Statusline:key), and the window's size, by which the
+--- render places the line (status_y). Of what else the render
+--- reads, the ground's colours go by the same state of the
+--- IDE, and the draft's rows only size a ground that is higher
+--- than the canvas at one row. Nil while a field is drawn.
+--- @private
+--- @return string?
+function UserInputView:_bare_key()
+  local bare = self.field_hidden and self.bare_status
+  if not bare then return nil end
+  local gfx = love.graphics
+  return self.statusline:key(bare) .. ' ' .. gfx.getWidth()
+      .. 'x' .. gfx.getHeight()
+end
+
 --- @param input InputDTO
 --- @param status Status
 function UserInputView:render(input, status, time)
@@ -477,6 +495,8 @@ function UserInputView:render(input, status, time)
   --- screen's mode on the status line
   self.cursor_shown = Blink.shown(self.cfg.blink)
   self.mode_shown = status and status.mode
+  --- what the canvas holds from this render on
+  self.bare_drawn = self:_bare_key()
   --- @diagnostic disable-next-line: undefined-field
   if gfx.mock then return end
   local err_text = input.wrapped_error or {}
@@ -517,7 +537,15 @@ function UserInputView:draw()
   local model = self.controller and self.controller.model
   local source = model and model.screen_source
   local moded = source ~= nil and source() ~= self.mode_shown
-  if self.controller ~= project or turned or moded then
+  --- The bare status line behind a running program is the
+  --- same frame after frame: the canvas that holds it is kept
+  --- until anything its draw reads changes (_bare_key), or
+  --- anything else is rendered (its render cost a Compy about
+  --- 1.5 ms of every frame).
+  local key = self:_bare_key()
+  local kept = key ~= nil and key == self.bare_drawn
+  if not kept
+      and (self.controller ~= project or turned or moded) then
     self.controller:update_view()
   end
   local h = self.start_h
