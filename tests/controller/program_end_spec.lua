@@ -370,3 +370,30 @@ describe("compy.ask at a stop #console", function()
     assert.is_nil(held[1])
   end)
 end)
+
+-- Beads compy-ide-ask-flags-keep-a-stopped-programs-callbacks:
+-- a question's flags are no store of a program's callbacks
+describe("compy.ask's flags at a stop #console", function()
+  after_each(cleanup)
+
+  it("keep no stopped program's callback, capture or environment",
+    function()
+      reset({ ["main.lua"] = "BIG = { }\n"
+        .. "compy.input.callbacks.on_text_entered = function()\n"
+        .. "  return BIG\nend\n"
+        .. "compy.ask('name?')\n"
+        .. "function love.update() end\n" })
+      run("run()")
+      local env = K.cc:get_project_env()
+      local held = setmetatable({ env.BIG, env,
+        env.compy.input.callbacks.on_text_entered }, { __mode = "v" })
+      env = nil
+      assert.is_not_nil(held[1])
+      K.keys("lctrl", "q")
+      assert.is_false(K.cc.run_live)
+      collectgarbage("collect")
+      collectgarbage("collect")
+      assert.is_nil(held[1])
+      assert.is_nil(held[2])
+    end)
+end)

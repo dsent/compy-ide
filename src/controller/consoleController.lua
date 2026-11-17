@@ -1596,7 +1596,11 @@ local function build_simple_surface(input, get_env)
         armed = { widget = love.state.user_input_controller,
           config = save_config(input) }
       end
-      input.configure(ASK_FLAGS)
+      --- a copy: configure merges the widget's callbacks into
+      --- the table it is given, and the shared flags would keep a
+      --- stopped program's callbacks and environment alive (Beads
+      --- compy-ide-ask-flags-keep-a-stopped-programs-callbacks)
+      input.configure(table.clone(ASK_FLAGS))
       local cb = input.callbacks
       cb.on_text_entered = function(t) conclude(t) end
       cb.after_cancel = function() conclude(nil) end
