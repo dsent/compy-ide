@@ -284,6 +284,62 @@ describe("selection in the draft #input", function()
       assert.same({ 1, 8 }, cursor(f), owner)
     end)
 
+    --- review s4's first finding
+    in_every_field("a drag brought back to its press selects "
+        .. "nothing", function(owner)
+      local f = field_of(owner, { "abcdef" }, 1, 7)
+      local x, y = at(f, 0, 2)
+      local x2 = at(f, 0, 5)
+      F.set_mouse_down(true)
+      F.session.mousepressed(x, y, 1, false, 1)
+      F.session.mousemoved(x2, y, x2 - x, 0, false)
+      assert.same("bcd", selected(f), owner)
+      F.session.mousemoved(x, y, x - x2, 0, false)
+      F.set_mouse_down(false)
+      F.session.mousereleased(x, y, 1, false, 1)
+      K.frame()
+      assert.is_nil(selected(f), owner)
+      assert.same({ 1, 2 }, cursor(f), owner)
+    end)
+
+    --- review s4's second finding: a release the field never saw,
+    --- the button seen up, then a press elsewhere and a drag in
+    in_every_field("a drag whose release went unseen does not come "
+        .. "back with a later press elsewhere", function(owner)
+      local f = field_of(owner, { "abcdef" }, 1, 7)
+      local x, y = at(f, 0, 2)
+      local x2 = at(f, 0, 5)
+      F.set_mouse_down(true)
+      f:mousepressed(x, y, 1)
+      F.set_mouse_down(false)
+      f:mousemoved(x, y, 0, 0, false)
+      K.frame()
+      F.set_mouse_down(true)
+      f:mousemoved(x2, y, x2 - x, 0, false)
+      F.set_mouse_down(false)
+      f:mousereleased(x2, y, 1)
+      assert.is_nil(selected(f), owner)
+    end)
+
+    --- review s4's third finding: the key card comes up during a
+    --- drag in the editor; the moves under it are held back, and
+    --- the release that balances the press selects nothing
+    it("a release under the key card selects nothing", function()
+      local f = field_of("editor", { "abcdef" }, 1, 7)
+      local x, y = at(f, 0, 2)
+      local x2 = at(f, 0, 5)
+      F.set_mouse_down(true)
+      F.session.mousepressed(x, y, 1, false, 1)
+      K.hold("f1")
+      assert.is_not_nil(K.key_card())
+      F.session.mousemoved(x2, y, x2 - x, 0, false)
+      F.set_mouse_down(false)
+      F.session.mousereleased(x2, y, 1, false, 1)
+      K.release("f1")
+      assert.is_nil(selected(f))
+      assert.same({ 1, 2 }, cursor(f))
+    end)
+
     in_every_field("a click in one frame places the cursor and "
         .. "selects nothing", function(owner)
       local f = field_of(owner, { "hello world" }, 1, 12)

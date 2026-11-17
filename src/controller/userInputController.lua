@@ -885,47 +885,55 @@ end
 function UserInputController:mousereleased(
     x, y, btn, touch, presses)
   if btn ~= 1 then return end
-  --- the drag ends where the button comes up: a press, one
-  --- move and the release in one frame select as a slow drag
-  --- does (the device run's point E)
-  self:_drag_to(x, y)
-  self.drag_from = nil
-end
-
---- @private
---- Select from the drag's press to the point (x, y), while the
---- text is as it was at the press and the point is in the
---- field's rows
---- @param x number
---- @param y number
-function UserInputController:_drag_to(x, y)
   local from = self.drag_from
-  if not from then return end
-  if from[3] ~= self.model.text_changes then
-    self.drag_from = nil
-    return
-  end
+  self.drag_from = nil
+  --- a move with the button already up in this frame (point E):
+  --- the release, where that move went, selects to it. A release
+  --- elsewhere than the last move, or with no move seen (under
+  --- the key card the moves are held back), changes nothing.
+  if not from or from[3] ~= self.model.text_changes then return end
+  local last = from.last
+  if not last then return end
   local l, c = self:_point(x, y)
-  if not l then return end
-  if l == from[1] and c == from[2] then return end
+  if l ~= last[1] or c ~= last[2] then return end
   self.model:select_to(from[1], from[2], l, c)
   self:update_view()
 end
 
 --- A drag from a press in the draft selects up to the point
---- it has reached, while that point is in the field's rows
+--- it has reached, while that point is in the field's rows; a
+--- point back on the press selects nothing. With the button up
+--- a move only marks where it went, for a release in the same
+--- frame; the button seen up and then down again is a press
+--- this field did not see, and ends the drag (review s4).
 --- @param x number
 --- @param y number
 --- @param dx number
 --- @param dy number
 --- @param touch boolean
 function UserInputController:mousemoved(x, y, dx, dy, touch)
-  --- a move with the button up selects nothing: its release went
-  --- elsewhere, or it is on its way in this frame, and the
-  --- release then ends the drag where it is (point E); a change
-  --- to the text since the press ends the drag
-  if not love.mouse.isDown(1) then return end
-  self:_drag_to(x, y)
+  local from = self.drag_from
+  if not from then return end
+  --- any change to the text since the press ends the drag
+  if from[3] ~= self.model.text_changes then
+    self.drag_from = nil
+    return
+  end
+  local down = love.mouse.isDown(1)
+  if down and from.up then
+    self.drag_from = nil
+    return
+  end
+  local l, c = self:_point(x, y)
+  if not down then from.up = true end
+  if not l then
+    from.last = nil
+    return
+  end
+  from.last = { l, c }
+  if not down then return end
+  self.model:select_to(from[1], from[2], l, c)
+  self:update_view()
 end
 
 --- @param x integer
