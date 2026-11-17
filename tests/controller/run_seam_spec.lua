@@ -605,6 +605,18 @@ function love.update(dt) Timer.update(dt) end
       assert.is_false(said('OLDEXIT'), K.console_text())
     end)
 
+  --- round 22: a project's close with nothing live calls no
+  --- exit hook a typed line set; it removes it
+  it('calls no typed exit hook as run("other") closes the project',
+    function()
+      reset({['main.lua'] = 'fresh = true\n'})
+      run("compy.before_exit = function() print('OLD' .. 'EXIT') end")
+      K.next_project('other', {['main.lua'] = 'x = 43\n'})
+      run("run('other')")
+      assert.same('other', K.cc.model.projects.current.name)
+      assert.is_false(said('OLDEXIT'), K.console_text())
+    end)
+
   it('drops a serial handler typed before a run with nothing live',
     function()
       reset({['main.lua'] = 'fresh = true\n'})

@@ -1524,11 +1524,20 @@ local function build_simple_surface(input, get_env)
     return ns and rawget(ns, k)
   end
 
+  --- A question belongs to the widget it was asked on: one
+  --- asked at the console with nothing live, or by a run that
+  --- has ended, is forgotten, never restored over a later run's
+  --- field (round 22)
+  --- @return boolean own --- the question was this widget's
   local function disarm()
-    if not armed then return end
+    if not armed then return false end
     local saved = armed
     armed = nil
-    restore_config(input, saved)
+    if saved.widget ~= love.state.user_input_controller then
+      return false
+    end
+    restore_config(input, saved.config)
+    return true
   end
 
   --- The boilerplate `ask` installs on both conclusions
@@ -1583,7 +1592,8 @@ local function build_simple_surface(input, get_env)
     ask = function(prompt, highlighter, text, cursor)
       check_hook_free()
       if input.hooks.keypressed ~= key_stub then
-        armed = save_config(input)
+        armed = { widget = love.state.user_input_controller,
+          config = save_config(input) }
       end
       input.configure(ASK_FLAGS)
       local cb = input.callbacks
@@ -1604,9 +1614,7 @@ local function build_simple_surface(input, get_env)
     --- abandoning, and a program that withdrew its own
     --- question already knows.
     unask = function()
-      if not armed then return end
-      disarm()
-      input.hide()
+      if disarm() then input.hide() end
     end,
   }
 end
@@ -2437,8 +2445,10 @@ function ConsoleController:flush_program_state(call_exit)
   End.ending = true
   local ended = self.run_live
   local st = love.state.app_state
-  local to_end = ended or self.state_left
-      or (st ~= 'ready' and st ~= 'editor')
+  --- a program is live: it runs, is paused, or idles with its
+  --- handlers or picture
+  local live = ended or (st ~= 'ready' and st ~= 'editor')
+  local to_end = live or self.state_left
   self.state_left = false
   if to_end then
     -- What the run queued for the board and has not sent goes
@@ -2446,7 +2456,9 @@ function ConsoleController:flush_program_state(call_exit)
     -- line on purpose, and that one stays.
     SerialPort:drop()
     local compy = self:get_project_env().compy
-    if call_exit then
+    --- the hook is a live run's: with none, one a typed line set
+    --- is removed and not called (round 22)
+    if call_exit and live then
       framework_before_exit(compy)
     else
       compy.before_exit = default_before_exit

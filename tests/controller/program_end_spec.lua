@@ -329,3 +329,24 @@ describe("a lifecycle call ends the code that made it #console",
         true))
     end)
   end)
+
+-- round 22: a question asked at the console with nothing live
+-- is refused, and leaves nothing for the next run to restore
+describe("compy.ask with nothing live #console", function()
+  after_each(cleanup)
+
+  --- with no widget, the question asks nothing; the next run's
+  --- unask() then has no question to withdraw, and hides no
+  --- field of its own
+  it("leaves nothing for the next run's unask() to withdraw",
+    function()
+      reset({ ["main.lua"] = "compy.input.show({ })\n"
+        .. "compy.unask()\n"
+        .. "function love.update() end\n" })
+      run("compy.ask('old')")
+      run("run()")
+      local field = love.state.user_input_controller
+      assert.is_true(field:is_shown())
+      K.keys("lctrl", "q")
+    end)
+end)

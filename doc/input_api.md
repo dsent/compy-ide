@@ -1170,10 +1170,10 @@ end
 - **Timing:** runs at the start of the stop, before the IDE's own teardown,
   so your variables, `love.*` calls and the input field are still there.
   What your program queued for the board and had not sent is dropped just
-  before the hook runs, so a line the hook sends is the last one, and it goes
-  out while the IDE runs on. When the IDE itself quits (in play mode, or
-  when Android closes it), the connection to the board closes right after
-  the hook, and that line may not go out.
+  before the hook runs, so a line the hook sends is the last one. It is
+  queued and goes out unless the IDE quits (in play mode, or when Android
+  closes it: the connection closes right after the hook) or a run started at
+  once fails in its first lines (that run's end drops what was queued).
 - **Fires on:** every stop of a live program, that is one that runs, is
   paused, or has ended its code with its handlers or picture still there:
   `stop()`, `Ctrl+Q`, `Ctrl+R` (before the run starts again), `Ctrl+T` from
