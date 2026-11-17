@@ -1582,6 +1582,61 @@ describe("the output's rows with no field under it #console",
         forget()
       end)
 
+    --- The pause's screenshot is the picture of a program that
+    --- draws. Kept for one that draws nothing, it was an image of
+    --- the console's own screen under the output, a row apart
+    --- from it once the grid had rolled for the field; and kept
+    --- through continue(), it lay under the running program's
+    --- output (seen on a Compy on November 17, 2026). The
+    --- fixture's screenshot never comes and its View drops
+    --- nothing: here the screenshot comes at once and is
+    --- dropped as view/view.lua drops it.
+    local function screenshot_comes()
+      local gfx = love.graphics
+      local shot, image = gfx.captureScreenshot, gfx.newImage
+      local clear = View.clear_snapshot
+      gfx.captureScreenshot = function(taken) taken({ }) end
+      gfx.newImage = function()
+        return { release = function() end }
+      end
+      View.clear_snapshot = function() View.snapshot = nil end
+      return function()
+        gfx.captureScreenshot, gfx.newImage = shot, image
+        View.clear_snapshot = clear
+        View.snapshot = nil
+      end
+    end
+
+    it("keep no picture of a paused program that draws nothing",
+      function()
+        owning()
+        local back = screenshot_comes()
+        K.keys("lctrl", "pause")
+        K.frame()
+        assert.same("inspect", K.app_state())
+        assert.is_nil(View.snapshot)
+        back()
+        forget()
+      end)
+
+    it("keep the picture of a paused program that draws, until "
+      .. "continue()", function()
+        reset({ ["main.lua"] = "function love.draw() end\n" .. RUNS })
+        run("run()")
+        K.frame()
+        local back = screenshot_comes()
+        K.keys("lctrl", "pause")
+        K.frame()
+        assert.same("inspect", K.app_state())
+        assert.is_not_nil(View.snapshot)
+        run("continue()")
+        assert.same("running", K.app_state())
+        assert.is_nil(View.snapshot)
+        back()
+        env().love.update = nil
+        env().love.draw = nil
+      end)
+
     it("have the status line under them, naming the project, "
       .. "the entry point and that it runs, and nothing else",
       function()

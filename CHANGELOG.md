@@ -388,6 +388,11 @@ Project-author guide: `doc/input_api.md`.
 
 ### Fixed
 
+- **A paused program's output is drawn once.** A pause kept a picture of the whole
+  screen and drew the output over it. For a program that draws nothing of its own that
+  picture was the console itself, and after `continue()` it stayed under whatever the
+  program printed next, each row showing twice. A pause now keeps the picture of a
+  program that draws, and `continue()` drops it.
 - **A line as wide as the screen is not followed by a blank row.** The console moved to
   the next row as soon as a row's 64th character was written, so the line end after a
   64-character line left a row empty, and a full last row scrolled the screen at once.

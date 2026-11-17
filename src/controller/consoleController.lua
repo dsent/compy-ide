@@ -1950,6 +1950,10 @@ function ConsoleController.prepare_project_env(cc)
       love.state.paused_from = nil
       SerialPort:programContinued()
       cc.model.output:to_rest()
+      --- the pause's picture goes as the program runs again: its
+      --- own draw paints from the next frame, and nothing of the
+      --- pause lies under a console drawn meanwhile
+      View.clear_snapshot()
       cc.main_ctrl.restore_user_handlers(cc)
       -- After the handlers: a cursor the program has released
       -- raises here, and the program runs on regardless.

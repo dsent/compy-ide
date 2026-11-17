@@ -769,9 +769,14 @@ Controller = {
       end
       if love.state.app_state == 'snapshot' then
         gfx.captureScreenshot(function(img)
-          local snap = gfx.newImage(img)
-          if View.snapshot then View.snapshot:release() end
-          View.snapshot = snap
+          --- The screenshot is the picture of a program that
+          --- draws. One that draws nothing has no picture but
+          --- the console's output, which the console draws as
+          --- it is: kept here, the screenshot lay under that
+          --- output as an image of itself. The program's draw
+          --- is still its own here; suspend takes it away.
+          View.clear_snapshot()
+          if user_draw then View.snapshot = gfx.newImage(img) end
           CC:suspend()
         end)
       end
