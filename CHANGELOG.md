@@ -273,7 +273,8 @@ Project-author guide: `doc/input_api.md`.
 - **The mouse wheel scrolls the console's output**, three rows a notch.
 - **Ctrl+Pause pauses any program that can act**, one with only key handlers and no update
   or draw included: before, it did nothing there. The pause gives the console and its field
-  back, and `continue()` resumes the program as it was, idle or running.
+  back, holds the program's serial handlers too (before, they went on), and `continue()`
+  resumes the program as it was, idle or running.
 - **Ctrl+R restarts a live program only.** It restarts a program that runs, is paused or
   idles behind the console, from the file it runs from; in the console with no program, and
   in the editor, it does nothing: the idle console's key card lists it among the other keys,

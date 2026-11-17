@@ -196,3 +196,62 @@ describe("Ctrl+Pause on a program that can act #console", function()
     K.keys("lctrl", "q")
   end)
 end)
+
+-- p1's findings
+describe("a pause of a program that can act, p1 #console", function()
+  after_each(K.cleanup)
+
+  it("pauses the program's serial handlers too", function()
+    K.reset({ ["main.lua"] = "n = 0\n"
+      .. "compy.serial.onTick = function() n = n + 1 end\n" })
+    run("run()")
+    local env = K.cc:get_project_env()
+    local function tick()
+      SerialPort.dispatcher:push('tick')
+      SerialPort.dispatcher:pump()
+    end
+    local was = env.n
+    tick()
+    assert.equal(was + 1, env.n)
+    K.keys("lctrl", "pause")
+    K.frame()
+    if K.app_state() == "snapshot" then K.cc:suspend() end
+    assert.same("inspect", K.app_state())
+    was = env.n
+    tick()
+    K.frame()
+    assert.equal(was, env.n)
+    run("continue()")
+    was = env.n
+    tick()
+    assert.is_true(env.n > was)
+    K.keys("lctrl", "q")
+  end)
+
+  it("pauses a program whose first lines call pause() and then"
+    .. " idle, and continue() resumes it idle", function()
+      K.reset({ ["main.lua"] = "function love.keypressed() end\n"
+        .. "pause()\n" })
+      run("run()")
+      K.frame()
+      if K.app_state() == "snapshot" then K.cc:suspend() end
+      assert.same("inspect", K.app_state())
+      run("continue()")
+      assert.same("ready", K.app_state())
+      assert.is_nil(love.state.paused_from)
+      K.keys("lctrl", "q")
+    end)
+
+  it("gives a held console key's repeats no hidden draft", function()
+    K.reset({ ["main.lua"] = "function love.update() end\n" })
+    K.type("abc")
+    K.hold("backspace")
+    assert.same("ab", K.console_draft())
+    K.cc:run_project()
+    assert.is_true(K.cc.main_ctrl.program_owns_input())
+    K.repeat_key("backspace")
+    K.release("backspace")
+    assert.same("ab", K.console_draft())
+    K.keys("lctrl", "q")
+  end)
+end)

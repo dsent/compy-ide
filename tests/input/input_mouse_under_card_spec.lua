@@ -249,29 +249,54 @@ describe("the mouse under the key card #input", function()
   end)
 
   --- the card comes up behind a program only while it is paused
-  --- (November 17): its half clicks are the console's
+  --- (November 17): the console is the receiver then, and what it
+  --- is handed is recorded (p1: the paused program's empty log
+  --- alone observed nothing)
   describe("leaves no half click", function()
+    --- the button events the console's field is handed
+    local function console_mouse()
+      local seen = { }
+      local field = K.cc.input
+      local press, release = field.mousepressed, field.mousereleased
+      field.mousepressed = function(...)
+        seen[#seen + 1] = "mousepressed"
+        return press(...)
+      end
+      field.mousereleased = function(...)
+        seen[#seen + 1] = "mousereleased"
+        return release(...)
+      end
+      finally(function()
+        field.mousepressed, field.mousereleased = press, release
+      end)
+      return seen
+    end
+
     it("a press under the card holds back its release after "
         .. "the card", function()
       paused(IDLES)
+      local seen = console_mouse()
       local x, y = on_field(1)
       K.hold("f1")
       F.session.mousepressed(x, y, 1, false, 1)
       K.release("f1")
       F.session.mousereleased(x, y, 1, false, 1)
       K.frame(0.5)
+      assert.same({ }, seen)
       assert.same({ }, log())
     end)
 
     it("a press before the card gets its release under it, at"
         .. " the console, not the paused program", function()
         paused(IDLES)
+        local seen = console_mouse()
         local x, y = on_field(1)
         F.session.mousepressed(x, y, 1, false, 1)
         K.hold("f1")
         assert.is_not_nil(K.key_card())
         F.session.mousereleased(x, y, 1, false, 1)
         K.release("f1")
+        assert.same({ "mousepressed", "mousereleased" }, seen)
         assert.same({ }, log())
       end)
   end)

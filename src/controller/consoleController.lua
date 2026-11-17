@@ -741,7 +741,13 @@ function ConsoleController:_run_project(name, stopped, entry)
           -- stopped, so its handlers stay, but it is no longer
           -- the one speaking and the console listens again.
           SerialPort:programIdle()
-          love.state.app_state = 'ready'
+          --- a pause the first lines asked for goes on, and
+          --- continue() resumes the program idle (p1)
+          if love.state.app_state == 'snapshot' then
+            love.state.paused_from = 'ready'
+          else
+            love.state.app_state = 'ready'
+          end
           -- Without a widget or a pointer handler nothing of the
           -- program answers the pointer, and the console is on
           -- screen: it needs its mouse now, even if keys or the
@@ -1935,6 +1941,7 @@ function ConsoleController.prepare_project_env(cc)
       -- resume, in the state the pause found the program in
       love.state.app_state = love.state.paused_from or 'running'
       love.state.paused_from = nil
+      SerialPort:programContinued()
       cc.model.output:to_rest()
       cc.main_ctrl.restore_user_handlers(cc)
       -- After the handlers: a cursor the program has released
@@ -2207,6 +2214,8 @@ function ConsoleController:suspend()
   self.paused_mouse = get_mouse()
   set_mouse(CONSOLE_MOUSE)
   self.main_ctrl.save_user_handlers(runner_env['love'])
+  --- the program's serial handlers wait with it (p1)
+  SerialPort:programPaused()
   self.main_ctrl.set_default_handlers(self, self.view)
 end
 
@@ -3025,7 +3034,10 @@ function ConsoleController:mousereleased(
     if self.cfg.editor.mouse_enabled then
       self.editor.input:mousereleased(x, y, btn, touch, presses)
     end
-  elseif not self:key_card() then
+  else
+    --- a release goes where its press went: the gate drops the
+    --- release of a press the card held back, and hands this
+    --- one the release of a press made before the card (p1)
     self.input:mousereleased(x, y, btn, touch, presses)
   end
 end

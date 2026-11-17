@@ -1326,6 +1326,9 @@ Controller = {
         --- a key whose press fell through to the console repeats
         --- there, whoever has the keys now
         if to == 'console' and route_owner ~= 'console' then
+          --- not while the program owns the input: the console's
+          --- field is hidden (p1)
+          if Controller.program_owns_input() then return end
           local console = Controller._defaults.keypressed
           if console then return console(k, sc, isr) end
           return
