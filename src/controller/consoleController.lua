@@ -36,9 +36,8 @@ local messages = {
   --- only a card that cannot hold scratchpad leaves none open
   no_project      = 'No project is open: the SD card cannot be used.',
   --- a pause shows the console; a picture the program drew
-  --- waits behind it (the lead's decision 7 of November 17,
-  --- 2026, after the maintainer's "press F12 to see the drawing
-  --- canvas")
+  --- waits behind it (decision 7 of November 17, 2026, after
+  --- the maintainer's "press F12 to see the drawing canvas")
   picture_hint    = 'F12 shows the picture',
   --- run() makes no project: project() does
   no_such_project = function(name)
@@ -2381,8 +2380,8 @@ end
 --- A pause's text with how to see the picture behind it: on the
 --- pause's own row, in brackets after its text, where both fit,
 --- so that the band covers no more of the output; on a row of
---- its own where they do not (the lead's ruling of November 17,
---- 2026: ASCII alone in the words the screen shows), the text
+--- its own where they do not (the ruling of November 17, 2026:
+--- ASCII alone in the words the screen shows), the text
 --- cut to the band's rows less the hint's, as the band cuts a
 --- message, so that the hint is always seen; alone after a
 --- pause with no text. The text is measured as the band shows
@@ -2812,8 +2811,8 @@ end
 --- maintainer's ruling "The natural end is a stop; the build
 --- waits for the canvas", built in stage 4 of the canvas plan).
 --- At the end of its first lines a program that drew leaves its
---- picture on show until a key or a click (the lead's decision
---- 1 of November 17, 2026); one found ended as an event comes
+--- picture on show until a key or a click (decision 1 of
+--- November 17, 2026); one found ended as an event comes
 --- leaves the console, which that event reaches, or the picture
 --- when it is on show as the end is made (`shown`; stage 2's k5
 --- and k6: the screen after the end is set here, by the end
@@ -3403,7 +3402,8 @@ end
 --- returns, raised or was ended, before the target goes back: a
 --- push saves the state it is made in, the program's canvas
 --- bound, and one left behind would bind it again where it is
---- popped (the lead's ruling on rounds c1 and c2).
+--- popped (the ruling of November 17, 2026, on rounds c1 and
+--- c2).
 --- @param f function
 function ConsoleController:use_canvas(f)
   local canvas = self.model.output.canvas

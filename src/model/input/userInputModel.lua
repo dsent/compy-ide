@@ -195,8 +195,8 @@ function UserInputModel:add_text(text)
     if self:has_selection() then
       --- typing over a selection is two steps: the selection's
       --- removal, then the typing, a run of its own from its
-      --- first letter (the lead's ruling after the device run of
-      --- November 17, 2026)
+      --- first letter (the ruling of November 17, 2026, after
+      --- that day's device run)
       self:delete_selection()
       self:_record_edit(single and 'insert' or 'text', true)
     elseif single then

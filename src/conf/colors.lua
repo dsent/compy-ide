@@ -105,8 +105,8 @@ return {
   --- combined mode the output is drawn over the program's
   --- picture: `ground` is the opacity of the output's ground
   --- over the picture, `text` the opacity of its characters.
-  --- The lead's decision 5 of November 17, 2026 starts here,
-  --- the picture dimmed and the text whole, for legibility; the
+  --- Decision 5 of November 17, 2026 starts here, the picture
+  --- dimmed and the text whole, for legibility; the
   --- maintainer's words, "the text half-transparent over the
   --- canvas", are ground 0 and text 0.5. The maintainer chooses.
   screen = {

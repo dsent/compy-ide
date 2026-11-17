@@ -683,7 +683,8 @@ describe('a program\'s canvas after it stops #canvas', function()
   --- (use_canvas), which unwinds what the code pushed and did not
   --- pop before it gives the target back: no push of the
   --- program's outlives the call that made it, whatever entry
-  --- point ran it (the lead's ruling on round c2)
+  --- point ran it (the ruling of November 17, 2026, on round
+  --- c2)
   describe('program code that pushes and never pops leaves nothing'
     .. ' pushed after it, the screen the target', function()
     local function clean()

@@ -65,8 +65,8 @@ function ScreenModel:step()
 end
 
 --- From the full picture back to the console's text, whatever
---- showed before it: any key or button there (the lead's ruling
---- of November 17, 2026, after the maintainer's "if any key gets
+--- showed before it: any key or button there (the ruling of
+--- November 17, 2026, after the maintainer's "if any key gets
 --- us back into console, this is good enough"); F12 reaches the
 --- picture through combined, and the plain console is then one
 --- key away
@@ -125,8 +125,8 @@ function ScreenModel:resume()
 end
 
 --- A run ended by itself, its picture drawn: the picture stays
---- on show, and back() (any key) goes to the console (the lead's
---- decision 1 of November 17, 2026)
+--- on show, and back() (any key) goes to the console (decision
+--- 1 of November 17, 2026)
 function ScreenModel:ended_by_itself()
   self.mode = 'picture'
   self.paused = nil

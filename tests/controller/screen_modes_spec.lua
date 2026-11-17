@@ -212,7 +212,7 @@ describe('the screen modes #canvas', function()
     assert.is_false(F.cc.model.output:is_drawn())
   end)
 
-  --- the lead's decision 1 of November 17, 2026: a program that
+  --- decision 1 of November 17, 2026: a program that
   --- ended by itself and drew leaves its picture on show; one that
   --- drew nothing leaves the console
   it('shows the picture after a drawing program\'s natural end',
@@ -429,8 +429,8 @@ describe('the screen modes #canvas', function()
         assert.equal('text', S:get())
       end)
 
-    --- c3's fifth finding; back goes to text (the lead's ruling
-    --- of November 17, 2026)
+    --- c3's fifth finding; back goes to text (the ruling of
+    --- November 17, 2026)
     it('goes back to text from a picture stepped to before a pause'
       .. ' in which the program first drew', function()
         F.run_project(function()
