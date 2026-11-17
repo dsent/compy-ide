@@ -483,7 +483,9 @@ describe('input surface: inbound events — a project stays live'
       .. how, function()
         local calls = stub_stop()
         F.quits()
-        F.run_source(how)
+        -- a running project: one that can do nothing more ends
+        -- at its last line (stage 4 of the canvas plan)
+        F.run_source('function love.update() end\n' .. how)
         local got = F.quits()
         assert.are.equal(1, #got)
         local system, window = love.system, love.window

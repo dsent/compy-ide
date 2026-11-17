@@ -139,6 +139,17 @@ function M.request(work)
   error(M.ENDED, 0)
 end
 
+--- The IDE's own request, made where program code may be on the
+--- stack: recorded as a lifecycle call's is, and carried out
+--- once the place that holds it ends, with nothing raised, so
+--- the IDE's code there goes on (a program's natural end, found
+--- as an event comes)
+--- @param work function
+function M.defer(work)
+  if M.user == 0 and M.hold == 0 then return work() end
+  if not M.pending and not M.ending then M.pending = work end
+end
+
 --- Everything back as at the start, for a test's fixture
 function M.reset()
   M.user, M.hold = 0, 0

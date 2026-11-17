@@ -701,20 +701,22 @@ describe("IS1 files #editor #spec", function()
       end
     end
 
-    -- A program that finished its code idles behind the
-    -- console, not stopped; Ctrl+Q stops it.
+    -- A paused program is live behind the console, not
+    -- stopped; Ctrl+Q stops it.
     spec_it("IS3.16 Show the key card: the console's " ..
         "card lists Ctrl+Q as exit program, among the keys now " ..
         "while a program is not stopped and after them with " ..
         "none, and the key does nothing while the card shows",
         function()
-      K.reset({ ["main.lua"] = "x = 1\n" })
+      K.reset({ ["main.lua"] = "x = 1\npause('here')\n" })
       assert.same({ "other", "exit program" },
         { card_ctrl_q() })
-      -- run the project from the editor: it ends idle
+      -- run the project from the editor: its first lines pause it,
+      -- and the console is in front of it (a program that can do
+      -- nothing more ends at its last line: stage 4)
       K.open()
       K.keys("lctrl", "t")
-      assert.same("ready", K.app_state())
+      assert.same("inspect", K.app_state())
       assert.is_true(K.cc.run_live)
       assert.same({ "now", "exit program" }, { card_ctrl_q() })
       K.hold("f1")
@@ -740,12 +742,8 @@ describe("IS1 files #editor #spec", function()
       })
       K.open()
       K.keys("lctrl", "t")
-      -- the error suspends the run; the move from the snapshot
-      -- to 'inspect' is the screenshot's callback, which needs
-      -- a real graphics context
+      -- the error pauses the run, in the frame it raises in
       K.frame()
-      assert.same("snapshot", K.app_state())
-      K.cc:suspend()
       assert.same("inspect", K.app_state())
       assert.same({ "now", "exit program" }, { card_ctrl_q() })
       K.hold("f1")

@@ -44,9 +44,22 @@
   <kbd>Ctrl</kbd>+<kbd>Esc</kbd> acts. In your program F1 holds
   back nothing.
 - A click in the field places the cursor, as in the console and
-  in your program's input; a click on the file does nothing. No
-  field selects text: Shift with an arrow does nothing, and
-  neither does a drag.
+  in your program's input; a click on the file does nothing.
+  <kbd>Shift</kbd> with a movement key, or a drag of the mouse,
+  selects a part of the draft: typing replaces it, and
+  <kbd>Backspace</kbd> or <kbd>Delete</kbd> removes it, which
+  <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes back; after typing, the
+  first <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes back what was typed
+  and the second brings the selection back. Every other key keeps
+  its meaning: a plain arrow clears the selection and moves as
+  it always does, and <kbd>Escape</kbd> drops the edit. Beside a
+  selection the cursor is a thin bar at the left edge of its
+  cell, so that a selected character it stands on stays seen;
+  without one it is the block. Nothing copies or
+  pastes: <kbd>Ctrl</kbd>+<kbd>Insert</kbd>,
+  <kbd>Ctrl</kbd>+<kbd>Delete</kbd> and
+  <kbd>Shift</kbd>+<kbd>Insert</kbd> keep their meaning for
+  blocks.
 - Held down, a key repeats, and each stops by itself: a held
   <kbd>Enter</kbd> adds an empty line per repeat, a held
   <kbd>Ctrl</kbd>+<kbd>Delete</kbd> removes the empty lines down
@@ -88,6 +101,7 @@
 | Delete to the end of the line                                     | <kbd>Ctrl</kbd>+<kbd>K</kbd>                  |
 | Move the cursor's line up / down                                  | <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>⇧</kbd>/<kbd>⇩</kbd> |
 | Place the cursor                                                  | click in the field                            |
+| Select a part of the draft; typing replaces it, Backspace or Delete removes it | <kbd>Shift</kbd>+movement, or drag |
 | Evaluate input                                                    | <kbd>Enter ⏎</kbd>                            |
 | **Editor**                                                        |                                               |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; _same as Input in the field, except for:_ |                                               |

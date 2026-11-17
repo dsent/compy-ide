@@ -26,6 +26,12 @@ local OTHER = 'o = 1\n'
 --- a program behind the console: it hooks no key, so the
 --- console takes them
 local IDLES = 'n = 0\nfunction love.update() n = n + 1 end\n'
+--- a program live behind the console that leaves it the keys
+--- and its card (a program that can act owns all input, November
+--- 17):
+--- paused in its first lines (one that can do nothing more ends
+--- at its last line, stage 4 of the canvas plan)
+local ENDS = "n = 0\npause('here')\n"
 
 local function stored() return P.stored(PROJECT, FILE) end
 local function col()
@@ -196,6 +202,11 @@ local function draft_rows(d)
       D.eq(col(), '1:1', 'and the one before')
       D.key(wait, 'C-right')
       D.eq(col(), '1:2', 'Ctrl+Right to the word end')
+    end },
+    ['Shift+move'] = { 'select', function(wait)
+      D.key(wait, 'S-left')
+      D.type(wait, 'Z')
+      D.eq(P.draft(), d:sub(1, -2) .. 'Z', 'typing replaced it')
     end },
     ['Ctrl+Home/End'] = { 'text start/end', function(wait)
       D.key(wait, 'S-return')
@@ -406,14 +417,31 @@ local CONSOLE = {
   end },
   ['F1 (hold)'] = { 'this card', card_shows },
   ['Ctrl+Esc'] = { 'quit the IDE', quits },
+  --- the screen's modes, round to text again
+  ['F12'] = { 'screen', function(wait)
+    local function mode() return P.cc().model.screen:get() end
+    D.eq(mode(), 'text', 'the text shows')
+    D.key(wait, 'f12')
+    D.eq(mode(), 'combined', 'F12, combined')
+    D.key(wait, 'f12')
+    D.eq(mode(), 'picture', 'F12 again, the picture')
+    D.key(wait, 'f12')
+    D.eq(mode(), 'text', 'F12 a third time, the text')
+  end },
   ['Ctrl+T'] = { 'to the editor', function(wait)
     D.key(wait, 'C-t')
     D.in_state('editor')
     D.leave(wait)
   end },
+  --- the program behind the console runs anew and pauses again
+  --- (ENDS)
   ['Ctrl+R'] = { 'run anew', function(wait)
     D.key(wait, 'escape')
-    runs(wait, 'C-r')
+    D.key(wait, 'C-r')
+    D.in_state('inspect')
+    assert(P.cc().run_live, 'Ctrl+R did not run it anew')
+    D.key(wait, 'C-q')
+    D.in_state('ready')
   end },
   ['Ctrl+Up/Down'] = { 'scroll a row', function(wait)
     D.key(wait, 'escape')
@@ -430,7 +458,10 @@ local CONSOLE = {
     D.eq(out:top(), t, 'Ctrl+Down, a row newer')
     D.eq(P.console_draft(), D0, 'the draft stays')
     D.key(wait, 'escape')
-    assert(not out:is_scrolled(), 'Esc brings the screen back')
+    assert(out:is_scrolled(), 'Esc moved the scrolled view')
+    D.key(wait, 'end')
+    assert(not out:is_scrolled(),
+      'End on an empty field left the view scrolled')
   end },
   ['Ctrl+L'] = { 'clear screen', function(wait)
     D.key(wait, 'escape')
@@ -448,6 +479,12 @@ local CONSOLE = {
     D.key(wait, 'home')
     D.key(wait, 'C-k')
     D.eq(P.console_draft(), '', 'Ctrl+K')
+  end },
+  ['Shift+move'] = { 'select', function(wait)
+    D.key(wait, 'S-left')
+    D.type(wait, 'Z')
+    D.eq(P.console_draft(), D0:sub(1, -2) .. 'Z',
+      'typing replaced it')
   end },
   ['Ctrl+Home/End'] = { 'text start/end', function(wait)
     D.key(wait, 'S-return')
@@ -496,7 +533,7 @@ end
 scenario('console', function(wait)
   wait(.1)
   D.enter(wait, string.format('project(%q)', PROJECT))
-  P.put(PROJECT, 'main.lua', IDLES)
+  P.put(PROJECT, 'main.lua', ENDS)
   D.key(wait, 'escape')
   console_rows(wait, false)
   console_rows(wait, true)
@@ -510,7 +547,7 @@ end)
 scenario('ctrl-q-held', function(wait)
   wait(.1)
   D.enter(wait, string.format('project(%q)', PROJECT))
-  P.put(PROJECT, 'main.lua', IDLES)
+  P.put(PROJECT, 'main.lua', ENDS)
   D.enter(wait, 'run_project()')
   wait(.1)
   assert(P.cc().run_live, 'no program behind the console')

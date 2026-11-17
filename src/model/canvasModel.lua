@@ -11,8 +11,11 @@ local gfx = love.graphics
 --- @field terminal table
 --- @field kept KeptRows --- the rows scrolled off its top
 --- @field view_top integer? --- the scrolled view's first row
---- @field canvas love.Canvas
+--- @field canvas love.Canvas --- the program's picture
+--- @field drawn boolean? --- drawn on since it was cleared
+--- @field background number[]? --- the program's chosen ground
 --- @field term_canvas love.Canvas
+--- @field rows integer --- the grid's rows while a field is drawn
 --- @field cfg table
 --- @field write function
 --- @field push function
@@ -43,12 +46,18 @@ function CanvasModel.new(cfg)
   -- only revealed once a newline scrolls the buffer up (#149). The
   -- drawing canvas above keeps the full size, so canvas programs are
   -- unaffected.
-  local term_h = h
+  --- The field's own row, under the status line, is made with
+  --- the grid: it is the output's while no input field is drawn
+  --- (field_drawn), and the grid is a row shorter otherwise.
+  local term_h, field_rows = h, 0
   if not cfg.view.sizedebug then
-    term_h = ViewUtils.get_drawable_height(cfg.view)
+    term_h = ViewUtils.get_drawable_height(cfg.view) + cfg.view.fh
+    field_rows = 1
   end
   local term = Terminal(w, term_h, cfg.view.font,
     nil, custom_height)
+  local rows = term.max_height - field_rows
+  term:set_height(rows)
 
   local color = cfg.view.colors.terminal
   term:hide_cursor()
@@ -66,6 +75,7 @@ function CanvasModel.new(cfg)
     canvas = canvas,
     term_canvas = t_canvas,
     cfg = cfg,
+    rows = rows,
   }, CanvasModel)
 
   return self
@@ -88,6 +98,22 @@ function CanvasModel:push(newResult)
   else
     self:write(tostring(newResult) .. '\n')
   end
+end
+
+--- Whether an input field is drawn under the output. With one,
+--- the grid has its own rows; with none, the field's row is the
+--- grid's too, with no restriction: a program prints and moves
+--- there as on any row. When a field comes back, text or the
+--- cursor on that row rolls the grid up and its top row is
+--- kept; an empty row just goes (Terminal:set_height). A
+--- scrolled view keeps its rule on the grid as it is then.
+--- @param drawn boolean
+function CanvasModel:field_drawn(drawn)
+  local t = self.terminal
+  local rows = drawn and self.rows or t.max_height
+  if rows == t.height then return end
+  t:set_height(rows)
+  self:show(self.view_top)
 end
 
 --- An accepted console line, written to the output before it
@@ -147,8 +173,18 @@ end
 --- and what still waited to be written when it was pressed, so
 --- that none of it appears afterwards
 function CanvasModel:erase()
-  self.terminal:discard()
+  local t = self.terminal
+  t:discard()
   self:reset()
+  --- The clear is made at once, with the styles that waited:
+  --- left in the queue, it would find a grid that lost a row
+  --- meanwhile (field_drawn), whose roll had put a row of the
+  --- erased screen into the kept rows forgotten here.
+  local waits, budget = 0, t.accumulator
+  for _ in t:waiting() do waits = waits + 1 end
+  t.accumulator = 0
+  t:update((waits + 1) * t.char_cost / t.speed)
+  t.accumulator = budget
   self.kept:forget()
   self:to_rest()
 end
@@ -311,9 +347,47 @@ function CanvasModel:get_canvas()
   return self.canvas
 end
 
+--------------------------
+--- the program's canvas ---
+--------------------------
+--- `canvas` is the program's record, kept apart from the
+--- console's text (the proposal "The Program's Canvas and the
+--- Viewing Modes", built as if accepted on November 17, 2026):
+--- what a program or a typed line draws stays on it through a
+--- stop, and a run's start and reset() clear it. With it are
+--- kept whether anything is drawn on it since it was cleared,
+--- and the ground the program chose
+--- (love.graphics.setBackgroundColor), which the screen puts
+--- under the picture where it shows the picture whole.
+
+--- @return boolean
+function CanvasModel:is_drawn()
+  return self.drawn == true
+end
+
+function CanvasModel:mark_drawn()
+  self.drawn = true
+end
+
+--- The ground a program or a typed line chose
+--- (love.graphics.setBackgroundColor)
+--- @param r number
+--- @param g number
+--- @param b number
+--- @param a number?
+function CanvasModel:keep_background(r, g, b, a)
+  self.background = { r, g, b, a or 1 }
+end
+
+--- @return number[]
+function CanvasModel:get_background()
+  return self.background or { 0, 0, 0, 1 }
+end
+
 --- Clear the whole canvas, whatever graphics state a program
 --- left: a scissor or a color mask would spare part of it.
 --- The caller's scissor, mask and render target come back.
+--- The picture is gone, and so is the ground it was on.
 function CanvasModel:clear_canvas()
   local sx, sy, sw, sh = gfx.getScissor()
   local r, g, b, a = gfx.getColorMask()
@@ -326,6 +400,8 @@ function CanvasModel:clear_canvas()
   if sx then
     gfx.setScissor(sx, sy, sw, sh)
   end
+  self.drawn = false
+  self.background = nil
 end
 
 function CanvasModel:draw_to()

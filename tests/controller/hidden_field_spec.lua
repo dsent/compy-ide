@@ -68,8 +68,9 @@ describe("the console's field behind a program that owns the keys"
       assert.is_false(cursor_drawn(s))
     end)
 
-  local function back(how)
-    K.reset({ ["main.lua"] = TAKES .. "function love.update() end\n" })
+  local function back(how, program)
+    K.reset({ ["main.lua"] = program
+      or TAKES .. "function love.update() end\n" })
     run("run()")
     K.cc.input:add_text("draftx")
     local _, draft = field_texts(K.screen())
@@ -90,18 +91,35 @@ describe("the console's field behind a program that owns the keys"
     end)
   end)
 
+  --- a program whose last way to act was that hook can do
+  --- nothing more (November 17)
   it("is back when the program drops its last hook", function()
     back(function()
       K.cc:get_project_env().compy.input.hooks.keypressed = nil
-    end)
+    end, TAKES)
   end)
 
-  it("stays as today behind a program that takes no keys",
+  --- turned around on November 17: a program that can act owns
+  --- all input, a pointer hook as much as a key hook
+  it("is hidden behind a program with only a pointer hook",
     function()
       K.reset({ ["main.lua"] = "compy.input.hooks.mousepressed = "
         .. "function() end\n" })
       run("run()")
       assert.is_true(K.cc.run_live)
+      K.cc.input:add_text("draftx")
+      local status, draft = field_texts(K.screen())
+      assert.is_true(status)
+      assert.is_false(draft)
+    end)
+
+  --- a program that can do nothing more has ended at its last
+  --- line (stage 4 of the canvas plan)
+  it("is back after a program that could do nothing more ended",
+    function()
+      K.reset({ ["main.lua"] = "x = 1\n" })
+      run("run()")
+      assert.is_false(K.cc.run_live)
       K.type("draftx")
       local status, draft = field_texts(K.screen())
       assert.is_true(status)
@@ -142,7 +160,100 @@ describe("continue() and the hook table #console", function()
       assert.is_nil(env.compy.input.hooks.keypressed)
       K.keys("x")
       assert.is_nil(env.got)
-      assert.is_false(K.cc.main_ctrl.program_owns_keys())
+      --- its update still acts: the input stays the program's
+      assert.is_true(K.cc.main_ctrl.program_owns_input())
       K.keys("lctrl", "q")
     end)
+end)
+
+-- Ctrl+Pause pauses any live program that can act, one with only
+-- key handlers and no update or draw included (the device run of
+-- November 17 found it did nothing there); the pause gives the
+-- console and its field back, and continue() hides them again
+describe("Ctrl+Pause on a program that can act #console", function()
+  after_each(K.cleanup)
+
+  local KEYS_ONLY = "function love.keypressed(k) last = k end\n"
+
+  it("pauses a program with only key handlers", function()
+    K.reset({ ["main.lua"] = KEYS_ONLY })
+    run("run()")
+    assert.same("ready", K.app_state())
+    assert.is_true(K.cc.main_ctrl.program_owns_input())
+    K.keys("lctrl", "pause")
+    K.frame()
+    if K.app_state() == "snapshot" then K.cc:suspend() end
+    assert.same("inspect", K.app_state())
+    assert.is_false(K.cc.main_ctrl.program_owns_input())
+    K.type("draftx")
+    local status, draft = field_texts(K.screen())
+    assert.is_true(status)
+    assert.is_true(draft)
+    K.cc.input:clear()
+    run("continue()")
+    assert.same("ready", K.app_state())
+    assert.is_true(K.cc.main_ctrl.program_owns_input())
+    K.keys("y")
+    assert.same("y", K.cc:get_project_env().last)
+    K.keys("lctrl", "q")
+  end)
+end)
+
+-- p1's findings
+describe("a pause of a program that can act, p1 #console", function()
+  after_each(K.cleanup)
+
+  it("pauses the program's serial handlers too", function()
+    K.reset({ ["main.lua"] = "n = 0\n"
+      .. "compy.serial.onTick = function() n = n + 1 end\n" })
+    run("run()")
+    local env = K.cc:get_project_env()
+    local function tick()
+      SerialPort.dispatcher:push('tick')
+      SerialPort.dispatcher:pump()
+    end
+    local was = env.n
+    tick()
+    assert.equal(was + 1, env.n)
+    K.keys("lctrl", "pause")
+    K.frame()
+    if K.app_state() == "snapshot" then K.cc:suspend() end
+    assert.same("inspect", K.app_state())
+    was = env.n
+    tick()
+    K.frame()
+    assert.equal(was, env.n)
+    run("continue()")
+    was = env.n
+    tick()
+    assert.is_true(env.n > was)
+    K.keys("lctrl", "q")
+  end)
+
+  it("pauses a program whose first lines call pause() and then"
+    .. " idle, and continue() resumes it idle", function()
+      K.reset({ ["main.lua"] = "function love.keypressed() end\n"
+        .. "pause()\n" })
+      run("run()")
+      K.frame()
+      if K.app_state() == "snapshot" then K.cc:suspend() end
+      assert.same("inspect", K.app_state())
+      run("continue()")
+      assert.same("ready", K.app_state())
+      assert.is_nil(love.state.paused_from)
+      K.keys("lctrl", "q")
+    end)
+
+  it("gives a held console key's repeats no hidden draft", function()
+    K.reset({ ["main.lua"] = "function love.update() end\n" })
+    K.type("abc")
+    K.hold("backspace")
+    assert.same("ab", K.console_draft())
+    K.cc:run_project()
+    assert.is_true(K.cc.main_ctrl.program_owns_input())
+    K.repeat_key("backspace")
+    K.release("backspace")
+    assert.same("ab", K.console_draft())
+    K.keys("lctrl", "q")
+  end)
 end)

@@ -91,6 +91,7 @@
 --- @field custom CustomStatus?
 --- @field caps string? --- 'CAPS' while Caps Lock is on
 --- @field project string? --- the open project's name
+--- @field mode ScreenMode? --- the console's: the screen's mode
 
 --- @class InputDTO table
 --- @field text InputText
@@ -139,6 +140,7 @@
 --- @field app_state AppState
 --- @field prev_state AppState?
 --- @field suspend_msg string?
+--- @field frame integer? --- the frames counted by the update
 
 --- @class LoveDebug table
 --- @field show_snapshot boolean

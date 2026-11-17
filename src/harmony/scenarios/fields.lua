@@ -4,9 +4,10 @@ local D = require('harmony.drive')
 --- One text field, the same everywhere (the ruling of November
 --- 14, 2026): the file editor's, the console's and a running
 --- program's field take the same field keys and the same word
---- deletions, a click places
---- the text cursor, Shift with an arrow selects nothing, and
---- a chord nothing binds does nothing, Ctrl+Enter first.
+--- deletions, a click places the text cursor, Shift with a
+--- movement key selects and typing replaces the selection (the
+--- ruling of November 17, 2026), and a chord nothing binds does
+--- nothing, Ctrl+Enter first.
 
 local PROJECT = 'h-fields'
 --- a program that shows a field and counts its submissions
@@ -93,8 +94,8 @@ local function word_keys(wait, which, clear)
   end
 end
 
---- Chords nothing binds in a field, and Shift with the arrows:
---- the draft and the cursor stay
+--- Chords nothing binds in a field: the draft and the cursor
+--- stay
 --- @param wait function
 --- @param which 'editor'|'console'|'program'
 --- @param chords string[]
@@ -118,8 +119,8 @@ local function click(wait, which)
   D.eq(col_of(which), '1:3', 'a click places the cursor in ' .. which)
 end
 
-local FIELD_CHORDS = { 'C-return', 'C-kpenter', 'S-left', 'S-right',
-  'S-home', 'S-end', 'C-a', 'C-S-up', 'A-left', 'A-home',
+local FIELD_CHORDS = { 'C-return', 'C-kpenter',
+  'C-a', 'C-S-up', 'A-left', 'A-home',
   -- removed on November 14, late
   'C-d', 'S-delete' }
 
@@ -142,9 +143,12 @@ scenario('editor', function(wait)
   D.type(wait, 'c = 3')
   D.key(wait, 'left')
   unbound(wait, 'editor', FIELD_CHORDS)
-  -- typing after Shift+Left replaces nothing
+  -- Shift+Left selects the space before the 3, drawn over it,
+  -- and typing replaces it
+  D.key(wait, 'S-left')
+  D.shot(wait, 'selected')
   D.type(wait, '0')
-  D.eq(P.draft(), 'c = 03', 'nothing was selected')
+  D.eq(P.draft(), 'c =03', 'typing replaced the selection')
   D.key(wait, 'escape')
   click(wait, 'editor')
   D.shot(wait, 'clicked')

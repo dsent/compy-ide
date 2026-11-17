@@ -170,14 +170,16 @@ describe("round five #editor #spec", function()
       assert.same("ready", K.app_state())
     end)
 
-    spec_it("IS3.16 Show the key card: over a program idling "
-        .. "with no input field of its own, the console's card "
+    --- a program that can do nothing more ends at its last line
+    --- (stage 4 of the canvas plan): the console is its own
+    spec_it("IS3.16 Show the key card: after a program that "
+        .. "could do nothing more ended, the console's card "
         .. "shows and its field takes nothing", function()
       K.reset({ ["main.lua"] = "x = 1\n" })
       K.open()
       K.keys("lctrl", "t")
       assert.same("ready", K.app_state())
-      assert.is_true(K.cc.run_live)
+      assert.is_false(K.cc.run_live)
       K.type("a")
       K.hold("f1")
       assert.is_not_nil(K.key_card())
@@ -193,12 +195,8 @@ describe("round five #editor #spec", function()
       K.reset({ ["main.lua"] = PAUSES })
       K.open()
       K.keys("lctrl", "t")
+      -- the error pauses it in the frame it raises in
       K.frame()
-      assert.same("snapshot", K.app_state())
-      -- the move from the snapshot to 'inspect' is the
-      -- screenshot's callback, which needs a real graphics
-      -- context
-      K.cc:suspend()
       assert.same("inspect", K.app_state())
       K.type("a")
       K.hold("f1")

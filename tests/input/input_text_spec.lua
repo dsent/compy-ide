@@ -21,6 +21,16 @@ describe('InputText', function()
     assert.same({ l1, l2, l3 }, text)
   end)
 
+  -- a selection of one character is a span of one: the
+  -- cursor positions on its either side
+  it('traverses a single character on a line', function()
+    local one = InputText({ 'abc' })
+    assert.same({ 'b' }, one:traverse(Cursor(1, 2), Cursor(1, 3)))
+    one:traverse(Cursor(1, 2), Cursor(1, 3), { delete = true })
+    assert.same({ 'ac' }, one)
+    assert.same({ '' }, one:traverse(Cursor(1, 2), Cursor(1, 2)))
+  end)
+
   it('traverses', function()
     local from = Cursor(1, 12)
     local to   = Cursor(2, 7 + 1)

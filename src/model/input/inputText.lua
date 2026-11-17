@@ -60,7 +60,8 @@ function InputText:traverse(from, to, options)
   end)()
 
   if ls == le then
-    if ce > cs then
+    --- one character is a span too: ce == cs
+    if ce >= cs then
       local l = lines[ls]
       local pre, mid, post = string.splice(l, cs - 1, ce)
       ret:append(mid)

@@ -1,13 +1,18 @@
--- A program draws on the console's canvas, and the canvas is
--- drawn over the console every frame. When the run ends, what
--- it drew goes with it, or a stopped program's picture stays
--- over the console and its history. A paused program has not
--- ended: its picture stays until it stops.
+-- A program draws on its canvas, a record kept apart from the
+-- console's text and shown in a screen mode that shows it
+-- (spec: screen_modes_spec.lua). The canvas survives a stop, as
+-- the console's output does: a stopped program's picture is
+-- there to look at. A run's start, Ctrl+R and reset() clear it
+-- (the maintainer's ruling "The picture and the text: the shape
+-- is approved", built as if accepted on November 17, 2026). A
+-- program's love.draw draws on it, each frame on a cleared
+-- canvas, as LÖVE clears the screen before love.draw.
 --
--- Spec justification (dev testing policy): the stop paths are
--- a critical dispatch seam, many callers funnelling into one
--- teardown, and a path that skips it fails on a device only,
--- as a picture left over the console.
+-- Spec justification (dev testing policy): the run, stop and
+-- reset paths are a critical dispatch seam, many callers
+-- funnelling into one teardown, and a path that clears or keeps
+-- the wrong way fails on a device only, as a picture lost or
+-- one carried into the next run.
 
 local F = require('tests.helpers.input_fixture')
 
@@ -17,6 +22,8 @@ local gfx
 -- holds the tag of what drew it. Drawing lands where the render
 -- target says: the canvas, or the screen, which is not watched.
 local canvas, pixels, drawing, scissor, mask, target
+--- what the program's canvas was last cleared to
+local cleared
 
 --- A canvas that remembers what is drawn on it
 local function fake_canvas()
@@ -88,8 +95,10 @@ end
 
 describe('a program\'s canvas after it stops #canvas', function()
   local saved = {}
-  local names = { 'setCanvas', 'clear', 'getScissor', 'setScissor',
-    'getColorMask', 'setColorMask' }
+  local names = { 'setCanvas', 'getCanvas', 'clear', 'getScissor',
+    'setScissor', 'getColorMask', 'setColorMask', 'push', 'pop',
+    'getStackDepth', 'setBlendMode', 'getBackgroundColor',
+    'setBackgroundColor', 'reset' }
   local o_canvas
   setup(function()
     F.setup()
@@ -110,6 +119,31 @@ describe('a program\'s canvas after it stops #canvas', function()
     gfx.setCanvas = function(t)
       target = t and (t[1] or t) or nil
     end
+    gfx.getCanvas = function() return target end
+    -- push('all') keeps the render target, and pop puts it back,
+    -- as LÖVE's do
+    -- push('all') keeps the render target and the background
+    -- colour, and pop puts them back
+    local stack = { }
+    local bg = { 0, 0, 0, 1 }
+    gfx.push = function()
+      stack[#stack + 1] = { target, bg }
+    end
+    gfx.pop = function()
+      assert(#stack > 0, 'Minimum stack depth reached')
+      target, bg = stack[#stack][1], stack[#stack][2]
+      stack[#stack] = nil
+    end
+    gfx.getStackDepth = function() return #stack end
+    -- LÖVE's reset makes no canvas active, and the ground black
+    gfx.reset = function()
+      target = nil
+      bg = { 0, 0, 0, 1 }
+    end
+    gfx.getBackgroundColor = function() return unpack(bg) end
+    gfx.setBackgroundColor = function(r, g, b, a)
+      bg = { r, g, b, a or 1 }
+    end
     F.cc.model.output.canvas = canvas
     gfx.getScissor = function()
       if scissor then return 0, 0, 1, 1 end
@@ -119,8 +153,9 @@ describe('a program\'s canvas after it stops #canvas', function()
     gfx.setColorMask = function(...) mask = { ... } end
     -- as LÖVE clears: the scissor spares what is outside it, a
     -- color mask spares what it does not write
-    gfx.clear = function()
-      if not drawing then return end
+    gfx.clear = function(...)
+      if target == canvas then cleared = { ... } end
+      if not (drawing or target == canvas) then return end
       if mask[1] and mask[2] and mask[3] and mask[4] then
         pixels.inside = false
         if not scissor then pixels.outside = false end
@@ -136,17 +171,17 @@ describe('a program\'s canvas after it stops #canvas', function()
     assert.is_true(shown())
   end)
 
-  it('Ctrl+T clears it', function()
+  it('Ctrl+T keeps it', function()
     run_drawing()
     press({ 'lctrl', 't' })
     assert.are_not.equal('running', love.state.app_state)
-    assert.is_false(shown())
+    assert.is_true(shown())
   end)
 
   -- Ctrl+Q stops the program and keeps its project open; the
   -- fixture has none open, so one is set here, and a close
   -- would show.
-  it('Ctrl+Q clears it, the project still open', function()
+  it('Ctrl+Q keeps it, the project still open', function()
     local undo = project(function() end)
     local P = F.cc.model.projects
     local open = P.current
@@ -162,21 +197,33 @@ describe('a program\'s canvas after it stops #canvas', function()
     undo()
     assert(ok, err)
     assert.equal('ready', love.state.app_state)
-    assert.is_false(shown())
+    assert.is_true(shown())
     assert.is_false(closed)
     assert.is_true(still_open)
   end)
 
-  it('the program\'s stop() clears it', function()
+  it('the program\'s stop() keeps it', function()
     run_drawing()
     F.cc:get_project_env().stop()
-    assert.is_false(shown())
+    assert.is_true(shown())
   end)
 
-  it('the program\'s own quit clears it', function()
+  it('the program\'s own quit keeps it', function()
     run_drawing()
     assert.is_true(love.quit())
     assert.equal('ready', love.state.app_state)
+    assert.is_true(shown())
+  end)
+
+  it('reset() clears it', function()
+    run_drawing()
+    F.cc:reset()
+    assert.is_false(shown())
+  end)
+
+  it('reset() clears it with nothing run', function()
+    paint()
+    F.cc:reset()
     assert.is_false(shown())
   end)
 
@@ -200,13 +247,13 @@ describe('a program\'s canvas after it stops #canvas', function()
     assert.is_false(seen)
   end)
 
-  it('an error in top-level code clears what it drew', function()
+  it('an error in top-level code keeps what it drew', function()
     F.run_project(function()
       draw()
       error('boom')
     end)
     assert.equal('ready', love.state.app_state)
-    assert.is_false(shown())
+    assert.is_true(shown())
     assert.is_false(F.cc.run_live)
   end)
 
@@ -223,30 +270,34 @@ describe('a program\'s canvas after it stops #canvas', function()
       assert.is_false(shown())
     end)
 
-  it('what a before_exit hook draws is cleared too', function()
+  it('what a before_exit hook draws stays too', function()
     run_drawing()
-    F.cc:get_project_env().compy.before_exit = paint
+    F.cc:get_project_env().compy.before_exit = function()
+      draw('exit')
+    end
     press({ 'lctrl', 'q' })
-    assert.is_false(shown())
+    assert.equal('exit', who())
   end)
 
   describe('whatever graphics state the program left', function()
-    it('a scissor does not spare part of it on a stop',
+    it('a scissor does not spare part of it at reset()',
       function()
         run_drawing()
         F.cc:get_project_env().compy.before_exit = restrict
-        press({ 'lctrl', 'q' })
+        F.cc:reset()
         assert.is_false(shown())
       end)
 
-    it('a scissor does not spare part of it after a top-level'
-      .. ' error', function()
+    it('a scissor does not spare part of it at the next run',
+      function()
         F.run_project(function()
           draw()
           restrict()
           error('boom')
         end)
-        assert.is_false(shown())
+        local seen
+        F.run_project(function() seen = shown() end)
+        assert.is_false(seen)
       end)
 
     it('a color mask does not keep the old picture into the'
@@ -268,8 +319,9 @@ describe('a program\'s canvas after it stops #canvas', function()
     end)
   end)
 
-  describe('a handler that goes on drawing after its stop', function()
-    it('leaves no picture', function()
+  describe('a handler that would go on drawing after its stop',
+    function()
+    it('draws nothing after it', function()
       F.activate_project({
         update = function()
           F.cc:get_project_env().stop()
@@ -291,14 +343,14 @@ describe('a program\'s canvas after it stops #canvas', function()
       assert.equal('new', who())
     end)
 
-    --- The outgoing handler keeps drawing after its replacement
-    --- ended too: the canvas is nobody's.
+    --- The outgoing handler's stop ends it (design B): nothing
+    --- after it runs, whatever the run it started does.
     for name, top in pairs({
       ['stops'] = function() F.cc:get_project_env().stop() end,
       ['fails'] = function() error('boom') end,
     }) do
-      it('clears it when the run it started ' .. name
-        .. ' before it draws again', function()
+      it('draws nothing when the run it started ' .. name,
+        function()
           local undo = project(top)
           F.activate_project({
             update = function()
@@ -326,7 +378,8 @@ describe('a program\'s canvas after it stops #canvas', function()
       assert.is_false(shown())
     end)
 
-    it('clears a restart whose top-level code fails', function()
+    it('keeps what a restart whose top-level code fails drew',
+      function()
       local undo = project(function()
         draw('new')
         error('boom')
@@ -337,7 +390,7 @@ describe('a program\'s canvas after it stops #canvas', function()
       F.love_update(0.1)
       undo()
       assert.equal('ready', love.state.app_state)
-      assert.is_false(shown())
+      assert.equal('new', who())
     end)
 
     it('leaves the console\'s own drawing working', function()
@@ -352,7 +405,7 @@ describe('a program\'s canvas after it stops #canvas', function()
 
   -- One console line that stops and then would draw: the stop
   -- ends the line (design B), so nothing after it draws, and
-  -- the stop's clear is the last word on the canvas.
+  -- the picture is the program's as it left it.
   --- The line is submitted with Enter, which runs inside the
   --- program's own call while a run exists, idle or not.
   local function submit_stop_and_draw()
@@ -368,12 +421,15 @@ describe('a program\'s canvas after it stops #canvas', function()
       assert.equal('typed', who())
     end)
 
-  it('the same line after a run that finished: the stop clears'
-    .. ' its picture, and nothing after it draws', function()
+  --- a run that ended by itself is stopped already (stage 4): its
+  --- picture stays, the line's stop is refused, and it draws on
+  it('the same line after a run that ended by itself: the picture'
+    .. ' stays until the line draws over it', function()
       F.run_project(function() draw('prog') end)
+      assert.is_false(F.cc.run_live)
       assert.equal('prog', who())
       submit_stop_and_draw()
-      assert.is_false(shown())
+      assert.equal('typed', who())
     end)
 
   -- Enter reaches the program's input hook, which here stops the
@@ -403,33 +459,38 @@ describe('a program\'s canvas after it stops #canvas', function()
       env.love.update = nil
       env.compy.input.hooks.keypressed = nil
       assert.equal('ready', love.state.app_state)
-      assert.is_false(shown())
+      assert.equal('prog', who())
       F.session.type('mark()')
       press({ 'return' })
       assert.equal('typed', who())
     end)
 
-  it('the same line over a program with an update handler keeps'
-    .. ' what it drew', function()
+  --- turned around on November 17: a program that can act owns
+  --- the input, so the line reaches no console; the program runs
+  --- on with its picture
+  it('the same line over a program with an update reaches nothing',
+    function()
       F.run_project(function()
         draw('prog')
         F.cc:get_project_env().love.update = function() end
       end)
       assert.equal('running', love.state.app_state)
       submit_stop_and_draw()
+      assert.equal('running', love.state.app_state)
+      assert.equal('prog', who())
       F.cc:get_project_env().love.update = nil
-      assert.equal('ready', love.state.app_state)
-      assert.is_false(shown())
     end)
 
-  it('the same line over a run with a live handler keeps what'
-    .. ' it drew', function()
+  it('the same line over a run with a pointer handler reaches'
+    .. ' nothing', function()
       F.run_project(function()
         draw('prog')
         F.cc:get_project_env().love.mousepressed = function() end
       end)
       submit_stop_and_draw()
-      assert.is_false(shown())
+      assert.is_true(F.cc.run_live)
+      assert.equal('prog', who())
+      F.cc:get_project_env().love.mousepressed = nil
     end)
 
   it('console code run over a live program keeps what it draws'
@@ -443,8 +504,8 @@ describe('a program\'s canvas after it stops #canvas', function()
     end)
 
   -- Top-level code that stops its run and would then fail: the
-  -- stop ends it (design B), so no error comes, and the stop
-  -- clears what it drew.
+  -- stop ends it (design B), so no error comes, and what it drew
+  -- before the stop stays.
   it('top-level code that stops draws and fails no more', function()
       local undo = project(function()
         draw('old')
@@ -456,7 +517,7 @@ describe('a program\'s canvas after it stops #canvas', function()
       undo()
       assert(ok, err)
       assert.equal('ready', love.state.app_state)
-      assert.is_false(shown())
+      assert.equal('old', who())
     end)
 
   it('a paused program keeps it, and continue() gives it its'
@@ -492,9 +553,9 @@ describe('a program\'s canvas after it stops #canvas', function()
 
   -- Ready with a handler live: the program idles behind the
   -- console, not stopped. Ctrl+S is no reserved key, so its
-  -- picture stays; Ctrl+Q stops it as it stops a running one.
+  -- picture stays; Ctrl+Q stops it, and the picture stays.
   it('a run in ready with a live handler keeps it through'
-    .. ' Ctrl+S, until Ctrl+Q stops it', function()
+    .. ' Ctrl+S and Ctrl+Q', function()
       F.run_project(function()
         draw()
         F.cc:get_project_env().love.mousepressed = function() end
@@ -504,14 +565,336 @@ describe('a program\'s canvas after it stops #canvas', function()
       assert.is_true(shown())
       press({ 'lctrl', 'q' })
       assert.equal('ready', love.state.app_state)
-      assert.is_false(shown())
+      assert.is_true(shown())
     end)
 
   it('a run that finished with nothing live keeps its picture'
-    .. ' until Ctrl+Q stops it', function()
+    .. ' until reset()', function()
       F.run_project(draw)
       assert.is_true(shown())
       press({ 'lctrl', 'q' })
+      assert.is_true(shown())
+      F.cc:reset()
       assert.is_false(shown())
+    end)
+
+  describe('a program\'s love.draw', function()
+    it('draws its frame on the canvas', function()
+      F.run_project(function()
+        F.cc:get_project_env().love.draw = function()
+          draw('frame')
+        end
+      end)
+      love.draw()
+      F.cc:get_project_env().love.draw = nil
+      assert.equal('frame', who())
+    end)
+
+    it('draws each frame on a cleared canvas, as LÖVE clears the'
+      .. ' screen', function()
+        local frames = 0
+        F.run_project(function()
+          F.cc:get_project_env().love.draw = function()
+            frames = frames + 1
+            if frames == 1 then draw('first') end
+          end
+        end)
+        love.draw()
+        assert.equal('first', who())
+        love.draw()
+        F.cc:get_project_env().love.draw = nil
+        assert.equal(2, frames)
+        assert.is_false(shown())
+      end)
+
+    it('is not drawn while paused: the last frame stays',
+      function()
+        F.run_project(function()
+          F.cc:get_project_env().love.draw = function()
+            draw('frame')
+          end
+        end)
+        love.draw()
+        F.cc:suspend_run('paused')
+        F.love_update(0.1)
+        assert.equal('inspect', love.state.app_state)
+        pixels.outside = 'kept'
+        love.draw()
+        F.cc:get_project_env().love.draw = nil
+        assert.equal('kept', who())
+      end)
+  end)
+
+  it('a program\'s setCanvas() with no target binds its canvas',
+    function()
+      F.run_project(function()
+        local g = F.cc:get_project_env().love.graphics
+        g.setCanvas({ })
+        g.setCanvas()
+        draw('back')
+      end)
+      assert.equal('back', who())
+    end)
+
+  it('a program\'s setCanvas() with an empty table binds its canvas,'
+    .. ' as a target saved with { getCanvas() } is', function()
+      F.run_project(function()
+        local g = F.cc:get_project_env().love.graphics
+        local saved = { g.getCanvas() }
+        g.setCanvas({ })
+        g.setCanvas(saved)
+        draw('back')
+      end)
+      assert.equal('back', who())
+    end)
+
+  it('a stop in a love.draw that pushed and never popped leaves the'
+    .. ' screen the target, and nothing pushed', function()
+      F.run_project(function()
+        local env = F.cc:get_project_env()
+        env.love.draw = function()
+          -- LÖVE's own push, which the environment's is
+          gfx.push('all')
+          env.stop()
+        end
+      end)
+      love.draw()
+      assert.is_false(F.cc.run_live)
+      assert.is_nil(target)
+      assert.equal(0, gfx.getStackDepth())
+    end)
+
+  --- c2's first finding: before_exit runs on the canvas, and a
+  --- push it leaves behind kept that binding
+  it('a before_exit that pushed and raised leaves the screen the'
+    .. ' target after the stop', function()
+      run_drawing()
+      F.cc:get_project_env().compy.before_exit = function()
+        gfx.push('all')
+        error('x')
+      end
+      press({ 'lctrl', 'q' })
+      assert.equal('ready', love.state.app_state)
+      assert.is_nil(target)
+      assert.equal(0, gfx.getStackDepth())
+    end)
+
+  --- Program code runs on its canvas through one helper
+  --- (use_canvas), which unwinds what the code pushed and did not
+  --- pop before it gives the target back: no push of the
+  --- program's outlives the call that made it, whatever entry
+  --- point ran it (the lead's ruling on round c2)
+  describe('program code that pushes and never pops leaves nothing'
+    .. ' pushed after it, the screen the target', function()
+    local function clean()
+      assert.equal(0, gfx.getStackDepth())
+      assert.is_nil(target)
+    end
+
+    it('its top-level code', function()
+      F.run_project(function() gfx.push('all') end)
+      clean()
+    end)
+
+    it('its love.update', function()
+      F.run_project(function()
+        F.cc:get_project_env().love.update = function()
+          gfx.push('all')
+        end
+      end)
+      F.love_update(0.1)
+      F.cc:get_project_env().love.update = nil
+      clean()
+    end)
+
+    it('its key handler', function()
+      F.run_project(function()
+        F.cc:get_project_env().love.keypressed = function()
+          gfx.push('all')
+        end
+        F.cc:get_project_env().love.update = function() end
+      end)
+      F.session.press('a')
+      F.session.release('a')
+      F.cc:get_project_env().love.keypressed = nil
+      F.cc:get_project_env().love.update = nil
+      clean()
+    end)
+
+    it('a typed line', function()
+      F.cc:get_project_env().mark = function() gfx.push('all') end
+      F.session.type('mark()')
+      press({ 'return' })
+      clean()
+    end)
+
+    it('its before_exit at a stop', function()
+      run_drawing()
+      F.cc:get_project_env().compy.before_exit = function()
+        gfx.push('all')
+      end
+      F.cc:stop_project_run()
+      clean()
+    end)
+  end)
+
+  --- c3's first finding: serial callbacks are program code, run
+  --- on its canvas through the one helper
+  it('a serial callback that binds the program\'s screen leaves the'
+    .. ' screen the target after it', function()
+      local update = SerialPort.update
+      SerialPort.update = function()
+        F.cc:get_project_env().love.graphics.setCanvas()
+        return { }
+      end
+      finally(function() SerialPort.update = update end)
+      F.love_update(0.1)
+      assert.is_nil(target)
+    end)
+
+  --- c3's second finding: a program's reset() makes no canvas
+  --- active under LÖVE, which for a program is its own
+  it('a program\'s reset() leaves its canvas the target', function()
+    F.run_project(function()
+      F.cc:get_project_env().love.graphics.reset()
+      draw('after')
+    end)
+    assert.equal('after', who())
+  end)
+
+  --- c3's fourth finding: the canvas holds premultiplied colour
+  it('clears a love.draw frame to a translucent ground'
+    .. ' premultiplied', function()
+      F.run_project(function()
+        local env = F.cc:get_project_env()
+        env.love.graphics.setBackgroundColor(.2, .4, .6, .5)
+        env.love.draw = function() end
+      end)
+      love.draw()
+      F.cc:get_project_env().love.draw = nil
+      assert.same({ .1, .2, .3, .5 }, cleared)
+    end)
+
+  it('a love.draw that pushes and never pops leaves nothing pushed'
+    .. ' after its frame', function()
+      F.run_project(function()
+        local env = F.cc:get_project_env()
+        env.love.draw = function()
+          gfx.push('all')
+        end
+      end)
+      love.draw()
+      love.draw()
+      F.cc:get_project_env().love.draw = nil
+      assert.equal(0, gfx.getStackDepth())
+      assert.is_nil(target)
+    end)
+
+  describe('the ground the program chose', function()
+    it('is kept as the program sets it, before any stop', function()
+      F.run_project(function()
+        F.cc:get_project_env().love.graphics.setBackgroundColor(1, 0, 0)
+        draw()
+        F.cc:get_project_env().love.update = function() end
+      end)
+      assert.same({ 1, 0, 0, 1 }, F.cc.model.output:get_background())
+      F.cc:get_project_env().love.update = nil
+    end)
+
+    it('stays through a second flush', function()
+      F.run_project(function()
+        F.cc:get_project_env().love.graphics.setBackgroundColor(1, 0, 0)
+        draw()
+        F.cc:get_project_env().love.update = function() end
+      end)
+      F.cc:get_project_env().love.update = nil
+      F.cc:stop_project_run()
+      gfx.setBackgroundColor(0, 0, 0)
+      F.cc:stop_project_run()
+      assert.same({ 1, 0, 0, 1 }, F.cc.model.output:get_background())
+    end)
+
+    it('stays through a typed line that does not set it', function()
+      F.run_project(function()
+        F.cc:get_project_env().love.graphics.setBackgroundColor(1, 0, 0)
+        draw()
+      end)
+      gfx.setBackgroundColor(0, 0, 0)
+      F.cc:get_project_env().mark = function() end
+      F.session.type('mark()')
+      press({ 'return' })
+      assert.same({ 1, 0, 0, 1 }, F.cc.model.output:get_background())
+    end)
+
+    --- c2's second finding: the flush's reset leaves black, and a
+    --- typed line that sets black is a choice all the same
+    it('is what a typed line sets after a stop, black included',
+      function()
+        F.run_project(function()
+          F.cc:get_project_env().love.graphics.setBackgroundColor(1, 0, 0)
+          draw()
+        end)
+        F.cc:stop_project_run()
+        gfx.setBackgroundColor(0, 0, 0)
+        F.session.type('love.graphics.setBackgroundColor(0, 0, 0)')
+        press({ 'return' })
+        assert.same({ 0, 0, 0, 1 }, F.cc.model.output:get_background())
+      end)
+
+    it('is what a love.draw sets, though its state is given back'
+      .. ' after the frame', function()
+        F.run_project(function()
+          local env = F.cc:get_project_env()
+          env.love.draw = function()
+            env.love.graphics.setBackgroundColor(0, 0, 1)
+          end
+        end)
+        love.draw()
+        F.cc:get_project_env().love.draw = nil
+        assert.same({ 0, 0, 1, 1 }, F.cc.model.output:get_background())
+      end)
+
+    --- c3's third finding: a pop of the program's gives the ground
+    --- back as LÖVE does
+    it('is the one a pop of the program\'s puts back', function()
+      F.run_project(function()
+        local g = F.cc:get_project_env().love.graphics
+        g.setBackgroundColor(1, 0, 0)
+        -- LÖVE's own push, which the environment's is
+        gfx.push('all')
+        g.setBackgroundColor(0, 0, 1)
+        g.pop()
+        draw()
+      end)
+      assert.same({ 1, 0, 0, 1 }, F.cc.model.output:get_background())
+    end)
+
+    it('is black after a program\'s reset()', function()
+      F.run_project(function()
+        local g = F.cc:get_project_env().love.graphics
+        g.setBackgroundColor(1, 0, 0)
+        g.reset()
+        draw()
+      end)
+      assert.same({ 0, 0, 0, 1 }, F.cc.model.output:get_background())
+    end)
+
+    it('goes with the picture at reset()', function()
+      F.run_project(function()
+        F.cc:get_project_env().love.graphics.setBackgroundColor(1, 0, 0)
+        draw()
+      end)
+      F.cc:reset()
+      assert.same({ 0, 0, 0, 1 }, F.cc.model.output:get_background())
+    end)
+  end)
+
+  it('a program\'s getCanvas() answers nil on its own canvas',
+    function()
+      local seen = 'unset'
+      F.run_project(function()
+        seen = F.cc:get_project_env().love.graphics.getCanvas()
+      end)
+      assert.is_nil(seen)
     end)
 end)

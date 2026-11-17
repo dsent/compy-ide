@@ -196,6 +196,55 @@ local function terminal_roll_up(terminal, how_many)
     terminal.dirty = true
 end
 
+-- The grid takes `rows` rows from now on, between one and the
+-- rows it was made with. A row it gains comes at the bottom,
+-- blank in the cursor's colors. A row it loses goes from the
+-- bottom; when text or the cursor is on a row it loses, the grid
+-- rolls up first by as many rows as that takes, as a line end
+-- on the last row rolls it, so that what was written last stays
+-- on the grid and the rows leaving the top are handed on.
+-- It acts on the grid at once: what still waits to be written
+-- lands on the grid as it is by then.
+local function terminal_set_height(terminal, rows)
+    rows = math.max(1, math.min(math.floor(rows), terminal.max_height))
+    local buffer, state_buffer = terminal.buffer, terminal.state_buffer
+    if rows < terminal.height then
+        local last = math.min(terminal.cursor_y, terminal.height)
+        for y = terminal.height, last + 1, -1 do
+            local holds = false
+            for _, c in ipairs(buffer[y]) do
+                if c ~= ' ' then holds = true break end
+            end
+            if holds then last = y break end
+        end
+        local over = math.max(0, last - rows)
+        if over > 0 then
+            terminal_roll_up(terminal, over)
+            terminal.cursor_y = math.max(1, terminal.cursor_y - over)
+            terminal.saved_cursor_y =
+                math.max(1, terminal.saved_cursor_y - over)
+        end
+        for y = terminal.height, rows + 1, -1 do
+            buffer[y], state_buffer[y] = nil, nil
+        end
+        terminal.height = rows
+        terminal.saved_cursor_y = math.min(terminal.saved_cursor_y, rows)
+    else
+        for y = terminal.height + 1, rows do
+            buffer[y], state_buffer[y] = {}, {}
+            for x = 1, terminal.width do
+                buffer[y][x] = ' '
+                state_buffer[y][x] = { dirty = true }
+            end
+            terminal.height = y
+            for x = 1, terminal.width do
+                terminal_update_character(terminal, x, y, ' ')
+            end
+        end
+    end
+    terminal.dirty = true
+end
+
 local function wrap_if_bottom(terminal)
     if terminal.cursor_y > terminal.height then
         -- more rolls than rows leave the same blank grid
@@ -483,6 +532,9 @@ end
 --- @field dirty boolean
 --- @field char_width integer
 --- @field char_height integer
+--- @field height integer --- the rows the grid has now
+--- @field max_height integer --- the rows it was made with
+--- @field set_height fun(self: Terminal, rows: number)
 --- @field speed integer
 --- @field char_cost integer
 --- @field accumulator integer
@@ -507,6 +559,7 @@ local function terminal(self, width, height,
     local instance = {
         width = math.floor(num_columns),
         height = math.floor(num_rows),
+        max_height = math.floor(num_rows),
         font = font,
 
         cursor_visible = true,
@@ -560,6 +613,7 @@ local function terminal(self, width, height,
     instance.load_position = terminal_load_position
     instance.move_to = terminal_move_to
     instance.fresh_row = terminal_fresh_row
+    instance.set_height = terminal_set_height
     instance.discard = terminal_discard
     instance.waiting = terminal_waiting
     instance.hide_cursor = terminal_hide_cursor

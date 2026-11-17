@@ -3,10 +3,11 @@
 -- maintainer's invariant of 2026-06-12, confirmed 2026-11-16:
 -- "a stop clears the globals too"): stop(), Ctrl+Q, a project's
 -- close, an error in a program's first lines and the run seam's
--- stop all call it. A program's natural end and a pause flush
--- nothing. Keys only, through the K helper.
+-- stop all call it, and so does a program's natural end; a pause
+-- flushes nothing. Keys only, through the K helper.
 
 local K = require("tests.helpers.editor_keys")
+local F = require("tests.helpers.input_fixture")
 
 local unrouted
 local function reset(contents)
@@ -33,6 +34,17 @@ end
 
 local function env()
   return K.cc:get_project_env()
+end
+
+--- Code run behind a live program, which owns the input, so no
+--- line can be typed there (November 17): run as the IDE's own
+--- call in the program's environment
+local function behind(code)
+  local f = assert(loadstring(code))
+  setfenv(f, K.cc:get_project_env())
+  local r = f()
+  K.frame(100)
+  return r
 end
 
 local RUNS = "g = 1\nfunction love.update() end\n"
@@ -117,7 +129,7 @@ describe("the terminate flush #console", function()
 
   for _, case in ipairs({
     { "Ctrl+Q", function() K.keys("lctrl", "q") end },
-    { "stop()", function() run("stop()") end },
+    { "stop()", function() behind("stop()") end },
   }) do
     it("clears the program's globals at " .. case[1], function()
       reset({ ["main.lua"] = RUNS })
@@ -136,12 +148,99 @@ describe("the terminate flush #console", function()
     assert.is_nil(env().g)
   end)
 
-  it("keeps the globals at a program's natural end", function()
-    reset({ ["main.lua"] = "g = 1\n" })
-    run("run()")
-    run("print('read ' .. tostring(g))")
-    assert.truthy(K.console_text():find("read 1", 1, true))
-    assert.equal(1, env().g)
+  --- the maintainer's ruling "The natural end is a stop; the build
+  --- waits for the canvas" (November 16, 2026), built with the
+  --- canvas kept apart (stage 4 of the canvas plan): a program
+  --- whose code has ended and that can no longer act gets the
+  --- stop's flush
+  describe("at a program's natural end", function()
+    it("clears its globals", function()
+      reset({ ["main.lua"] = "g = 1\n" })
+      run("run()")
+      assert.is_false(K.cc.run_live)
+      assert.same("ready", K.app_state())
+      assert.is_nil(env().g)
+    end)
+
+    it("calls its before_exit once", function()
+      reset({ ["main.lua"] = "compy.before_exit = function()\n"
+        .. "  exits = (exits or 0) + 1\n"
+        .. "  print('exits ' .. exits)\n"
+        .. "end\n" })
+      run("run()")
+      assert.truthy(K.console_text():find("exits 1", 1, true))
+      assert.falsy(K.console_text():find("exits 2", 1, true))
+    end)
+
+    it("lets a sound it started play out", function()
+      reset({ ["main.lua"] = "shot = love.audio.newSource('b.ogg',"
+        .. " 'static')\nshot:play()\n" })
+      local seen = devices()
+      run("run()")
+      assert.is_false(K.cc.run_live)
+      assert.equal(0, seen.stops)
+      assert.is_true(seen.sources[1]:isPlaying())
+    end)
+
+    it("is no end for a program with an update", function()
+      reset({ ["main.lua"] = RUNS })
+      run("run()")
+      assert.is_true(K.cc.run_live)
+      assert.equal(1, env().g)
+      K.keys("lctrl", "q")
+    end)
+
+    it("is no end for a program with only a key handler", function()
+      reset({ ["main.lua"] = "g = 1\nfunction love.keypressed() end\n" })
+      run("run()")
+      assert.is_true(K.cc.run_live)
+      assert.equal(1, env().g)
+      K.keys("lctrl", "q")
+    end)
+
+    --- round c5's first finding: an event that comes before the
+    --- pause is made finds the program unable to act, and a pause
+    --- is no end
+    it("is no end for a paused program an event finds unable to act",
+      function()
+        reset()
+        F.run_project(function()
+          local e = env()
+          e.g = 42
+          e.pause('look')
+        end)
+        assert.same("snapshot", K.app_state())
+        F.session.mousemoved(5, 5, 1, 1)
+        K.frame(100)
+        assert.same("inspect", K.app_state())
+        assert.equal(42, env().g)
+        run("continue()")
+      end)
+
+    it("is no end for a program whose first lines paused it",
+      function()
+        reset({ ["main.lua"] = "g = 1\npause('look')\n" })
+        run("run()")
+        assert.same("inspect", K.app_state())
+        assert.equal(1, env().g)
+        run("continue()")
+      end)
+
+    it("comes when a program can act no more, at the event that"
+      .. " finds it", function()
+        reset({ ["main.lua"] = "g = 1\n"
+          .. "function love.keypressed()\n"
+          .. "  love.keypressed = nil\n"
+          .. "  compy.input.hooks.keypressed = nil\n"
+          .. "end\n" })
+        run("run()")
+        assert.is_true(K.cc.run_live)
+        K.keys("a")
+        K.keys("b")
+        K.frame(100)
+        assert.is_false(K.cc.run_live)
+        assert.is_nil(env().g)
+      end)
   end)
 
   it("keeps everything through a pause and continue()", function()
@@ -199,8 +298,8 @@ describe("the terminate flush #console", function()
       run("run()")
       local held = seen.sources[3]
       local held_plays = held.plays
-      run("shot:play()")
-      run("stop()")
+      behind("shot:play()")
+      behind("stop()")
       local shot = seen.sources[2]
       assert.is_true(shot:isPlaying())
       assert.is_false(held:isPlaying())
@@ -245,7 +344,7 @@ describe("the terminate flush #console", function()
         reset({ ["main.lua"] = "print('from the run')\n" .. RUNS })
         local seen = devices()
         run("run()")
-        run("reset()")
+        behind("reset()")
         assert.is_false(K.cc.run_live)
         assert.is_nil(env().g)
         assert.is_true(seen.stops >= 1)
@@ -255,8 +354,8 @@ describe("the terminate flush #console", function()
       reset({ ["main.lua"] = SOUNDS })
       local seen = devices()
       run("run()")
-      run("shot:play()")
-      run("reset()")
+      behind("shot:play()")
+      behind("reset()")
       for _, s in ipairs(seen.sources) do
         assert.is_false(s:isPlaying())
       end
@@ -265,7 +364,7 @@ describe("the terminate flush #console", function()
     it("empties the console", function()
         reset({ ["main.lua"] = "print('from the run')\n" .. RUNS })
         run("run()")
-        run("reset()")
+        behind("reset()")
         local text = K.console_text()
         assert.is_nil(text:find("from the run", 1, true), text)
         assert.same({ }, (function()

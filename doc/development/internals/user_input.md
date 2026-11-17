@@ -174,9 +174,9 @@ The console's input view is `input_max = 14` lines high; the editor's field show
 
 ### Selection
 
-No field selects text (the maintainer's ruling of 2026-11-14: the clipboard that needed a selection is gone, and both return with a design of their own). No key of the widget's table starts one, and the mouse places the cursor and selects nothing. The model's selection code (`model/input/selection.lua`, `hold_selection`, `pop_selected_text`, `mouse_click`/`mouse_release`/`mouse_drag` in `userInputModel.lua`) stays for that return; nothing in the widget reaches it now.
+A field selects a part of its draft, without a clipboard (the maintainer's ruling of 2026-11-17, which changes "Selection is off until the clipboard is designed" in part). Shift with each movement key of the field's table (`model/input/fieldKeys.lua`, the `select` entry: Left, Right, Ctrl+Left, Ctrl+Right, Home, End, Ctrl+Home, Ctrl+End, Up, Down) runs that movement through `UserInputModel:select_by`, which holds the selection from where it began, or from the cursor, to where the cursor lands; Up on the first row and Down on the last go to the draft's ends and recall no history. A press in the field places the cursor and clears the selection; a drag from it selects (`UserInputController:mousemoved`, `select_to`) while the button is down, and its release selects to where the last move went (see "Input widget mouse" below). Backspace, Delete, Ctrl+Backspace, Ctrl+W and Ctrl+K remove the selection alone (`delete_selection`), one step on the field's undo, whose snapshot keeps the selection so that Ctrl+Z brings it back with the text. Typing (`add_text`) and a line break replace it in two steps, the removal and then the typing as a run of its own from its first letter, so that the first Ctrl+Z gives back the draft without the typing and the second the selection. Whatever replaces or rewrites the text clears it (`set_text`, `reformat`, history recall); a plain movement clears it (`move_cursor`, and `cursor_vertical_move` at the draft's edge too) and then moves as it always does, and Alt+Shift+Up/Down clears it before it moves the cursor's line; Escape and Enter keep their meaning. One key keeps one meaning with or without a selection, as the classic text-mode editors do (the lead's decisions of 2026-11-17). The view draws a selected cell in the draft's own lines and columns (`render_input`, `is_selected`), over a wrapped line's mark; beside a selection the cursor is a bar at its cell's left edge, so that the selected cell it stands on stays seen. Nothing copies, cuts or pastes.
 
-A click on the input widget (translated from screen coordinates to input grid via `_translate_to_input_grid`) places the cursor, in every field: the console's, the file editor's and a project's (the project route passes `love.state.user_input_controller` as its widget, so there is no project-specific translation path). The coordinate translation is bottom-relative: line 0 is the bottom line of the input, which is non-obvious.
+A click on the input widget places the cursor, in every field: the console's, the file editor's and a project's (the project route passes `love.state.user_input_controller` as its widget, so there is no project-specific translation path). `UserInputController:_point` asks `UserInputView:cell_at` for the cell under the point: the draft's wrapped row, counted from 1 downward with the field's visible offset added, and the column, or nothing outside the rows the field shows; `UserInputModel:translate_grid_to_cursor` turns that cell into the cursor's line and column.
 
 ### Error state
 
@@ -368,13 +368,13 @@ love.handlers.keypressed (k, scancode, isrepeat)
          SEEDED hook (one captured from the project's own
          love.*) consumes unconditionally, D-HOOKS-SEEDED's
          2026-09-08 amendment.
-           → nobody consumed: back to the console's own handler
-             for that channel, unless the project owns
-             love.draw (Controller._defaults[event], gated on
-             user_draw; the two derived clicks have no console
-             default and fall through to nothing), and, for a
-             key or text event, unless the program takes keys
-             (takes_keys: then it goes nowhere)
+           → nobody consumed: nowhere while the program can
+             act (can_act), but the output's scrolling keys and
+             the wheel, which scroll the console's output
+             (ruling 1.1); once it can act no more, the route
+             is released and the event is the console's
+             (Controller._defaults[event]; the two derived
+             clicks have no console default and go nowhere)
 ```
 
 **The last line is a repair, not a tier.** The walk is still three consumers; what changed is that
@@ -387,7 +387,7 @@ consumed"*; the regression it pays is [`../technical_debt/input.md`](../technica
 
 `app_state == 'starting'` is never observed by any input path: `main.lua`'s `love.load()` sets it, then flips it to `'ready'` a few lines later — both synchronously, before LÖVE's event pump runs, so no `love.handlers.*` entry point can ever see the `'starting'` value.
 
-Global shortcuts are answered in `love.handlers.keypressed` before anything reaches the active route's controller. They live in `RESERVED` (`controller.lua`, in `setup_callback_handlers`): a **second, privileged combo table** keyed per event, structurally separate from a project's `compy.input.shortcuts` — same shape, consulted before any route exists, never overridable by one, and consuming its key for the whole press: the route sees neither its press, its repeats nor its release (`decisions/input.md`, D-RESERVE-TABLE's note of 2026-11-16). Every other key's repeats and release go to the receiver of its press, the route in force at the press (`delivered`, `route_owner`), and to no one once it is gone; a release a paused program is owed comes at its `continue()` (`owed_releases`). Its keys are canonical combo strings: `ctrl+pause` suspends, `ctrl+q` stops the run and returns to the console with the project still open (from the file editor it leaves the editor; in the console with no run it does nothing), `ctrl+r` restarts a live program from its entry point (the predicate `program_live` Ctrl+Q's stop asks too; with none it does nothing, playback apart), `ctrl+t` quick-switches between run and edit, `ctrl+alt+p` / `ctrl+alt+shift+p` start and stop the profiler, and bare `f10` cycles the FPS-overlay corner. `ctrl+escape` (quit) is the one reservation living on the release side, in `RESERVED.keyreleased`, not keypressed: it is decided at Escape's press, with Ctrl held then, and acts on Escape's release whatever is held by then (`owed`). The glyph of a reserved chord, which the device sends as text before or after the press (`Ctrl+R`'s `r`), reaches no route: `handlers.textinput` drops it before the project's shortcuts and hooks are offered a chord's glyph. Each entry is a function that also checks the state it applies in — the project- and console-management ones no-op in playback (`cfg.mode == 'play'`), the profiler three are reserved only in a profiling build (`love.PROFILE`, which `conf.lua` sets before the gate is built), so elsewhere a program receives F10 and the two profiler chords — which is why the project guide's table carries a "when" column.
+Global shortcuts are answered in `love.handlers.keypressed` before anything reaches the active route's controller. They live in `RESERVED` (`controller.lua`, in `setup_callback_handlers`): a **second, privileged combo table** keyed per event, structurally separate from a project's `compy.input.shortcuts` — same shape, consulted before any route exists, never overridable by one, and consuming its key for the whole press: the route sees neither its press, its repeats nor its release (`decisions/input.md`, D-RESERVE-TABLE's note of 2026-11-16). Every other key's repeats and release go to the receiver of its press, the route in force at the press, decided as the press is handed over (`receivers`, `hand_press`, `route_owner`; a mouse button and a touch by the same record and path), and to no one once it is gone. The receiver is recorded before the press's handler runs, so a release the handler raises itself finds it; the console replaces it only when the route handed the press itself to the console, which a per-press token (`handing`) marks and a nested event cannot. A release a paused program is owed comes at its `continue()` (`owed_releases`), until one of them asks for a stop or a run or leaves the program nothing to act with. A known limit: an error that escapes a console handler during a press's hand-over (a program's own error is caught inside the route) leaves `handing` set; the next hand-over saves and restores it without reading it, and the next call of the same event outside a hand-over takes it (a key repeat, which reaches the route through `follow`, takes a stale key press's). No wrong delivery follows from it: no record points at the stale token any more, so marking or taking it changes no receiver. Its keys are canonical combo strings: `ctrl+pause` suspends, `ctrl+q` stops the run and returns to the console with the project still open (from the file editor it leaves the editor; in the console with no run it does nothing), `ctrl+r` restarts a live program from its entry point (the predicate `program_live` Ctrl+Q's stop asks too; with none it does nothing, playback apart), `ctrl+t` quick-switches between run and edit, `ctrl+alt+p` / `ctrl+alt+shift+p` start and stop the profiler, and bare `f10` cycles the FPS-overlay corner. `ctrl+escape` (quit) is the one reservation living on the release side, in `RESERVED.keyreleased`, not keypressed: it is decided at Escape's press, with Ctrl held then, and acts on Escape's release whatever is held by then (`owed`). The glyph of a reserved chord, which the device sends as text before or after the press (`Ctrl+R`'s `r`), reaches no route: `handlers.textinput` drops it before the project's shortcuts and hooks are offered a chord's glyph. Each entry is a function that also checks the state it applies in — the project- and console-management ones no-op in playback (`cfg.mode == 'play'`), the profiler three are reserved only in a profiling build (`love.PROFILE`, which `conf.lua` sets before the gate is built), so elsewhere a program receives F10 and the two profiler chords — which is why the project guide's table carries a "when" column.
 
 Each of these matches its modifier set **exactly** — the modifiers it names held, and no other (`decisions/input.md`, D-EXACT-RESERVE). Since a reservation is looked up by the canonical combo string built for the event, that exactness is a property of the representation: a string equality cannot tolerate an unnamed modifier. "Intercepted" describes what the gate may *claim*, not what passes through it: every keypress enters here; one the gate does not claim is forwarded to the route unchanged, and a claimed one is not: its key, with its repeats and release, is the gate's for the whole press, Ctrl+Escape's Escape included.
 
@@ -547,9 +547,9 @@ binding to apply, deliberately not a rule the tier enforces.
 - **Ctrl+Up/Ctrl+Down, PageUp/PageDown, and Home/End with an empty field**: scroll the output
   over its kept rows, a row, a page of 15 rows with one carried over, and to the oldest or the
   newest row; they recall nothing and leave the field's text and cursor as they are. With text
-  in the field, Home and End are the field's own keys. Every other key brings the screen back
-  before it does its work (`ConsoleController:_back_to_screen`); a modifier or a lock key on
-  its own and F1 leave the view. See `console.md`, "The Output and Its Kept Rows".
+  in the field, Home and End are the field's own keys. Typing and every other key leave a
+  scrolled view where it is; Enter on a line that runs brings the screen back. See
+  `console.md`, "The Output and Its Kept Rows", for everything that does.
 - **Up/Down at input boundary**: history navigation, through the widget's `on_limit_reached`
   (below). The walk is the classic shell's (`model/input/history.lua`): the entries are the lines
   that ran, and walking never changes one. Up from the line being typed keeps it in a slot below
@@ -648,8 +648,8 @@ held from a capital) and Delete, Ctrl+Backspace and Ctrl+W deleting what Ctrl+Le
 would cross (at a line's start, the break and the word before it), Ctrl+K the rest of its line,
 Shift+Enter and Alt+Enter breaking the line, Ctrl+Z and Ctrl+Y undoing and redoing the draft
 (D-UNDO-KEYS), bare Enter submitting and bare Escape cancelling. Every owner gets the same keys.
-Alt+Up/Down are the editor's block move and the widget's for no owner. It has no selection
-and no clipboard keys and never inserts literal characters — see "Text Input Widget" above for why
+Alt+Up/Down are the editor's block move and the widget's for no owner. Shift with each move
+selects (see "Selection" above); it has no clipboard keys and never inserts literal characters — see "Text Input Widget" above for why
 `keypressed` and `textinput` divide the work this way. Ahead of the table run the error lock and the
 web build's space.
 
@@ -801,8 +801,10 @@ it. (`ConsoleController:wrap_handler`, which used to do this per handler, is gon
 ### Input widget mouse
 
 `UserInputController` handles mouse events on the input widget:
-- `mousepressed`: translates screen (x, y) → input grid (col, line) via `_translate_to_input_grid`. Grid is bottom-relative (y increases upward in input space). Moves the cursor there (`translate_grid_to_cursor`, `move_cursor`), in every field; a press outside the field's rows does nothing.
-- `mousemoved` and `mousereleased`: nothing. A drag selects nothing.
+- `mousepressed`: ends any drag before it, then finds the cell under the point (`_point`, `cell_at`: the wrapped row counted from 1 downward with the visible offset added) and moves the cursor there (`translate_grid_to_cursor`, `move_cursor`), in every field; a press outside the field's rows does nothing more.
+- `mousepressed` also clears a selection and marks where a drag would start (`drag_from`).
+- `mousemoved`: while the left button is down after such a press, selects from where the press was to the cell under the pointer, while it is in the field's rows; a point back on the press selects nothing. With the button up it only marks where it went (`last`): LÖVE reads a button's state as of the last event taken from the system, so a press, one move and the release in one frame give a move with the button already up. The button seen up lasts for its frame alone (`love.state.frame`, which the IDE's update counts): seen up in an earlier frame, or down again since, the drag's release went unseen (a program's hook took it) and the drag is over, as it is after any change to the text since the press (`text_changes`).
+- `mousereleased`: ends the drag; where the last move went, it selects to there, in the frame of a move with the button up only, so that a drag of one motion in one frame selects. A release elsewhere than the last move, or with no move seen (under the key card the moves are held back), changes nothing.
 
 The file editor forwards a press to its field (`EditorController:mousepressed`) while `cfg.editor.mouse_enabled` is on, as `main.lua` ships it; a click on the document view does nothing (PR #28, D-MOUSE-BROWSE).
 

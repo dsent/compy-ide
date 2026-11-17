@@ -8,8 +8,9 @@ local D = require('harmony.drive')
 --- continuation cue at a cut edge and none at rest; the first
 --- step from a nearly empty screen, which fills it; the echo of
 --- an entered line in blue and its error after it in the
---- output's error color; the key card's rows; and a row printed
---- in one print against a print for each of its cells.
+--- output's error color; the key card's rows; the seventeenth
+--- row behind a program; and a row printed in one print against
+--- a print for each of its cells.
 
 --- @return table
 local function theme() return P.cc().cfg.view.colors end
@@ -212,6 +213,173 @@ scenario('blank-row', function(wait)
   D.eq(from_to('seven', 'eight'), 'seven||eight',
     'print(\'\') in a program')
   D.key(wait, 'C-q')
+  hm_done()
+end)
+
+--- The field's row is the output's while no input field is
+--- drawn (the maintainer's ruling of November 17, 2026): behind a
+--- program that owns the input and shows no field the grid has
+--- 17 rows, text shows on the seventeenth, and the status line is
+--- the screen's last row, naming the project, the file and that
+--- it runs. Once the field is back the grid has 16, and what was
+--- on the seventeenth row has scrolled up.
+scenario('seventeenth-row', function(wait)
+  wait(.1)
+  D.key(wait, 'escape')
+  D.key(wait, 'C-l')
+  D.enter(wait, "project('h-rows')")
+  P.put('h-rows', 'main.lua',
+    "for i = 1, 16 do print('row ' .. i) end\n"
+    .. "compy.terminal.gotoxy(1, 17)\n"
+    .. "io.write('the seventeenth')\n"
+    .. "compy.input.hooks.keypressed = function() return true end\n"
+    .. "function love.update() end\n")
+  D.enter(wait, 'run_project()')
+  settle(wait)
+  local t, th, v = output().terminal, theme(), view()
+  local lay = require('view.layout')(v)
+
+  --- the grid's row `y`, spaces at its end left out
+  local function row(y)
+    return (table.concat(t.buffer[y]):gsub('%s+$', ''))
+  end
+
+  D.eq(t.height, 17, 'rows behind a program that owns the input')
+  D.eq(row(17), 'the seventeenth', 'the seventeenth row')
+  local img = P.capture(wait)
+  local says = P.drawn(wait)
+  D.shot(wait, 'seventeen-rows')
+  local _, ink = P.cell(img, 1, 17, top())
+  is(ink, th.terminal.fg, 'the text on the seventeenth row')
+  local first = P.band(img, th.statusline.user.bg)
+  D.eq(first, v.h - lay.bottom - lay.status_h,
+    "the status line's first pixel row")
+  for _, word in ipairs({ 'h-rows', 'main.lua', 'running' }) do
+    assert(P.shows(says, word), 'the status line does not say ' .. word)
+  end
+  assert(not P.shows(says, 'L1'), 'the status line shows a position')
+
+  D.key(wait, 'C-q')
+  wait(.2)
+  D.eq(t.height, 16, 'rows once the field is back')
+  D.eq(row(16), 'the seventeenth', 'the seventeenth row, scrolled up')
+  img = P.capture(wait)
+  D.shot(wait, 'sixteen-rows-again')
+  first = P.band(img, th.statusline.console.bg)
+  D.eq(first, v.h - lay.bottom - v.fh - lay.status_h,
+    "the status line's first pixel row over the field")
+  hm_done()
+end)
+
+--- The first `rows` rows of the grid as the screen should show
+--- them: every background, then each cell's character at its
+--- own place, as bytes of pixels
+--- @param t table --- the terminal
+--- @param rows integer
+--- @return string
+local function grid_picture(t, rows)
+  local gfx = love.graphics
+  local cw, ch = t.char_width, t.char_height
+  local canvas = gfx.newCanvas(t.width * cw, rows * ch)
+  gfx.push('all')
+  gfx.setCanvas(canvas)
+  gfx.origin()
+  gfx.clear(0, 0, 0, 1)
+  gfx.setFont(t.font)
+  for pass = 1, 2 do
+    for y = 1, rows do
+      for x, char in ipairs(t.buffer[y]) do
+        local st = t.state_buffer[y][x]
+        local back, fore = st.backcolor, st.color
+        if st.reversed then back, fore = fore, back end
+        local left, up = (x - 1) * cw, (y - 1) * ch
+        if pass == 1 then
+          gfx.setColor(back)
+          gfx.rectangle('fill', left, up, cw, ch)
+        else
+          gfx.setColor(fore)
+          gfx.print(char, left, up)
+        end
+      end
+    end
+  end
+  gfx.pop()
+  return canvas:newImageData():getString()
+end
+
+--- The screen's pixels over the grid's first `rows` rows
+--- @param img love.ImageData
+--- @param t table
+--- @param rows integer
+--- @return string
+local function screen_rows(img, t, rows)
+  local w, h = t.width * t.char_width, rows * t.char_height
+  local part = love.image.newImageData(w, h)
+  part:paste(img, 0, 0, 0, top(), w, h)
+  return part:getString()
+end
+
+--- How many pixels of two pictures differ
+local function differ(a, b)
+  if a == b then return 0 end
+  local n = 0
+  for i = 1, #a, 4 do
+    if a:sub(i, i + 3) ~= b:sub(i, i + 3) then n = n + 1 end
+  end
+  return n
+end
+
+--- A program that draws nothing of its own has no picture but
+--- the output. When it pauses, and when it runs again after
+--- continue(), the screen shows the grid's rows as they are, each
+--- once: the pause's screenshot is the picture of a program
+--- that draws, and laid under the output of one that does not
+--- it showed every row twice, a row apart once the grid had
+--- rolled for the field (seen on a Compy on November 17, 2026).
+--- This is checked here and not in the unit tests: their
+--- fixture's captureScreenshot never delivers, so no pause there
+--- has a screenshot and nothing is drawn over one; what a pause
+--- shows, pixel by pixel, is Harmony's to check.
+scenario('paused-output', function(wait)
+  wait(.1)
+  D.key(wait, 'escape')
+  D.key(wait, 'C-l')
+  D.enter(wait, "project('h-paused')")
+  P.put('h-paused', 'main.lua',
+    "for i = 1, 16 do print(string.format('ROW %02d', i)) end\n"
+    .. "io.write('ROW 17 holds text')\n"
+    .. "function love.update() end\n")
+  D.key(wait, 'C-l')
+  D.enter(wait, 'run_project()')
+  settle(wait)
+  local t = output().terminal
+  D.eq(t.height, 17, 'rows while the program runs')
+  -- once to bring every glyph into the font's texture
+  grid_picture(t, 17)
+
+  D.key(wait, 'C-pause')
+  wait(.5)
+  D.in_state('inspect')
+  D.eq(t.height, 16, 'rows at the pause')
+  local img = P.capture(wait)
+  D.shot(wait, 'paused-output')
+  -- the notice band lies over the last row
+  D.eq(differ(screen_rows(img, t, 15), grid_picture(t, 15)), 0,
+    'pixels of the paused output that are not the grid\'s rows')
+
+  D.key(wait, 'escape')
+  D.enter(wait, 'continue()')
+  settle(wait)
+  D.in_state('running')
+  D.eq(t.height, 17, 'rows once it runs again')
+  img = P.capture(wait)
+  D.shot(wait, 'continued-output')
+  D.eq(differ(screen_rows(img, t, 17), grid_picture(t, 17)), 0,
+    'pixels of the continued output that are not the grid\'s rows')
+
+  D.key(wait, 'C-q')
+  wait(.2)
+  D.in_state('ready')
   hm_done()
 end)
 

@@ -980,7 +980,8 @@ local function draw_all(also)
   -- as love.draw does through View.draw (view/view.lua),
   -- which the fixture stubs
   local cc = K.cc
-  cc.view:draw(cc:get_terminal(), cc:get_canvas(), nil)
+  cc.view:draw(cc:get_terminal(), cc:get_canvas(),
+    cc.model.screen:get())
   if also then
     also()
   end
@@ -1004,6 +1005,21 @@ end
 ---   draw; those of `field_log` have none, the log being in
 ---   the order drawn already
 function K.screen(also)
+  --- The console's field keeps a status line it rendered
+  --- before (UserInputView:draw); a recording wants its texts,
+  --- so the kept render is forgotten here. That hides a kept
+  --- line gone stale: every K.screen shows the line as a fresh
+  --- render makes it. A check of what is kept, and of when it
+  --- is rendered again, draws with K.redraw.
+  K.cc.view.input.bare_drawn = nil
+  return K.redraw(also)
+end
+
+--- K.screen's draw and recording with nothing forgotten first:
+--- what one more frame's draw draws, a render kept from an
+--- earlier frame left out.
+--- @param also function?
+function K.redraw(also)
   complete_cfg()
   local lg = love.graphics
   screen = {

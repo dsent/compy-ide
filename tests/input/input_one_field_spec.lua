@@ -2,9 +2,9 @@
 -- ruling of November 14, 2026): the console, the file
 -- editor and a program's input field run the same keys over
 -- the same draft to the same result, and a click places the
--- cursor in each. There is no selection: Shift with a move is
--- bound nowhere, and a drag selects nothing. Keys only,
--- through the K helper and the production gateway.
+-- cursor in each. Selection, with Shift and a move or a drag
+-- (the ruling of November 17, 2026), is input_selection_spec's.
+-- Keys only, through the K helper and the production gateway.
 
 local F = require("tests.helpers.input_fixture")
 local K = require("tests.helpers.editor_keys")
@@ -92,14 +92,9 @@ describe("one text field everywhere #input", function()
     end)
   end
 
-  -- the keys no field binds: no selection, no Shift+Delete,
-  -- and the block move is the file editor's own, not its
-  -- field's
+  -- the keys no field binds: no Shift+Delete, and the block
+  -- move is the file editor's own, not its field's
   local UNBOUND = {
-    { "lshift", "left" }, { "lshift", "right" },
-    { "lshift", "up" }, { "lshift", "down" },
-    { "lshift", "home" }, { "lshift", "end" },
-    { "lctrl", "lshift", "left" }, { "lctrl", "lshift", "end" },
     { "lshift", "delete" }, { "lctrl", "delete" },
     { "lalt", "left" }, { "lalt", "home" }, { "lalt", "end" },
     -- removed on November 14, 2026, late
@@ -347,20 +342,5 @@ describe("one text field everywhere #input", function()
       end
     end)
 
-    it("a drag selects nothing, in every field", function()
-      for _, owner in ipairs(ORDER) do
-        local f = field_of(owner)
-        local x, y = at(f, 1, 2)
-        local x2, y2 = at(f, 0, 8)
-        F.set_mouse_down(true)
-        F.session.mousepressed(x, y, 1, false, 1)
-        F.session.mousemoved(x2, y2, x2 - x, y2 - y, false)
-        F.session.mousereleased(x2, y2, 1, false, 1)
-        F.set_mouse_down(false)
-        K.frame()
-        assert.is_false(f.model:has_selection(), owner)
-        assert.same({ 1, 2 }, { f:get_cursor_pos() }, owner)
-      end
-    end)
   end)
 end)

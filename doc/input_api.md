@@ -478,9 +478,15 @@ letters, digits and underscores; at a line's start, the line break and the word
 before it), Ctrl+K the rest of its line, and Alt+Shift+Up and Alt+Shift+Down
 move its line; Home and End go to
 the ends of the cursor's row, Ctrl+Home and Ctrl+End to the ends of the text. A
-click places the cursor. The widget has no selection (Shift with an arrow does
-nothing, and a drag selects nothing) and no clipboard: Ctrl+C, Ctrl+X, Ctrl+V,
-Ctrl+Insert and Shift+Insert change nothing in it. On a non-empty submission
+click places the cursor. Shift with any of these movement keys selects from where
+the selection began to where the cursor lands, and so does a drag of the mouse
+from a press in the field; a click or a plain movement clears the selection.
+Backspace, Delete, Ctrl+Backspace, Ctrl+W and Ctrl+K remove the selected text,
+as one change Ctrl+Z takes back with the selection. Typing replaces it in two
+changes: the first Ctrl+Z takes back what was typed, the second the selection's
+removal.
+The widget has no clipboard: Ctrl+C, Ctrl+X, Ctrl+V, Ctrl+Insert and Shift+Insert
+change nothing in it. On a non-empty submission
 the order is:
 
 1. `before_submit(text)`, if assigned. A truthy return vetoes the
@@ -707,18 +713,26 @@ A hook you assign yourself is the other case: you have met the truthy
 convention by writing it, so `compy.input.hooks.keypressed` falls
 through on falsey like everything else in the chain.
 
-**A program that takes keys owns the keyboard.** While your program has
-any way of taking keys or text, its own `love.keypressed`,
-`love.keyreleased` or `love.textinput`, a key or text hook, a key or text
-shortcut, or its own shown field, a key or text that nothing of yours
-takes goes nowhere: it does not fall through to the console's prompt.
-Behind a program that takes keys and draws nothing, the console's field
-and its cursor are hidden while it runs, the output and the status line
-staying on show; the field comes back when the program stops (Ctrl+Q),
-pauses, or takes keys no more. A program that wants typing shows its
-own field. A program that takes no
-keys and draws nothing leaves the keyboard to the console. Pointer and
-touch events are not part of this.
+**A program that can act owns all input.** While your program can still
+act, that is while it has a `love.update` or `love.draw`, a hook or a
+shortcut on any channel (its own `love.*` handlers among them), its own
+shown field, or a serial handler, every key, text, mouse and touch event
+is yours, and one that nothing of yours takes goes nowhere: the console
+does not get it. The console's field and its cursor are hidden while it
+runs, and its row is then your program's: the output has 17 rows where it
+had 16, `gotoxy` reaches the 17th, and the status line sits on the
+screen's last row, naming the project, the file it runs from and
+"running". The field comes back when the program stops (Ctrl+Q), pauses
+(Ctrl+Pause), or can do nothing more, and so does the 16-row output when
+your program shows a field of its own: what is on the 17th row then
+scrolls up. A program that wants typing shows its own field. The one exception:
+the output stays in use, so a key press or a wheel event you leave that
+belongs to it scrolls it (Ctrl+Up and Ctrl+Down, PgUp and PgDn, Home and
+End, and the wheel). An event is yours when a shortcut or a hook for it
+returns true, or your shown field takes it; a `love.keypressed` of yours
+takes every key press, so behind it only the wheel scrolls the output. A
+program whose code has ended and that can do nothing more gives all input
+back to the console, its picture staying.
 
 **What this means in practice:** if your project shows the input widget
 *and* handles keys, write `compy.input.hooks.keypressed = function(k)`
@@ -850,17 +864,9 @@ as it did under plain LÖVE ("How events reach your project").
 ### Combos the framework keeps
 
 A few combinations belong to the platform. They are answered before your
-project's route exists, so **a project cannot override one by naming it** — but the
-platform does not swallow the key either: **your binding still runs**, and the
-platform's action happens as well.
-
-That combination is worth reading twice, because it is the opposite of how your
-own shortcuts behave. Yours consume by returning truthy. A reserved combo never
-consumes; it acts *and* passes the key on.
-
-The practical consequence is only visible for the ones that end a run: your
-handler runs, and then the project is stopped anyway. Nothing suppressed you —
-the route you were bound to was taken down underneath you.
+project's route exists, so **a project cannot override one by naming it**, and
+the platform keeps the key for its whole press: your handlers, hooks and
+shortcuts see neither its press, its repeats nor its release.
 
 **A reservation is its modifier set exactly.** It does not extend to chords it
 does not name, so `ctrl+shift+escape` is yours to bind even though `ctrl+escape`
@@ -874,20 +880,31 @@ yourself.
 | `ctrl+r` | restarts a program that runs, is paused or idles behind the console, from the file it runs from; does nothing when none does (a packaged build restarts always) | always |
 | `ctrl+t` | switches between running and the editor | development only |
 | `ctrl+q` | stops the run and returns to the console; the project stays open. From the editor, leaves it for the console | development only |
-| `ctrl+pause` | suspends the run | development only |
+| `ctrl+pause` | suspends the run of a program that runs or can still act, one with only key handlers included; the console and its field come back, and `continue()` resumes it as it was | development only |
 | `ctrl+alt+p` / `ctrl+alt+shift+p` | starts / stops the profiler | profiling builds |
 | `f10` | cycles the FPS overlay corner | profiling builds |
+| `f12` | shows the screen's next mode: text, combined, the picture | development only |
 
 "Development only" means the combo is inert in a packaged build, where the
 console it returns you to is not there to return to.
 
 `ctrl+s` and `ctrl+shift+r` were reserved until 2026-11-14 and are yours now:
 a project receives them like any other chord, so `ctrl+s` can save. No key
-closes the project; the console's `close_project()` does. Note `f10` is the one
-reservation with no modifier at all: bare F10 is the platform's in a profiling
-build, and F10 with any modifier is yours.
+closes the project; the console's `close_project()` does. `f10` and `f12` are
+the reservations with no modifier at all: bare F10 is the platform's in a
+profiling build, bare F12 in a development build, and either with any modifier
+is yours.
 
-It is also the only F-key that arrives on every Compy. The function row shares
+**The full picture.** While your program draws, the IDE shows its picture on
+the whole screen, and F12 steps through the text, the text over the picture and
+the picture. While your program can still act, it keeps every key and click in
+any of them, and F12 is how a person leaves its picture. Once nothing that can
+act runs (the program stopped, paused, or ended at its last line), any key or
+mouse button pressed on the full picture goes back to the console's text and
+goes nowhere else: no handler, hook or field sees its press, repeats, release or
+text, and the wheel, a move and text with no key do nothing there.
+
+F10 is also the only F-key that arrives on every Compy. The function row shares
 its keys with the keyboard's Fn layer — Insert is Fn+F12, Scroll Lock is
 Fn+F10, mute and the media keys are Fn+F5 through Fn+F8 — and on a stock,
 unrooted Compy **F1 to F9 never reach your project**; the system answers them.

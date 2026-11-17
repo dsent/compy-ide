@@ -18,6 +18,13 @@ Project-author guide: `doc/input_api.md`.
 
 ### Added
 
+- **F12 shows the screen's next mode.** In the console, whether a program runs, is
+  paused or none is, F12 steps through the text, the text over the picture and the picture;
+  the status line names `text` or `combined`, and the console's key card lists F12. On the
+  full picture, while no program that can act runs, any key or mouse button goes back to the
+  text and types or clicks nothing; a program that can act keeps its keys there,
+  and F12 is the way back. A pause with a picture says `F12 shows the picture`. A program no
+  longer gets a bare F12; F12 with a modifier is still its own.
 - **A simple way to ask a question — `compy.ask`.** `compy.ask(prompt, …)` asks,
   `compy.on_answer(text)` receives the answer (or `nil` on Escape),
   `compy.on_key(...)`'s return value decides who consumes a key, and `compy.unask()`
@@ -38,6 +45,16 @@ Project-author guide: `doc/input_api.md`.
 
 ### Changed
 
+- **A program's picture is kept apart from the console's text.** What a program prints
+  goes to the console's text and what it draws to its picture, and the screen shows the
+  text, the text over the picture, or the picture alone. A run starts with the text; its
+  first drawing shows its picture, whole; a line typed in the console that draws shows the
+  text over the picture. A pause shows the text, and `continue()` brings back what showed
+  before. A stop shows the text and keeps the picture, which the next run and `reset()`
+  clear. A program's `love.draw` draws on its picture each frame, and its
+  `love.graphics.setCanvas()` with no canvas draws there too.
+  `compy.screen.show("text" | "combined" | "picture")` shows one of them, and
+  `compy.screen.getMode()` says which shows.
 - **In the console's output a character wider than its cell shows whole.** The next
   cell's background used to cut it at the cell's right edge. A block or a box line now
   keeps the faint pixel it has at each side, and an arrow or a CJK character runs a few
@@ -171,8 +188,12 @@ Project-author guide: `doc/input_api.md`.
   Ctrl+K the rest of the line, and Alt+Shift+Up and
   Alt+Shift+Down move the cursor's line, in every field. Alt+Up and Alt+Down move a
   block in the file editor and do nothing elsewhere. A click places the cursor in every
-  field, the file editor's included. No field selects text: Shift with an arrow, Home or
-  End does nothing, and neither does a drag.
+  field, the file editor's included. Shift with a movement key, or a drag of the mouse,
+  selects a part of the draft; typing replaces it, Backspace or Delete removes it, and
+  Ctrl+Z takes back the typing and then the removal, the selection with it; a click or a
+  plain movement clears it. Beside a
+  selection the cursor is a thin bar, so that the selected character it stands on stays
+  seen. Nothing copies, cuts or pastes.
 - **Alt+F says why it refuses**, in a notice that blocks nothing: in a text or
   Markdown file, "The file has nothing to format.", and during an edit. `tidy()` on a
   text or Markdown file says it has nothing to format, where it named an error or said
@@ -202,15 +223,17 @@ Project-author guide: `doc/input_api.md`.
   are on it. Only a bare F1 brings it up.
 - **The console keeps its output.** The last 1,000 rows that scroll off the top of the
   console's output are kept, each with its colors, and Ctrl+Up / Ctrl+Down scroll over them
-  a row at a time, PageUp / PageDown a page of 15 rows with one carried over, and, while the
+  a row at a time, PageUp / PageDown a page of one row fewer than the view (15 rows, 16
+  while a program's 17-row output shows) with one carried over, and, while the
   field is empty, Home and End go to the oldest and the newest row. A scrolled view fills
   the screen, carries the editor's continuation cue at an edge with more beyond, and stays
-  where it is while new output arrives; any other key but a modifier, a lock key or F1
-  brings the screen back, and so do a program's start, stop or pause, a key or text a
-  running program takes, and its input field coming up. The field keeps its text and
-  cursor. PageUp and PageDown no longer recall the history, which Up and
-  Down still do. While a program's input field shows, or the program takes the keys
-  itself, the keys are the program's. The key card lists Ctrl+Up/Down and Home/End.
+  where it is while new output arrives and while you type, in the console and in a
+  program's field alike. Enter on a line that runs brings the screen back, and so do an
+  answer a program's field takes, a program's start, stop or pause, and its input field
+  coming up. The field keeps its text and cursor. PageUp and PageDown no longer recall
+  the history, which Up and Down still do. While a program's input field shows, or the
+  program takes the keys itself, the keys are the program's. The key card lists
+  Ctrl+Up/Down and Home/End.
 - **Ctrl+L empties the console**: the screen, the kept output, and output still waiting
   to be written when it is pressed. A program's `compy.terminal.clear()` clears the
   screen alone, and what was on it is gone. `list_projects()` no longer clears the screen:
@@ -254,21 +277,35 @@ Project-author guide: `doc/input_api.md`.
   console before it, is gone, and so is a bundled library's state the program loaded,
   such as a timer's pending calls; the graphics settings it changed are reset, and a transform it
   pushed and never popped is popped. Before, a handler deleted from `main.lua` went on running
-  until another project was opened or the IDE restarted. A program that ends by itself
-  leaves its variables for the console to look at until the next run, and `continue()` and
-  `dofile()` keep everything as it is.
+  until another project was opened or the IDE restarted. `continue()` and `dofile()` keep
+  everything as it is.
+- **A program that ends by itself is stopped.** When its code has run to the end and nothing
+  of it can act any more (no `love.update` or `love.draw`, no handler, hook or shortcut, no
+  input field showing, no serial handler), it gets the same flush as `stop()`: its variables
+  and functions go, `compy.before_exit` runs, and a sound it started plays out. A program
+  that drew leaves its picture on show. To keep what a file defines, run it with
+  `dofile("main.lua")`.
 - **A project can have a second entry point.** `run(nil, "second.lua")` runs that file of
   the open project as the program, from a clean start like any run, and
   `run("name", "second.lua")` opens the project first. Ctrl+R restarts that file while its
   program is live; Ctrl+T from the editor runs `main.lua`. A file the project does not hold,
   or a folder, is refused, "There is no second.lua in this project.", before anything
   changes.
-- **A program that takes keys owns the keyboard.** While a program has its own key or text
-  handler, a key or text hook or shortcut, or its own field shown, no key or text it leaves
-  reaches the console's prompt: behind such a program that draws nothing, the prompt and its
-  cursor are hidden, the output and the status line staying, until the program stops, pauses
-  or takes keys no more. A program that wants typing shows its own field. Before, a key or text its hook did not take was typed into the console, as was a key
-  hook's text on a Compy.
+- **A program that can act owns all input.** While a program has an update or a draw, a
+  hook or a shortcut, its own field shown, or a serial handler, every key, text, mouse and
+  touch event is the program's, and what it does not take goes nowhere; the console's field
+  and cursor are hidden. The prompt's row is the program's meanwhile: the output has 17 rows,
+  `compy.terminal.gotoxy` reaches the 17th, and the status line is the screen's last row,
+  showing the project, the file the program runs from and "running". When a field comes
+  back, what is on the 17th row scrolls up. The output keeps its own
+  scrolling keys and the wheel when the program does not take them, so a program that only
+  prints can be scrolled. A program that can do nothing more, its picture staying or not,
+  gives the console back. Before, a key or text a program left was typed into the console.
+- **The mouse wheel scrolls the console's output**, three rows a notch.
+- **Ctrl+Pause pauses any program that can act**, one with only key handlers and no update
+  or draw included: before, it did nothing there. The pause gives the console and its field
+  back, holds the program's serial handlers too (before, they went on), and `continue()`
+  resumes the program as it was, idle or running.
 - **Ctrl+R restarts a live program only.** It restarts a program that runs, is paused or
   idles behind the console, from the file it runs from; in the console with no program, and
   in the editor, it does nothing: the idle console's key card lists it among the other keys,
@@ -291,8 +328,8 @@ Project-author guide: `doc/input_api.md`.
   first lines and the close of its project now all end it through one flush: its handlers,
   input hooks, shortcuts, `before_exit` hook, serial handlers, input field and modules go,
   as before, and now also its variables, the master volume, and key repeat and text input as
-  it set them; its
-  picture is cleared and the graphics settings reset. A sound it started plays to its end,
+  it set them; the graphics settings are reset, and its picture is kept, apart from the
+  console's text (see *A program's picture is kept apart*). A sound it started plays to its end,
   and one set to repeat plays once more and stops; `reset()` silences them. A pause
   clears nothing, so `continue()` resumes as it was. The console's output and history and
   the editor's files stay.
@@ -377,6 +414,12 @@ Project-author guide: `doc/input_api.md`.
 
 ### Fixed
 
+- **A paused program's output is drawn once.** A pause kept a picture of the whole
+  screen and drew the output over it. For a program that draws nothing of its own that
+  picture was the console itself, and after `continue()` it stayed under whatever the
+  program printed next, each row showing twice. A pause now takes no picture of the
+  screen: a program's frame stays on its own canvas (see *A program's picture is kept
+  apart*).
 - **A line as wide as the screen is not followed by a blank row.** The console moved to
   the next row as soon as a row's 64th character was written, so the line end after a
   64-character line left a row empty, and a full last row scrolled the screen at once.

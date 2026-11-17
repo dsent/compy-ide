@@ -133,19 +133,35 @@ function Probe.card()
   return Probe.cc():card_shows()
 end
 
---- The console's text: its rows, then what is still being
---- printed
+--- The console's text: its rows with what is still being
+--- printed put where it will be written, at the cursor. A
+--- line the terminal is in the middle of writing reads whole
+--- then: its start on the cursor's row, its rest still waiting
+--- (the terminal writes 800 characters a second, so a check
+--- made 30 ms after Enter meets it mid-line).
 --- @return string
 function Probe.console_text()
   local term = Probe.cc().model.output.terminal
-  local rows, pending = {}, {}
-  for y, row in ipairs(term.buffer) do
-    rows[y] = table.concat(row):gsub('%s+$', '')
+  local function row(y)
+    return (table.concat(term.buffer[y]):gsub('%s+$', ''))
   end
+  local pending = {}
   for c in term:waiting() do
     if type(c) == 'string' then pending[#pending + 1] = c end
   end
-  return table.concat(rows, '\n') .. table.concat(pending)
+  local rows = {}
+  for y = 1, #term.buffer do rows[y] = row(y) end
+  if #pending > 0 then
+    --- the cursor's row up to the cursor, then what waits; a
+    --- full row's cursor waits past its last column, and what
+    --- comes next starts the next row
+    local y = math.min(term.cursor_y, #term.buffer)
+    local before = math.min(term.cursor_x - 1, term.width)
+    local head = table.concat(term.buffer[y], '', 1, before)
+    local wraps = term.cursor_x > term.width and pending[1] ~= '\n'
+    rows[y] = head .. (wraps and '\n' or '') .. table.concat(pending)
+  end
+  return table.concat(rows, '\n')
 end
 
 --- A project's file as storage holds it, nil when it is not
@@ -388,12 +404,19 @@ end
 local recording
 
 --- Record the text the screen draws while `wait` runs for
---- `t` seconds, a frame or more
+--- `t` seconds, a frame or more. A status line the console's
+--- field kept from an earlier frame (UserInputView:draw) is
+--- rendered anew first, so that its text is among it. That
+--- hides a kept line gone stale: what this records is the
+--- line as a fresh render makes it, and a picture of the
+--- screen taken before this call is the one that shows what
+--- was kept.
 --- @param wait function
 --- @param t number?
 --- @return string[] --- each string drawn, in order
 function Probe.drawn(wait, t)
   local gfx = love.graphics
+  Probe.cc().view.input.bare_drawn = nil
   local print_, printf_ = gfx.print, gfx.printf
   recording = {}
   local got = recording

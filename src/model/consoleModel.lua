@@ -1,6 +1,7 @@
 local class = require('util.class')
 
 require("model.canvasModel")
+require("model.screenModel")
 require("model.editor.editorModel")
 require("model.project.project")
 
@@ -8,6 +9,7 @@ require("model.project.project")
 --- @field input UserInputModel
 --- @field editor EditorModel
 --- @field output CanvasModel
+--- @field screen ScreenModel
 --- @field projects ProjectService
 --- @field cfg Config
 ConsoleModel = class.create(function(cfg)
@@ -23,6 +25,7 @@ ConsoleModel = class.create(function(cfg)
     input    = UserInputModel(cfg, LuaEval(), console_label),
     editor   = EditorModel(cfg),
     output   = CanvasModel(cfg),
+    screen   = ScreenModel(),
     projects = ProjectService(),
     cfg      = cfg
   }

@@ -31,7 +31,9 @@ end
 --- @field controller UserInputController
 --- @field statusline table
 --- @field canvas love.Canvas
---- @field field_hidden boolean? --- the console's field behind a program that owns the keys: its status line alone
+--- @field field_hidden boolean? --- the console's field behind a program that owns the input: its status line alone
+--- @field bare_status Status? --- what the status line says while no field is drawn under it; it is then the screen's last row
+--- @field bare_drawn string? --- what the canvas holds while it holds that status line alone (_bare_key)
 UserInputView = class.create(new)
 
 local get_colors = function(cf_colors)
@@ -123,6 +125,7 @@ end
 --- The rows a message may take in the band: one, or up to
 --- three when it is wider than the screen
 local NOTICE_ROWS = 3
+UserInputView.NOTICE_ROWS = NOTICE_ROWS
 
 --- The rows of the message the band shows, nil when none
 --- shows; one longer than the band ends in an ellipsis.
@@ -236,7 +239,7 @@ function UserInputView:render_input(input, status, time)
   local wrap_forward = vc.wrap_forward
 
 
-  self.start_h = self:status_y(inLines)
+  self.start_h = self:status_y(self.bare_status and 0 or inLines)
 
   local function drawCursor()
     --- the cursor blinks (H-NFR4.4): in its hidden phase
@@ -255,7 +258,13 @@ function UserInputView:render_input(input, status, time)
 
     gfx.push('all')
     gfx.setColor(cf_colors.input.cursor)
-    if x_offset >= w then
+    if input.selection and input.selection.fin then
+      --- beside a selection, a bar at the cell's left edge, so
+      --- that the selected cell it stands on stays seen; past a
+      --- full row's last column, at the field's right edge
+      gfx.rectangle('fill', math.min(x_offset * fw, w * fw - 2),
+        ch, 2, fh)
+    elseif x_offset >= w then
       --- past the last column of a full row there is no
       --- cell: a bar at the field's right edge, where half of
       --- it is cut off, and a second one inside it
@@ -291,9 +300,9 @@ function UserInputView:render_input(input, status, time)
   drawBackground()
 
   gfx.push('all')
-  self.statusline:draw(status, 0)
+  self.statusline:draw(self.bare_status or status, 0)
   gfx.pop()
-  --- hidden behind a program that owns the keyboard: the status
+  --- hidden behind a program that owns the input: the status
   --- line alone, the field's rows background, no cursor
   if self.field_hidden then return end
 
@@ -310,10 +319,28 @@ function UserInputView:render_input(input, status, time)
     vc:get_content_length(), bare), row_y, w * fw, fh,
     cf_colors.editor.wrap_mark)
 
-  if highlight then
+  --- whether the draft's character at (tl, tc) is selected:
+  --- from the selection's first position up to its last
+  local sel = input.selection
+  local sel_from, sel_to
+  if sel and sel.start and sel.fin then
+    local a, b = sel.start, sel.fin
+    if a.l > b.l or (a.l == b.l and a.c > b.c) then a, b = b, a end
+    sel_from, sel_to = a, b
+  end
+  local function is_selected(tl, tc)
+    if not sel_from or not tl then return false end
+    local after = tl > sel_from.l
+        or (tl == sel_from.l and tc >= sel_from.c)
+    local before = tl < sel_to.l
+        or (tl == sel_to.l and tc < sel_to.c)
+    return after and before
+  end
+
+  if highlight or sel_from then
     gfx.push('all')
-    local hl = highlight.hl
-    local perr = highlight.parse_err
+    local hl = highlight and highlight.hl
+    local perr = highlight and highlight.parse_err
     local el, ec
     if perr then
       el = perr.l
@@ -353,27 +380,8 @@ function UserInputView:render_input(input, status, time)
               or (at_l == el and ec and at_c >= ec)) then
           color = cf_colors.input.error
         end
-        local selected = (function()
-          local sel = input.selection
-          local startl = sel.start and sel.start.l
-          local endl = sel.fin and sel.fin.l
-          if startl then
-            local startc = sel.start.c
-            local endc = sel.fin.c
-            if startc and endc then
-              if startl == endl then
-                local sc = math.min(sel.start.c, sel.fin.c)
-                local endi = math.max(sel.start.c, sel.fin.c)
-                return l == startl and c >= sc and c < endi
-              else
-                return
-                    (l == startl and c >= sel.start.c) or
-                    (l > startl and l < endl) or
-                    (l == endl and c < sel.fin.c)
-              end
-            end
-          end
-        end)()
+        --- in the draft's own lines and columns, as the red
+        local selected = is_selected(tlc and tlc.l, tlc and tlc.c)
         local dy = self:row_y(row)
         local dx = (c - 1) * fw
         ViewUtils.write_token(dy, dx,
@@ -462,12 +470,33 @@ function UserInputView:render_error(err_text, status)
   gfx.pop()
 end
 
+--- What a render of the bare status line is compared by: the
+--- status line's own key, which holds what its draw reads
+--- (Statusline:key), and the window's size, by which the
+--- render places the line (status_y). Of what else the render
+--- reads, the ground's colours go by the same state of the
+--- IDE, and the draft's rows only size a ground that is higher
+--- than the canvas at one row. Nil while a field is drawn.
+--- @private
+--- @return string?
+function UserInputView:_bare_key()
+  local bare = self.field_hidden and self.bare_status
+  if not bare then return nil end
+  local gfx = love.graphics
+  return self.statusline:key(bare) .. ' ' .. gfx.getWidth()
+      .. 'x' .. gfx.getHeight()
+end
+
 --- @param input InputDTO
 --- @param status Status
 function UserInputView:render(input, status, time)
   local gfx = love.graphics
-  --- what this render shows of the cursor's blink
+  --- what this render shows of the cursor's blink, and of the
+  --- screen's mode on the status line
   self.cursor_shown = Blink.shown(self.cfg.blink)
+  self.mode_shown = status and status.mode
+  --- what the canvas holds from this render on
+  self.bare_drawn = self:_bare_key()
   --- @diagnostic disable-next-line: undefined-field
   if gfx.mock then return end
   local err_text = input.wrapped_error or {}
@@ -503,7 +532,20 @@ function UserInputView:draw()
   local project = love.state.user_input_controller
   local shown = Blink.shown(self.cfg.blink)
   local turned = shown ~= self.cursor_shown
-  if self.controller ~= project or turned then
+  --- and when the screen's mode its status line names changes
+  --- (round j1)
+  local model = self.controller and self.controller.model
+  local source = model and model.screen_source
+  local moded = source ~= nil and source() ~= self.mode_shown
+  --- The bare status line behind a running program is the
+  --- same frame after frame: the canvas that holds it is kept
+  --- until anything its draw reads changes (_bare_key), or
+  --- anything else is rendered (its render cost a Compy about
+  --- 1.5 ms of every frame).
+  local key = self:_bare_key()
+  local kept = key ~= nil and key == self.bare_drawn
+  if not kept
+      and (self.controller ~= project or turned or moded) then
     self.controller:update_view()
   end
   local h = self.start_h

@@ -12,10 +12,7 @@
 -- require below.
 package.preload['view.view'] = function()
   View = {
-    prev_draw      = nil,
     main_draw      = nil,
-    snapshot       = nil,
-    clear_snapshot = function() end,
     draw           = function() end,
     drawFPS        = function() end,
   }
@@ -63,10 +60,9 @@ local function mock_runtime()
       stop      = function() end,
       play      = function() end,
     },
-    -- isDown is real production input: the widget's drag-select
-    -- consults it on every mousemoved
-    -- (userInputModel, "mouse_drag"). Driven by
-    -- F.set_mouse_down so a case can hold a button over a move.
+    -- isDown answers whether a button is held, as a program's
+    -- code may ask. Driven by F.set_mouse_down so a case can
+    -- hold a button over a move.
     mouse      = {
       getPosition = function() return mx, my end,
       isDown      = function() return mouse_down end,
@@ -114,15 +110,14 @@ local function enrich_gfx()
   gfx.pop       = function() end
   -- what a run's start puts back (consoleController.lua,
   -- reset_graphics)
-  gfx.reset = gfx.reset or function() end
+  -- LÖVE's reset makes no canvas active
+  gfx.reset = function() love.graphics.setCanvas() end
   gfx.getStackDepth = gfx.getStackDepth or function() return 0 end
-  -- love.update walks into the snapshot branch as soon as a
-  -- project raise sets 'snapshot', so this has to exist. It is
-  -- a no-op that never invokes its callback, modelling "the
-  -- screenshot has not been delivered yet" — the state a run
-  -- sits in between suspend_run and suspend. Cases wanting the
-  -- far side of that boundary call CC:suspend() themselves.
+  -- a program may ask for one; the IDE takes none
   gfx.captureScreenshot = function() end
+  -- the ground a program chose, which the console keeps
+  gfx.getBackgroundColor = function() return 0, 0, 0, 1 end
+  gfx.origin = function() end
 end
 
 -- A monospace font is a leaf dependency of the terminal; stub

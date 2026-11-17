@@ -283,6 +283,97 @@ describe("a wrapped line's marks #editor", function()
         assert.is_true(0 < seen)
       end)
 
+    -- the selection is drawn in the draft's own lines and
+    -- columns: on a wrapped line's second row, its cells there
+    it("leave a selection on a wrapped line's second row to its "
+        .. "own cells", function()
+        K.type(string.rep("y", W + 4))
+        local model = K.cc.input.model
+        -- the line's characters W - 1 to W + 2: the last two of
+        -- row 1 and the first two of row 2
+        model:start_selection(1, W - 1)
+        model:end_selection(1, W + 3)
+        local log = K.screen().field_log
+        local fw, fh = view_cfg().fw, view_cfg().fh
+        local cells = { }
+        for _, e in ipairs(log) do
+          if e.text == "█" then
+            cells[#cells + 1] = { (e.x / fw) + 1, e.y }
+          end
+        end
+        assert.same({ { W - 1, first() }, { W, first() },
+          { 1, first() + fh }, { 2, first() + fh } }, cells)
+      end)
+
+    -- the cursor stands at one end of a selection: drawn as a
+    -- block it would hide the selected cell under it, so beside
+    -- a selection it is a bar at its cell's left edge
+    it("leave a selected cell under the cursor to show: the "
+        .. "cursor is a bar beside a selection", function()
+      K.type("abc")
+      local model = K.cc.input.model
+      model:start_selection(1, 4)
+      model:move_cursor(1, 3, 'keep')
+      model:end_selection(1, 3)
+      local log = K.screen().field_log
+      local fw, fh = view_cfg().fw, view_cfg().fh
+      local cursor = view_cfg().colors.input.cursor
+      local block, bar = false, false
+      for _, e in ipairs(log) do
+        if e.fill and e.colour[1] == cursor[1]
+            and e.colour[2] == cursor[2] and e.y >= first() then
+          if e.w == fw and e.h == fh then block = true end
+          if e.w < fw and e.x == 2 * fw then bar = true end
+        end
+      end
+      assert.is_false(block)
+      assert.is_true(bar)
+      local cells = 0
+      for _, e in ipairs(log) do
+        if e.text == "█" and e.x == 2 * fw then cells = cells + 1 end
+      end
+      assert.same(1, cells)
+    end)
+
+    it("draw the cursor beside a selection as the bar at a full "
+        .. "row's end too", function()
+      K.type(string.rep("y", W))
+      K.keys("home")
+      K.keys("lshift", "end")
+      assert.is_true(K.cc.input.model:has_selection())
+      local log = K.screen().field_log
+      local fw, fh = view_cfg().fw, view_cfg().fh
+      local cursor = view_cfg().colors.input.cursor
+      local bar = false
+      for _, e in ipairs(log) do
+        if e.fill and e.colour[1] == cursor[1]
+            and e.colour[2] == cursor[2] and e.y >= first()
+            and e.w == 2 and e.h == fh and e.x == W * fw - 2 then
+          bar = true
+        end
+        assert.is_true(e.text ~= "|", "a glyph bar")
+      end
+      assert.is_true(bar)
+    end)
+
+    it("draw a selection in a program's field", function()
+      local widget = F.show_widget({ text = "abcdef" })
+      local view = UserInputView(view_cfg(), widget)
+      widget:init_view(view)
+      widget.model:start_selection(1, 2)
+      widget.model:end_selection(1, 4)
+      local s = K.screen(function()
+        widget:update_view()
+        view:draw()
+      end)
+      local fw = view_cfg().fw
+      local cols = { }
+      for _, e in ipairs(s.field_log) do
+        if e.text == "█" then cols[#cols + 1] = e.x / fw + 1 end
+      end
+      assert.same({ 2, 3 }, cols)
+    end)
+
     it("are drawn before the draft's text and the cursor",
       function()
         K.type(string.rep("y", W + 4))

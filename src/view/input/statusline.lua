@@ -7,6 +7,10 @@ Statusline = class.create(function(cfg)
 end)
 
 
+--- The room the console's position may take at the line's end,
+--- before which the screen's mode stands
+local POSITION_ROOM = 'L99:999'
+
 --- The columns `text` takes with the gap after it.
 --- @param text string?
 --- @return integer
@@ -36,13 +40,68 @@ local function shown(text)
   return string.scrub(tostring(text))
 end
 
+--- What a status line's picture takes from the IDE beside its
+--- status: the state, which picks the colours, and the debug
+--- marks. A draw reads them here and nowhere else, and
+--- Statusline:key compares by the same three.
+--- @return string? state
+--- @return any testing
+--- @return any debug
+local function ide_state()
+  return love.state.app_state, love.state.testing, love.DEBUG
+end
+
+--- `v` spelled for a comparison: a string, a number or a
+--- boolean by its value, a table by every key and value it
+--- holds, and a table deeper than any status goes, a function
+--- or an object as `tostring` gives it. Two statuses made the
+--- same way spell the same; the same fields set in another
+--- order may not, which costs one draw.
+--- @param v any
+--- @param out string[]
+--- @param depth integer
+local function spell(v, out, depth)
+  local t = type(v)
+  if t == 'table' and depth < 6 then
+    out[#out + 1] = '{'
+    for k, x in pairs(v) do
+      spell(k, out, depth + 1)
+      spell(x, out, depth + 1)
+    end
+    out[#out + 1] = '}'
+  elseif t == 'string' then
+    out[#out + 1] = 's' .. #v .. ':' .. v
+  else
+    out[#out + 1] = t:sub(1, 2) .. tostring(v)
+  end
+end
+
+--- What a draw of `status` reads that can differ between two
+--- frames, as one string: the IDE's state (ide_state) and the
+--- whole of `status`, every field of it, read by this draw or
+--- not. Two draws with equal keys draw the same line for the
+--- statuses the IDE makes, of texts, numbers and flags, so a
+--- canvas that holds one need not be drawn again for the other
+--- (UserInputView:draw). A new field of a status is in the key
+--- by itself; a new read of the IDE's state belongs in
+--- ide_state. Where the line is drawn is the caller's.
+--- @param status Status
+--- @return string
+function Statusline:key(status)
+  local out = { }
+  spell({ ide_state() }, out, 0)
+  spell(status, out, 0)
+  return table.concat(out, ' ')
+end
+
 --- @param status Status
 --- @param start_y integer?
 function Statusline:draw(status, start_y)
   local gfx = love.graphics
   local cf = self.cfg
+  local app_state, testing, debug = ide_state()
   local colors = (function()
-    local state = love.state.app_state
+    local state = app_state
     if state == 'inspect' then
       return cf.colors.statusline.inspect
     elseif state == 'running' then
@@ -97,8 +156,29 @@ function Statusline:draw(status, start_y)
     end
   end
 
+  --- The console names the screen's mode, `text` or
+  --- `combined`, right-aligned at one place in every state: its
+  --- end stands where the room a position such as "L99:999"
+  --- takes begins, whether a position shows or not, so that the
+  --- word does not move as the position grows; a wider position
+  --- pushes it left. The full picture has no status line.
+  --- @param pos_x number? --- where the position begins, if one
+  --- shows
+  --- @return number? left --- where the word begins
+  local function drawMode(pos_x)
+    local mode = status.mode
+    if not mode or mode == 'picture' then return nil end
+    local right = math.min(endTextX - cols(POSITION_ROOM),
+      pos_x or endTextX) - 2 * cf.fw
+    local left = right - cols(mode)
+    gfx.setColor(colors.fg2 or colors.fg)
+    gfx.print(mode, left, start_box.y + pad)
+    gfx.setColor(colors.fg)
+    return left
+  end
+
   local function drawStatus()
-    local state = love.state.app_state
+    local state = app_state
     local custom = status.custom
     local start_text = {
       x = start_box.x + margin,
@@ -155,9 +235,9 @@ function Statusline:draw(status, start_y)
       gfx.setColor(colors.fg)
       left_x = left_x + cols(text .. '  ')
     end
-    if love.DEBUG then
+    if debug then
       gfx.setColor(cf.colors.debug)
-      if love.state.testing then
+      if testing then
         gfx.print('testing',
           midX - (8 * cf.fw),
           start_text.y)
@@ -242,8 +322,10 @@ function Statusline:draw(status, start_y)
         local lw = cols(pos_l)
         local cw = cols(pos_c)
         local sx = endTextX - (lw + cw)
-        --- the project's name ends before the position
-        drawLeft(sx)
+        local left_end = drawMode(sx) or sx
+        --- the project's name ends before the mode and the
+        --- position
+        drawLeft(left_end)
         if ln == l_lim then
           gfx.setColor(colors.indicator)
         end
@@ -251,6 +333,12 @@ function Statusline:draw(status, start_y)
         gfx.setColor(colors.fg)
         gfx.print(pos_c, sx + lw, start_text.y)
       end
+    else
+      --- a status with no cursor names things alone: what runs
+      --- behind a hidden field, and the screen's mode where the
+      --- console's status line has it. A long name is cut, the
+      --- state kept whole, within the screen.
+      drawLeft(drawMode() or endTextX)
     end
   end
 

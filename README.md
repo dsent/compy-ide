@@ -35,6 +35,7 @@ a project must be selected first.
 | Exit application                                                  | <kbd>Ctrl</kbd>+<kbd>Esc</kbd>                |
 | Pause project                                                     | <kbd>Ctrl</kbd>+<kbd>Pause</kbd>              |
 | Toggle edit/run                                                   | <kbd>Ctrl</kbd>+<kbd>T</kbd>                  |
+| Show the screen's next mode: text, combined, picture (console)    | <kbd>F12</kbd>                                |
 | **Console output**                                                |                                               |
 | Scroll the output a row (the field keeps its text)                | <kbd>Ctrl</kbd>+<kbd>⇧</kbd>/<kbd>Ctrl</kbd>+<kbd>⇩</kbd> |
 | Scroll the output a page of 15 rows                               | <kbd>PageUp</kbd>/<kbd>PageDown</kbd>         |
@@ -53,6 +54,7 @@ a project must be selected first.
 | Delete to the end of the line                                     | <kbd>Ctrl</kbd>+<kbd>K</kbd>                  |
 | Move the cursor's line up / down                                  | <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>⇧</kbd>/<kbd>⇩</kbd> |
 | Place the cursor                                                  | click in the field                            |
+| Select a part of the draft; typing replaces it, Backspace or Delete removes it | <kbd>Shift</kbd>+movement, or drag |
 | Evaluate input                                                    | <kbd>Enter ⏎</kbd>                            |
 | **Editor**                                                        |                                               |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; _same as Input in the field, except for:_ |                                               |
@@ -80,10 +82,11 @@ a project must be selected first.
 The console keeps the last 1,000 rows that scroll off the top of
 its output, and the keys above scroll over them. A scrolled view
 fills the screen and is marked at its edges where more lies
-beyond; new output leaves it where it is, and any other key but
-a modifier, a lock key or <kbd>F1</kbd> brings the screen back,
-as do a program's start, stop or pause and a key the program
-takes. Each line the console runs is
+beyond. New output leaves it where it is, and so does typing:
+you can look at what scrolled away while you write the next
+line. <kbd>Enter</kbd> on a line that runs brings the screen
+back, as do a program's start, stop or pause. Each line the
+console runs is
 written to the output in blue before it runs, and its error
 after it, in red. A command that refuses says why in the output,
 in orange. The band above the status line belongs to the line
@@ -93,8 +96,12 @@ when <kbd>Enter</kbd> begins its next line instead of running it.
 <kbd>Ctrl</kbd>+<kbd>L</kbd> empties the console: the
 screen, the kept rows and output still waiting to be written;
 `compy.terminal.clear()` from a program clears the screen alone.
-While a program's input field shows, or the program takes the
-keys itself, the scrolling keys are the program's.
+The mouse wheel scrolls the output too. While a program runs and
+can still act, all input is the program's and the console's
+field is hidden, but the output keeps its scrolling keys and the
+wheel for itself whenever the program does not take them; a
+program with its own `love.keypressed` takes every key, which
+leaves the wheel.
 
 Each combination is a key of its own: a key pressed with a modifier the
 table does not name does nothing. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> is not
@@ -156,15 +163,64 @@ returns.
   input hooks and shortcuts go with it; then no variable,
   `love` handler or module of an earlier run, or of a line
   typed before it, is there, and the graphics settings are
-  reset. A program that ends by itself leaves its variables
-  for the console to look at until the next run. Stopping a
-  program, by `stop()`, Ctrl+Q, an error in its first lines or
-  closing its project, clears them too and puts the keyboard
-  and the volume back as the IDE set them; a sound it started
-  plays to its end,
+  reset. Stopping a program, by `stop()`, Ctrl+Q, an error in
+  its first lines or closing its project, clears them too and
+  puts the keyboard and the volume back as the IDE set them; a
+  sound it started plays to its end,
   and one set to repeat plays once more and stops. A pause keeps
-  everything for `continue()`. `dofile()` runs in the
-  environment as it stands.
+  everything for `continue()`.
+
+  A program also stops by itself when its code has run to the
+  end and nothing of it can act any more: no `love.update` or
+  `love.draw`, no key, mouse or touch handler, hook or shortcut,
+  no input field showing, no serial handler. That is a stop
+  like `stop()`: what the program made goes, its variables and
+  functions too. To keep what a file defines and use it from
+  the console, run it with `dofile("main.lua")`: it runs in the
+  console's environment, as it stands, and what it defines
+  stays there. `run()` runs a program that starts clean and
+  leaves nothing behind.
+
+### The screen
+
+What a program prints goes to the console's text, and what it
+draws goes to its picture, kept apart. The screen shows them in
+one of three ways:
+
+- **text**: the console's text, the status line and the field;
+- **combined**: the console's text over the picture, the way to
+  draw from the console;
+- **picture**: the picture alone, on the whole screen.
+
+A run starts with the text. When the running program first
+draws, its picture shows; a line typed in the console that draws
+shows the text over the picture. A pause shows the text, and
+`continue()` brings back what showed before. A stop shows the
+text and keeps the picture until the next run or `reset()`.
+
+- `compy.screen.show(mode)`
+
+  Show `"text"`, `"combined"` or `"picture"`, from a program or
+  a line typed in the console. A program's choice holds against
+  its first drawing until the run ends; any other name stops the
+  program with an error on the line that called it.
+
+- `compy.screen.getMode()`
+
+  The mode the screen shows: `"text"`, `"combined"` or
+  `"picture"`.
+
+<kbd>F12</kbd> shows the next mode, text, combined, picture and
+text again, whether a program runs, is paused or none is; the
+status line names the mode, `text` or `combined`, and the full
+picture has none. In the editor <kbd>F12</kbd> does nothing. A
+running program never gets <kbd>F12</kbd>.
+
+On the full picture, any key or mouse button goes back to the
+text, and types or clicks nothing. While a program that can still act runs, its keys and clicks
+are its own on the full picture too, and <kbd>F12</kbd> is the
+way back. A pause with a picture says so: `F12 shows the
+picture`.
 
 - `example_projects()`
 
@@ -179,8 +235,9 @@ returns.
 
   Stop the program if one runs, clear what it and the lines
   typed before left (variables, handlers, settings), silence
-  every sound, and empty the console as
-  <kbd>Ctrl</kbd>+<kbd>L</kbd> does; then it says
+  every sound, empty the console as
+  <kbd>Ctrl</kbd>+<kbd>L</kbd> does and clear the program's
+  picture; then it says
   `Runtime reset for <project>. All files kept.`; like `stop()`,
   it ends the code that called it and returns nothing. The history
   and the editor's files stay. Only `reset()` with
