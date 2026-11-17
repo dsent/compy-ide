@@ -30,7 +30,7 @@ Key transitions not obvious from the state table:
 
 The full machine is diagrammed in `doc/mermaid/fsm.md` and `doc/mermaid/fsm_f.md`.
 
-The `snapshot` state is a one-frame transition: on the next `update()` tick, LÖVE2D captures a screenshot, stores it as `View.snapshot`, and then calls `ConsoleController:suspend()` which switches to `inspect`. The snapshot is drawn as a background behind the console UI during inspect, giving the user a "freeze frame" view of where the project stopped.
+The `snapshot` state is a one-frame transition: on the next `update()` tick, LÖVE2D captures a screenshot and then calls `ConsoleController:suspend()` which switches to `inspect`. The screenshot is kept as `View.snapshot` only for a program that draws (its own `love.draw`): it is that program's picture, drawn as a background behind the console UI during inspect, giving the user a "freeze frame" view of where the project stopped, with the output laid over it faint and without backgrounds. A program that draws nothing has no picture but the console's output, and its pause keeps no snapshot: the console draws the output as it is, with the pause's status line. `continue()` drops the snapshot.
 
 ---
 
@@ -202,7 +202,7 @@ The maintainer's ruling of November 16, 2026 (design B): `stop()`, `reset()`, `r
 
 **`suspend_run(msg)`**: Requests a snapshot, for a program that runs or one idle behind the console that can still act (`program_owns_input`: one with only key handlers, say); with neither it does nothing. State → `snapshot` → `inspect` on next tick. Handlers saved; default handlers restored temporarily. The console gets its mouse back and the program's is saved. The program's serial handlers wait too (`SerialPort:programPaused`, `programContinued` at `continue()`). A pause a program's first lines ask for goes on when the program then idles, and `continue()` resumes it idle. User can inspect and continue.
 
-**`continue()`**: Restores project handlers and the program's mouse from the saved copies. State → the one the pause found the program in (`love.state.paused_from`: `running`, or `ready` for a program idle behind the console that can still act).
+**`continue()`**: Drops the pause's snapshot, and restores project handlers and the program's mouse from the saved copies. State → the one the pause found the program in (`love.state.paused_from`: `running`, or `ready` for a program idle behind the console that can still act).
 
 **`quit_project()`**: Calls `stop_project_run()` + `close_project()` + resets terminal and input. The environment is wiped.
 
