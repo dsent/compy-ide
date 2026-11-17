@@ -1586,6 +1586,11 @@ describe("the output's rows with no field under it #console",
         forget()
       end)
 
+    --- A pause takes no screenshot: the paused frame is on the
+    --- program's canvas (the canvas plan's stage 1), and a program
+    --- that draws nothing shows its output as it is
+    --- (Harmony scrollback.paused-output checks the pixels).
+
     it("have the status line under them, naming the project, "
       .. "the entry point and that it runs, and nothing else",
       function()
