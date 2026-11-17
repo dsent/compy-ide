@@ -232,6 +232,27 @@ describe('the screen modes #canvas', function()
     assert.equal('text', mode())
   end)
 
+  --- round c6: Ctrl+Pause and Ctrl+Q in one batch of events, no
+  --- update between: the run in its pause's frame is live, and
+  --- Ctrl+Q stops it (the reviewer's reproducer, turned to what the
+  --- stop makes)
+  it('stops a run with Ctrl+Q in the frame its pause is asked in',
+    function()
+      F.run_source([[function love.draw()
+        gfx.rectangle('fill', 0, 0, 1, 1)
+      end]])
+      love.draw()
+      assert.equal('picture', mode())
+      press({ 'lctrl', 'pause' })
+      assert.equal('snapshot', love.state.app_state)
+      press({ 'lctrl', 'q' })
+      F.love_update(.01)
+      assert.is_false(F.cc.run_live)
+      assert.equal('ready', love.state.app_state)
+      assert.equal('text', mode())
+      assert.is_true(F.cc.model.output:is_drawn())
+    end)
+
   it('shows text after a printing program\'s natural end', function()
     F.run_project(function() print('x') end)
     assert.is_false(F.cc.run_live)
