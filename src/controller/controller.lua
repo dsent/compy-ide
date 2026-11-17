@@ -1236,6 +1236,34 @@ Controller = {
       if nxt then love.PROFILE.fpsc = nxt end
     end
 
+    --- the screen's modes, where a console runs (a bare
+    --- driver of the gate has none)
+    local screen = CC.model and CC.model.screen
+
+    --- F12: the screen's next mode in the console, idle,
+    --- running or paused; the editor shows no mode, and
+    --- playback no console
+    local function reserved_screen_mode()
+      if playback or not screen then return end
+      if love.state.app_state == 'editor' then return end
+      screen:step()
+    end
+
+    --- The full picture shows, and no program that can act
+    --- runs: the screen is a picture to look at, with no field
+    --- and no status line. Any key or button goes back from it
+    --- to the text and goes nowhere else (the maintainer: "if
+    --- any key gets us back into console, this is good
+    --- enough"); text, the wheel and movement do
+    --- nothing, as no field shows to take them. A program that
+    --- can act keeps all its input, and F12 is its way back.
+    --- @return boolean
+    local function picture_only()
+      return screen ~= nil and screen:get() == 'picture'
+          and love.state.app_state ~= 'editor'
+          and not Controller.program_owns_input()
+    end
+
     -- The gate's own reservations
     -- (doc/development/decisions/input.md, D-RESERVE-TABLE): a
     -- SECOND, PRIVILEGED table, structurally separate from a
@@ -1257,6 +1285,7 @@ Controller = {
       profile_start = reserved_profile_start,
       profile_stop = reserved_profile_stop,
       overlay = reserved_overlay,
+      screen_mode = reserved_screen_mode,
       exit = Application.request_application_exit,
     }
     local RESERVED = { keypressed = { }, keyreleased = { } }
@@ -1283,6 +1312,10 @@ Controller = {
     -- Escape goes down with Ctrl held, and comes on Escape's
     -- release whatever is held by then, the card up or not).
     local delivered, owed = { }, { }
+    --- the keys that went back from the full picture, from
+    --- their press to their release: the text they type goes
+    --- nowhere either
+    local went_back = { }
     for _, r in ipairs(require('model.input.reservedKeys')) do
       -- the profiling keys only where conf.lua set love.PROFILE,
       -- which it does before love.load builds this gate
@@ -1337,6 +1370,19 @@ Controller = {
         if to ~= route_owner then return end
       elseif card and k ~= KeyCard.KEY then
         delivered[k] = nil
+        return
+      elseif picture_only() and not Key.is_lone(k)
+          and reservation ~= reserved_screen_mode then
+        -- back from the full picture: the key is the IDE's for
+        -- its whole press, and a reserved chord acts as well
+        -- (F12 is the cycle, whose next mode is text)
+        screen:back()
+        went_back[k] = true
+        delivered[k] = { act = reservation, again = REPEATS[chord] }
+        if not reservation then return end
+        if CC.editor then CC.editor:key_begins() end
+        reservation()
+        if CC.editor then CC.editor:gate_key_done() end
         return
       elseif reservation or owed[k] then
         -- the IDE's for the whole press, Ctrl+Escape's Escape too
@@ -1398,6 +1444,7 @@ Controller = {
       Blink.restart()
       if not love.textinput then return end
       if CC:card_shows() then return end
+      if next(went_back) or picture_only() then return end
       if Key.chord_text(t) then
         if RESERVED.keypressed[combo_string(t)] then return end
         local console = Controller._defaults.textinput
@@ -1411,6 +1458,7 @@ Controller = {
       -- here, whichever route has the keys: the help key's
       -- release ends its card wherever its press went
       CC:key_released(k)
+      went_back[k] = nil
       local reservation = owed[k]
       owed[k] = nil
       if reservation then reservation() end
@@ -1473,6 +1521,13 @@ Controller = {
         press_to[btn] = false
         return
       end
+      --- a button goes back from the full picture, as a key
+      --- does, and its release goes nowhere either
+      if picture_only() then
+        screen:back()
+        press_to[btn] = false
+        return
+      end
       if btn == 1 then
         press_pos, press_dragged = { x = x, y = y }, false
       end
@@ -1510,7 +1565,7 @@ Controller = {
     --- @param touch boolean
     handlers.mousemoved = function(x, y, dx, dy, touch)
       track_click_motion(x, y)
-      if CC:card_shows() then return end
+      if CC:card_shows() or picture_only() then return end
       if love.mousemoved then
         return love.mousemoved(x, y, dx, dy, touch)
       end
@@ -1526,7 +1581,7 @@ Controller = {
     --- @param x number
     --- @param y number
     handlers.wheelmoved = function(x, y)
-      if CC:card_shows() then return end
+      if CC:card_shows() or picture_only() then return end
       if love.wheelmoved then
         return love.wheelmoved(x, y)
       end
@@ -1539,7 +1594,7 @@ Controller = {
     -- on those routes the slot is simply empty.
     for _, name in ipairs(_derived) do
       handlers[name] = function(x, y)
-        if CC:card_shows() then return end
+        if CC:card_shows() or picture_only() then return end
         if love[name] then return love[name](x, y) end
       end
     end
@@ -1552,6 +1607,11 @@ Controller = {
     --- @param pressure number?
     handlers.touchpressed = function(id, x, y, dx, dy, pressure)
       if CC:card_shows() then
+        touch_to[id] = false
+        return
+      end
+      if picture_only() then
+        screen:back()
         touch_to[id] = false
         return
       end
@@ -1586,7 +1646,8 @@ Controller = {
     --- @param pressure number?
     handlers.touchmoved = function(id, x, y, dx, dy, pressure)
       --- a touch begun under the card moves nothing after it
-      if not release_goes(touch_to[id]) or CC:card_shows() then
+      if not release_goes(touch_to[id]) or CC:card_shows()
+          or picture_only() then
         return
       end
       if love.touchmoved then

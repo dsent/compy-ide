@@ -1586,15 +1586,17 @@ describe("the output's rows with no field under it #console",
         forget()
       end)
 
+    --- and the screen's mode, as the console's status line names
+    --- it in every state (the program's canvas, stage 2)
     it("have the status line under them, naming the project, "
-      .. "the entry point and that it runs, and nothing else",
-      function()
+      .. "the entry point and that it runs, the screen's mode, and "
+      .. "nothing else", function()
         owning()
         local s = K.screen()
         local line = { }
         for _, t in ipairs(s.field) do line[#line + 1] = t.text end
         local name = K.cc.model.projects.current.name
-        assert.same({ name, "main.lua", "running" }, line)
+        assert.same({ "text", name, "main.lua", "running" }, line)
         assert.equal(0, s.field_rows, "rows under the status line")
         forget()
       end)

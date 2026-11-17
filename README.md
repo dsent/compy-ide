@@ -35,6 +35,7 @@ a project must be selected first.
 | Exit application                                                  | <kbd>Ctrl</kbd>+<kbd>Esc</kbd>                |
 | Pause project                                                     | <kbd>Ctrl</kbd>+<kbd>Pause</kbd>              |
 | Toggle edit/run                                                   | <kbd>Ctrl</kbd>+<kbd>T</kbd>                  |
+| Show the screen's next mode: text, combined, picture (console)    | <kbd>F12</kbd>                                |
 | **Console output**                                                |                                               |
 | Scroll the output a row (the field keeps its text)                | <kbd>Ctrl</kbd>+<kbd>⇧</kbd>/<kbd>Ctrl</kbd>+<kbd>⇩</kbd> |
 | Scroll the output a page of 15 rows                               | <kbd>PageUp</kbd>/<kbd>PageDown</kbd>         |
@@ -199,6 +200,18 @@ text and keeps the picture until the next run or `reset()`.
 
   The mode the screen shows: `"text"`, `"combined"` or
   `"picture"`.
+
+<kbd>F12</kbd> shows the next mode, text, combined, picture and
+text again, whether a program runs, is paused or none is; the
+status line names the mode, `text` or `combined`, and the full
+picture has none. In the editor <kbd>F12</kbd> does nothing. A
+running program never gets <kbd>F12</kbd>.
+
+On the full picture, any key or mouse button goes back to the
+text, and types or clicks nothing. While a program that can still act runs, its keys and clicks
+are its own on the full picture too, and <kbd>F12</kbd> is the
+way back. A pause with a picture says so: `F12 shows the
+picture`.
 
 - `example_projects()`
 

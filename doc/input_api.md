@@ -885,17 +885,28 @@ yourself.
 | `ctrl+pause` | suspends the run of a program that runs or can still act, one with only key handlers included; the console and its field come back, and `continue()` resumes it as it was | development only |
 | `ctrl+alt+p` / `ctrl+alt+shift+p` | starts / stops the profiler | profiling builds |
 | `f10` | cycles the FPS overlay corner | profiling builds |
+| `f12` | shows the screen's next mode: text, combined, the picture | development only |
 
 "Development only" means the combo is inert in a packaged build, where the
 console it returns you to is not there to return to.
 
 `ctrl+s` and `ctrl+shift+r` were reserved until 2026-11-14 and are yours now:
 a project receives them like any other chord, so `ctrl+s` can save. No key
-closes the project; the console's `close_project()` does. Note `f10` is the one
-reservation with no modifier at all: bare F10 is the platform's in a profiling
-build, and F10 with any modifier is yours.
+closes the project; the console's `close_project()` does. `f10` and `f12` are
+the reservations with no modifier at all: bare F10 is the platform's in a
+profiling build, bare F12 in a development build, and either with any modifier
+is yours.
 
-It is also the only F-key that arrives on every Compy. The function row shares
+**The full picture.** While your program draws, the IDE shows its picture on
+the whole screen, and F12 steps through the text, the text over the picture and
+the picture. While your program can still act, it keeps every key and click in
+any of them, and F12 is how a person leaves its picture. Once nothing that can
+act runs (the program stopped, paused, or ended at its last line), any key or
+mouse button pressed on the full picture goes back to the console's text and
+goes nowhere else: no handler, hook or field sees its press, repeats, release or
+text, and the wheel, a move and text with no key do nothing there.
+
+F10 is also the only F-key that arrives on every Compy. The function row shares
 its keys with the keyboard's Fn layer — Insert is Fn+F12, Scroll Lock is
 Fn+F10, mute and the media keys are Fn+F5 through Fn+F8 — and on a stock,
 unrooted Compy **F1 to F9 never reach your project**; the system answers them.

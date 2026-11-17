@@ -411,6 +411,17 @@ local CONSOLE = {
   end },
   ['F1 (hold)'] = { 'this card', card_shows },
   ['Ctrl+Esc'] = { 'quit the IDE', quits },
+  --- the screen's modes, round to text again
+  ['F12'] = { 'screen', function(wait)
+    local function mode() return P.cc().model.screen:get() end
+    D.eq(mode(), 'text', 'the text shows')
+    D.key(wait, 'f12')
+    D.eq(mode(), 'combined', 'F12, combined')
+    D.key(wait, 'f12')
+    D.eq(mode(), 'picture', 'F12 again, the picture')
+    D.key(wait, 'f12')
+    D.eq(mode(), 'text', 'F12 a third time, the text')
+  end },
   ['Ctrl+T'] = { 'to the editor', function(wait)
     D.key(wait, 'C-t')
     D.in_state('editor')

@@ -35,6 +35,11 @@ local messages = {
   end,
   --- only a card that cannot hold scratchpad leaves none open
   no_project      = 'No project is open: the SD card cannot be used.',
+  --- a pause shows the console; a picture the program drew
+  --- waits behind it (the lead's decision 7 of November 17,
+  --- 2026, after the maintainer's "press F12 to see the drawing
+  --- canvas")
+  picture_hint    = 'F12 shows the picture',
   --- run() makes no project: project() does
   no_such_project = function(name)
     return string.format('There is no project %s: project(%q) creates it.',
@@ -154,6 +159,10 @@ function ConsoleController.new(M, main_ctrl)
   M.input.project_source = function()
     local p = M.projects and M.projects.current
     return p and p.name
+  end
+  --- and the screen's mode, where it shows (model/screenModel.lua)
+  M.input.screen_source = function()
+    return M.screen and M.screen:get()
   end
   -- initialize the user environment
   ConsoleController.prepare_project_env(self)
@@ -2198,11 +2207,14 @@ end
 --- @return Status
 function ConsoleController:running_status()
   local P = self.model.projects
-  return { custom = {
-    project = P.current and P.current.name,
-    name = self.entry or 'main.lua',
-    state = 'running',
-  } }
+  return {
+    custom = {
+      project = P.current and P.current.name,
+      name = self.entry or 'main.lua',
+      state = 'running',
+    },
+    mode = self.model.screen:get(),
+  }
 end
 
 ---@return number
@@ -2367,10 +2379,26 @@ function ConsoleController:suspend()
   --- band as a notice, and the program's screen is not touched
   --- (the maintainer's ruling of November 16, 2026)
   local msg = love.state.suspend_msg
-  if msg then
-    self.input:notice({ tostring(msg) })
-    love.state.suspend_msg = nil
+  love.state.suspend_msg = nil
+  --- with a picture, how to see it: on the pause's own row
+  --- after its text and a dash where both fit, so that the band
+  --- covers no more of the output (the band's wrap keeps one
+  --- space between words), on a row of its own where they do not
+  local says = msg and tostring(msg) or nil
+  if self.model.output:is_drawn() then
+    local hint = messages.picture_hint
+    local visible = self.input.model.visible
+    local w = visible and visible.wrap_w or 64
+    if not says then
+      says = hint
+    elseif not says:find('\n') and string.ulen(says) + 3
+        + string.ulen(hint) <= w then
+      says = says .. ' — ' .. hint
+    else
+      says = { says, hint }
+    end
   end
+  if says then self.input:notice(says) end
 
   self.model.output:invalidate_terminal()
 

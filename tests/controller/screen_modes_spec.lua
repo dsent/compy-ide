@@ -331,18 +331,20 @@ describe('the screen modes #canvas', function()
       assert.same({ 'combined', 'picture', 'text', 'combined' }, seen)
     end)
 
-    it('goes back from the picture to the mode before it', function()
-      local S = F.cc.model.screen
-      S:set('combined')
-      S:step()
-      assert.equal('picture', S:get())
-      S:back()
-      assert.equal('combined', S:get())
-    end)
+    it('goes back to text from a picture F12 brought up, past'
+      .. ' combined', function()
+        local S = F.cc.model.screen
+        S:set('combined')
+        S:step()
+        assert.equal('picture', S:get())
+        S:back()
+        assert.equal('text', S:get())
+      end)
 
-    --- c3's fifth finding
-    it('goes back from a picture stepped to before a pause in which'
-      .. ' the program first drew', function()
+    --- c3's fifth finding; back goes to text (the lead's ruling
+    --- of November 17, 2026)
+    it('goes back to text from a picture stepped to before a pause'
+      .. ' in which the program first drew', function()
         F.run_project(function()
           F.cc:get_project_env().love.update = function() end
         end)
@@ -357,7 +359,7 @@ describe('the screen modes #canvas', function()
         F.cc:get_project_env().love.update = nil
         assert.equal('picture', S:get())
         S:back()
-        assert.equal('combined', S:get())
+        assert.equal('text', S:get())
       end)
 
     it('goes back to text from a picture a run brought up', function()
