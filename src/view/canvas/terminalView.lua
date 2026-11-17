@@ -179,7 +179,14 @@ local function terminal_draw(terminal, canvas, overlay, window)
     gfx.push('all')
     gfx.setCanvas(canvas)
     gfx.setFont(terminal.font)
-    gfx.clear(terminal.clear_color_alpha)
+    --- over a picture the canvas is drawn premultiplied, so it is
+    --- cleared to nothing at all: a white clear gave the glyphs'
+    --- edges a pale fringe (round c2's fourth finding)
+    if overlay then
+      gfx.clear(0, 0, 0, 0)
+    else
+      gfx.clear(terminal.clear_color_alpha)
+    end
     --- the rows to draw: their characters, styles and place
     local rows = { }
     local function grid(y, at)
@@ -247,8 +254,12 @@ function TerminalView.draw(terminal, canvas, overlay, y, window)
   terminal_draw(terminal, canvas, overlay and true or nil, window)
   --- over a picture the characters take their opacity here,
   --- whole on the canvas: counted once, and the canvas is not
-  --- drawn again for another opacity
-  if overlay then gfx.setColor(1, 1, 1, overlay) end
+  --- drawn again for another opacity. What is drawn on a canvas
+  --- carries its alpha in its colour already.
+  if overlay then
+    gfx.setBlendMode('alpha', 'premultiplied')
+    gfx.setColor(overlay, overlay, overlay, overlay)
+  end
   gfx.draw(canvas, 0, y or 0)
   gfx.setBlendMode('alpha') -- default
   gfx.pop()

@@ -60,10 +60,13 @@ local program_loaded = { }
 --- one bound stays bound. The font is the IDE's too, and
 --- run_project sets it after.
 local function reset_graphics()
+  --- the target bound now: a push the program left saved the
+  --- state it was made in, its canvas bound, and popping it puts
+  --- that binding back (round c2's first finding)
+  local canvas = gfx.getCanvas()
   if End.ide_pushes == 0 and gfx.getStackDepth then
     while gfx.getStackDepth() > 0 do gfx.pop() end
   end
-  local canvas = gfx.getCanvas()
   gfx.reset()
   if canvas then gfx.setCanvas({ canvas, stencil = true }) end
 end
@@ -1760,6 +1763,14 @@ function ConsoleController.prepare_project_env(cc)
     end
     return love.graphics.getCanvas()
   end
+  --- the ground a program or a typed line chooses is kept with
+  --- its picture, as it is chosen: neither the flush's reset nor
+  --- the state a draw gives back after its frame changes it
+  --- (rounds c1 and c2)
+  program_gfx.setBackgroundColor = function(...)
+    love.graphics.setBackgroundColor(...)
+    cc.model.output:keep_background(love.graphics.getBackgroundColor())
+  end
   --- each drawing call says that the program drew
   --- (ConsoleController:drew); clear() erases, and draws none
   for _, name in ipairs({ 'arc', 'circle', 'draw', 'drawInstanced',
@@ -2558,7 +2569,8 @@ function ConsoleController:flush_program_state(call_exit)
   -- built as if accepted on November 17, 2026); a run's start
   -- and reset() clear it. The ground the program chose goes
   -- with the graphics state below; the canvas has kept it as the
-  -- program set it (use_canvas). The console shows.
+  -- program set it (setBackgroundColor, prepare_project_env). The
+  -- console shows.
   self.model.screen:ended()
   --- the IDE draws on from here: under the program's scissor,
   --- colour or wireframe its key card and editor came out
@@ -3154,13 +3166,7 @@ function ConsoleController:use_canvas(f)
     canvas, -- this is actually [1] = canvas
     stencil = true
   })
-  local bg = self.model.output:program_background()
   local r = { pcall(f) }
-  --- the ground the code chose, kept with the picture when the
-  --- code changed it: a later flush's reset, or a typed line
-  --- that leaves it, keeps what the program set (c1's third and
-  --- fifth findings)
-  self.model.output:note_background(bg)
   if outer == canvas then
     gfx.setCanvas({ canvas, stencil = true })
   else

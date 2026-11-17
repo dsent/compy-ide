@@ -44,9 +44,10 @@ lands on its picture.
   colour mask the program left, and puts the caller's state back.
 - With the canvas the record keeps whether anything is drawn on it
   since it was cleared (`is_drawn`) and the background colour the
-  program chose (`get_background`): `use_canvas` keeps the colour in
-  force after program or typed code when that code changed it, so the
-  flush's reset and a typed line that leaves it change nothing.
+  program chose (`get_background`): the program's
+  `love.graphics.setBackgroundColor` keeps each colour it sets there, so
+  neither the flush's reset nor the state a draw gives back after its
+  frame changes it. A program's `love.draw` frame is cleared to it.
 
 ## The Screen's Modes
 
@@ -73,7 +74,7 @@ What sets the mode:
 | A run starts | `text` |
 | A running program's first drawing call of its run | `picture` |
 | A typed line's drawing call, in `text` | `combined` |
-| A pause | `text`; `continue()` brings back the mode before it |
+| A pause | `text`, whatever the program draws while paused; `continue()` brings back the mode before it, or the picture when the program first drew while paused |
 | A stop, an error in top-level code, `reset()` | `text` |
 
 A drawing call is one of the program's `love.graphics` drawing

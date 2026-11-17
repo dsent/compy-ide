@@ -135,6 +135,23 @@ describe('the screen modes #canvas', function()
       F.cc:get_project_env().love.draw = nil
     end)
 
+  --- c2's third finding: a pause shows the console, whatever the
+  --- program draws while it waits (a serial handler, say)
+  it('keeps the console through a pause, and continue() shows the'
+    .. ' picture drawn in it', function()
+      F.run_project(function()
+        F.cc:get_project_env().love.update = function() end
+      end)
+      F.cc:suspend_run('paused')
+      F.love_update(0.1)
+      assert.equal('inspect', love.state.app_state)
+      draw()
+      assert.equal('text', mode())
+      F.cc:get_project_env().continue()
+      F.cc:get_project_env().love.update = nil
+      assert.equal('picture', mode())
+    end)
+
   for name, stop in pairs({
     ['Ctrl+Q'] = function() press({ 'lctrl', 'q' }) end,
     ['stop()'] = function() F.cc:get_project_env().stop() end,
@@ -286,8 +303,11 @@ describe('the screen modes #canvas', function()
         draw_screen('combined')
         theme.text = text
         assert.same({ 'alpha', 'premultiplied' }, at_draw.picture)
-        assert.are_not.same({ 'alpha', 'premultiplied' }, at_draw.text)
-        assert.equal(.5, at_draw.color[4])
+        --- c2's fourth finding: the output's canvas, cleared to
+        --- nothing over a picture, is premultiplied too, and its
+        --- opacity tints it whole
+        assert.same({ 'alpha', 'premultiplied' }, at_draw.text)
+        assert.same({ .5, .5, .5, .5 }, at_draw.color)
       end)
 
     it('picture: the picture alone', function()

@@ -66,6 +66,12 @@ end
 function ScreenModel:program_drew()
   if self.switched then return end
   self.switched = true
+  --- while paused the console stays, and continue() shows the
+  --- picture (round c2's third finding: a serial handler draws)
+  if self.paused then
+    self.paused = 'picture'
+    return
+  end
   self.mode = 'picture'
 end
 

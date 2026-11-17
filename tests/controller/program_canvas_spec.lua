@@ -96,7 +96,7 @@ describe('a program\'s canvas after it stops #canvas', function()
   local names = { 'setCanvas', 'getCanvas', 'clear', 'getScissor',
     'setScissor', 'getColorMask', 'setColorMask', 'push', 'pop',
     'getStackDepth', 'setBlendMode', 'getBackgroundColor',
-    'setBackgroundColor' }
+    'setBackgroundColor', 'reset' }
   local o_canvas
   setup(function()
     F.setup()
@@ -128,6 +128,8 @@ describe('a program\'s canvas after it stops #canvas', function()
       stack[#stack] = nil
     end
     gfx.getStackDepth = function() return #stack end
+    -- LÖVE's reset makes no canvas active
+    gfx.reset = function() target = nil end
     local bg = { 0, 0, 0, 1 }
     gfx.getBackgroundColor = function() return unpack(bg) end
     gfx.setBackgroundColor = function(r, g, b, a)
@@ -644,6 +646,21 @@ describe('a program\'s canvas after it stops #canvas', function()
       assert.equal(0, gfx.getStackDepth())
     end)
 
+  --- c2's first finding: before_exit runs on the canvas, and a
+  --- push it leaves behind kept that binding
+  it('a before_exit that pushed and raised leaves the screen the'
+    .. ' target after the stop', function()
+      run_drawing()
+      F.cc:get_project_env().compy.before_exit = function()
+        gfx.push('all')
+        error('x')
+      end
+      press({ 'lctrl', 'q' })
+      assert.equal('ready', love.state.app_state)
+      assert.is_nil(target)
+      assert.equal(0, gfx.getStackDepth())
+    end)
+
   it('a love.draw that pushes and never pops leaves nothing pushed'
     .. ' after its frame', function()
       F.run_project(function()
@@ -662,7 +679,7 @@ describe('a program\'s canvas after it stops #canvas', function()
   describe('the ground the program chose', function()
     it('is kept as the program sets it, before any stop', function()
       F.run_project(function()
-        gfx.setBackgroundColor(1, 0, 0)
+        F.cc:get_project_env().love.graphics.setBackgroundColor(1, 0, 0)
         draw()
         F.cc:get_project_env().love.update = function() end
       end)
@@ -672,7 +689,7 @@ describe('a program\'s canvas after it stops #canvas', function()
 
     it('stays through a second flush', function()
       F.run_project(function()
-        gfx.setBackgroundColor(1, 0, 0)
+        F.cc:get_project_env().love.graphics.setBackgroundColor(1, 0, 0)
         draw()
         F.cc:get_project_env().love.update = function() end
       end)
@@ -685,7 +702,7 @@ describe('a program\'s canvas after it stops #canvas', function()
 
     it('stays through a typed line that does not set it', function()
       F.run_project(function()
-        gfx.setBackgroundColor(1, 0, 0)
+        F.cc:get_project_env().love.graphics.setBackgroundColor(1, 0, 0)
         draw()
       end)
       gfx.setBackgroundColor(0, 0, 0)
@@ -695,9 +712,37 @@ describe('a program\'s canvas after it stops #canvas', function()
       assert.same({ 1, 0, 0, 1 }, F.cc.model.output:get_background())
     end)
 
+    --- c2's second finding: the flush's reset leaves black, and a
+    --- typed line that sets black is a choice all the same
+    it('is what a typed line sets after a stop, black included',
+      function()
+        F.run_project(function()
+          F.cc:get_project_env().love.graphics.setBackgroundColor(1, 0, 0)
+          draw()
+        end)
+        F.cc:stop_project_run()
+        gfx.setBackgroundColor(0, 0, 0)
+        F.session.type('love.graphics.setBackgroundColor(0, 0, 0)')
+        press({ 'return' })
+        assert.same({ 0, 0, 0, 1 }, F.cc.model.output:get_background())
+      end)
+
+    it('is what a love.draw sets, though its state is given back'
+      .. ' after the frame', function()
+        F.run_project(function()
+          local env = F.cc:get_project_env()
+          env.love.draw = function()
+            env.love.graphics.setBackgroundColor(0, 0, 1)
+          end
+        end)
+        love.draw()
+        F.cc:get_project_env().love.draw = nil
+        assert.same({ 0, 0, 1, 1 }, F.cc.model.output:get_background())
+      end)
+
     it('goes with the picture at reset()', function()
       F.run_project(function()
-        gfx.setBackgroundColor(1, 0, 0)
+        F.cc:get_project_env().love.graphics.setBackgroundColor(1, 0, 0)
         draw()
       end)
       F.cc:reset()

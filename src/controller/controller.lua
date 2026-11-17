@@ -436,7 +436,9 @@ local function hook_draw(userlove)
 end
 
 --- The program's frame, on its canvas: cleared first to the
---- ground the program chose, as love.run clears the screen
+--- ground the program chose (CanvasModel:get_background, which
+--- a choice in love.draw reaches though the frame's state is
+--- given back after it), as love.run clears the screen
 --- before love.draw, the transform at its origin, and drawn in
 --- the program's own graphics state, which is given back after
 --- it. What the frame pushed and did not pop is popped at its
@@ -455,7 +457,7 @@ local function draw_program(CC)
     End.ide_pushes = End.ide_pushes + 1
     local depth = gfx.getStackDepth and gfx.getStackDepth()
     gfx.origin()
-    gfx.clear(gfx.getBackgroundColor())
+    gfx.clear(CC.model.output:get_background())
     wrap(udr, CC)
     if depth then
       while gfx.getStackDepth() > depth do gfx.pop() end
