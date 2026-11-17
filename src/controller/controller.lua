@@ -781,6 +781,9 @@ Controller = {
       return End.held(update_body, dt)
     end
     update_body = function(dt)
+      --- the frames counted, for what holds only within one
+      --- (UserInputController: a drag's move with the button up)
+      love.state.frame = (love.state.frame or 0) + 1
       if love.PROFILE then
         Prof.update()
       end

@@ -52,6 +52,21 @@ describe("the key card #editor", function()
     end
   end)
 
+  -- the selection (the ruling of November 17, 2026): one row
+  it("lists Shift with a movement key as select, in every card",
+    function()
+      local now, other = group("browsing", true)
+      assert.is_nil(now["Shift+move"])
+      assert.same("select", other["Shift+move"])
+      for _, st in ipairs({ "inserting", "replacing" }) do
+        assert.same("select", (group(st, false))["Shift+move"], st)
+      end
+      for _, live in ipairs({ true, false }) do
+        local n = group_of(KeyCard.console_cells(live))
+        assert.same("select", n["Shift+move"])
+      end
+    end)
+
   -- not trivial for a child (the ruling of November 14, late)
   it("lists Ctrl+Home/End, the text's start and end, in every "
       .. "card", function()
@@ -123,7 +138,7 @@ describe("the key card #editor", function()
     -- the editor's own keys, the field's, and the reserved
     -- chords that act in the editor; in a draft without Up/Down
     -- and Home/End, which move its cursor there
-    local COUNT = { browsing = 25, inserting = 23, replacing = 23 }
+    local COUNT = { browsing = 26, inserting = 24, replacing = 24 }
     for _, state in ipairs({
       "browsing", "inserting", "replacing"
     }) do
@@ -213,7 +228,7 @@ describe("the key card #editor", function()
 
   it("takes one column where two do not fit", function()
     local lines = KeyCard.lines("browsing", true, 40, 40)
-    assert.same(27, #lines)
+    assert.same(28, #lines)
     assert.same(" Keys now, browsing:", lines[1])
   end)
 end)

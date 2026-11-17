@@ -648,6 +648,12 @@ a captured handler, so it is the one where falling through would have reached th
 while looking at the keyboard channels and missed `tixy`'s `mousepressed`. Per-example measurement:
 `../wip/77-new-input-api/validation/notes/S83-legacy-handler-blast-radius.md`.)*
 
+**Note, 2026-11-17 — selection returns, without the clipboard.** By the maintainer's ruling a
+field selects a part of its draft with Shift and a movement key or a drag, and typing, Delete or
+Backspace replaces or removes it undoably; nothing copies, cuts or pastes
+(`internals/user_input.md`, "Selection"). The constructor argument stays gone: every field
+selects alike.
+
 **Note, 2026-11-14 — selection is gone, and the constructor argument with it.** No field selects
 text now (the maintainer's ruling "Selection is off until the clipboard is designed"), and
 `build_input_widget` builds the widget as `UserInputController(model)`: the argument that disabled

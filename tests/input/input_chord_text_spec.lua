@@ -797,6 +797,8 @@ describe("a key pressed under AltGr makes no chord #input",
       two_lines()
       chord(ORDERS[2], { "ralt", "lshift" }, "up")
       assert.same("a\nb", K.console_draft())
+      -- Shift+Up selected; the cursor back on the second line
+      K.keys("lctrl", "end")
       chord(ORDERS[2], { "lalt", "lshift" }, "up")
       assert.same("b\na", K.console_draft())
     end)

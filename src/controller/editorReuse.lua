@@ -90,10 +90,15 @@ end
 function EditorController:_field_snapshot()
   local im = self.input.model
   local l, c = im:get_cursor_pos()
+  local sel = im.selection
   return {
     text = table.clone(im:get_text()),
     l = l,
     c = c,
+    --- a selection comes back with its text
+    selection = im:has_selection()
+        and { sel.start.l, sel.start.c, sel.fin.l, sel.fin.c }
+        or nil,
     steps = copy_list(im.edit_history.steps),
     target = self:get_active_buffer().loaded,
   }
@@ -109,6 +114,8 @@ function EditorController:_field_restore(snap)
   else
     self.input:set_text(table.clone(snap.text))
     im:move_cursor(snap.l, snap.c)
+    local s = snap.selection
+    if s then im:select_to(s[1], s[2], s[3], s[4]) end
   end
   im.edit_history.steps = copy_list(snap.steps)
   if snap.target then
@@ -439,6 +446,7 @@ function EditorController:_replay_file(step, forward)
         text = found.text,
         l = found.l,
         c = found.c,
+        selection = found.selection,
         steps = {},
       }
     end
