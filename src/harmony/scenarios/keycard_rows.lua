@@ -197,6 +197,11 @@ local function draft_rows(d)
       D.key(wait, 'C-right')
       D.eq(col(), '1:2', 'Ctrl+Right to the word end')
     end },
+    ['Shift+move'] = { 'select', function(wait)
+      D.key(wait, 'S-left')
+      D.type(wait, 'Z')
+      D.eq(P.draft(), d:sub(1, -2) .. 'Z', 'typing replaced it')
+    end },
     ['Ctrl+Home/End'] = { 'text start/end', function(wait)
       D.key(wait, 'S-return')
       D.type(wait, 'zz')
@@ -448,6 +453,12 @@ local CONSOLE = {
     D.key(wait, 'home')
     D.key(wait, 'C-k')
     D.eq(P.console_draft(), '', 'Ctrl+K')
+  end },
+  ['Shift+move'] = { 'select', function(wait)
+    D.key(wait, 'S-left')
+    D.type(wait, 'Z')
+    D.eq(P.console_draft(), D0:sub(1, -2) .. 'Z',
+      'typing replaced it')
   end },
   ['Ctrl+Home/End'] = { 'text start/end', function(wait)
     D.key(wait, 'S-return')

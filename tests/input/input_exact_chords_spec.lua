@@ -151,7 +151,6 @@ describe("every chord is its own key #input", function()
       { "Ctrl+Up", { "lctrl", "up" } },
       { "Ctrl+Delete", { "lctrl", "delete" } },
       { "Shift+Delete", { "lshift", "delete" } },
-      { "Shift+Left", { "lshift", "left" } },
       { "Alt+Up", { "lalt", "up" } },
       { "Shift+Escape", { "lshift", "escape" } },
       { "Alt+Escape", { "lalt", "escape" } },

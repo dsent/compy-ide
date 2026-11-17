@@ -130,9 +130,14 @@ end
 --- @return table --- {text, cursor} for the edit history
 function UserInputModel:_edit_snapshot()
   local cl, cc = self:get_cursor_pos()
+  local sel = self.selection
   return {
     text = table.clone(self:get_text()),
     cursor = { l = cl, c = cc },
+    --- the selection a step replaced comes back with its text
+    selection = self:has_selection()
+        and { sel.start.l, sel.start.c, sel.fin.l, sel.fin.c }
+        or nil,
   }
 end
 
@@ -177,6 +182,8 @@ function UserInputModel:_apply_edit_snapshot(snap)
   self:text_change()
   self:move_cursor(snap.cursor.l, snap.cursor.c)
   self:clear_selection()
+  local s = snap.selection
+  if s then self:_select(s[1], s[2], s[3], s[4]) end
 end
 
 function UserInputModel:add_text(text)
@@ -185,7 +192,10 @@ function UserInputModel:add_text(text)
     --- nothing to add: no step (IS6.6)
     if text == '' then return end
     local single = string.ulen(text) == 1
-    if single then
+    if self:has_selection() then
+      --- replacing a selection is a step of its own
+      self:_record_edit('replace', true)
+    elseif single then
       --- a whitespace starts a new step, so undo eats
       --- word by word, not letter by letter
       self:_record_edit('insert',
@@ -292,6 +302,7 @@ end
 --- Remove the text from the cursor to the end of its line,
 --- the line break excluded (IS3.12, Ctrl+K).
 function UserInputModel:kill_to_line_end()
+  if self:delete_selection() then return end
   local cl, cc = self:get_cursor_pos()
   local line = self:get_text_line(cl)
   if cc > string.ulen(line) then return end
@@ -370,6 +381,7 @@ end
 --- nothing moves.
 --- @param dir VerticalDir
 function UserInputModel:move_line(dir)
+  self:clear_selection()
   local cl = self:get_cursor_y()
   local to = dir == 'up' and cl - 1 or cl + 1
   if to < 1 or to > self:get_n_text_lines() then return end
@@ -410,6 +422,7 @@ end
 
 function UserInputModel:line_feed()
   self:_record_edit('newline', true)
+  self:pop_selected_text()
   local cl, cc = self:get_cursor_pos()
   local cur_line = self:get_text_line(cl)
   local pre, post = string.split_at(cur_line, cc)
@@ -456,14 +469,12 @@ function UserInputModel:get_current_line()
 end
 
 function UserInputModel:backspace()
-  --- nothing before the cursor and nothing selected: no
-  --- change, and no step (IS6.6)
+  if self:delete_selection() then return end
+  --- nothing before the cursor: no change, and no step
+  --- (IS6.6)
   local l0, c0 = self:get_cursor_pos()
-  if l0 == 1 and c0 == 1 and not self:has_selection() then
-    return
-  end
+  if l0 == 1 and c0 == 1 then return end
   self:_record_edit('remove')
-  self:pop_selected_text()
   local line = self:get_current_line()
   local cl, cc = self:get_cursor_pos()
   local newcl = cl - 1
@@ -499,6 +510,7 @@ end
 --- 14, 2026). At a line's start that is the line break and the
 --- previous line's last word; at the draft's start, nothing.
 function UserInputModel:backspace_word()
+  if self:delete_selection() then return end
   local l, c = self:get_cursor_pos()
   local tl, tc = self:_word_left_of(l, c)
   if tl == l and tc == c then return end
@@ -518,16 +530,14 @@ function UserInputModel:backspace_word()
 end
 
 function UserInputModel:delete()
-  --- nothing after the cursor and nothing selected: no
-  --- change, and no step (IS6.6)
+  if self:delete_selection() then return end
+  --- nothing after the cursor: no change, and no step (IS6.6)
   local l0, c0 = self:get_cursor_pos()
   local last = string.ulen(self:get_current_line() or '') + 1
-  if l0 == self:get_n_text_lines() and c0 == last
-      and not self:has_selection() then
+  if l0 == self:get_n_text_lines() and c0 == last then
     return
   end
   self:_record_edit('remove')
-  self:pop_selected_text()
   local line = self:get_current_line()
   local cl, cc = self:get_cursor_pos()
   local pre, post
@@ -1501,25 +1511,6 @@ function UserInputModel:end_selection(l, c)
   self.selection.text = sel
 end
 
---- @param is_mouse boolean
-function UserInputModel:hold_selection(is_mouse)
-  if not is_mouse then
-    local cur_start = self:get_selection().start
-    local cur_end = self:get_selection().fin
-    if cur_start and cur_start.l and cur_start.c then
-      self:start_selection(cur_start.l, cur_start.c)
-    else
-      self:start_selection()
-    end
-    if cur_end and cur_end.l and cur_end.c then
-      self:end_selection(cur_end.l, cur_end.c)
-    else
-      self:end_selection()
-    end
-  end
-  self.selection.held = true
-end
-
 function UserInputModel:release_selection()
   self.selection.held = false
 end
@@ -1568,38 +1559,65 @@ function UserInputModel:clear_selection()
   self:release_selection()
 end
 
+--- Select from (al, ac) to (l, c), the cursor at (l, c); an
+--- empty span selects nothing
+--- @private
+function UserInputModel:_select(al, ac, l, c)
+  self.selection = InputSelection()
+  if al == l and ac == c then
+    self:move_cursor(l, c)
+    return
+  end
+  self:start_selection(al, ac)
+  self:move_cursor(l, c, 'keep')
+  self:end_selection(l, c)
+end
+
+--- A movement with Shift held (the maintainer's ruling of
+--- November 17, 2026): `move` moves the cursor as its plain
+--- key does, and the selection runs from where it began, or
+--- from the cursor, to where the cursor lands. While it moves
+--- the selection is held, so that Up on the first row and Down
+--- on the last go to the draft's ends.
+--- @param move function
+function UserInputModel:select_by(move)
+  local sel = self.selection
+  local al, ac
+  if self:has_selection() then
+    al, ac = sel.start.l, sel.start.c
+  else
+    al, ac = self:get_cursor_pos()
+  end
+  self.selection = InputSelection()
+  self:start_selection(al, ac)
+  self.selection.held = true
+  move()
+  local l, c = self:get_cursor_pos()
+  self:_select(al, ac, l, c)
+end
+
+--- Select from the anchor (al, ac) to (l, c): a drag
+--- @param al integer
+--- @param ac integer
+--- @param l integer
+--- @param c integer
+function UserInputModel:select_to(al, ac, l, c)
+  self:_select(al, ac, l, c)
+end
+
+--- Remove the selection, as one step (IS6.6)
+--- @return boolean --- there was one to remove
+function UserInputModel:delete_selection()
+  if not self:has_selection() then return false end
+  self:_record_edit('remove', true)
+  self:pop_selected_text()
+  self:_note_edit()
+  return true
+end
+
 --- @return boolean
 function UserInputModel:has_selection()
   local s = self.selection
   return s:is_defined()
 end
 
---- @param l integer
---- @param c integer
-function UserInputModel:mouse_click(l, c)
-  local li, ci = self:translate_grid_to_cursor(l, c)
-  self:clear_selection()
-  self:start_selection(li, ci)
-  self:hold_selection(true)
-end
-
---- @param l integer
---- @param c integer
-function UserInputModel:mouse_release(l, c)
-  local li, ci = self:translate_grid_to_cursor(l, c)
-  self:release_selection()
-  self:end_selection(li, ci)
-  self:move_cursor(li, ci, 'keep')
-end
-
---- @param l integer
---- @param c integer
-function UserInputModel:mouse_drag(l, c)
-  local li, ci = self:translate_grid_to_cursor(l, c)
-  local sel = self:get_selection()
-  local held = sel.held and love.mouse.isDown(1)
-  if sel.start and held then
-    self:end_selection(li, ci)
-    self:move_cursor(li, ci, 'move')
-  end
-end

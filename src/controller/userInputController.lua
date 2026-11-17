@@ -687,7 +687,33 @@ local function vertical(self, input, k)
   end
 end
 
+--- The model's movement each movement key makes, by its chord
+--- without Shift; with Shift the same movement selects
+local MOVES = {
+  left = 'cursor_left', right = 'cursor_right',
+  ['ctrl+left'] = 'cursor_word_left',
+  ['ctrl+right'] = 'cursor_word_right',
+  home = 'jump_line_start', ['end'] = 'jump_line_end',
+  ['ctrl+home'] = 'jump_home', ['ctrl+end'] = 'jump_end',
+}
+
+--- Shift with a movement key: the movement, selecting (the
+--- maintainer's ruling of November 17, 2026). Up and Down
+--- move by rows, and at the draft's first or last row go to
+--- its ends: a selection recalls no history.
+local function select(_, input, k)
+  local plain = Key.combo(k):gsub('shift%+', '')
+  input:select_by(function()
+    if k == 'up' or k == 'down' then
+      input:cursor_vertical_move(k)
+    else
+      input[MOVES[plain]](input)
+    end
+  end)
+end
+
 local ACT = {
+  select = select,
   char = horizontal(false),
   word = horizontal(true),
   edge = edge(false),
@@ -818,20 +844,34 @@ end
 --   mouse   --
 ---------------
 
+--- The draft's cursor position under a point of the screen,
+--- nil outside the rows the field shows
+--- @private
+--- @return integer? l
+--- @return integer? c
+function UserInputController:_point(x, y)
+  local v = self.view
+  if not (v and v.cell_at) then return end
+  local im = self.model
+  local row, col = v:cell_at(x, y, im:get_input())
+  if not row then return end
+  return im:translate_grid_to_cursor(row, col)
+end
+
 --- A click in the draft places the text cursor on the cell
---- it points at, in every field; it selects nothing (the
---- ruling of November 14, 2026). A click outside the rows the
---- field shows leaves the cursor where it is.
+--- it points at, in every field, and clears a selection; a
+--- drag from there selects (the maintainer's ruling of
+--- November 17, 2026). A click outside the rows the field
+--- shows leaves the cursor where it is.
 --- @param x integer
 --- @param y integer
 --- @param btn integer
 function UserInputController:mousepressed(x, y, btn)
-  local v = self.view
-  if btn ~= 1 or not (v and v.cell_at) then return end
-  local im = self.model
-  local row, col = v:cell_at(x, y, im:get_input())
-  if not row then return end
-  im:move_cursor(im:translate_grid_to_cursor(row, col))
+  if btn ~= 1 then return end
+  local l, c = self:_point(x, y)
+  if not l then return end
+  self.model:move_cursor(l, c)
+  self.drag_from = { l, c }
   self:update_view()
 end
 
@@ -842,15 +882,23 @@ end
 --- @param presses number
 function UserInputController:mousereleased(
     x, y, btn, touch, presses)
+  if btn == 1 then self.drag_from = nil end
 end
 
+--- A drag from a press in the draft selects up to the point
+--- it has reached, while that point is in the field's rows
 --- @param x number
 --- @param y number
 --- @param dx number
 --- @param dy number
 --- @param touch boolean
---- A drag selects nothing
 function UserInputController:mousemoved(x, y, dx, dy, touch)
+  local from = self.drag_from
+  if not from then return end
+  local l, c = self:_point(x, y)
+  if not l then return end
+  self.model:select_to(from[1], from[2], l, c)
+  self:update_view()
 end
 
 --- @param x integer

@@ -171,8 +171,10 @@ Project-author guide: `doc/input_api.md`.
   Ctrl+K the rest of the line, and Alt+Shift+Up and
   Alt+Shift+Down move the cursor's line, in every field. Alt+Up and Alt+Down move a
   block in the file editor and do nothing elsewhere. A click places the cursor in every
-  field, the file editor's included. No field selects text: Shift with an arrow, Home or
-  End does nothing, and neither does a drag.
+  field, the file editor's included. Shift with a movement key, or a drag of the mouse,
+  selects a part of the draft; typing replaces it, Backspace or Delete removes it, as
+  one change Ctrl+Z takes back, and a click or a plain movement clears it. Nothing
+  copies, cuts or pastes.
 - **Alt+F says why it refuses**, in a notice that blocks nothing: in a text or
   Markdown file, "The file has nothing to format.", and during an edit. `tidy()` on a
   text or Markdown file says it has nothing to format, where it named an error or said

@@ -262,6 +262,10 @@ function UserInputView:render_input(input, status, time)
       local x = (x_offset - .5) * fw
       gfx.print('|', x, ch)
       gfx.print('|', x - 4, ch)
+    elseif input.selection and input.selection.fin then
+      --- beside a selection, a bar at the cell's left edge, so
+      --- that the selected cell it stands on stays seen
+      gfx.rectangle('fill', x_offset * fw, ch, 2, fh)
     else
       --- a block on the cursor's cell, the character under
       --- it in the text's colour, so that it stays readable
@@ -310,10 +314,28 @@ function UserInputView:render_input(input, status, time)
     vc:get_content_length(), bare), row_y, w * fw, fh,
     cf_colors.editor.wrap_mark)
 
-  if highlight then
+  --- whether the draft's character at (tl, tc) is selected:
+  --- from the selection's first position up to its last
+  local sel = input.selection
+  local sel_from, sel_to
+  if sel and sel.start and sel.fin then
+    local a, b = sel.start, sel.fin
+    if a.l > b.l or (a.l == b.l and a.c > b.c) then a, b = b, a end
+    sel_from, sel_to = a, b
+  end
+  local function is_selected(tl, tc)
+    if not sel_from or not tl then return false end
+    local after = tl > sel_from.l
+        or (tl == sel_from.l and tc >= sel_from.c)
+    local before = tl < sel_to.l
+        or (tl == sel_to.l and tc < sel_to.c)
+    return after and before
+  end
+
+  if highlight or sel_from then
     gfx.push('all')
-    local hl = highlight.hl
-    local perr = highlight.parse_err
+    local hl = highlight and highlight.hl
+    local perr = highlight and highlight.parse_err
     local el, ec
     if perr then
       el = perr.l
@@ -353,27 +375,8 @@ function UserInputView:render_input(input, status, time)
               or (at_l == el and ec and at_c >= ec)) then
           color = cf_colors.input.error
         end
-        local selected = (function()
-          local sel = input.selection
-          local startl = sel.start and sel.start.l
-          local endl = sel.fin and sel.fin.l
-          if startl then
-            local startc = sel.start.c
-            local endc = sel.fin.c
-            if startc and endc then
-              if startl == endl then
-                local sc = math.min(sel.start.c, sel.fin.c)
-                local endi = math.max(sel.start.c, sel.fin.c)
-                return l == startl and c >= sc and c < endi
-              else
-                return
-                    (l == startl and c >= sel.start.c) or
-                    (l > startl and l < endl) or
-                    (l == endl and c < sel.fin.c)
-              end
-            end
-          end
-        end)()
+        --- in the draft's own lines and columns, as the red
+        local selected = is_selected(tlc and tlc.l, tlc and tlc.c)
         local dy = self:row_y(row)
         local dx = (c - 1) * fw
         ViewUtils.write_token(dy, dx,

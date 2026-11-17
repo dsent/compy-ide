@@ -10,8 +10,9 @@
 --- says of the key; an alias of a key with words has none, and
 --- a `trivial` key, one anyone finds without being told
 --- (moving the cursor, deleting a character), is left off the
---- card (the maintainer's ruling of November 14, 2026). There
---- is no selection: the clipboard that needed one is gone.
+--- card (the maintainer's ruling of November 14, 2026). Shift
+--- with a movement key selects (the ruling of November 17,
+--- 2026); nothing copies, cuts or pastes.
 local Keymap = require('model.input.keymap')
 
 --- @param act string
@@ -53,6 +54,15 @@ local DEFS = {
   with(key('vertical'),
     { chords = { 'up', 'down' }, repeats = true,
       trivial = true }),
+  --- each movement above with Shift: a selection from where
+  --- it began to where the cursor lands
+  with(key('select', 'select'),
+    { chords = { 'shift+left', 'shift+right',
+      'ctrl+shift+left', 'ctrl+shift+right',
+      'shift+home', 'shift+end',
+      'ctrl+shift+home', 'ctrl+shift+end',
+      'shift+up', 'shift+down' },
+      card = 'Shift+move', repeats = true }),
   --- IS3.12
   with(key('backspace'),
     { chords = { 'backspace' }, repeats = true,

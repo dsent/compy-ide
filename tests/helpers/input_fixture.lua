@@ -63,10 +63,9 @@ local function mock_runtime()
       stop      = function() end,
       play      = function() end,
     },
-    -- isDown is real production input: the widget's drag-select
-    -- consults it on every mousemoved
-    -- (userInputModel, "mouse_drag"). Driven by
-    -- F.set_mouse_down so a case can hold a button over a move.
+    -- isDown answers whether a button is held, as a program's
+    -- code may ask. Driven by F.set_mouse_down so a case can
+    -- hold a button over a move.
     mouse      = {
       getPosition = function() return mx, my end,
       isDown      = function() return mouse_down end,
