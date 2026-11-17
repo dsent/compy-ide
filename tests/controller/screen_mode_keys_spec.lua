@@ -354,8 +354,96 @@ describe("the screen modes' keys #canvas", function()
         K.hold("a")
         assert.same("text", mode())
         run("continue()")
+        --- k1's sixth finding: the case resumes
+        assert.same("running", K.app_state())
         K.release("a")
         assert.is_nil(seen():find(" a", 1, true))
+      end)
+
+    --- k1's fourth finding
+    it("lets another key type while the back key is held",
+      function()
+        picture()
+        K.hold("a")
+        K.type("b")
+        K.release("a")
+        assert.same("b", K.console_draft())
+      end)
+
+    --- text with no key of its own (a paste, a method of
+    --- input) after the key that went back is up goes on
+    it("lets text with no key through once the back key is up",
+      function()
+        picture()
+        K.keys("lctrl", "q")
+        assert.same("text", mode())
+        F.session.type("r")
+        assert.same("r", K.console_draft())
+      end)
+
+    --- k1's third finding
+    it("keeps a button's moves from a program resumed while the"
+      .. " button that went back is held", function()
+        K.reset({ ["main.lua"] = recorder(true)
+          .. "moves = 0\nfunction love.mousemoved() moves = moves + 1"
+          .. " end\n" })
+        K.start()
+        K.keys("lctrl", "pause")
+        K.frame()
+        K.keys("f12")
+        K.keys("f12")
+        F.set_mouse_down(true)
+        F.session.mousepressed(10, 10, 1, false, 1)
+        assert.same("text", mode())
+        run("continue()")
+        assert.same("running", K.app_state())
+        F.session.mousemoved(20, 10, 10, 0, false)
+        F.set_mouse_down(false)
+        F.session.mousereleased(20, 10, 1, false, 1)
+        assert.same(0, env().moves)
+      end)
+
+    --- k1's second finding: a packaged program's picture is all
+    --- there is, and no key shows a console
+    it("does nothing in playback", function()
+      K.reset({ ["main.lua"] = DRAWS_ONCE })
+      local Session = require("tests.helpers.input_session")
+      K.cc.cfg.mode = "play"
+      F.session = Session.new(K.cc)
+      finally(function()
+        K.cc.cfg.mode = "dev"
+        F.session = Session.new(K.cc)
+      end)
+      K.cc:run_project(K.PROJECT)
+      assert.same("picture", mode())
+      K.type("a")
+      assert.same("picture", mode())
+      F.session.mousepressed(10, 10, 1, false, 1)
+      F.session.mousereleased(10, 10, 1, false, 1)
+      assert.same("picture", mode())
+      K.keys("f12")
+      assert.same("picture", mode())
+    end)
+
+    --- k1's seventh finding: F12 in the frame between a pause's
+    --- request and the pause leaves continue() its mode
+    it("leaves continue() the mode before the pause when F12 comes"
+      .. " before the pause is made", function()
+        K.reset({ ["main.lua"] = recorder(true) })
+        K.start()
+        assert.same("picture", mode())
+        F.session.press("lctrl")
+        F.session.press("pause")
+        F.session.release("pause")
+        F.session.release("lctrl")
+        assert.same("snapshot", K.app_state())
+        F.session.press("f12")
+        F.session.release("f12")
+        K.frame()
+        assert.same("inspect", K.app_state())
+        run("continue()")
+        assert.same("running", K.app_state())
+        assert.same("picture", mode())
       end)
   end)
 
@@ -418,7 +506,7 @@ describe("the screen modes' keys #canvas", function()
         K.start()
         K.keys("lctrl", "pause")
         K.frame()
-        assert.same({ "BREAK into program — " .. HINT }, rows())
+        assert.same({ "BREAK into program (" .. HINT .. ")" }, rows())
       end)
 
     it("takes a row of its own where the pause's text leaves no"
@@ -441,6 +529,36 @@ describe("the screen modes' keys #canvas", function()
       assert.truthy(n and n:find("BREAK into program", 1, true))
       assert.is_nil(n:find(HINT, 1, true))
     end)
+
+    --- k1's first finding
+    it("measures a pause text that is not UTF-8 as it shows",
+      function()
+        K.reset({ ["main.lua"] = DRAWS_ONCE
+          .. "function love.update() pause(string.char(255)) end\n" })
+        K.start()
+        K.frame()
+        assert.same("inspect", K.app_state())
+        local r = rows()
+        assert.same(1, #r)
+        assert.truthy(r[1]:find("(" .. HINT .. ")", 1, true))
+      end)
+
+    --- k1's fifth finding: the band shows three rows at most
+    for name, text in pairs({
+      ["three lines"] = "one\\ntwo\\nthree",
+      ["a text three rows wide"] = string.rep("word ", 40),
+    }) do
+      it("keeps the hint in sight after " .. name, function()
+        K.reset({ ["main.lua"] = DRAWS_ONCE
+          .. "function love.update() pause('" .. text .. "') end\n" })
+        K.start()
+        K.frame()
+        assert.same("inspect", K.app_state())
+        local shown = K.cc.view.input:notice_rows()
+        assert.same(HINT, shown[#shown])
+        assert.truthy(shown[1]:find("^one") or shown[1]:find("^word"))
+      end)
+    end
 
     it("shows alone after pause() with no message", function()
       K.reset({ ["main.lua"] = DRAWS_ONCE

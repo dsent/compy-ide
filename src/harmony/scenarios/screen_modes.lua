@@ -179,7 +179,7 @@ scenario('pause-shows-console', function(wait)
   D.in_state('inspect')
   assert(mode() == 'text', 'a pause shows the console, the mode '
     .. 'is ' .. mode())
-  D.eq(P.console_message(), 'look here — F12 shows the picture',
+  D.eq(P.console_message(), 'look here (F12 shows the picture)',
     'the pause\'s text, and how to see the picture')
   local paused = P.capture(wait)
   D.shot(wait, 'paused')

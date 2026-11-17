@@ -1245,7 +1245,11 @@ Controller = {
     --- playback no console
     local function reserved_screen_mode()
       if playback or not screen then return end
-      if love.state.app_state == 'editor' then return end
+      --- the editor shows no mode; between a pause's request and
+      --- the pause (`snapshot`) a step would be the mode the
+      --- pause saves for continue() (k1)
+      local st = love.state.app_state
+      if st == 'editor' or st == 'snapshot' then return end
       screen:step()
     end
 
@@ -1258,8 +1262,11 @@ Controller = {
     --- nothing, as no field shows to take them. A program that
     --- can act keeps all its input, and F12 is its way back.
     --- @return boolean
+    --- Playback has no console: a packaged program's picture is
+    --- all there is (k1).
     local function picture_only()
-      return screen ~= nil and screen:get() == 'picture'
+      return not playback
+          and screen ~= nil and screen:get() == 'picture'
           and love.state.app_state ~= 'editor'
           and not Controller.program_owns_input()
     end
@@ -1312,10 +1319,18 @@ Controller = {
     -- Escape goes down with Ctrl held, and comes on Escape's
     -- release whatever is held by then, the card up or not).
     local delivered, owed = { }, { }
-    --- the keys that went back from the full picture, from
-    --- their press to their release: the text they type goes
-    --- nowhere either
-    local went_back = { }
+    --- The text of a key that went back from the full picture
+    --- goes nowhere: while it is held, the next text event after
+    --- its press or one of its repeats is that key's, unless
+    --- another key is pressed first (k1: another key's text,
+    --- typed while it is held, goes on). Its release ends it, so
+    --- text with no key after it goes on.
+    --- @type string?
+    local swallow_for = nil
+    --- the buttons that went back from the full picture, from
+    --- their press to their release: their moves go nowhere
+    --- either, also into a program resumed meanwhile (k1)
+    local back_buttons = { }
     for _, r in ipairs(require('model.input.reservedKeys')) do
       -- the profiling keys only where conf.lua set love.PROFILE,
       -- which it does before love.load builds this gate
@@ -1338,6 +1353,9 @@ Controller = {
       if not isr then
         owed[k] = RESERVED.keyreleased[combo_string(k)]
       end
+      --- a key's text follows its press: whatever this key types
+      --- is no longer the text of a key that went back
+      swallow_for = nil
       -- Not a reservation: this fires on ANY key in playback
       -- while shutting down, not on one combo, so it cannot be
       -- a table entry.
@@ -1354,6 +1372,7 @@ Controller = {
         -- reaches a natural stop (reservedKeys.lua): a held
         -- Ctrl+T does not flip between the run and the editor
         if type(to) == 'table' then
+          if to.back then swallow_for = k end
           if to.again then to.act() end
           return
         end
@@ -1377,8 +1396,9 @@ Controller = {
         -- its whole press, and a reserved chord acts as well
         -- (F12 is the cycle, whose next mode is text)
         screen:back()
-        went_back[k] = true
-        delivered[k] = { act = reservation, again = REPEATS[chord] }
+        swallow_for = k
+        delivered[k] = { act = reservation, again = REPEATS[chord],
+          back = true }
         if not reservation then return end
         if CC.editor then CC.editor:key_begins() end
         reservation()
@@ -1444,7 +1464,11 @@ Controller = {
       Blink.restart()
       if not love.textinput then return end
       if CC:card_shows() then return end
-      if next(went_back) or picture_only() then return end
+      if swallow_for then
+        swallow_for = nil
+        return
+      end
+      if picture_only() then return end
       if Key.chord_text(t) then
         if RESERVED.keypressed[combo_string(t)] then return end
         local console = Controller._defaults.textinput
@@ -1458,7 +1482,7 @@ Controller = {
       -- here, whichever route has the keys: the help key's
       -- release ends its card wherever its press went
       CC:key_released(k)
-      went_back[k] = nil
+      if swallow_for == k then swallow_for = nil end
       local reservation = owed[k]
       owed[k] = nil
       if reservation then reservation() end
@@ -1526,6 +1550,7 @@ Controller = {
       if picture_only() then
         screen:back()
         press_to[btn] = false
+        back_buttons[btn] = true
         return
       end
       if btn == 1 then
@@ -1549,6 +1574,7 @@ Controller = {
     handlers.mousereleased = function(x, y, btn, touch, presses)
       local to = press_to[btn]
       press_to[btn] = nil
+      back_buttons[btn] = nil
       if not release_goes(to) then return end
       local result
       if love.mousereleased then
@@ -1566,6 +1592,7 @@ Controller = {
     handlers.mousemoved = function(x, y, dx, dy, touch)
       track_click_motion(x, y)
       if CC:card_shows() or picture_only() then return end
+      if next(back_buttons) then return end
       if love.mousemoved then
         return love.mousemoved(x, y, dx, dy, touch)
       end

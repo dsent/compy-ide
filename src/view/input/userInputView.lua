@@ -124,6 +124,7 @@ end
 --- The rows a message may take in the band: one, or up to
 --- three when it is wider than the screen
 local NOTICE_ROWS = 3
+UserInputView.NOTICE_ROWS = NOTICE_ROWS
 
 --- The rows of the message the band shows, nil when none
 --- shows; one longer than the band ends in an ellipsis.
