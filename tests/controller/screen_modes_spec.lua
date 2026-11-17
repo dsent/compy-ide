@@ -340,6 +340,26 @@ describe('the screen modes #canvas', function()
       assert.equal('combined', S:get())
     end)
 
+    --- c3's fifth finding
+    it('goes back from a picture stepped to before a pause in which'
+      .. ' the program first drew', function()
+        F.run_project(function()
+          F.cc:get_project_env().love.update = function() end
+        end)
+        local S = F.cc.model.screen
+        S:step()
+        S:step()
+        assert.equal('picture', S:get())
+        F.cc:suspend_run('paused')
+        F.love_update(0.1)
+        draw()
+        F.cc:get_project_env().continue()
+        F.cc:get_project_env().love.update = nil
+        assert.equal('picture', S:get())
+        S:back()
+        assert.equal('combined', S:get())
+      end)
+
     it('goes back to text from a picture a run brought up', function()
       F.run_project(draw)
       F.cc.model.screen:back()

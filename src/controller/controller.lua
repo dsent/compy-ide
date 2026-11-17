@@ -454,7 +454,9 @@ local function draw_program(CC)
   local ok, err = pcall(CC.use_canvas, CC, function()
     gfx.push('all')
     gfx.origin()
-    gfx.clear(CC.model.output:get_background())
+    --- the canvas holds premultiplied colour (round c3)
+    local r, g, b, a = unpack(CC.model.output:get_background())
+    gfx.clear(r * a, g * a, b * a, a)
     wrap(udr, CC)
   end)
   End.ide_pushes = End.ide_pushes - 1
@@ -743,7 +745,12 @@ Controller = {
         Prof.update()
       end
       if Serial and SerialPort then
-        for _, f in ipairs(SerialPort:update(dt)) do
+        --- a program's serial handlers are program code: on its
+        --- canvas, through the one helper (round c3)
+        local faults = CC:use_canvas(function()
+          return SerialPort:update(dt)
+        end)
+        for _, f in ipairs(faults or { }) do
           print('serial fault [' .. f.env .. ']: ' ..
             tostring(f.err))
         end

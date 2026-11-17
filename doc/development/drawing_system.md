@@ -22,13 +22,16 @@ The canvas then holds the last frame drawn.
 Either way, every line of program code and every typed line runs with
 the canvas bound (`ConsoleController:use_canvas`): top-level code and
 typed lines (`run_user_code`), every routed event (`with_canvas_and_errors`
-in `controller.lua`), `love.update`, `love.draw` (`draw_program`) and
-`compy.before_exit`. What the code pushed and did not pop is popped when
+in `controller.lua`), `love.update`, `love.draw` (`draw_program`),
+`compy.before_exit` and the serial handlers (`SerialPort:update`). A
+field's validator, highlighter and parser are the one exception: they
+run while the IDE renders the field into its own canvas. What the code pushed and did not pop is popped when
 it returns, raises or is ended, before the target goes back: a push
 saves the state it is made in, the program's canvas bound, and one left
 behind would bind it again wherever it is popped. A program's `love.graphics.setCanvas()` with no
 target binds its canvas, as LÖVE's binds the screen, and its
-`getCanvas()` answers `nil` there (`prepare_project_env`). So a program
+`getCanvas()` answers `nil` there, and its `reset()` makes its canvas the
+target again (`prepare_project_env`). So a program
 that draws through a canvas of its own and goes "back to the screen"
 lands on its picture.
 
@@ -47,9 +50,11 @@ lands on its picture.
 - With the canvas the record keeps whether anything is drawn on it
   since it was cleared (`is_drawn`) and the background colour the
   program chose (`get_background`): the program's
-  `love.graphics.setBackgroundColor` keeps each colour it sets there, so
+  `love.graphics.setBackgroundColor` keeps each colour it sets there, and
+  so do its `pop()` when it puts another back and its `reset()`, so
   neither the flush's reset nor the state a draw gives back after its
-  frame changes it. A program's `love.draw` frame is cleared to it.
+  frame changes it. A program's `love.draw` frame is cleared to it,
+  premultiplied, as the canvas holds its colours.
 
 ## The Screen's Modes
 

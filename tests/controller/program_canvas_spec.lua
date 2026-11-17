@@ -22,6 +22,8 @@ local gfx
 -- holds the tag of what drew it. Drawing lands where the render
 -- target says: the canvas, or the screen, which is not watched.
 local canvas, pixels, drawing, scissor, mask, target
+--- what the program's canvas was last cleared to
+local cleared
 
 --- A canvas that remembers what is drawn on it
 local function fake_canvas()
@@ -120,17 +122,24 @@ describe('a program\'s canvas after it stops #canvas', function()
     gfx.getCanvas = function() return target end
     -- push('all') keeps the render target, and pop puts it back,
     -- as LÖVE's do
+    -- push('all') keeps the render target and the background
+    -- colour, and pop puts them back
     local stack = { }
-    gfx.push = function() stack[#stack + 1] = target end
+    local bg = { 0, 0, 0, 1 }
+    gfx.push = function()
+      stack[#stack + 1] = { target, bg }
+    end
     gfx.pop = function()
       assert(#stack > 0, 'Minimum stack depth reached')
-      target = stack[#stack]
+      target, bg = stack[#stack][1], stack[#stack][2]
       stack[#stack] = nil
     end
     gfx.getStackDepth = function() return #stack end
-    -- LÖVE's reset makes no canvas active
-    gfx.reset = function() target = nil end
-    local bg = { 0, 0, 0, 1 }
+    -- LÖVE's reset makes no canvas active, and the ground black
+    gfx.reset = function()
+      target = nil
+      bg = { 0, 0, 0, 1 }
+    end
     gfx.getBackgroundColor = function() return unpack(bg) end
     gfx.setBackgroundColor = function(r, g, b, a)
       bg = { r, g, b, a or 1 }
@@ -144,7 +153,8 @@ describe('a program\'s canvas after it stops #canvas', function()
     gfx.setColorMask = function(...) mask = { ... } end
     -- as LÖVE clears: the scissor spares what is outside it, a
     -- color mask spares what it does not write
-    gfx.clear = function()
+    gfx.clear = function(...)
+      if target == canvas then cleared = { ... } end
       if not (drawing or target == canvas) then return end
       if mask[1] and mask[2] and mask[3] and mask[4] then
         pixels.inside = false
@@ -720,6 +730,43 @@ describe('a program\'s canvas after it stops #canvas', function()
     end)
   end)
 
+  --- c3's first finding: serial callbacks are program code, run
+  --- on its canvas through the one helper
+  it('a serial callback that binds the program\'s screen leaves the'
+    .. ' screen the target after it', function()
+      local update = SerialPort.update
+      SerialPort.update = function()
+        F.cc:get_project_env().love.graphics.setCanvas()
+        return { }
+      end
+      finally(function() SerialPort.update = update end)
+      F.love_update(0.1)
+      assert.is_nil(target)
+    end)
+
+  --- c3's second finding: a program's reset() makes no canvas
+  --- active under LÖVE, which for a program is its own
+  it('a program\'s reset() leaves its canvas the target', function()
+    F.run_project(function()
+      F.cc:get_project_env().love.graphics.reset()
+      draw('after')
+    end)
+    assert.equal('after', who())
+  end)
+
+  --- c3's fourth finding: the canvas holds premultiplied colour
+  it('clears a love.draw frame to a translucent ground'
+    .. ' premultiplied', function()
+      F.run_project(function()
+        local env = F.cc:get_project_env()
+        env.love.graphics.setBackgroundColor(.2, .4, .6, .5)
+        env.love.draw = function() end
+      end)
+      love.draw()
+      F.cc:get_project_env().love.draw = nil
+      assert.same({ .1, .2, .3, .5 }, cleared)
+    end)
+
   it('a love.draw that pushes and never pops leaves nothing pushed'
     .. ' after its frame', function()
       F.run_project(function()
@@ -798,6 +845,31 @@ describe('a program\'s canvas after it stops #canvas', function()
         F.cc:get_project_env().love.draw = nil
         assert.same({ 0, 0, 1, 1 }, F.cc.model.output:get_background())
       end)
+
+    --- c3's third finding: a pop of the program's gives the ground
+    --- back as LÖVE does
+    it('is the one a pop of the program\'s puts back', function()
+      F.run_project(function()
+        local g = F.cc:get_project_env().love.graphics
+        g.setBackgroundColor(1, 0, 0)
+        -- LÖVE's own push, which the environment's is
+        gfx.push('all')
+        g.setBackgroundColor(0, 0, 1)
+        g.pop()
+        draw()
+      end)
+      assert.same({ 1, 0, 0, 1 }, F.cc.model.output:get_background())
+    end)
+
+    it('is black after a program\'s reset()', function()
+      F.run_project(function()
+        local g = F.cc:get_project_env().love.graphics
+        g.setBackgroundColor(1, 0, 0)
+        g.reset()
+        draw()
+      end)
+      assert.same({ 0, 0, 0, 1 }, F.cc.model.output:get_background())
+    end)
 
     it('goes with the picture at reset()', function()
       F.run_project(function()

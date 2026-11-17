@@ -111,7 +111,8 @@ local function enrich_gfx()
   gfx.pop       = function() end
   -- what a run's start puts back (consoleController.lua,
   -- reset_graphics)
-  gfx.reset = gfx.reset or function() end
+  -- LÖVE's reset makes no canvas active
+  gfx.reset = function() love.graphics.setCanvas() end
   gfx.getStackDepth = gfx.getStackDepth or function() return 0 end
   -- a program may ask for one; the IDE takes none
   gfx.captureScreenshot = function() end

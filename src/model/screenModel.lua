@@ -104,7 +104,7 @@ function ScreenModel:program_drew()
   --- while paused the console stays, and continue() shows the
   --- picture (round c2's third finding: a serial handler draws)
   if self.paused then
-    self.before = self.paused
+    if self.paused ~= 'picture' then self.before = self.paused end
     self.paused = 'picture'
     return
   end

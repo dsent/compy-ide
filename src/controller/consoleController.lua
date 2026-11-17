@@ -1799,6 +1799,24 @@ function ConsoleController.prepare_project_env(cc)
     love.graphics.setBackgroundColor(...)
     cc.model.output:keep_background(love.graphics.getBackgroundColor())
   end
+  --- a pop of the program's puts back the ground its push saved,
+  --- as LÖVE's does; one that changes it is a choice too (round
+  --- c3)
+  program_gfx.pop              = function()
+    local r, g, b, a = love.graphics.getBackgroundColor()
+    love.graphics.pop()
+    local r2, g2, b2, a2 = love.graphics.getBackgroundColor()
+    if r ~= r2 or g ~= g2 or b ~= b2 or a ~= a2 then
+      cc.model.output:keep_background(r2, g2, b2, a2)
+    end
+  end
+  --- a program's reset() makes its canvas the target, as LÖVE's
+  --- makes the screen, and its ground black (round c3)
+  program_gfx.reset            = function()
+    love.graphics.reset()
+    love.graphics.setCanvas({ cc.model.output.canvas, stencil = true })
+    cc.model.output:keep_background(love.graphics.getBackgroundColor())
+  end
   --- each drawing call says that the program drew
   --- (ConsoleController:drew); clear() erases, and draws none
   for _, name in ipairs({ 'arc', 'circle', 'draw', 'drawInstanced',
