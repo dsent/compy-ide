@@ -228,6 +228,10 @@ local function project_handlers(userlove, CC)
 end
 
 
+--- The release events, each the end of a press
+local RELEASES = { keyreleased = true, mousereleased = true,
+  touchreleased = true }
+
 --- The serial handlers a program may set, by field
 local SERIAL_FIELDS = { 'onConnect', 'onDisconnect', 'onBytes',
   'onLine', 'onTick' }
@@ -320,6 +324,9 @@ local function occupy_input(userlove, CC, resume)
       --- first (asked as the event comes, before any chain)
       if not can_act(pic.compy_input) then
         Controller.release_keyboard_route(CC)
+        --- a release is of a press the program got: it goes to
+        --- no one, the console having seen no press (p3)
+        if RELEASES[k] then return end
         local console = Controller._defaults[k]
         if console then return console(...) end
         return
@@ -1459,13 +1466,17 @@ Controller = {
         press_to[btn] = false
         return
       end
-      press_to[btn] = route_owner
       if btn == 1 then
         press_pos, press_dragged = { x = x, y = y }, false
       end
+      local r
       if love.mousepressed then
-        return love.mousepressed(x, y, btn, touch, presses)
+        r = love.mousepressed(x, y, btn, touch, presses)
       end
+      --- the receiver after the press: the route may have gone
+      --- back to the console during it (p3)
+      press_to[btn] = route_owner
+      return r
     end
 
     --- @param x integer
@@ -1537,10 +1548,12 @@ Controller = {
         touch_to[id] = false
         return
       end
-      touch_to[id] = route_owner
+      local r
       if love.touchpressed then
-        return love.touchpressed(id, x, y, dx, dy, pressure)
+        r = love.touchpressed(id, x, y, dx, dy, pressure)
       end
+      touch_to[id] = route_owner
+      return r
     end
 
     --- @param id userdata

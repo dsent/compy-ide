@@ -202,7 +202,8 @@ Project-author guide: `doc/input_api.md`.
   are on it. Only a bare F1 brings it up.
 - **The console keeps its output.** The last 1,000 rows that scroll off the top of the
   console's output are kept, each with its colors, and Ctrl+Up / Ctrl+Down scroll over them
-  a row at a time, PageUp / PageDown a page of 15 rows with one carried over, and, while the
+  a row at a time, PageUp / PageDown a page of one row fewer than the view (15 rows, 16
+  while a program's 17-row output shows) with one carried over, and, while the
   field is empty, Home and End go to the oldest and the newest row. A scrolled view fills
   the screen, carries the editor's continuation cue at an edge with more beyond, and stays
   where it is while new output arrives and while you type, in the console and in a

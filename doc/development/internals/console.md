@@ -157,9 +157,10 @@ leaves them, the output's own scrolling keys scroll it too
 `CanvasView:draw_cues` draws the editor's continuation cue
 (`src/view/continuationCue.lua`) at a cut edge of a scrolled view.
 
-A key reaches these only when it reaches the console: a program's
-shown input field, its own `love.keypressed` or its own `love.draw`
-keeps every key (`fall_through` in `src/controller/controller.lua`).
+A key reaches these from the console's own route, and from behind a
+program that can act only when the program's chain leaves it and it
+is one of the output's scrolling keys (`output_key`; a program's own
+`love.keypressed` takes every key, its `love.draw` none).
 
 ---
 

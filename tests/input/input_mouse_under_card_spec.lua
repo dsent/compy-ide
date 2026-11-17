@@ -344,3 +344,65 @@ describe("the mouse under the key card #input", function()
       end)
   end)
 end)
+
+-- p3: a pointer's release goes where its press went when the
+-- route itself goes back to the console, the press first or the
+-- release
+describe("a pointer across the end of a program's acting #input",
+  function()
+    setup(K.setup)
+    teardown(K.teardown)
+    after_each(K.cleanup)
+
+    --- the button and touch events the console's field is handed
+    local function console_events()
+      local seen = { }
+      local field = K.cc.input
+      local saved = { }
+      for _, m in ipairs({ "mousepressed", "mousereleased",
+        "touchpressed", "touchreleased" }) do
+        saved[m] = field[m]
+        field[m] = function(...)
+          seen[#seen + 1] = m
+          return saved[m](...)
+        end
+      end
+      finally(function()
+        for m, f in pairs(saved) do field[m] = f end
+      end)
+      return seen
+    end
+
+    it("gives the console both halves of the first click and touch"
+      .. " after a program that can do nothing more", function()
+        K.reset({ ["main.lua"] = "X = 1\n" })
+        K.start()
+        assert.is_true(K.cc.run_live)
+        local seen = console_events()
+        local x, y = on_field(1)
+        F.session.mousepressed(x, y, 1, false, 1)
+        F.session.mousereleased(x, y, 1, false, 1)
+        local H = love.handlers
+        H.touchpressed("t1", x, y, 0, 0, 1)
+        H.touchreleased("t1", x, y, 0, 0, 1)
+        assert.same({ "mousepressed", "mousereleased",
+          "touchpressed", "touchreleased" }, seen)
+      end)
+
+    it("gives the console no release of a press the program got as"
+      .. " it stopped acting", function()
+        K.reset({ ["main.lua"] = "compy.input.hooks.mousepressed ="
+          .. " function() compy.input.hooks.mousepressed = nil end\n"
+          .. "compy.input.hooks.touchpressed ="
+          .. " function() compy.input.hooks.touchpressed = nil end\n" })
+        K.start()
+        local seen = console_events()
+        local x, y = on_field(1)
+        F.session.mousepressed(x, y, 1, false, 1)
+        local H = love.handlers
+        H.touchpressed("t1", x, y, 0, 0, 1)
+        F.session.mousereleased(x, y, 1, false, 1)
+        H.touchreleased("t1", x, y, 0, 0, 1)
+        assert.same({ }, seen)
+      end)
+  end)
