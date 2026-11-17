@@ -94,7 +94,9 @@ end
 describe('a program\'s canvas after it stops #canvas', function()
   local saved = {}
   local names = { 'setCanvas', 'getCanvas', 'clear', 'getScissor',
-    'setScissor', 'getColorMask', 'setColorMask' }
+    'setScissor', 'getColorMask', 'setColorMask', 'push', 'pop',
+    'getStackDepth', 'setBlendMode', 'getBackgroundColor',
+    'setBackgroundColor' }
   local o_canvas
   setup(function()
     F.setup()
@@ -116,6 +118,21 @@ describe('a program\'s canvas after it stops #canvas', function()
       target = t and (t[1] or t) or nil
     end
     gfx.getCanvas = function() return target end
+    -- push('all') keeps the render target, and pop puts it back,
+    -- as LÖVE's do
+    local stack = { }
+    gfx.push = function() stack[#stack + 1] = target end
+    gfx.pop = function()
+      assert(#stack > 0, 'Minimum stack depth reached')
+      target = stack[#stack]
+      stack[#stack] = nil
+    end
+    gfx.getStackDepth = function() return #stack end
+    local bg = { 0, 0, 0, 1 }
+    gfx.getBackgroundColor = function() return unpack(bg) end
+    gfx.setBackgroundColor = function(r, g, b, a)
+      bg = { r, g, b, a or 1 }
+    end
     F.cc.model.output.canvas = canvas
     gfx.getScissor = function()
       if scissor then return 0, 0, 1, 1 end
@@ -598,6 +615,95 @@ describe('a program\'s canvas after it stops #canvas', function()
       end)
       assert.equal('back', who())
     end)
+
+  it('a program\'s setCanvas() with an empty table binds its canvas,'
+    .. ' as a target saved with { getCanvas() } is', function()
+      F.run_project(function()
+        local g = F.cc:get_project_env().love.graphics
+        local saved = { g.getCanvas() }
+        g.setCanvas({ })
+        g.setCanvas(saved)
+        draw('back')
+      end)
+      assert.equal('back', who())
+    end)
+
+  it('a stop in a love.draw that pushed and never popped leaves the'
+    .. ' screen the target, and nothing pushed', function()
+      F.run_project(function()
+        local env = F.cc:get_project_env()
+        env.love.draw = function()
+          -- LÖVE's own push, which the environment's is
+          gfx.push('all')
+          env.stop()
+        end
+      end)
+      love.draw()
+      assert.is_false(F.cc.run_live)
+      assert.is_nil(target)
+      assert.equal(0, gfx.getStackDepth())
+    end)
+
+  it('a love.draw that pushes and never pops leaves nothing pushed'
+    .. ' after its frame', function()
+      F.run_project(function()
+        local env = F.cc:get_project_env()
+        env.love.draw = function()
+          gfx.push('all')
+        end
+      end)
+      love.draw()
+      love.draw()
+      F.cc:get_project_env().love.draw = nil
+      assert.equal(0, gfx.getStackDepth())
+      assert.is_nil(target)
+    end)
+
+  describe('the ground the program chose', function()
+    it('is kept as the program sets it, before any stop', function()
+      F.run_project(function()
+        gfx.setBackgroundColor(1, 0, 0)
+        draw()
+        F.cc:get_project_env().love.update = function() end
+      end)
+      assert.same({ 1, 0, 0, 1 }, F.cc.model.output:get_background())
+      F.cc:get_project_env().love.update = nil
+    end)
+
+    it('stays through a second flush', function()
+      F.run_project(function()
+        gfx.setBackgroundColor(1, 0, 0)
+        draw()
+        F.cc:get_project_env().love.update = function() end
+      end)
+      F.cc:get_project_env().love.update = nil
+      F.cc:stop_project_run()
+      gfx.setBackgroundColor(0, 0, 0)
+      F.cc:stop_project_run()
+      assert.same({ 1, 0, 0, 1 }, F.cc.model.output:get_background())
+    end)
+
+    it('stays through a typed line that does not set it', function()
+      F.run_project(function()
+        gfx.setBackgroundColor(1, 0, 0)
+        draw()
+      end)
+      gfx.setBackgroundColor(0, 0, 0)
+      F.cc:get_project_env().mark = function() end
+      F.session.type('mark()')
+      press({ 'return' })
+      assert.same({ 1, 0, 0, 1 }, F.cc.model.output:get_background())
+    end)
+
+    it('goes with the picture at reset()', function()
+      F.run_project(function()
+        gfx.setBackgroundColor(1, 0, 0)
+        draw()
+      end)
+      F.cc:reset()
+      assert.same({ 0, 0, 0, 1 }, F.cc.model.output:get_background())
+    end)
+  end)
 
   it('a program\'s getCanvas() answers nil on its own canvas',
     function()

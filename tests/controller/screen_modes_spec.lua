@@ -257,6 +257,39 @@ describe('the screen modes #canvas', function()
       assert.is_true(pc < oc)
     end)
 
+    --- c1's fourth finding: what is drawn on a canvas carries
+    --- its alpha in its colour already
+    it('draws the picture premultiplied, and the output at the'
+      .. ' theme\'s opacity: each alpha counted once', function()
+        local saved_blend, saved_color = gfx.setBlendMode, gfx.setColor
+        local blend, color, at_draw = { }, { }, { }
+        gfx.setBlendMode = function(m, a) blend = { m, a } end
+        gfx.setColor = function(r, g, b, a) color = { r, g, b, a } end
+        local plain_draw = gfx.draw
+        local canvas = { }
+        local output = F.cc.model.output
+        output.canvas = canvas
+        gfx.draw = function(what)
+          if what == canvas then at_draw.picture = blend end
+          if what == output.term_canvas then
+            at_draw.text, at_draw.color = blend, color
+          end
+          plain_draw(what)
+        end
+        finally(function()
+          gfx.setBlendMode, gfx.setColor, gfx.draw =
+              saved_blend, saved_color, plain_draw
+        end)
+        local theme = F.cfg.view.colors.screen.combined
+        local text = theme.text
+        theme.text = .5
+        draw_screen('combined')
+        theme.text = text
+        assert.same({ 'alpha', 'premultiplied' }, at_draw.picture)
+        assert.are_not.same({ 'alpha', 'premultiplied' }, at_draw.text)
+        assert.equal(.5, at_draw.color[4])
+      end)
+
     it('picture: the picture alone', function()
       F.cc.model.output.canvas = { }
       draw_screen('picture')

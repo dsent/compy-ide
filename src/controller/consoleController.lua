@@ -1741,9 +1741,14 @@ function ConsoleController.prepare_project_env(cc)
   --- draws through a canvas of its own included. The `gfx`
   --- alias is the same table.
   local program_gfx            = project_env.love.graphics
+  --- the screen, as a program names it: no target, nil, or a
+  --- table without a canvas, which `{ getCanvas() }` makes there
+  local function names_the_screen(n, t)
+    if n == 0 or t == nil then return true end
+    return n == 1 and type(t) == 'table' and t[1] == nil
+  end
   program_gfx.setCanvas        = function(...)
-    local n = select('#', ...)
-    if n == 0 or (n == 1 and (...) == nil) then
+    if names_the_screen(select('#', ...), (...)) then
       return love.graphics.setCanvas({
         cc.model.output.canvas, stencil = true })
     end
@@ -2552,12 +2557,8 @@ function ConsoleController:flush_program_state(call_exit)
   -- (the proposal "The Program's Canvas and the Viewing Modes",
   -- built as if accepted on November 17, 2026); a run's start
   -- and reset() clear it. The ground the program chose goes
-  -- with the graphics state below, so the canvas keeps it, after
-  -- the project's own hook, which may still set it. The console
-  -- shows.
-  if gfx.getBackgroundColor then
-    self.model.output:keep_background(gfx.getBackgroundColor())
-  end
+  -- with the graphics state below; the canvas has kept it as the
+  -- program set it (use_canvas). The console shows.
   self.model.screen:ended()
   --- the IDE draws on from here: under the program's scissor,
   --- colour or wireframe its key card and editor came out
@@ -3153,7 +3154,13 @@ function ConsoleController:use_canvas(f)
     canvas, -- this is actually [1] = canvas
     stencil = true
   })
+  local bg = self.model.output:program_background()
   local r = { pcall(f) }
+  --- the ground the code chose, kept with the picture when the
+  --- code changed it: a later flush's reset, or a typed line
+  --- that leaves it, keeps what the program set (c1's third and
+  --- fifth findings)
+  self.model.output:note_background(bg)
   if outer == canvas then
     gfx.setCanvas({ canvas, stencil = true })
   else

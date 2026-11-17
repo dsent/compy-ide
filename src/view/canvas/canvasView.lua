@@ -80,7 +80,11 @@ function CanvasView:draw(
       gfx.setColor(ground)
       gfx.rectangle('fill', 0, 0, cfg.w, cfg.h)
       gfx.setColor(1, 1, 1, 1)
+      --- what was drawn on the canvas carries its alpha in its
+      --- colour already (c1's fourth finding)
+      gfx.setBlendMode('alpha', 'premultiplied')
       gfx.draw(canvas)
+      gfx.setBlendMode('alpha', 'alphamultiply')
     end
     if mode ~= 'picture'
         and ViewUtils.conditional_draw('show_terminal') then
@@ -93,7 +97,10 @@ function CanvasView:draw(
         shade = c.text
         gfx.setColor(Color.with_alpha(cfg.colors.terminal.bg,
           c.ground))
-        gfx.rectangle('fill', 0, 0, cfg.w, top + drawable_height)
+        --- as high as the grid's rows, which the output's grid
+        --- may grow by the field's while no field is drawn
+        gfx.rectangle('fill', 0, 0, cfg.w,
+          top + terminal.height * terminal.char_height)
         gfx.setColor(1, 1, 1, 1)
       else
         if ViewUtils.conditional_draw('show_snapshot') then

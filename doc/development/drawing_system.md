@@ -17,7 +17,8 @@ plots its curve once and defines no `love.draw`.
 `love.draw` calls it each frame onto the canvas, after clearing the
 canvas to the program's background colour with the transform at its
 origin, as `love.run` clears the screen before a LÖVE program's draw.
-The canvas then holds the last frame drawn.
+What the frame pushed and did not pop is popped at its end, a stop in
+it included. The canvas then holds the last frame drawn.
 
 Either way, every line of program code and every typed line runs with
 the canvas bound (`ConsoleController:use_canvas`): top-level code and
@@ -42,9 +43,10 @@ lands on its picture.
 - `CanvasModel:clear_canvas` clears the whole canvas whatever scissor or
   colour mask the program left, and puts the caller's state back.
 - With the canvas the record keeps whether anything is drawn on it
-  since it was cleared (`is_drawn`) and the program's background colour
-  (`get_background`), which the flush reads before it resets the
-  graphics state.
+  since it was cleared (`is_drawn`) and the background colour the
+  program chose (`get_background`): `use_canvas` keeps the colour in
+  force after program or typed code when that code changed it, so the
+  flush's reset and a typed line that leaves it change nothing.
 
 ## The Screen's Modes
 
@@ -59,7 +61,10 @@ of it is one call there.
 
 In the combined mode the theme's `screen.combined.ground` is the opacity
 of the output's ground over the picture, and `screen.combined.text` that
-of its characters (`src/conf/colors.lua`).
+of its characters (`src/conf/colors.lua`), which the output's canvas
+takes as it is drawn, its characters whole on it. The program's canvas
+is drawn with premultiplied alpha, since what is drawn on a canvas
+carries its alpha in its colour already.
 
 What sets the mode:
 

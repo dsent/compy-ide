@@ -860,6 +860,17 @@ describe("terminal view", function()
       assert.same({ "0 ab", "2 →", "3 c" }, drawn(t, 0, 1))
     end)
 
+  --- c1's sixth finding: over a picture that does not change,
+  --- the output is not drawn again each frame
+  it("draws the output over a program's picture once, whatever "
+    .. "its opacity, which the canvas takes as it is drawn", function()
+    local t = view_term()
+    t:print("ab")
+    assert.same({ "0 ab" }, drawn(t, 0, 1))
+    assert.same({ }, drawn(t, 0, 1))
+    assert.same({ }, drawn(t, 0, .5))
+  end)
+
   it("draws the output on its ground again once the program's "
     .. "picture is gone, and then lets it be", function()
     local t = view_term()

@@ -335,12 +335,26 @@ function CanvasModel:mark_drawn()
   self.drawn = true
 end
 
---- @param r number
---- @param g number
---- @param b number
---- @param a number?
-function CanvasModel:keep_background(r, g, b, a)
-  self.background = { r, g, b, a or 1 }
+--- The ground in force now, as LÖVE holds it: a program's
+--- while its code runs
+--- @return number[]?
+function CanvasModel:program_background()
+  if not gfx.getBackgroundColor then return nil end
+  return { gfx.getBackgroundColor() }
+end
+
+--- Keep the ground in force now when it is not `before`, the
+--- one in force before the code ran: the code chose it
+--- @param before number[]?
+function CanvasModel:note_background(before)
+  local now = self:program_background()
+  if not (before and now) then return end
+  for i = 1, 4 do
+    if before[i] ~= now[i] then
+      self.background = { now[1], now[2], now[3], now[4] or 1 }
+      return
+    end
+  end
 end
 
 --- @return number[]
