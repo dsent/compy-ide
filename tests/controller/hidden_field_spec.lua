@@ -68,8 +68,9 @@ describe("the console's field behind a program that owns the keys"
       assert.is_false(cursor_drawn(s))
     end)
 
-  local function back(how)
-    K.reset({ ["main.lua"] = TAKES .. "function love.update() end\n" })
+  local function back(how, program)
+    K.reset({ ["main.lua"] = program
+      or TAKES .. "function love.update() end\n" })
     run("run()")
     K.cc.input:add_text("draftx")
     local _, draft = field_texts(K.screen())
@@ -90,16 +91,31 @@ describe("the console's field behind a program that owns the keys"
     end)
   end)
 
+  --- a program whose last way to act was that hook can do
+  --- nothing more (November 17)
   it("is back when the program drops its last hook", function()
     back(function()
       K.cc:get_project_env().compy.input.hooks.keypressed = nil
-    end)
+    end, TAKES)
   end)
 
-  it("stays as today behind a program that takes no keys",
+  --- turned around on November 17: a program that can act owns
+  --- all input, a pointer hook as much as a key hook
+  it("is hidden behind a program with only a pointer hook",
     function()
       K.reset({ ["main.lua"] = "compy.input.hooks.mousepressed = "
         .. "function() end\n" })
+      run("run()")
+      assert.is_true(K.cc.run_live)
+      K.cc.input:add_text("draftx")
+      local status, draft = field_texts(K.screen())
+      assert.is_true(status)
+      assert.is_false(draft)
+    end)
+
+  it("is back behind a finished program that can do nothing more",
+    function()
+      K.reset({ ["main.lua"] = "x = 1\n" })
       run("run()")
       assert.is_true(K.cc.run_live)
       K.type("draftx")
@@ -142,7 +158,8 @@ describe("continue() and the hook table #console", function()
       assert.is_nil(env.compy.input.hooks.keypressed)
       K.keys("x")
       assert.is_nil(env.got)
-      assert.is_false(K.cc.main_ctrl.program_owns_keys())
+      --- its update still acts: the input stays the program's
+      assert.is_true(K.cc.main_ctrl.program_owns_input())
       K.keys("lctrl", "q")
     end)
 end)

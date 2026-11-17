@@ -1096,10 +1096,15 @@ describe("the scrolled view at a transition #console", function()
     assert.is_false(output():is_scrolled(), what)
   end
 
+  --- a line typed behind a program that can act reaches no
+  --- console (November 17): the program prints the rows, and
+  --- the output's own Home scrolls them (ruling 1.1)
   it("a run started anew by Ctrl+R", function()
-    reset({ ["main.lua"] = RUNS })
+    reset({ ["main.lua"] = "for i = 1, 40 do print('L' .. i) end\n"
+      .. RUNS })
     K.start()
-    scrolled()
+    K.keys("home")
+    assert.is_true(output():is_scrolled())
     K.keys("lctrl", "r")
     at_rest("Ctrl+R")
   end)
@@ -1123,18 +1128,19 @@ describe("the scrolled view at a transition #console", function()
   end)
 
   it("a stop by Ctrl+Q", function()
-    reset({ ["main.lua"] = RUNS })
+    reset({ ["main.lua"] = "for i = 1, 40 do print('L' .. i) end\n"
+      .. RUNS })
     run("run()")
-    print_lines(1, 40)
     output():to_oldest()
+    assert.is_true(output():is_scrolled())
     K.keys("lctrl", "q")
     at_rest("Ctrl+Q")
   end)
 
   it("a pause and its end", function()
-    reset({ ["main.lua"] = RUNS })
+    reset({ ["main.lua"] = "for i = 1, 40 do print('L' .. i) end\n"
+      .. RUNS })
     run("run()")
-    print_lines(1, 40)
     output():to_oldest()
     K.keys("lctrl", "pause")
     K.frame()
@@ -1553,4 +1559,80 @@ describe("the scrollback and the console's notice #console",
         assert.is_false(output():is_scrolled())
         assert.equal("q", K.console_draft())
       end)
+  end)
+
+-- Ruling 1.1 of November 17, 2026: behind a program that owns
+-- the input, the output stays in use and takes its own keys and
+-- the wheel when the program leaves them ("the program that only
+-- prints into the text buffer, allows scrolling with both
+-- keyboard and mouse wheel"). What the program's chain takes,
+-- event by event, the output does not get.
+describe("the output behind a program that owns the input #console",
+  function()
+    before_each(function() reset() end)
+    after_each(cleanup)
+
+    local PRINTS = "for i = 1, 40 do print('L' .. i) end\n"
+    local RUNS = "function love.update() end\n"
+
+    local function wheel(y)
+      require("tests.helpers.input_fixture").session.wheelmoved(0, y)
+      K.frame()
+    end
+
+    it("scrolls with the wheel in the console", function()
+      print_lines(1, 40)
+      wheel(1)
+      assert.is_true(output():is_scrolled())
+      wheel(-5)
+      assert.is_false(output():is_scrolled())
+    end)
+
+    it("scrolls with the wheel behind a program that prints",
+      function()
+        reset({ ["main.lua"] = PRINTS .. RUNS })
+        run("run()")
+        assert.same("running", K.app_state())
+        wheel(1)
+        assert.is_true(output():is_scrolled())
+      end)
+
+    it("takes no other key of the console's behind it", function()
+      reset({ ["main.lua"] = PRINTS .. RUNS })
+      run("run()")
+      K.keys("lctrl", "l")
+      assert.truthy(K.console_text():find("L40", 1, true))
+      K.keys("x")
+      assert.same("", K.console_draft())
+    end)
+
+    it("gets only the wheel behind a program whose love.keypressed"
+      .. " takes every key", function()
+        reset({ ["main.lua"] = PRINTS
+          .. "function love.keypressed() end\n" .. RUNS })
+        run("run()")
+        K.keys("lctrl", "up")
+        assert.is_false(output():is_scrolled())
+        wheel(1)
+        assert.is_true(output():is_scrolled())
+      end)
+
+    it("gets a key a hook leaves, and not one it takes", function()
+      reset({ ["main.lua"] = PRINTS
+        .. "compy.input.hooks.keypressed = function(k)\n"
+        .. "  return k == 'pageup'\nend\n" .. RUNS })
+      run("run()")
+      K.keys("pageup")
+      assert.is_false(output():is_scrolled())
+      K.keys("lctrl", "up")
+      assert.is_true(output():is_scrolled())
+    end)
+
+    it("gets no wheel a program's own handler takes", function()
+      reset({ ["main.lua"] = PRINTS
+        .. "function love.wheelmoved() end\n" .. RUNS })
+      run("run()")
+      wheel(1)
+      assert.is_false(output():is_scrolled())
+    end)
   end)

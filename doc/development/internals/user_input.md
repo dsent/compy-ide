@@ -368,13 +368,13 @@ love.handlers.keypressed (k, scancode, isrepeat)
          SEEDED hook (one captured from the project's own
          love.*) consumes unconditionally, D-HOOKS-SEEDED's
          2026-09-08 amendment.
-           → nobody consumed: back to the console's own handler
-             for that channel, unless the project owns
-             love.draw (Controller._defaults[event], gated on
-             user_draw; the two derived clicks have no console
-             default and fall through to nothing), and, for a
-             key or text event, unless the program takes keys
-             (takes_keys: then it goes nowhere)
+           → nobody consumed: nowhere while the program can
+             act (can_act), but the output's scrolling keys and
+             the wheel, which scroll the console's output
+             (ruling 1.1); once it can act no more, the route
+             is released and the event is the console's
+             (Controller._defaults[event]; the two derived
+             clicks have no console default and go nowhere)
 ```
 
 **The last line is a repair, not a tier.** The walk is still three consumers; what changed is that

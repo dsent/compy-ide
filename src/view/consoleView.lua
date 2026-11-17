@@ -66,7 +66,7 @@ function ConsoleView:draw(terminal, canvas, snapshot)
       --- and its cursor are hidden, its status line stays (the
       --- maintainer's question of November 16, 2026, the lead's
       --- option B): the field takes no typing there
-      local hidden = self.controller.main_ctrl.program_owns_keys()
+      local hidden = self.controller.main_ctrl.program_owns_input()
       self.input.field_hidden = hidden
       self.input:draw()
       --- the notice band over the output's last rows, on

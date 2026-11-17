@@ -26,8 +26,9 @@ end
 --- pauses it
 local PROGRAMS = {
   ends = "y = 0\n",
-  --- a pointer hook: the program idles and leaves the keys to
-  --- the console (one that takes keys owns the keyboard)
+  --- a pointer hook: the program idles, and, able to act, owns
+  --- all input (November 17): the console takes a line behind it
+  --- only once Ctrl+Q has stopped it (to_console)
   idles = "compy.input.hooks.mousepressed = function() end\n",
   -- its handler goes from the project's love table as it
   -- fails, so that no later run in the file finds it there
@@ -37,6 +38,12 @@ local PROGRAMS = {
       .. "end\n",
 }
 local PROGRAM_KINDS = { "ends", "idles", "pauses" }
+
+--- Where a line can be typed after the run: a program that can
+--- still act owns the input, so Ctrl+Q stops it first
+local function to_console(kind)
+  if kind == "idles" then K.keys("lctrl", "q") end
+end
 
 --- Run the project from the editor with Ctrl+T; its program
 --- ends as `kind` says
@@ -284,6 +291,7 @@ describe("a run and a visit #editor #spec", function()
           K.keys("escape")
           K.browse_to(1)
           run_from_editor(kind)
+          to_console(kind)
           K.open()
           assert.same("editor", K.app_state())
           assert.same({ "main.lua" }, stack())
@@ -303,6 +311,7 @@ describe("a run and a visit #editor #spec", function()
         K.open()
         K.browse_to(1)
         run_from_editor(kind)
+        to_console(kind)
         K.open("other.lua")
         assert.same("editor", K.app_state())
         assert.same({ "other.lua" }, stack())

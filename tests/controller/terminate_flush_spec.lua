@@ -35,6 +35,17 @@ local function env()
   return K.cc:get_project_env()
 end
 
+--- Code run behind a live program, which owns the input, so no
+--- line can be typed there (November 17): run as the IDE's own
+--- call in the program's environment
+local function behind(code)
+  local f = assert(loadstring(code))
+  setfenv(f, K.cc:get_project_env())
+  local r = f()
+  K.frame(100)
+  return r
+end
+
 local RUNS = "g = 1\nfunction love.update() end\n"
 
 --- A source as LÖVE 11 keeps one, in memory: it plays, loops,
@@ -117,7 +128,7 @@ describe("the terminate flush #console", function()
 
   for _, case in ipairs({
     { "Ctrl+Q", function() K.keys("lctrl", "q") end },
-    { "stop()", function() run("stop()") end },
+    { "stop()", function() behind("stop()") end },
   }) do
     it("clears the program's globals at " .. case[1], function()
       reset({ ["main.lua"] = RUNS })
@@ -199,8 +210,8 @@ describe("the terminate flush #console", function()
       run("run()")
       local held = seen.sources[3]
       local held_plays = held.plays
-      run("shot:play()")
-      run("stop()")
+      behind("shot:play()")
+      behind("stop()")
       local shot = seen.sources[2]
       assert.is_true(shot:isPlaying())
       assert.is_false(held:isPlaying())
@@ -245,7 +256,7 @@ describe("the terminate flush #console", function()
         reset({ ["main.lua"] = "print('from the run')\n" .. RUNS })
         local seen = devices()
         run("run()")
-        run("reset()")
+        behind("reset()")
         assert.is_false(K.cc.run_live)
         assert.is_nil(env().g)
         assert.is_true(seen.stops >= 1)
@@ -255,8 +266,8 @@ describe("the terminate flush #console", function()
       reset({ ["main.lua"] = SOUNDS })
       local seen = devices()
       run("run()")
-      run("shot:play()")
-      run("reset()")
+      behind("shot:play()")
+      behind("reset()")
       for _, s in ipairs(seen.sources) do
         assert.is_false(s:isPlaying())
       end
@@ -265,7 +276,7 @@ describe("the terminate flush #console", function()
     it("empties the console", function()
         reset({ ["main.lua"] = "print('from the run')\n" .. RUNS })
         run("run()")
-        run("reset()")
+        behind("reset()")
         local text = K.console_text()
         assert.is_nil(text:find("from the run", 1, true), text)
         assert.same({ }, (function()

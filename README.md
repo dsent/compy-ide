@@ -93,8 +93,12 @@ when <kbd>Enter</kbd> begins its next line instead of running it.
 <kbd>Ctrl</kbd>+<kbd>L</kbd> empties the console: the
 screen, the kept rows and output still waiting to be written;
 `compy.terminal.clear()` from a program clears the screen alone.
-While a program's input field shows, or the program takes the
-keys itself, the scrolling keys are the program's.
+The mouse wheel scrolls the output too. While a program runs and
+can still act, all input is the program's and the console's
+field is hidden, but the output keeps its scrolling keys and the
+wheel for itself whenever the program does not take them; a
+program with its own `love.keypressed` takes every key, which
+leaves the wheel.
 
 Each combination is a key of its own: a key pressed with a modifier the
 table does not name does nothing. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> is not

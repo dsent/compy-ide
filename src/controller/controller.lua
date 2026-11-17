@@ -228,53 +228,26 @@ local function project_handlers(userlove, CC)
 end
 
 
---- An event the project's chain did not consume goes back to
---- the console, which is where it went before a project run
---- held every channel for its whole lifetime
---- (doc/development/internals/event_dispatch_layers.md,
---- "Layer 2 — `love.<event>`, the active route's handler").
---- Two guards, and both are the point rather than defence:
---- `user_draw` because a project painting over the console
---- would otherwise let the user type into a prompt they cannot
---- see, and the nil check because the two derived clicks have
---- no console default at all (`_defaults`, above).
---- `user_is_blocking()` cannot serve as the first guard: it
---- also answers true for a project that hooks only `update`,
---- which is exactly the class this serves.
---- @param event string
---- The keys whose press fell through to the console: the gate
---- records the console as their receiver, so that their repeats
---- and release go there and never to the program, which saw no
---- press of them (handlers.keypressed)
-local fell_through = { }
+--- The serial handlers a program may set, by field
+local SERIAL_FIELDS = { 'onConnect', 'onDisconnect', 'onBytes',
+  'onLine', 'onTick' }
 
-local function fall_through(event, ...)
-  if user_draw then return end
-  local console = Controller._defaults[event]
-  if not console then return end
-  if event == 'keypressed' then fell_through[(...)] = true end
-  return console(...)
-end
-
---- The key and text events, the keyboard's
-local KEYBOARD = { keypressed = true, keyreleased = true,
-  textinput = true }
-
---- Whether a live program takes keys, asked as each key or text
---- event comes, before its chain runs, since hooks and shortcuts
---- come and go: a key or text hook (its own love.keypressed,
---- keyreleased or textinput among them, seeded as hooks when its
---- run began: the hook table is the one record, round 19), a key
---- or text shortcut, or its own shown field. Such a program owns
---- the keyboard: what its chain leaves goes nowhere, not to the
---- console (the maintainer's ruling of November 16, 2026). An
---- empty shortcut table, and a hook or a shortcut for the
---- pointer or a touch, take no keys.
+--- Whether the program whose route holds the input can still
+--- act: an update or a draw, a hook or a non-empty shortcut
+--- table on any channel, its own shown field, or a serial
+--- handler. Such a program owns all input (the maintainer's
+--- ruling of November 17, 2026: "all input is the program's
+--- while it runs"); one that can do none of these has ended at
+--- its last line, and the input is the console's again. Asked
+--- as each event comes, since hooks and shortcuts come and go;
+--- the hook table is the one record (a program's own love.*
+--- handlers are seeded there when its run begins).
 --- @param compy_input table?
 --- @return boolean
-local function takes_keys(compy_input)
-  for event in pairs(KEYBOARD) do
-    if compy_input then
+local function can_act(compy_input)
+  if user_update or user_draw then return true end
+  if compy_input then
+    for _, event in ipairs(_bindable) do
       if compy_input.hooks[event] then return true end
       if next(compy_input.shortcuts[event] or { }) then
         return true
@@ -282,7 +255,15 @@ local function takes_keys(compy_input)
     end
   end
   local field = love.state.user_input_controller
-  return field ~= nil and field:is_shown() == true
+  if field ~= nil and field:is_shown() == true then return true end
+  local port = rawget(_G, 'SerialPort')
+  local serial = port and port.table_for and port:table_for('program')
+  if serial then
+    for _, f in ipairs(SERIAL_FIELDS) do
+      if serial[f] then return true end
+    end
+  end
+  return false
 end
 
 --- A key or a text that a running program takes brings the
@@ -313,15 +294,22 @@ end
 -- the console fork), so PIC is wired explicitly here. See
 -- doc/development/decisions/input.md #1 "route-centric routing"
 -- + #11 "route connects only while running". It installs even
--- with no project handlers: the walk decides, per event, and an
--- unconsumed one falls back to the console unless the project
--- owns the screen (fall_through, above). (`userlove` rename:
+-- with no project handlers: per event, a program that can act
+-- (can_act, above) owns it, and one that can act no more gives
+-- the route back to the console. (`userlove` rename:
 -- technical_debt.)
 --- Who has the keys now: 'console' (the console and the file
 --- editor), or the number of the program run whose route holds
 --- them; a pause and continue() keep the run's number, a new
 --- run takes the next (set_user_handlers)
 local route_owner, program_count = 'console', 0
+
+--- Whether a receiver the gate recorded is a program run's
+--- @param to any
+--- @return boolean
+local function to_program(to)
+  return type(to) == 'number'
+end
 --- Releases a paused program is owed, by its number: a key it
 --- got the press of and that was let go while it waited. They
 --- come at continue(), and go with the run otherwise.
@@ -341,24 +329,34 @@ local function occupy_input(userlove, CC, resume)
   -- `love.keypressed = pic.keypressed` would drop `self`.
   for _, k in ipairs(_bindable) do
     love[k] = with_canvas_and_errors(CC, function(...)
-      --- the program's as the event comes, not as its chain
-      --- leaves it: a hook that removes itself does not hand
-      --- that event on (round 19)
-      local owns = KEYBOARD[k] and takes_keys(pic.compy_input)
+      --- a program that can no longer act has ended at its last
+      --- line: the input is the console's again, this event
+      --- first (asked as the event comes, before any chain)
+      if not can_act(pic.compy_input) then
+        Controller.release_keyboard_route(CC)
+        local console = Controller._defaults[k]
+        if console then return console(...) end
+        return
+      end
       -- LÖVE discards a handler's return, so the
-      -- walk's verdict is spent here or not at all.
+      -- walk's verdict is spent here or not at all. What the
+      -- program's chain leaves goes nowhere: a program that can
+      -- act owns all input (November 17)
       if pic[k](pic, ...) then
         if takes_screen(k, ...) then CC.model.output:to_rest() end
         return
       end
-      --- an event whose handler asked to stop or replace the run
-      --- is that request's: the console does not get it before
-      --- the run ends (util.program_end)
+      --- the one exception, ruling 1.1: the output stays in use,
+      --- and takes its own scrolling keys and the wheel when
+      --- the program's chain left them
       if End.pending then return end
-      --- a program that takes keys owns the keyboard: no key,
-      --- repeat, release or text it leaves reaches the console
-      if owns then return end
-      return fall_through(k, ...)
+      if k == 'keypressed' then
+        local key, _, isr = ...
+        CC:output_key(key, isr)
+      elseif k == 'wheelmoved' then
+        local _, y = ...
+        CC:output_wheel(y)
+      end
     end)
   end
   route_owner = program_count
@@ -1359,17 +1357,17 @@ Controller = {
       -- love[name].) See doc/development/decisions/input.md #1
       -- "route-centric routing" + #11.
       local handled
-      fell_through[k] = nil
       if love.keypressed then
         handled = love.keypressed(k, sc, isr)
       end
-      --- a press the program's route left to the console is the
-      --- console's: its repeats and release go there. A repeat
-      --- changes no receiver (round 19)
-      if not isr and fell_through[k] and route_owner ~= 'console' then
+      --- a press during which the input went back to the console
+      --- (the program could no longer act) reached the console:
+      --- its repeats and release go there. A repeat changes no
+      --- receiver
+      if not isr and to_program(delivered[k])
+          and route_owner == 'console' then
         delivered[k] = 'console'
       end
-      fell_through[k] = nil
       -- a refusal at the gate holds back this key press alone
       -- (EditorController:refuse_to_leave), never a later one
       if CC.editor then CC.editor:gate_key_done() end
@@ -1595,14 +1593,21 @@ Controller = {
     return (love.state.user_input ~= nil) or user_pointer
   end,
 
-  --- A program's route holds the keys and the program takes
-  --- keys (takes_keys): it owns the keyboard, and the console's
+  --- A program's route holds the input and the program can
+  --- still act (can_act): it owns all input, and the console's
   --- field is hidden (ConsoleView:draw). False at a pause, a
-  --- stop, and once the program takes keys no more.
+  --- stop, and once the program can act no more.
+  --- @return boolean
+  program_owns_input = function()
+    if route_owner == 'console' then return false end
+    return can_act(Controller.project_input.compy_input)
+  end,
+
+  --- the name scrollback-writer's branch may still read, until
+  --- it is merged here
   --- @return boolean
   program_owns_keys = function()
-    if route_owner == 'console' then return false end
-    return takes_keys(Controller.project_input.compy_input)
+    return Controller.program_owns_input()
   end,
 
   --- @param userlove table

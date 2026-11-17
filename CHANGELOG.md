@@ -263,12 +263,14 @@ Project-author guide: `doc/input_api.md`.
   program is live; Ctrl+T from the editor runs `main.lua`. A file the project does not hold,
   or a folder, is refused, "There is no second.lua in this project.", before anything
   changes.
-- **A program that takes keys owns the keyboard.** While a program has its own key or text
-  handler, a key or text hook or shortcut, or its own field shown, no key or text it leaves
-  reaches the console's prompt: behind such a program that draws nothing, the prompt and its
-  cursor are hidden, the output and the status line staying, until the program stops, pauses
-  or takes keys no more. A program that wants typing shows its own field. Before, a key or text its hook did not take was typed into the console, as was a key
-  hook's text on a Compy.
+- **A program that can act owns all input.** While a program has an update or a draw, a
+  hook or a shortcut, its own field shown, or a serial handler, every key, text, mouse and
+  touch event is the program's, and what it does not take goes nowhere; the console's field
+  and cursor are hidden, the output and the status line staying. The output keeps its own
+  scrolling keys and the wheel when the program does not take them, so a program that only
+  prints can be scrolled. A program that can do nothing more, its picture staying or not,
+  gives the console back. Before, a key or text a program left was typed into the console.
+- **The mouse wheel scrolls the console's output**, three rows a notch.
 - **Ctrl+R restarts a live program only.** It restarts a program that runs, is paused or
   idles behind the console, from the file it runs from; in the console with no program, and
   in the editor, it does nothing: the idle console's key card lists it among the other keys,

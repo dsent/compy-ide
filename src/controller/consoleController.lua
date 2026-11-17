@@ -2868,6 +2868,44 @@ local SCROLLS = {
   scroll_row = true, scroll_page = true, scroll_end = true,
 }
 
+--- Rows a wheel's notch scrolls the output
+local WHEEL_ROWS = 3
+
+--- The output stays in use behind a program that owns the
+--- input (ruling 1.1 of November 17, 2026: "the scrollback
+--- area is visible so it takes keys and mouse events that
+--- normally belong to it, if the program doesn't take these
+--- keys and events"): a key the program's chain left that is
+--- one of the output's scrolling keys scrolls it. Home and End
+--- go to the oldest row and back to rest, the field being
+--- hidden. Nothing else of the console's keys acts.
+--- @param k string
+--- @param isrepeat boolean?
+--- @return boolean scrolled
+function ConsoleController:output_key(k, isrepeat)
+  local entry = ConsoleKeys:lookup('live', Key.combo(k))
+  if not (entry and SCROLLS[entry.act]) then return false end
+  if isrepeat and not entry.repeats then return true end
+  local out = self.model.output
+  if entry.act == 'scroll_end' then
+    if k == 'home' then out:to_oldest() else out:to_rest() end
+  else
+    ACTIONS[entry.act](self, k)
+  end
+  return true
+end
+
+--- The wheel scrolls the output, a notch WHEEL_ROWS rows, in
+--- the console and behind a program that left it (ruling 1.1)
+--- @param y number
+function ConsoleController:output_wheel(y)
+  if not y or y == 0 then return end
+  local dir = y > 0 and -1 or 1
+  for _ = 1, WHEEL_ROWS * math.abs(y) do
+    self.model.output:scroll_row(dir)
+  end
+end
+
 --- Every key but the ones that scroll brings the screen back
 --- before it does its work, so that no one types under an
 --- output whose newest row is hidden
@@ -3006,7 +3044,7 @@ function ConsoleController:wheelmoved(x, y)
       self.editor.input:wheelmoved(x, y)
     end
   elseif not self:key_card() then
-    self.input:wheelmoved(x, y)
+    self:output_wheel(y)
   end
 end
 

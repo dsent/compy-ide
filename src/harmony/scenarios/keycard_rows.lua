@@ -26,6 +26,11 @@ local OTHER = 'o = 1\n'
 --- a program behind the console: it hooks no key, so the
 --- console takes them
 local IDLES = 'n = 0\nfunction love.update() n = n + 1 end\n'
+--- a program that ends its code and stays live behind the
+--- console with its picture, able to do nothing more: the console
+--- keeps its keys and its card (a program that can act owns all
+--- input, November 17)
+local ENDS = 'n = 0\n'
 
 local function stored() return P.stored(PROJECT, FILE) end
 local function col()
@@ -411,9 +416,15 @@ local CONSOLE = {
     D.in_state('editor')
     D.leave(wait)
   end },
+  --- the program behind the console ends its code again, its
+  --- picture staying (ENDS)
   ['Ctrl+R'] = { 'run anew', function(wait)
     D.key(wait, 'escape')
-    runs(wait, 'C-r')
+    D.key(wait, 'C-r')
+    D.in_state('ready')
+    assert(P.cc().run_live, 'Ctrl+R did not run it anew')
+    D.key(wait, 'C-q')
+    D.in_state('ready')
   end },
   ['Ctrl+Up/Down'] = { 'scroll a row', function(wait)
     D.key(wait, 'escape')
@@ -496,7 +507,7 @@ end
 scenario('console', function(wait)
   wait(.1)
   D.enter(wait, string.format('project(%q)', PROJECT))
-  P.put(PROJECT, 'main.lua', IDLES)
+  P.put(PROJECT, 'main.lua', ENDS)
   D.key(wait, 'escape')
   console_rows(wait, false)
   console_rows(wait, true)
@@ -510,7 +521,7 @@ end)
 scenario('ctrl-q-held', function(wait)
   wait(.1)
   D.enter(wait, string.format('project(%q)', PROJECT))
-  P.put(PROJECT, 'main.lua', IDLES)
+  P.put(PROJECT, 'main.lua', ENDS)
   D.enter(wait, 'run_project()')
   wait(.1)
   assert(P.cc().run_live, 'no program behind the console')

@@ -409,27 +409,32 @@ describe('a program\'s canvas after it stops #canvas', function()
       assert.equal('typed', who())
     end)
 
-  it('the same line over a program with an update handler keeps'
-    .. ' what it drew', function()
+  --- turned around on November 17: a program that can act owns
+  --- the input, so the line reaches no console; the program runs
+  --- on with its picture
+  it('the same line over a program with an update reaches nothing',
+    function()
       F.run_project(function()
         draw('prog')
         F.cc:get_project_env().love.update = function() end
       end)
       assert.equal('running', love.state.app_state)
       submit_stop_and_draw()
+      assert.equal('running', love.state.app_state)
+      assert.equal('prog', who())
       F.cc:get_project_env().love.update = nil
-      assert.equal('ready', love.state.app_state)
-      assert.is_false(shown())
     end)
 
-  it('the same line over a run with a live handler keeps what'
-    .. ' it drew', function()
+  it('the same line over a run with a pointer handler reaches'
+    .. ' nothing', function()
       F.run_project(function()
         draw('prog')
         F.cc:get_project_env().love.mousepressed = function() end
       end)
       submit_stop_and_draw()
-      assert.is_false(shown())
+      assert.is_true(F.cc.run_live)
+      assert.equal('prog', who())
+      F.cc:get_project_env().love.mousepressed = nil
     end)
 
   it('console code run over a live program keeps what it draws'
