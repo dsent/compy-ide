@@ -171,8 +171,18 @@ end
 --- and what still waited to be written when it was pressed, so
 --- that none of it appears afterwards
 function CanvasModel:erase()
-  self.terminal:discard()
+  local t = self.terminal
+  t:discard()
   self:reset()
+  --- The clear is made at once, with the styles that waited:
+  --- left in the queue, it would find a grid that lost a row
+  --- meanwhile (field_drawn), whose roll had put a row of the
+  --- erased screen into the kept rows forgotten here.
+  local waits, budget = 0, t.accumulator
+  for _ in t:waiting() do waits = waits + 1 end
+  t.accumulator = 0
+  t:update((waits + 1) * t.char_cost / t.speed)
+  t.accumulator = budget
   self.kept:forget()
   self:to_rest()
 end

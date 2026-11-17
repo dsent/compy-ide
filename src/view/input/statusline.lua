@@ -253,8 +253,9 @@ function Statusline:draw(status, start_y)
       end
     else
       --- a status with no cursor names things alone: what runs
-      --- behind a hidden field
-      drawLeft()
+      --- behind a hidden field. A long name is cut, the state
+      --- kept whole, within the screen.
+      drawLeft(endTextX)
     end
   end
 

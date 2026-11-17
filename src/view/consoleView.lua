@@ -47,6 +47,8 @@ function ConsoleView:draw(terminal, canvas, snapshot)
   end
 
   local function drawConsole()
+    --- the output as high as this frame's screen leaves it
+    self.controller:fit_output()
     --- the key card over the output and the field alike,
     --- the status line beneath it (IS3.16)
     if self.controller:key_card() then

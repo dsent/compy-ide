@@ -93,7 +93,14 @@ started from and `running` (`ConsoleController:running_status`,
 pause, a stop, or when the program shows its own, the grid loses
 that row: text or the cursor on it rolls the grid up, as a line
 end on the last row does, and the top row goes to the kept rows;
-an empty row just goes (`Terminal:set_height`). The grid's canvas
+an empty row just goes (`Terminal:set_height`). The grid's height
+is set at each frame's step and again as the screen is drawn
+(`ConsoleController:fit_output`), so that a field a program's
+update shows or hides is over a grid of the right height in that
+very frame. The change acts on the grid at once, ahead of what
+still waits to be written; `CanvasModel:erase` (Ctrl+L, `reset()`)
+makes its clear at once for that reason, so that nothing it
+erased is on the grid for a roll to keep. The grid's canvas
 is made 17 rows high and drawn as many rows as the grid has. No
 call tells a program how many rows the grid has. When a row scrolls
 off its top, `terminal_roll_up` hands it, still whole, to
@@ -111,7 +118,8 @@ The console's text is one sequence: the kept rows, numbered from
 `kept.first` to `kept.last`, then the screen's rows down to the
 last that holds text. At rest the screen is drawn as it is. A
 scrolled view (`CanvasModel.view_top`, its first row's number) is
-a window of 16 consecutive rows of the sequence, drawn by
+a window of as many consecutive rows of the sequence as the grid
+has, drawn by
 `TerminalView` from the kept rows and the grid without changing
 either; a number names the same row while new rows arrive, so new
 output leaves the view where it is. `scroll_row`, `scroll_page`,
@@ -138,9 +146,11 @@ view where it is, as new output does. The screen comes back:
   leaves the keys to the console.
 
 Every one of these is a call of `CanvasModel:to_rest`. One
-consequence: a text program that takes every key leaves a
-scrolled view only by the mouse wheel, since its keys no longer
-bring the screen back and End is its own.
+consequence: behind a text program that takes every key, nothing
+a person presses brings a scrolled view back, since its keys no
+longer do and End is its own. The mouse wheel does not scroll the
+output behind a program in this code; the work on the input rule
+gives the output the wheel a program leaves.
 `CanvasView:draw_cues` draws the editor's continuation cue
 (`src/view/continuationCue.lua`) at a cut edge of a scrolled view.
 

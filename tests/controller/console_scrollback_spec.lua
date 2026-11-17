@@ -1511,6 +1511,71 @@ describe("the output's rows with no field under it #console",
       forget()
     end)
 
+    --- the grid is as high as the screen drawn shows it: a
+    --- program's update that shows or hides its field comes
+    --- after the frame's own step (review o1)
+    it("are 16 in the very frame whose update shows the "
+      .. "program's field, and 17 in the one that hides it",
+      function()
+        reset({ ["main.lua"] = "compy.input.hooks.keypressed = "
+          .. "function() return true end\n"
+          .. "function love.update()\n"
+          .. "  if want == 'show' then compy.input.show { } end\n"
+          .. "  if want == 'hide' then compy.input.hide() end\n"
+          .. "  want = nil\n"
+          .. "end\n" })
+        run("run()")
+        K.frame()
+        assert.equal(17, rows())
+        env().want = "show"
+        K.frame()
+        local s = K.screen()
+        assert.equal(16, rows(), "the frame that shows the field")
+        assert.equal(1, s.field_rows)
+        env().want = "hide"
+        K.frame()
+        s = K.screen()
+        assert.equal(17, rows(), "the frame that hides it")
+        assert.equal(0, s.field_rows)
+        forget()
+      end)
+
+    --- an erase is made at once: nothing it erased is on the grid
+    --- for the row's return to keep (review o1)
+    it("keep nothing of what reset() erased when the 17th row "
+      .. "goes", function()
+        owning()
+        for i = 1, 30 do output():push("old " .. i) end
+        K.frame(100)
+        assert.equal(17, output().terminal.cursor_y)
+        K.cc:reset()
+        K.frame()
+        K.frame(100)
+        assert.equal(16, rows())
+        for _, r in ipairs(kept()) do
+          assert.is_nil(r:find("old", 1, true), r)
+        end
+        for _, r in ipairs(screen()) do
+          assert.is_nil(r:find("old", 1, true), r)
+        end
+      end)
+
+    it("have a status line that fits the screen with a long "
+      .. "entry name, the name cut and \"running\" whole", function()
+        owning()
+        K.cc.entry = string.rep("e", 60) .. ".lua"
+        local s = K.screen()
+        local v = K.cc.cfg.view
+        local last = s.field[#s.field]
+        assert.equal("running", last.text)
+        assert.is_true(last.x + 7 * v.fw <= v.w, "running at "
+          .. last.x .. " of " .. v.w)
+        local name = s.field[#s.field - 1].text
+        assert.equal("…", name:sub(-#"…"))
+        K.cc.entry = nil
+        forget()
+      end)
+
     it("have the status line under them, naming the project, "
       .. "the entry point and that it runs, and nothing else",
       function()

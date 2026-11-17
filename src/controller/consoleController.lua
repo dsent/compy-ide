@@ -2040,8 +2040,7 @@ function ConsoleController:pass_time(dt)
     self.model.output:to_rest()
   end
   self.field_shown = field
-  --- with no field drawn under it the output has the field's row
-  self.model.output:field_drawn(not self:fieldless())
+  self:fit_output()
   --- the text cursor blinks on the frames' time
   Blink.pass_time(dt)
   self.model.output.terminal:update(dt)
@@ -2055,6 +2054,15 @@ function ConsoleController:fieldless()
   if not self.main_ctrl.program_owns_keys() then return false end
   local w = love.state.user_input_controller
   return not (w ~= nil and w:is_shown())
+end
+
+--- With no field drawn under it the output has the field's row.
+--- Asked at each frame's step and again as the screen is drawn
+--- (ConsoleView:draw): a program's update that shows or hides
+--- its field comes between the two, and the grid drawn is as
+--- high as the screen that frame shows.
+function ConsoleController:fit_output()
+  self.model.output:field_drawn(not self:fieldless())
 end
 
 --- What the status line says while no field is drawn: the
