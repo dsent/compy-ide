@@ -193,8 +193,12 @@ function UserInputModel:add_text(text)
     if text == '' then return end
     local single = string.ulen(text) == 1
     if self:has_selection() then
-      --- replacing a selection is a step of its own
-      self:_record_edit('replace', true)
+      --- typing over a selection is two steps: the selection's
+      --- removal, then the typing, a run of its own from its
+      --- first letter (the lead's ruling after the device run of
+      --- November 17, 2026)
+      self:delete_selection()
+      self:_record_edit(single and 'insert' or 'text', true)
     elseif single then
       --- a whitespace starts a new step, so undo eats
       --- word by word, not letter by letter
@@ -425,8 +429,10 @@ function UserInputModel:swap_lines(ln_that, ln_this)
 end
 
 function UserInputModel:line_feed()
+  --- over a selection, two steps as typing: the removal, then
+  --- the line break
+  self:delete_selection()
   self:_record_edit('newline', true)
-  self:pop_selected_text()
   local cl, cc = self:get_cursor_pos()
   local cur_line = self:get_text_line(cl)
   local pre, post = string.split_at(cur_line, cc)

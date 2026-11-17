@@ -172,8 +172,9 @@ Project-author guide: `doc/input_api.md`.
   Alt+Shift+Down move the cursor's line, in every field. Alt+Up and Alt+Down move a
   block in the file editor and do nothing elsewhere. A click places the cursor in every
   field, the file editor's included. Shift with a movement key, or a drag of the mouse,
-  selects a part of the draft; typing replaces it, Backspace or Delete removes it, as
-  one change Ctrl+Z takes back, and a click or a plain movement clears it. Beside a
+  selects a part of the draft; typing replaces it, Backspace or Delete removes it, and
+  Ctrl+Z takes back the typing and then the removal, the selection with it; a click or a
+  plain movement clears it. Beside a
   selection the cursor is a thin bar, so that the selected character it stands on stays
   seen. Nothing copies, cuts or pastes.
 - **Alt+F says why it refuses**, in a notice that blocks nothing: in a text or

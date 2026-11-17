@@ -48,7 +48,9 @@
   <kbd>Shift</kbd> with a movement key, or a drag of the mouse,
   selects a part of the draft: typing replaces it, and
   <kbd>Backspace</kbd> or <kbd>Delete</kbd> removes it, which
-  <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes back. Every other key keeps
+  <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes back; after typing, the
+  first <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes back what was typed
+  and the second brings the selection back. Every other key keeps
   its meaning: a plain arrow clears the selection and moves as
   it always does, and <kbd>Escape</kbd> drops the edit. Beside a
   selection the cursor is a thin bar at the left edge of its

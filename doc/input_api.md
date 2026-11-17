@@ -481,8 +481,10 @@ the ends of the cursor's row, Ctrl+Home and Ctrl+End to the ends of the text. A
 click places the cursor. Shift with any of these movement keys selects from where
 the selection began to where the cursor lands, and so does a drag of the mouse
 from a press in the field; a click or a plain movement clears the selection.
-Typing replaces the selected text, and Backspace, Delete, Ctrl+Backspace, Ctrl+W
-and Ctrl+K remove it, each as one change Ctrl+Z takes back with the selection.
+Backspace, Delete, Ctrl+Backspace, Ctrl+W and Ctrl+K remove the selected text,
+as one change Ctrl+Z takes back with the selection. Typing replaces it in two
+changes: the first Ctrl+Z takes back what was typed, the second the selection's
+removal.
 The widget has no clipboard: Ctrl+C, Ctrl+X, Ctrl+V, Ctrl+Insert and Shift+Insert
 change nothing in it. On a non-empty submission
 the order is:

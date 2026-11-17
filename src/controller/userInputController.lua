@@ -884,7 +884,32 @@ end
 --- @param presses number
 function UserInputController:mousereleased(
     x, y, btn, touch, presses)
-  if btn == 1 then self.drag_from = nil end
+  if btn ~= 1 then return end
+  --- the drag ends where the button comes up: a press, one
+  --- move and the release in one frame select as a slow drag
+  --- does (the device run's point E)
+  self:_drag_to(x, y)
+  self.drag_from = nil
+end
+
+--- @private
+--- Select from the drag's press to the point (x, y), while the
+--- text is as it was at the press and the point is in the
+--- field's rows
+--- @param x number
+--- @param y number
+function UserInputController:_drag_to(x, y)
+  local from = self.drag_from
+  if not from then return end
+  if from[3] ~= self.model.text_changes then
+    self.drag_from = nil
+    return
+  end
+  local l, c = self:_point(x, y)
+  if not l then return end
+  if l == from[1] and c == from[2] then return end
+  self.model:select_to(from[1], from[2], l, c)
+  self:update_view()
 end
 
 --- A drag from a press in the draft selects up to the point
@@ -895,19 +920,12 @@ end
 --- @param dy number
 --- @param touch boolean
 function UserInputController:mousemoved(x, y, dx, dy, touch)
-  local from = self.drag_from
-  if not from then return end
-  --- a release this field did not see ends the drag too, and
-  --- so does any change to the text since the press
-  if not love.mouse.isDown(1)
-      or from[3] ~= self.model.text_changes then
-    self.drag_from = nil
-    return
-  end
-  local l, c = self:_point(x, y)
-  if not l then return end
-  self.model:select_to(from[1], from[2], l, c)
-  self:update_view()
+  --- a move with the button up selects nothing: its release went
+  --- elsewhere, or it is on its way in this frame, and the
+  --- release then ends the drag where it is (point E); a change
+  --- to the text since the press ends the drag
+  if not love.mouse.isDown(1) then return end
+  self:_drag_to(x, y)
 end
 
 --- @param x integer
