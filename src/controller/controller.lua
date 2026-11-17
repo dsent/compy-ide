@@ -1711,10 +1711,25 @@ Controller = {
       enter()
       track_click_motion(x, y)
       if CC:card_shows() or picture_only() then return end
+      --- a button whose release was lost (a change of focus) holds
+      --- back nothing once it is up
+      for b in pairs(back_buttons) do
+        if not love.mouse.isDown(b) then back_buttons[b] = nil end
+      end
       if next(back_buttons) then return end
       if love.mousemoved then
         return love.mousemoved(x, y, dx, dy, touch)
       end
+    end
+
+    --- The window losing focus loses the releases still to come:
+    --- the buttons that went back hold back no move after it
+    --- @param f boolean
+    handlers.focus = function(f)
+      if not f then
+        for b in pairs(back_buttons) do back_buttons[b] = nil end
+      end
+      if love.focus then return love.focus(f) end
     end
 
     -- Wheel had no entry of compy's own until 2026-08-03. It
