@@ -2395,6 +2395,9 @@ local function with_picture_hint(text, visible)
       rows[#rows + 1] = row
     end
   end
+  --- a word wider than a row is cut by characters, as the band
+  --- cuts it (k2)
+  rows = string.wrap_array(rows, w)
   if #rows == 1
       and string.ulen(rows[1]) + 3 + string.ulen(hint) <= w then
     return rows[1] .. ' (' .. hint .. ')'

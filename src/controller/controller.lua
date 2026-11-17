@@ -1283,7 +1283,11 @@ Controller = {
     --- Playback has no console: a packaged program's picture is
     --- all there is (k1).
     local function picture_only()
+      --- between a pause's request and the pause (`snapshot`) the
+      --- screen keeps its mode, which the pause saves for
+      --- continue() (k2)
       return not playback
+          and love.state.app_state ~= 'snapshot'
           and screen ~= nil and screen:get() == 'picture'
           and love.state.app_state ~= 'editor'
           and not Controller.program_owns_input()
@@ -1338,13 +1342,28 @@ Controller = {
     -- release whatever is held by then, the card up or not).
     local owed = { }
     --- The text of a key that went back from the full picture
-    --- goes nowhere: while it is held, the next text event after
-    --- its press or one of its repeats is that key's, unless
-    --- another key is pressed first (k1: another key's text,
-    --- typed while it is held, goes on). Its release ends it, so
-    --- text with no key after it goes on.
-    --- @type string?
+    --- goes nowhere, by two rules that need no guess about which
+    --- comes first, a key or its text (k2): every text that comes
+    --- while the full picture shows is dropped, which is the key's
+    --- own text on a Compy, where it comes first; and after the
+    --- key's press a text is dropped only if it is the key's own
+    --- character, whatever its case, and comes before the key's
+    --- release and before any other key's press or repeat, which
+    --- is the desktop's order. Anything else is typed. A shifted
+    --- character other than a letter's (Shift+1's "!") slips
+    --- through on a desktop; a Compy never shows it.
+    --- @type string? --- the character a text is dropped for
     local swallow_for = nil
+
+    --- The character a key types on its own, nil when it has no
+    --- single one
+    --- @param k string
+    --- @return string?
+    local function own_char(k)
+      if k == 'space' then return ' ' end
+      if #k == 1 and k:match('%g') then return k end
+      return nil
+    end
     --- the buttons that went back from the full picture, from
     --- their press to their release: their moves go nowhere
     --- either, also into a program resumed meanwhile (k1)
@@ -1468,7 +1487,7 @@ Controller = {
         -- reaches a natural stop (reservedKeys.lua): a held
         -- Ctrl+T does not flip between the run and the editor
         if type(to) == 'table' then
-          if to.back then swallow_for = k end
+          if to.back then swallow_for = own_char(k) end
           if to.again then to.act() end
           return
         end
@@ -1486,7 +1505,7 @@ Controller = {
         -- its whole press, and a reserved chord acts as well
         -- (F12 is the cycle, whose next mode is text)
         screen:back()
-        swallow_for = k
+        swallow_for = own_char(k)
         hold_press('key', k,
           { act = reservation, again = REPEATS[chord], back = true })
         if not reservation then return end
@@ -1542,11 +1561,8 @@ Controller = {
       Blink.restart()
       if not love.textinput then return end
       if CC:card_shows() then return end
-      if swallow_for then
-        swallow_for = nil
-        return
-      end
       if picture_only() then return end
+      if swallow_for and t:lower() == swallow_for then return end
       if Key.chord_text(t) then
         if RESERVED.keypressed[combo_string(t)] then return end
         local console = Controller._defaults.textinput
@@ -1560,7 +1576,9 @@ Controller = {
       -- here, whichever route has the keys: the help key's
       -- release ends its card wherever its press went
       CC:key_released(k)
-      if swallow_for == k then swallow_for = nil end
+      if swallow_for and swallow_for == own_char(k) then
+        swallow_for = nil
+      end
       local reservation = owed[k]
       owed[k] = nil
       if reservation then reservation() end

@@ -370,6 +370,74 @@ describe("the screen modes' keys #canvas", function()
         assert.same("b", K.console_draft())
       end)
 
+    --- k2's first finding: both orders a key and its text come in
+    local h = function() return love.handlers end
+    it("drops the back key's text and types another key's, its text"
+      .. " first, as a Compy sends it", function()
+        picture()
+        h().textinput("a")
+        F.session.press("a")
+        assert.same("text", mode())
+        h().textinput("b")
+        F.session.press("b")
+        F.session.release("b")
+        F.session.release("a")
+        assert.same("b", K.console_draft())
+      end)
+
+    it("drops the back key's text and types another key's, its"
+      .. " press first, as a desktop sends it", function()
+        picture()
+        F.session.press("a")
+        h().textinput("a")
+        F.session.press("b")
+        h().textinput("b")
+        F.session.release("b")
+        F.session.release("a")
+        assert.same("b", K.console_draft())
+      end)
+
+    it("drops the back key's text in either case, and its repeats'",
+      function()
+        picture()
+        F.session.press("lshift")
+        F.session.press("a")
+        h().textinput("A")
+        F.session.repeat_press("a")
+        h().textinput("A")
+        F.session.release("a")
+        F.session.release("lshift")
+        assert.same("", K.console_draft())
+      end)
+
+    it("types the back key's character once that key is up",
+      function()
+        picture()
+        F.session.press("a")
+        F.session.release("a")
+        h().textinput("a")
+        assert.same("a", K.console_draft())
+      end)
+
+    --- k2's third finding: the frame between a pause's request
+    --- and the pause keeps the mode, which the pause saves for
+    --- continue(). The frame is set by hand: a program that can
+    --- act no more while its pause waits ends at the next event
+    --- (its natural end), so no program holds it open here.
+    it("leaves the picture alone between a pause's request and the"
+      .. " pause", function()
+        picture()
+        love.state.app_state = "snapshot"
+        finally(function() love.state.app_state = "ready" end)
+        F.session.press("z")
+        F.session.release("z")
+        F.session.mousepressed(10, 10, 1, false, 1)
+        F.session.mousereleased(10, 10, 1, false, 1)
+        love.handlers.touchpressed("t1", 10, 10, 0, 0, 1)
+        love.handlers.touchreleased("t1", 10, 10, 0, 0, 1)
+        assert.same("picture", mode())
+      end)
+
     --- text with no key of its own (a paste, a method of
     --- input) after the key that went back is up goes on
     it("lets text with no key through once the back key is up",
@@ -547,6 +615,8 @@ describe("the screen modes' keys #canvas", function()
     for name, text in pairs({
       ["three lines"] = "one\\ntwo\\nthree",
       ["a text three rows wide"] = string.rep("word ", 40),
+      --- k2's second finding
+      ["a word wider than the band"] = string.rep("wordx", 40),
     }) do
       it("keeps the hint in sight after " .. name, function()
         K.reset({ ["main.lua"] = DRAWS_ONCE

@@ -858,17 +858,9 @@ as it did under plain LÖVE ("How events reach your project").
 ### Combos the framework keeps
 
 A few combinations belong to the platform. They are answered before your
-project's route exists, so **a project cannot override one by naming it** — but the
-platform does not swallow the key either: **your binding still runs**, and the
-platform's action happens as well.
-
-That combination is worth reading twice, because it is the opposite of how your
-own shortcuts behave. Yours consume by returning truthy. A reserved combo never
-consumes; it acts *and* passes the key on.
-
-The practical consequence is only visible for the ones that end a run: your
-handler runs, and then the project is stopped anyway. Nothing suppressed you —
-the route you were bound to was taken down underneath you.
+project's route exists, so **a project cannot override one by naming it**, and
+the platform keeps the key for its whole press: your handlers, hooks and
+shortcuts see neither its press, its repeats nor its release.
 
 **A reservation is its modifier set exactly.** It does not extend to chords it
 does not name, so `ctrl+shift+escape` is yours to bind even though `ctrl+escape`
