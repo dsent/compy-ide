@@ -1,11 +1,11 @@
 -- tpbot.lua: the micro:bit firmware for the Compy's robot lessons. It is
 -- the start-up script of the firmware the Compy ships (3166307), prompt
 -- and radio link included, with the lessons' words added near its end:
--- robot_move(left, right, seconds), robot_light(r, g, b),
--- robot_distance(), robot_turn(hours) and robot_straight(steps).
--- upload("tpbot.lua") puts it on the board, which then runs it at every
--- start. It belongs to that firmware: when the Compy ships another, this
--- file is made again from that firmware's script.
+-- bot.move(left, right, seconds), bot.light(r, g, b), bot.distance(),
+-- bot.turn(hours) and bot.straight(steps). upload("tpbot.lua") puts it on
+-- the board, which then runs it at every start. It belongs to that
+-- firmware: when the Compy ships another, this file is made again from that
+-- firmware's script.
 
 local uBit = require("microbit")
 require("microbit.accelerometer")
@@ -562,11 +562,11 @@ function connect(name, timeout, tries)
 end
 
 -- The robot lessons' words, as the Compy's robot chapter teaches them, over
--- each TPBot's own commands: robot_move(left, right, seconds),
--- robot_light(r, g, b), robot_distance(), robot_turn(hours) and
--- robot_straight(steps). They add to the firmware's modules and replace
--- none: tpbot, tpbot2 and robot stay as the firmware gives them, and
--- tpbot.info() says which robot answers. Each word asks which robot
+-- each TPBot's own commands, in a table of their own, bot:
+-- bot.move(left, right, seconds), bot.light(r, g, b), bot.distance(),
+-- bot.turn(hours) and bot.straight(steps). They add to the firmware's
+-- modules and replace none: tpbot, tpbot2 and robot stay as the firmware
+-- gives them, and tpbot.info() says which robot answers. Each word asks which robot
 -- answers, so a robot changed or switched off between two words is met as
 -- it is; a switched-off TPBot Edu holds the bus, and the asking then takes
 -- about 5 s before the word says the robot does not answer.
@@ -577,6 +577,7 @@ do
   local NO_ROBOT = "The robot does not answer. Check that it is "
       .. "switched on, or switch it off and on again."
   local MAX_SECONDS = 3600
+  bot = {}
 
   -- The module that drives the robot that answers, tpbot for a TPBot
   -- Classic and tpbot2 for a TPBot Edu, and its name
@@ -591,11 +592,11 @@ do
 
   -- The motors never start without the stop after them, and the stop goes
   -- out even when the start or the wait failed, a Ctrl+C included
-  function robot_move(left, right, seconds)
+  function bot.move(left, right, seconds)
     if type(seconds) ~= "number"
         or not (seconds >= 0 and seconds <= MAX_SECONDS) then
-      error("robot_move needs how many seconds to drive, from 0 to "
-            .. MAX_SECONDS .. ", such as robot_move(50, 50, 1).", 0)
+      error("bot.move needs how many seconds to drive, from 0 to "
+            .. MAX_SECONDS .. ", such as bot.move(50, 50, 1).", 0)
     end
     local bot = robot()
     local ok, err = pcall(bot.set_motors_speed, left, right)
@@ -608,14 +609,14 @@ do
   end
 
   -- The headlights of whichever robot answers
-  function robot_light(r, g, b)
+  function bot.light(r, g, b)
     local bot = robot()
     return bot.set_car_light(r, g, b)
   end
 
   -- The sonar, which both robots have on the same pins: millimeters to the
   -- nearest obstacle, or nil when nothing is within about 4 m
-  function robot_distance()
+  function bot.distance()
     return classic.get_distance()
   end
 
@@ -626,7 +627,7 @@ do
     local bot, name = robot()
     if name ~= "TPBot Edu" then
       error(word .. " needs a TPBot Edu, which measures its moves; "
-            .. "this robot drives with robot_move.", 0)
+            .. "this robot drives with bot.move.", 0)
     end
     bot[command](amount)
     local ok, err = pcall(function()
@@ -638,22 +639,22 @@ do
     end
   end
 
-  -- robot_turn(h): h hours on a clock face, 30 degrees each, the shorter
-  -- way round; a positive angle turns the Edu left, so 3 hours, to the
-  -- right, is -90
-  function robot_turn(hours)
+  -- bot.turn(h): h hours on a clock face, 30 degrees each, the shorter way
+  -- round; a positive angle turns the Edu left, so 3 hours, to the right,
+  -- is -90
+  function bot.turn(hours)
     local h = hours % 12
     if h > 6 then h = h - 12 end
     local degrees = -30 * h
     if math.abs(degrees) < 5 then return end
-    edu_move("robot_turn", "turn", degrees)
+    edu_move("bot.turn", "turn", degrees)
   end
 
-  -- robot_straight(l): l steps of 14.5 cm, backward for a negative l
-  function robot_straight(steps)
+  -- bot.straight(l): l steps of 14.5 cm, backward for a negative l
+  function bot.straight(steps)
     local mm = 145 * steps
     if math.abs(mm) < 10 then return end
-    edu_move("robot_straight", "run_distance", mm)
+    edu_move("bot.straight", "run_distance", mm)
   end
 end
 
