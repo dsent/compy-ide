@@ -213,6 +213,40 @@ describe("the screen modes' keys #canvas", function()
       assert.same("picture", mode())
     end
 
+    --- f1: a key held from before the picture repeats into
+    --- nothing while the picture hides the console's draft
+    it("lets no held key repeat into the hidden draft", function()
+      K.reset()
+      local f = K.cc.input
+      f:set_text({ "abcdef" })
+      f:set_cursor_pos(1, 7)
+      K.hold("backspace")
+      assert.same("abcde", K.console_draft())
+      K.keys("f12")
+      K.keys("f12")
+      assert.same("picture", mode())
+      K.repeat_key("backspace")
+      assert.same("abcde", K.console_draft())
+      K.release("backspace")
+    end)
+
+    it("lets no held Shift+Right select the hidden draft",
+      function()
+        K.reset()
+        local f = K.cc.input
+        f:set_text({ "abcdef" })
+        f:set_cursor_pos(1, 2)
+        K.hold("right")
+        K.keys("f12")
+        K.keys("f12")
+        assert.same("picture", mode())
+        K.hold("lshift")
+        K.repeat_key("right")
+        assert.is_false(f.model:has_selection())
+        K.release("lshift")
+        K.release("right")
+      end)
+
     it("goes back with a key, which types nothing", function()
       picture()
       K.type("a")
@@ -516,6 +550,15 @@ describe("the screen modes' keys #canvas", function()
       it("lets the moves through after the window loses focus",
         function()
           love.handlers.focus(false)
+          F.session.mousemoved(20, 10, 10, 0, false)
+          assert.same(1, got)
+        end)
+
+      --- f1: a tap, with no move between its lost release and the
+      --- next press, finds the button down again
+      it("lets the moves of a new press of that button through",
+        function()
+          F.session.mousepressed(10, 10, 1, false, 1)
           F.session.mousemoved(20, 10, 10, 0, false)
           assert.same(1, got)
         end)

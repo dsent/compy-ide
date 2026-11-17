@@ -1543,6 +1543,10 @@ Controller = {
           if to.again then to.act() end
           return
         end
+        --- a repeat goes on only while its receiver can be seen
+        --- acting: the console's draft is hidden behind the full
+        --- picture, which no text reaches either (f1)
+        if to == 'console' and picture_only() then return end
         if CC.editor then CC.editor:key_begins() end
         local _, handled = follow('key', k, 'keypressed', false,
           k, sc, isr)
@@ -1681,6 +1685,9 @@ Controller = {
         back_buttons[btn] = true
         return
       end
+      --- a new press of a button that went back: its release
+      --- was lost, and it holds back no move of this press (f1)
+      back_buttons[btn] = nil
       if btn == 1 then
         press_pos, press_dragged = { x = x, y = y }, false
       end
