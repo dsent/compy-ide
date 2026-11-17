@@ -3099,7 +3099,10 @@ function ConsoleController:touchreleased(id, x, y,
       self.editor.input:touchreleased(id, x, y,
         dx, dy, pressure)
     end
-  elseif not self:key_card() then
+  else
+    --- a release goes where its touch began: the gate drops the
+    --- release of one the card held back, and hands this one the
+    --- release of one begun before the card (p2)
     self.input:touchreleased(id, x, y, dx, dy, pressure)
   end
 end

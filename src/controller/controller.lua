@@ -1447,8 +1447,21 @@ Controller = {
     -- press that went through gets its release under the
     -- card, so that no route is left with half a click.
     -- Touches follow the same rule, paired by the touch's id.
-    local held_press = { }
-    local held_touch = { }
+    -- Each records its press's receiver, as the keys do: false
+    -- for one the card held back, else the route in force; a
+    -- release goes on only to that receiver, still in force
+    -- (p2: a button the program got the press of, released while
+    -- the console has the pointer, reaches neither).
+    local press_to = { }
+    local touch_to = { }
+
+    --- whether a release recorded as `to` goes on now
+    --- @param to any
+    --- @return boolean
+    local function release_goes(to)
+      if to == false then return false end
+      return to == nil or to == route_owner
+    end
 
     -- The gateway entry: hand the event to whoever occupies
     -- the slot. Under a project run that is the project
@@ -1456,10 +1469,10 @@ Controller = {
     handlers.mousepressed = function(x, y, btn, touch, presses)
       Blink.restart()
       if CC:card_shows() then
-        held_press[btn] = true
+        press_to[btn] = false
         return
       end
-      held_press[btn] = nil
+      press_to[btn] = route_owner
       if btn == 1 then
         press_pos, press_dragged = { x = x, y = y }, false
       end
@@ -1474,10 +1487,9 @@ Controller = {
     --- @param touch boolean
     --- @param presses number
     handlers.mousereleased = function(x, y, btn, touch, presses)
-      if held_press[btn] then
-        held_press[btn] = nil
-        return
-      end
+      local to = press_to[btn]
+      press_to[btn] = nil
+      if not release_goes(to) then return end
       local result
       if love.mousereleased then
         result = love.mousereleased(x, y, btn, touch, presses)
@@ -1535,10 +1547,10 @@ Controller = {
     --- @param pressure number?
     handlers.touchpressed = function(id, x, y, dx, dy, pressure)
       if CC:card_shows() then
-        held_touch[id] = true
+        touch_to[id] = false
         return
       end
-      held_touch[id] = nil
+      touch_to[id] = route_owner
       if love.touchpressed then
         return love.touchpressed(id, x, y, dx, dy, pressure)
       end
@@ -1551,10 +1563,9 @@ Controller = {
     --- @param dy number?
     --- @param pressure number?
     handlers.touchreleased = function(id, x, y, dx, dy, pressure)
-      if held_touch[id] then
-        held_touch[id] = nil
-        return
-      end
+      local to = touch_to[id]
+      touch_to[id] = nil
+      if not release_goes(to) then return end
       if love.touchreleased then
         return love.touchreleased(id, x, y, dx, dy, pressure)
       end
@@ -1568,7 +1579,9 @@ Controller = {
     --- @param pressure number?
     handlers.touchmoved = function(id, x, y, dx, dy, pressure)
       --- a touch begun under the card moves nothing after it
-      if held_touch[id] or CC:card_shows() then return end
+      if not release_goes(touch_to[id]) or CC:card_shows() then
+        return
+      end
       if love.touchmoved then
         return love.touchmoved(id, x, y, dx, dy, pressure)
       end

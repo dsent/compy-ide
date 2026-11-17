@@ -214,6 +214,27 @@ describe("the mouse under the key card #input", function()
       assert.same({ }, touches())
     end)
 
+    --- p2: a release goes only to the receiver of its touch's
+    --- start, the console's own field included
+    it("gives the console's field the release of a touch begun"
+      .. " before the card", function()
+        K.reset()
+        local ends = 0
+        local field = K.cc.input
+        local was = field.touchreleased
+        field.touchreleased = function(...)
+          ends = ends + 1
+          return was(...)
+        end
+        finally(function() field.touchreleased = was end)
+        touch("t1", "press")
+        K.hold("f1")
+        assert.is_not_nil(K.key_card())
+        touch("t1", "release")
+        K.release("f1")
+        assert.same(1, ends)
+      end)
+
     it("reaches not the console's field under its card", function()
       K.reset()
       local count = counting(K.cc.input)
@@ -285,6 +306,28 @@ describe("the mouse under the key card #input", function()
       assert.same({ }, seen)
       assert.same({ }, log())
     end)
+
+    --- p2: a release goes only to the receiver of its press: a
+    --- button the program got the press of, released while the
+    --- console has the pointer, reaches neither
+    it("a press the program got gives the console no release",
+      function()
+        K.reset({ ["main.lua"] = IDLES .. "function love.update() end\n" })
+        K.start()
+        local x, y = on_field(1)
+        F.session.mousepressed(x, y, 1, false, 1)
+        assert.same({ "mousepressed" }, log())
+        K.keys("lctrl", "pause")
+        K.frame()
+        if K.app_state() == "snapshot" then K.cc:suspend() end
+        assert.same("inspect", K.app_state())
+        local seen = console_mouse()
+        K.hold("f1")
+        F.session.mousereleased(x, y, 1, false, 1)
+        K.release("f1")
+        assert.same({ }, seen)
+        assert.same({ "mousepressed" }, log())
+      end)
 
     it("a press before the card gets its release under it, at"
         .. " the console, not the paused program", function()
