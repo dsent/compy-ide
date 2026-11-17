@@ -340,6 +340,70 @@ describe("selection in the draft #input", function()
       assert.same({ 1, 2 }, cursor(f))
     end)
 
+    --- the probe of the review's round s4 limit: in a program's
+    --- field the program's own hooks take the field's release and
+    --- a later press; a release in a later frame at the cell the
+    --- pointer passed with the button up selects nothing
+    it("a program's field selects nothing from a release in a later"
+      .. " frame than its move with the button up", function()
+        K.reset()
+        local input = F.activate_project()
+        local w = F.show_widget({ text = "" })
+        w:set_text({ "abcdef" })
+        local x, y = at(w, 0, 2)
+        local x2 = at(w, 0, 5)
+        local takes = 0
+        input.hooks.mousereleased = function()
+          takes = takes + 1
+          return takes == 1
+        end
+        input.hooks.mousepressed = function(_, py) return py < 50 end
+        F.set_mouse_down(true)
+        F.session.mousepressed(x, y, 1, false, 1)
+        F.set_mouse_down(false)
+        F.session.mousereleased(x, y, 1, false, 1)
+        F.session.mousemoved(x2, y, x2 - x, 0, false)
+        K.frame()
+        F.set_mouse_down(true)
+        F.session.mousepressed(x2, 10, 1, false, 1)
+        F.set_mouse_down(false)
+        F.session.mousereleased(x2, y, 1, false, 1)
+        assert.is_nil(selected(w))
+      end)
+
+    --- review s5: the field saw the button up in an earlier frame
+    --- (its release went to the program's hook); a later quick
+    --- drag of one motion, its press taken by the program too,
+    --- does not finish the old drag
+    it("a program's field drops a drag whose button it saw up in an"
+      .. " earlier frame", function()
+        K.reset()
+        local input = F.activate_project()
+        local w = F.show_widget({ text = "" })
+        w:set_text({ "abcdef" })
+        local x, y = at(w, 0, 2)
+        local x2 = at(w, 0, 5)
+        local field_top = y - w.model.cfg.view.fh / 2
+        local canvas_y = y - w.model.cfg.view.fh
+        input.hooks.mousepressed = function(_, py) return py < field_top end
+        input.hooks.mousereleased = function(_, py)
+          return py < field_top
+        end
+        F.set_mouse_down(true)
+        F.session.mousepressed(x, y, 1, false, 1)
+        F.session.mousemoved(x, canvas_y, 0, canvas_y - y, false)
+        K.frame()
+        F.set_mouse_down(false)
+        F.session.mousereleased(x, canvas_y, 1, false, 1)
+        F.session.mousemoved(x, y, 0, y - canvas_y, false)
+        assert.is_nil(selected(w))
+        K.frame()
+        F.session.mousepressed(x2, canvas_y, 1, false, 1)
+        F.session.mousemoved(x2, y, 0, y - canvas_y, false)
+        F.session.mousereleased(x2, y, 1, false, 1)
+        assert.is_nil(selected(w))
+      end)
+
     in_every_field("a click in one frame places the cursor and "
         .. "selects nothing", function(owner)
       local f = field_of(owner, { "hello world" }, 1, 12)

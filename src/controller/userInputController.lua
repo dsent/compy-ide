@@ -888,12 +888,15 @@ function UserInputController:mousereleased(
   local from = self.drag_from
   self.drag_from = nil
   --- a move with the button already up in this frame (point E):
-  --- the release, where that move went, selects to it. A release
-  --- elsewhere than the last move, or with no move seen (under
-  --- the key card the moves are held back), changes nothing.
+  --- the release, where that move went, selects to it, in that
+  --- frame only (a later release is of a press this field did
+  --- not see). A release elsewhere than the last move, or with no
+  --- move seen (under the key card the moves are held back),
+  --- changes nothing.
   if not from or from[3] ~= self.model.text_changes then return end
   local last = from.last
   if not last then return end
+  if from.up and from.up ~= (love.state.frame or 0) then return end
   local l, c = self:_point(x, y)
   if l ~= last[1] or c ~= last[2] then return end
   self.model:select_to(from[1], from[2], l, c)
@@ -904,8 +907,8 @@ end
 --- it has reached, while that point is in the field's rows; a
 --- point back on the press selects nothing. With the button up
 --- a move only marks where it went, for a release in the same
---- frame; the button seen up and then down again is a press
---- this field did not see, and ends the drag (review s4).
+--- frame; after that frame, or with the button down again, the
+--- drag is over (reviews s4 and s5).
 --- @param x number
 --- @param y number
 --- @param dx number
@@ -920,12 +923,17 @@ function UserInputController:mousemoved(x, y, dx, dy, touch)
     return
   end
   local down = love.mouse.isDown(1)
-  if down and from.up then
+  local frame = love.state.frame or 0
+  --- the button seen up lasts for its frame alone, the one where
+  --- a press, one move and the release come together (point E):
+  --- seen up in an earlier frame, or down again since, the
+  --- drag's release went unseen and the drag is over (s4, s5)
+  if from.up and (down or from.up ~= frame) then
     self.drag_from = nil
     return
   end
   local l, c = self:_point(x, y)
-  if not down then from.up = true end
+  if not down then from.up = frame end
   if not l then
     from.last = nil
     return
