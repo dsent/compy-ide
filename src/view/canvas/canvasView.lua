@@ -75,9 +75,12 @@ function CanvasView:draw(
   if not test then
     local pictured = mode == 'combined' or mode == 'picture'
     if pictured and ViewUtils.conditional_draw('show_canvas') then
+      --- the ground opaque, as a screen shows a translucent
+      --- clear colour, so it counts once wherever it was set
+      --- (round c4)
       local ground = output and output:get_background()
           or { 0, 0, 0, 1 }
-      gfx.setColor(ground)
+      gfx.setColor(ground[1], ground[2], ground[3], 1)
       gfx.rectangle('fill', 0, 0, cfg.w, cfg.h)
       gfx.setColor(1, 1, 1, 1)
       --- what was drawn on the canvas carries its alpha in its

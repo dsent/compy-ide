@@ -152,6 +152,27 @@ describe('the screen modes #canvas', function()
       assert.equal('picture', mode())
     end)
 
+  --- c4's first finding: a program's handler that continue()
+  --- runs (a key's owed release) is the program's drawing, though
+  --- a typed line called continue()
+  it('shows the picture when a release owed at continue() draws',
+    function()
+      F.run_project(function()
+        local env = F.cc:get_project_env()
+        env.love.keyreleased = function() draw() end
+        env.love.update = function() end
+      end)
+      F.session.press('x')
+      F.cc:suspend_run('paused')
+      F.love_update(0.1)
+      assert.equal('inspect', love.state.app_state)
+      F.session.release('x')
+      submit('continue()')
+      F.cc:get_project_env().love.keyreleased = nil
+      F.cc:get_project_env().love.update = nil
+      assert.equal('picture', mode())
+    end)
+
   for name, stop in pairs({
     ['Ctrl+Q'] = function() press({ 'lctrl', 'q' }) end,
     ['stop()'] = function() F.cc:get_project_env().stop() end,
@@ -326,6 +347,26 @@ describe('the screen modes #canvas', function()
         assert.same({ 'alpha', 'premultiplied' }, at_draw.text)
         assert.same({ .5, .5, .5, .5 }, at_draw.color)
       end)
+
+    --- c4's second finding: the ground under the picture is
+    --- opaque, as a screen shows a translucent clear colour, so a
+    --- translucent ground counts once wherever it was set
+    it('lays the picture on its ground opaque', function()
+      local saved_color, saved_rect = gfx.setColor, gfx.rectangle
+      local color, ground
+      gfx.setColor = function(r, g, b, a)
+        color = type(r) == 'table' and r or { r, g, b, a }
+      end
+      gfx.rectangle = function() ground = ground or color end
+      finally(function()
+        gfx.setColor, gfx.rectangle = saved_color, saved_rect
+      end)
+      F.cc.model.output:keep_background(1, 0, 0, .5)
+      F.cc.model.output.canvas = { }
+      draw_screen('picture')
+      assert.same({ 1, 0, 0, 1 },
+        { ground[1], ground[2], ground[3], ground[4] or 1 })
+    end)
 
     it('picture: the picture alone', function()
       F.cc.model.output.canvas = { }

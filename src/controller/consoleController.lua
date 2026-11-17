@@ -3357,7 +3357,9 @@ end
 --- common case returns at once.
 function ConsoleController:drew()
   local output, screen = self.model.output, self.model.screen
-  if self.typing then
+  --- the typed line's own code, not a program's handler it ran
+  --- (an owed release at continue(): round c4)
+  if self.typing and End.user <= self.typing then
     output.drawn = true
     screen:typed_drew()
     return
