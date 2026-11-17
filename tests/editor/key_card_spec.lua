@@ -38,6 +38,21 @@ describe("the key card #editor", function()
     assert.same("file start/end", now["Home/End"])
   end)
 
+  -- the maintainer's ruling of November 17, 2026: Ctrl+PgUp and
+  -- Ctrl+PgDn are the file's start and end in every state, the
+  -- draft kept; Home and End only with an empty field
+  it("lists Ctrl+PgUp/PgDn, the file's start and end, among the"
+      .. " keys now in every state", function()
+    for _, st in ipairs({ "browsing", "inserting", "replacing" })
+    do
+      for _, empty in ipairs({ true, false }) do
+        local now = group(st, empty)
+        assert.same("file start/end", now["Ctrl+PgUp/PgDn"],
+          st .. " " .. tostring(empty))
+      end
+    end
+  end)
+
   -- trivial keys are bound but not on the card (the
   -- maintainer's ruling of November 14, 2026)
   it("leaves the trivial keys off", function()
@@ -138,7 +153,7 @@ describe("the key card #editor", function()
     -- the editor's own keys, the field's, and the reserved
     -- chords that act in the editor; in a draft without Up/Down
     -- and Home/End, which move its cursor there
-    local COUNT = { browsing = 26, inserting = 24, replacing = 24 }
+    local COUNT = { browsing = 27, inserting = 25, replacing = 25 }
     for _, state in ipairs({
       "browsing", "inserting", "replacing"
     }) do
@@ -228,7 +243,7 @@ describe("the key card #editor", function()
 
   it("takes one column where two do not fit", function()
     local lines = KeyCard.lines("browsing", true, 40, 40)
-    assert.same(28, #lines)
+    assert.same(29, #lines)
     assert.same(" Keys now, browsing:", lines[1])
   end)
 end)

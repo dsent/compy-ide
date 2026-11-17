@@ -67,6 +67,13 @@ local DEFS = {
     end),
     { chords = { 'home', 'end' }, card = 'Home/End',
       repeats = true }),
+  --- the oldest and the newest row, draft or no draft; the
+  --- draft stays (the maintainer's ruling of November 17,
+  --- 2026: "the Home/End for scrolling/document view when
+  --- there's text in the draft area")
+  with(both('output_edge', 'oldest/newest'),
+    { chords = { 'ctrl+pageup', 'ctrl+pagedown' },
+      card = 'Ctrl+PgUp/PgDn', repeats = true }),
   --- the screen and the kept rows cleared
   with(both('clear_terminal', 'clear screen'),
     { chords = { 'ctrl+l' }, card = 'Ctrl+L', repeats = true }),

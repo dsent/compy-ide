@@ -285,9 +285,12 @@ describe("paging, formatting, removed keys #editor #spec",
         end
         assert.truthy(card_text():find("file start/end", 1, true))
         K.type("abcd")
-        assert.is_nil(card_text():find("file start/end", 1, true))
-        -- Ctrl+Home/End, to the text's ends, stays
         assert.is_nil(card_text():find("[^+]Home/End "))
+        -- the file's ends stay on Ctrl+PgUp/PgDn alone (the
+        -- maintainer's ruling of November 17, 2026)
+        assert.truthy(card_text():find(
+          "Ctrl%+PgUp/PgDn +file start/end"))
+        -- Ctrl+Home/End, to the text's ends, stays
         assert.truthy(card_text():find("Ctrl+Home/End", 1, true))
       end)
 
@@ -305,6 +308,63 @@ describe("paging, formatting, removed keys #editor #spec",
         assert.same({ 1, 4 }, { K.cursor() })
         assert.same(30, K.position())
       end)
+    end)
+
+    -- what Home and End do with an empty field, in every state,
+    -- the draft kept (the maintainer's ruling of November 17,
+    -- 2026)
+    describe("Ctrl+PgUp and Ctrl+PgDn", function()
+      it("browse to the first block and the end position with "
+          .. "an empty field", function()
+        K.reset({ ["notes.txt"] = lines_file(60) })
+        K.open("notes.txt")
+        K.browse_to(30)
+        K.keys("lctrl", "pageup")
+        assert.same(1, K.position())
+        assert.same(1, (shown()))
+        K.keys("lctrl", "pagedown")
+        assert.same("end", K.position())
+        assert.same(60, select(2, shown()))
+        assert.same("", K.draft())
+        assert.same("browsing", K.state())
+      end)
+
+      it("do so in a draft, the draft and its cursor staying",
+        function()
+          K.reset({ ["notes.txt"] = lines_file(60) })
+          K.open("notes.txt")
+          K.browse_to(30)
+          K.type("abc")
+          K.keys("left")
+          K.keys("lctrl", "pageup")
+          assert.same(1, K.position())
+          assert.same(1, (shown()))
+          assert.same("abc", K.draft())
+          assert.same({ 1, 3 }, { K.cursor() })
+          assert.same("inserting", K.state())
+          K.keys("lctrl", "pagedown")
+          assert.same("end", K.position())
+          assert.same("abc", K.draft())
+          assert.same({ 1, 3 }, { K.cursor() })
+        end)
+
+      it("do so while replacing, the target staying for Ctrl+G",
+        function()
+          K.reset({ ["notes.txt"] = lines_file(60) })
+          K.open("notes.txt")
+          K.browse_to(30)
+          K.keys("f2")
+          local draft = K.draft()
+          K.keys("lctrl", "pageup")
+          assert.same(1, K.position())
+          assert.same(30, K.target())
+          assert.same("replacing", K.state())
+          K.keys("lctrl", "pagedown")
+          assert.same("end", K.position())
+          assert.same(draft, K.draft())
+          K.keys("lctrl", "g")
+          assert.same(30, K.position())
+        end)
     end)
 
     describe("Ctrl+G", function()

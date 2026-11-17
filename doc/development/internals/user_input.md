@@ -544,10 +544,12 @@ binding to apply, deliberately not a rule the tier enforces.
 
 ### Console-specific keys
 
-- **Ctrl+Up/Ctrl+Down, PageUp/PageDown, and Home/End with an empty field**: scroll the output
-  over its kept rows, a row, a page of 15 rows with one carried over, and to the oldest or the
-  newest row; they recall nothing and leave the field's text and cursor as they are. With text
-  in the field, Home and End are the field's own keys. Typing and every other key leave a
+- **Ctrl+Up/Ctrl+Down, PageUp/PageDown, Home/End with an empty field, and
+  Ctrl+PageUp/Ctrl+PageDown**: scroll the output over its kept rows, a row, a page of 15 rows
+  with one carried over, and to the oldest or the newest row; they recall nothing and leave the
+  field's text and cursor as they are. With text in the field, Home and End are the field's own
+  keys, and Ctrl+PageUp and Ctrl+PageDown go to the oldest and the newest row (the
+  maintainer's ruling of November 17, 2026). Typing and every other key leave a
   scrolled view where it is; Enter on a line that runs brings the screen back. See
   `console.md`, "The Output and Its Kept Rows", for everything that does.
 - **Up/Down at input boundary**: history navigation, through the widget's `on_limit_reached`

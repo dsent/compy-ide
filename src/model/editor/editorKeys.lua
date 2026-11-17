@@ -89,6 +89,14 @@ local DEFS = {
   { chords = { 'home', 'end' }, card = 'Home/End',
     repeats = true,
     browsing = { act = 'file_edge', words = 'file start/end' } },
+  --- what Home and End do with an empty field, in every state,
+  --- the draft kept (the maintainer's ruling of November 17,
+  --- 2026: "the Home/End for scrolling/document view when
+  --- there's text in the draft area")
+  with(each('file_edge', 'file start/end', 'file start/end',
+    'file start/end'),
+    { chords = { 'ctrl+pageup', 'ctrl+pagedown' },
+      card = 'Ctrl+PgUp/PgDn', repeats = true }),
   --- while replacing, the browsing position to the target
   --- (the maintainer's ruling of November 14, 2026)
   { chords = { 'ctrl+g' }, card = 'Ctrl+G', repeats = true,

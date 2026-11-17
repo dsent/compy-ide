@@ -910,11 +910,12 @@ local ACTIONS = {
       ec.input:keypressed(k)
     end
   end,
-  --- with an empty field: Home to the first block, End to the
-  --- end position
+  --- Home with an empty field and Ctrl+PgUp to the first
+  --- block, End and Ctrl+PgDn to the end position
   file_edge = function(ec, k)
     local buf = ec:get_active_buffer()
-    local to = k == 'home' and 1 or buf:get_content_length() + 1
+    local first = k == 'home' or k == 'pageup'
+    local to = first and 1 or buf:get_content_length() + 1
     buf:set_selection(to)
     ec.view:get_current_buffer():follow_selection()
     ec:update_status()

@@ -728,7 +728,7 @@ your program shows a field of its own: what is on the 17th row then
 scrolls up. A program that wants typing shows its own field. The one exception:
 the output stays in use, so a key press or a wheel event you leave that
 belongs to it scrolls it (Ctrl+Up and Ctrl+Down, PgUp and PgDn, Home and
-End, and the wheel). An event is yours when a shortcut or a hook for it
+End, Ctrl+PgUp and Ctrl+PgDn, and the wheel). An event is yours when a shortcut or a hook for it
 returns true, or your shown field takes it; a `love.keypressed` of yours
 takes every key press, so behind it only the wheel scrolls the output. A
 program whose code has ended and that can do nothing more gives all input

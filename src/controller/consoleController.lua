@@ -3142,6 +3142,11 @@ local ACTIONS = {
       out:to_rest()
     end
   end,
+  --- Ctrl+PgUp and Ctrl+PgDn, whatever the field holds
+  output_edge = function(cc, k)
+    local out = cc.model.output
+    if k == 'pageup' then out:to_oldest() else out:to_rest() end
+  end,
   terminal_test = function(cc)
     if love.DEBUG then cc:_terminal_test() end
   end,
@@ -3151,6 +3156,7 @@ local ACTIONS = {
 --- it takes behind a program that leaves them (output_key)
 local SCROLLS = {
   scroll_row = true, scroll_page = true, scroll_end = true,
+  output_edge = true,
 }
 
 --- Rows a wheel's notch scrolls the output
@@ -3163,7 +3169,8 @@ local WHEEL_ROWS = 3
 --- keys and events"): a key the program's chain left that is
 --- one of the output's scrolling keys scrolls it. Home and End
 --- go to the oldest row and back to rest, the field being
---- hidden. Nothing else of the console's keys acts.
+--- hidden, as Ctrl+PgUp and Ctrl+PgDn do. Nothing else of the
+--- console's keys acts.
 --- @param k string
 --- @param isrepeat boolean?
 --- @return boolean scrolled

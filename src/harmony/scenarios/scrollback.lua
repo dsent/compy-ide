@@ -4,9 +4,10 @@ local D = require('harmony.drive')
 --- The console's scrollback (the maintainer's ruling "Console
 --- scrollback, first version"), read from the screen's pixels
 --- against the theme (conf/colors.lua): the screen at rest, a
---- row up, a page up and the oldest row, each with the editor's
---- continuation cue at a cut edge and none at rest; the first
---- step from a nearly empty screen, which fills it; the echo of
+--- row up, a page up and the oldest row (Home, and Ctrl+PgUp
+--- with a draft), each with the editor's continuation cue at
+--- a cut edge and none at rest; the first step from a nearly
+--- empty screen, which fills it; the echo of
 --- an entered line in blue and its error after it in the
 --- output's error color; the key card's rows; the seventeenth
 --- row behind a program; and a row printed in one print against
@@ -92,6 +93,19 @@ scenario('views', function(wait)
 
   D.key(wait, 'end')
   assert(not output():is_scrolled(), 'End: the screen at rest')
+
+  -- with a draft in the field, Ctrl+PgUp and Ctrl+PgDn (the
+  -- maintainer's ruling of November 17, 2026)
+  D.type(wait, 'x = 1')
+  D.key(wait, 'C-pageup')
+  img = P.capture(wait)
+  D.shot(wait, 'oldest-row-with-draft')
+  same(cues(img), { false, true }, 'Ctrl+PgUp: the oldest kept row')
+  D.eq(output().view_top, output().kept.first, 'the oldest row on top')
+  D.key(wait, 'C-pagedown')
+  assert(not output():is_scrolled(), 'Ctrl+PgDn: the screen at rest')
+  D.eq(P.console_draft(), 'x = 1', 'the draft stays')
+  D.key(wait, 'escape')
   hm_done()
 end)
 

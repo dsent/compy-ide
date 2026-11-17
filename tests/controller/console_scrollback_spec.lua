@@ -689,6 +689,27 @@ describe("the console's scrolling keys #console", function()
       assert.same({ "abc", 1, 4 }, field())
     end)
 
+  -- the maintainer's ruling of November 17, 2026: the Home and
+  -- End of the output while the field holds text
+  it("Ctrl+PgUp and Ctrl+PgDn go to the oldest and the newest "
+    .. "row, the field empty or not, the draft and its cursor "
+    .. "staying", function()
+      print_lines(1, 80)
+      K.keys("lctrl", "pageup")
+      assert.same(slice(kept(), 1, H), view())
+      K.keys("lctrl", "pagedown")
+      assert.is_nil(view())
+      K.type("half typed")
+      K.keys("left")
+      local before = field()
+      K.keys("lctrl", "pageup")
+      assert.same(slice(kept(), 1, H), view())
+      assert.same(before, field())
+      K.keys("lctrl", "pagedown")
+      assert.is_nil(view())
+      assert.same(before, field())
+    end)
+
   it("keep scrolling while held", function()
     print_lines(1, 80)
     K.hold("lctrl")
@@ -709,7 +730,7 @@ describe("the console's scrolling keys #console", function()
   it("do nothing while no row is kept", function()
     print_lines(1, 3)
     for _, k in ipairs({ { "lctrl", "up" }, { "pageup" },
-      { "home" } }) do
+      { "home" }, { "lctrl", "pageup" } }) do
       K.keys(unpack(k))
       assert.is_nil(view())
     end
@@ -855,10 +876,14 @@ describe("the console's scrolling keys #console", function()
     assert.truthy(empty:find("scroll a row", 1, true))
     assert.truthy(empty:find("Home/End", 1, true))
     assert.truthy(empty:find("oldest/newest", 1, true))
-    assert.falsy(empty:find("PgUp", 1, true))
+    assert.truthy(empty:find("Ctrl+PgUp/PgDn  oldest/newest", 1, true))
+    -- no row for PgUp and PgDn alone
+    assert.falsy(empty:find("[^/+]PgUp"))
     local typed = card(false)
     assert.truthy(typed:find("scroll a row", 1, true))
-    assert.falsy(typed:find("oldest/newest", 1, true))
+    -- Home and End are the field's then; Ctrl+PgUp/PgDn stays
+    assert.falsy(typed:find("[^+]Home/End"))
+    assert.truthy(typed:find("Ctrl+PgUp/PgDn  oldest/newest", 1, true))
   end)
 end)
 
@@ -2158,8 +2183,32 @@ describe("the output behind a program that owns the input #console",
         run("run()")
         K.keys("lctrl", "up")
         assert.is_false(output():is_scrolled())
+        K.keys("lctrl", "pageup")
+        assert.is_false(output():is_scrolled())
         wheel(1)
         assert.is_true(output():is_scrolled())
+      end)
+
+    it("gets Ctrl+PgUp and Ctrl+PgDn behind a program that leaves "
+      .. "them", function()
+        reset({ ["main.lua"] = PRINTS .. RUNS })
+        run("run()")
+        assert.same("running", K.app_state())
+        K.keys("lctrl", "pageup")
+        assert.is_true(#kept() > 0)
+        assert.equal(kept()[1], view()[1])
+        K.keys("lctrl", "pagedown")
+        assert.is_false(output():is_scrolled())
+      end)
+
+    it("passes Ctrl+PgUp to a program whose love.keypressed takes "
+      .. "every key", function()
+        reset({ ["main.lua"] = PRINTS
+          .. "function love.keypressed(k) got = k end\n" .. RUNS })
+        run("run()")
+        K.keys("lctrl", "pageup")
+        assert.same("pageup", K.cc:get_project_env().got)
+        assert.is_false(output():is_scrolled())
       end)
 
     it("gets a key a hook leaves, and not one it takes", function()
