@@ -318,6 +318,27 @@ local owed_releases = { }
 
 --- @param resume boolean? --- continue(): the hooks are as the
 ---   pause left them, and none is seeded anew (round 20)
+--- A program whose route holds the input and that can act no
+--- more has ended at its last line, found as an event comes:
+--- the input is the console's again, and its natural end is made
+--- once the event is done (stage 4). One place for every event:
+--- the route asks it before any chain, and the gate before it
+--- takes a key or a click back from the full picture, so the end
+--- does not depend on who takes the event (k3). A paused
+--- program keeps its route for continue(), and is no end.
+--- @param CC ConsoleController
+--- @return boolean found
+local function found_ended(CC)
+  if route_owner == 'console' then return false end
+  if love.state.app_state == 'inspect' then return false end
+  if can_act(Controller.project_input.compy_input) then
+    return false
+  end
+  Controller.release_keyboard_route(CC)
+  End.defer(function() CC:end_naturally(false) end)
+  return true
+end
+
 local function occupy_input(userlove, CC, resume)
   local pic = Controller.project_input
   local compy = CC:get_project_env().compy
@@ -340,10 +361,7 @@ local function occupy_input(userlove, CC, resume)
       --- a program that can no longer act has ended at its last
       --- line: the input is the console's again, this event
       --- first (asked as the event comes, before any chain)
-      if not can_act(pic.compy_input) then
-        Controller.release_keyboard_route(CC)
-        --- its natural end, made once the event is done (stage 4)
-        End.defer(function() CC:end_naturally(false) end)
+      if found_ended(CC) then
         --- a release is of a press the program got: it goes to
         --- no one, the console having seen no press (p3)
         if RELEASES[k] then return end
@@ -1367,7 +1385,8 @@ Controller = {
     local function own_char(k)
       if k == 'space' then return ' ' end
       if #k == 1 and k:match('%g') then return k end
-      return nil
+      --- the keypad's: kp1, kp+, kp. (k3)
+      return k:match('^kp([%d%.,/%*%-%+=])$')
     end
     --- the buttons that went back from the full picture, from
     --- their press to their release: their moves go nowhere
@@ -1508,7 +1527,9 @@ Controller = {
           and reservation ~= reserved_screen_mode then
         -- back from the full picture: the key is the IDE's for
         -- its whole press, and a reserved chord acts as well
-        -- (F12 is the cycle, whose next mode is text)
+        -- (F12 is the cycle, whose next mode is text); a program
+        -- that can act no more ends first, as at any event (k3)
+        found_ended(CC)
         screen:back()
         swallow_for = own_char(k)
         hold_press('key', k,
@@ -1626,6 +1647,7 @@ Controller = {
       --- a button goes back from the full picture, as a key
       --- does, and its release goes nowhere either
       if picture_only() then
+        found_ended(CC)
         screen:back()
         hold_press('button', btn)
         back_buttons[btn] = true
@@ -1705,6 +1727,7 @@ Controller = {
         return
       end
       if picture_only() then
+        found_ended(CC)
         screen:back()
         hold_press('touch', id)
         return

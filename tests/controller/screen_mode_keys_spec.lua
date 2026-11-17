@@ -261,6 +261,57 @@ describe("the screen modes' keys #canvas", function()
         assert.same("", K.console_draft())
       end)
 
+    --- k3's first finding: a program that can act no more is
+    --- found ended by the key or the click that goes back, as by
+    --- any event: its natural end is made, whoever takes the event
+    local GOES = DRAWS_ONCE .. "ended = 0\n"
+      .. "compy.before_exit = function() ended = ended + 1 end\n"
+      .. "function love.mousereleased()"
+      .. " compy.input.hooks.mousereleased = nil end\n"
+    for name, back in pairs({
+      key = function() K.type("a") end,
+      button = function()
+        F.session.mousepressed(10, 10, 1, false, 1)
+        F.session.mousereleased(10, 10, 1, false, 1)
+      end,
+      touch = function()
+        love.handlers.touchpressed("t1", 10, 10, 0, 0, 1)
+        love.handlers.touchreleased("t1", 10, 10, 0, 0, 1)
+      end,
+    }) do
+      it("ends a program that can act no more when a " .. name
+        .. " goes back from its picture", function()
+          K.reset({ ["main.lua"] = GOES })
+          K.start()
+          assert.is_true(K.cc.run_live)
+          assert.same("picture", mode())
+          F.session.mousepressed(10, 10, 1, false, 1)
+          F.session.mousereleased(10, 10, 1, false, 1)
+          assert.is_true(K.cc.run_live)
+          local seen_end = env().ended
+          assert.same("picture", mode())
+          back()
+          K.frame()
+          assert.same("text", mode())
+          assert.is_false(K.cc.run_live == true)
+          assert.same(0, seen_end)
+          assert.same("", K.console_draft())
+        end)
+    end
+
+    --- k3's second finding: a keypad key's own character
+    it("drops a keypad key's own text after it goes back",
+      function()
+        local h = love.handlers
+        for _, k in ipairs({ "kp1", "kp+", "kp." }) do
+          picture()
+          F.session.press(k)
+          h.textinput(k:sub(3))
+          F.session.release(k)
+          assert.same("", K.console_draft(), k)
+        end
+      end)
+
     it("leaves the picture up on a modifier alone", function()
       picture()
       K.hold("lshift")
