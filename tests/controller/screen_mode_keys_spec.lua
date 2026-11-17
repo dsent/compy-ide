@@ -490,6 +490,37 @@ describe("the screen modes' keys #canvas", function()
       end
     end)
 
+    --- a button that went back and whose release is lost (a
+    --- change of focus on the Compy) does not hold back the moves
+    --- after it
+    describe("a lost release of a button that went back", function()
+      local got, saved
+      before_each(function()
+        picture()
+        F.set_mouse_down(true)
+        F.session.mousepressed(10, 10, 1, false, 1)
+        assert.same("text", mode())
+        got, saved = 0, love.mousemoved
+        love.mousemoved = function() got = got + 1 end
+      end)
+      after_each(function() love.mousemoved = saved end)
+
+      it("lets the moves through once the button is up", function()
+        F.session.mousemoved(20, 10, 10, 0, false)
+        assert.same(0, got)
+        F.set_mouse_down(false)
+        F.session.mousemoved(30, 10, 10, 0, false)
+        assert.same(1, got)
+      end)
+
+      it("lets the moves through after the window loses focus",
+        function()
+          love.handlers.focus(false)
+          F.session.mousemoved(20, 10, 10, 0, false)
+          assert.same(1, got)
+        end)
+    end)
+
     --- k3's second finding: a keypad key's own character
     it("drops a keypad key's own text after it goes back",
       function()
