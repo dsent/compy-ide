@@ -180,12 +180,13 @@ describe("a lifecycle call ends the code that made it #console",
       end)
 
     describe("a typed line", function()
-      --- a program that ended its code but keeps its picture is
-      --- live and can do nothing more: the console takes lines
-      --- behind it (November 17)
+      --- a paused program is live, and the console takes lines
+      --- behind it (a program that ended its code and can do
+      --- nothing more has ended: stage 4 of the canvas plan)
       it("stop(); print(1) prints nothing after the stop", function()
-        reset({ ["main.lua"] = "x = 1\n" })
+        reset({ ["main.lua"] = "x = 1\npause('here')\n" })
         run("run()")
+        assert.same("inspect", K.app_state())
         assert.is_true(K.cc.run_live)
         run("stop(); print('AFTER' .. '_STOP')")
         assert.is_nil(K.console_text():find("AFTER_STOP", 1, true))
@@ -307,26 +308,35 @@ describe("a lifecycle call ends the code that made it #console",
         assert.is_false(K.cc.run_live)
       end)
 
+    --- from the program's own code, which can stop it
     it("an edit() its admission refuses ends nothing", function()
-      reset({ ["main.lua"] = "x = 1\n" })
+      reset({ ["main.lua"] = "x = 1\nfunction love.update()\n"
+        .. "  if go then go = false; edit('../bad'); note('after') end\n"
+        .. "end\n" })
       local said = notes()
       run("run()")
       assert.is_true(K.cc.run_live)
-      run("edit('../bad'); note('after')")
+      env().go = true
+      K.frame()
       assert.same({ "after" }, said, K.console_text())
       assert.is_true(K.cc.run_live)
+      K.keys("lctrl", "q")
     end)
 
     it("a run() whose main.lua cannot be read ends nothing",
       function()
-        reset({ ["main.lua"] = "x = 1\n" })
+        reset({ ["main.lua"] = "x = 1\nfunction love.update()\n"
+          .. "  if go then go = false; run(); note('after') end\n"
+          .. "end\n" })
         local said = notes()
         run("run()")
         assert.is_true(K.cc.run_live)
         K.fail_reads("main.lua")
-        run("run(); note('after')")
+        env().go = true
+        K.frame()
         assert.same({ "after" }, said)
         assert.is_true(K.cc.run_live)
+        K.keys("lctrl", "q")
       end)
 
     it("a refused call ends nothing", function()

@@ -271,25 +271,32 @@ describe('input surface: inbound events — route lifetime #input',
     -- store a project left on it cannot reach the next project
     -- — structurally, rather than by a teardown wipe list.
     describe('the widget lives for one project run', function()
+      --- a run that stays live: one that can do nothing more ends
+      --- at its last line, its widget with it (stage 4 of the
+      --- canvas plan). A pointer hook keeps it in 'ready', as a
+      --- pen-and-paper project with handlers settles there.
+      local function live()
+        F.compy_input().hooks.mousepressed = function() end
+      end
 
       it('a run publishes a widget', function()
         F.cc:stop_project_run()
         assert.is_nil(love.state.user_input_controller)
-        F.run_project()
+        F.run_project(live)
         assert.is_not_nil(love.state.user_input_controller)
       end)
 
       it('a stop leaves none', function()
-        F.run_project()
+        F.run_project(live)
         F.cc:stop_project_run()
         assert.is_nil(love.state.user_input_controller)
       end)
 
       it('two runs get two widgets', function()
-        F.run_project()
+        F.run_project(live)
         local first = love.state.user_input_controller
         F.cc:stop_project_run()
-        F.run_project()
+        F.run_project(live)
         local second = love.state.user_input_controller
         assert.not_equal(first, second)
       end)
@@ -302,9 +309,10 @@ describe('input surface: inbound events — route lifetime #input',
           local mark = function() end
           F.run_project(function()
             F.compy_input().callbacks.on_text_entered = mark
+            live()
           end)
           F.cc:stop_project_run()
-          F.run_project()
+          F.run_project(live)
           local cbs = F.compy_input().callbacks
           assert.not_equal(mark, cbs.on_text_entered)
         end)
@@ -314,7 +322,7 @@ describe('input surface: inbound events — route lifetime #input',
       -- (technical_debt/input.md, "`close_project` bypasses the
       -- run's exit path") — this pins the widget half only.
       it('a close takes the widget with it', function()
-        F.run_project()
+        F.run_project(live)
         assert.is_not_nil(love.state.user_input_controller)
         F.cc:close_project()
         assert.is_nil(love.state.user_input_controller)
@@ -326,7 +334,7 @@ describe('input surface: inbound events — route lifetime #input',
       -- D-ROUTE-LIFETIME's amendment exists to keep deleted.
       it('a non-blocking run keeps its widget at ready',
         function()
-          F.run_project()
+          F.run_project(live)
           assert.equal('ready', love.state.app_state)
           assert.is_not_nil(love.state.user_input_controller)
         end)

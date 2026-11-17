@@ -191,6 +191,23 @@ describe('the screen modes #canvas', function()
     assert.is_false(F.cc.model.output:is_drawn())
   end)
 
+  --- the lead's decision 1 of November 17, 2026: a program that
+  --- ended by itself and drew leaves its picture on show; one that
+  --- drew nothing leaves the console
+  it('shows the picture after a drawing program\'s natural end',
+    function()
+      F.run_project(draw)
+      assert.is_false(F.cc.run_live)
+      assert.equal('picture', mode())
+      assert.is_true(F.cc.model.output:is_drawn())
+    end)
+
+  it('shows text after a printing program\'s natural end', function()
+    F.run_project(function() print('x') end)
+    assert.is_false(F.cc.run_live)
+    assert.equal('text', mode())
+  end)
+
   it('switches to the picture once per run', function()
     F.run_project(function()
       draw()
@@ -410,8 +427,10 @@ describe('the screen modes #canvas', function()
       F.run_project(function()
         screen().show('text')
         draw()
+        F.cc:get_project_env().love.update = function() end
       end)
       assert.equal('text', mode())
+      F.cc:get_project_env().love.update = nil
     end)
 
     it('is the run\'s: the next run starts in text and its drawing'

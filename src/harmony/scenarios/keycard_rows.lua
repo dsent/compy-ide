@@ -26,11 +26,12 @@ local OTHER = 'o = 1\n'
 --- a program behind the console: it hooks no key, so the
 --- console takes them
 local IDLES = 'n = 0\nfunction love.update() n = n + 1 end\n'
---- a program that ends its code and stays live behind the
---- console with its picture, able to do nothing more: the console
---- keeps its keys and its card (a program that can act owns all
---- input, November 17)
-local ENDS = 'n = 0\n'
+--- a program live behind the console that leaves it the keys
+--- and its card (a program that can act owns all input, November
+--- 17):
+--- paused in its first lines (one that can do nothing more ends
+--- at its last line, stage 4 of the canvas plan)
+local ENDS = "n = 0\npause('here')\n"
 
 local function stored() return P.stored(PROJECT, FILE) end
 local function col()
@@ -416,12 +417,12 @@ local CONSOLE = {
     D.in_state('editor')
     D.leave(wait)
   end },
-  --- the program behind the console ends its code again, its
-  --- picture staying (ENDS)
+  --- the program behind the console runs anew and pauses again
+  --- (ENDS)
   ['Ctrl+R'] = { 'run anew', function(wait)
     D.key(wait, 'escape')
     D.key(wait, 'C-r')
-    D.in_state('ready')
+    D.in_state('inspect')
     assert(P.cc().run_live, 'Ctrl+R did not run it anew')
     D.key(wait, 'C-q')
     D.in_state('ready')

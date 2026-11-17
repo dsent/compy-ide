@@ -266,9 +266,14 @@ Project-author guide: `doc/input_api.md`.
   console before it, is gone, and so is a bundled library's state the program loaded,
   such as a timer's pending calls; the graphics settings it changed are reset, and a transform it
   pushed and never popped is popped. Before, a handler deleted from `main.lua` went on running
-  until another project was opened or the IDE restarted. A program that ends by itself
-  leaves its variables for the console to look at until the next run, and `continue()` and
-  `dofile()` keep everything as it is.
+  until another project was opened or the IDE restarted. `continue()` and `dofile()` keep
+  everything as it is.
+- **A program that ends by itself is stopped.** When its code has run to the end and nothing
+  of it can act any more (no `love.update` or `love.draw`, no handler, hook or shortcut, no
+  input field showing, no serial handler), it gets the same flush as `stop()`: its variables
+  and functions go, `compy.before_exit` runs, and a sound it started plays out. A program
+  that drew leaves its picture on show. To keep what a file defines, run it with
+  `dofile("main.lua")`.
 - **A project can have a second entry point.** `run(nil, "second.lua")` runs that file of
   the open project as the program, from a clean start like any run, and
   `run("name", "second.lua")` opens the project first. Ctrl+R restarts that file while its

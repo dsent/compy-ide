@@ -906,10 +906,13 @@ describe('input surface: inbound events — dispatch #input',
       function()
         F.activate_project()
         F.show_widget({ text = 'keep' })
-        F.widget:hide()
+        -- held: a program that can do nothing more ends at the
+        -- event that finds it, its widget with it (stage 4)
+        local widget = F.widget
+        widget:hide()
         F.console:add_text('ab')
         F.session.press('backspace')
-        assert.same({ 'keep' }, F.widget:get_text())
+        assert.same({ 'keep' }, widget:get_text())
         assert.same({ 'a' }, F.console:get_text())
       end)
 

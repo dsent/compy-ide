@@ -373,11 +373,13 @@ describe("a pointer across the end of a program's acting #input",
       return seen
     end
 
+    --- such a program ends at its last line (stage 4 of the
+    --- canvas plan)
     it("gives the console both halves of the first click and touch"
-      .. " after a program that can do nothing more", function()
+      .. " after a program that could do nothing more", function()
         K.reset({ ["main.lua"] = "X = 1\n" })
         K.start()
-        assert.is_true(K.cc.run_live)
+        assert.is_false(K.cc.run_live)
         local seen = console_events()
         local x, y = on_field(1)
         F.session.mousepressed(x, y, 1, false, 1)

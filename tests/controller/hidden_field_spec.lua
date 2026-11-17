@@ -113,11 +113,13 @@ describe("the console's field behind a program that owns the keys"
       assert.is_false(draft)
     end)
 
-  it("is back behind a finished program that can do nothing more",
+  --- a program that can do nothing more has ended at its last
+  --- line (stage 4 of the canvas plan)
+  it("is back after a program that could do nothing more ended",
     function()
       K.reset({ ["main.lua"] = "x = 1\n" })
       run("run()")
-      assert.is_true(K.cc.run_live)
+      assert.is_false(K.cc.run_live)
       K.type("draftx")
       local status, draft = field_texts(K.screen())
       assert.is_true(status)
