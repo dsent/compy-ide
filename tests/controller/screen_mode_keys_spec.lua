@@ -401,6 +401,27 @@ describe("the screen modes' keys #canvas", function()
         end
       end)
 
+    --- k5's finding: the click timer's derived click comes inside
+    --- the frame's update, where the end is made once the update
+    --- returns; the picture stays on show after that end too
+    it("keeps the picture through an end the click timer finds",
+      function()
+        K.reset({ ["main.lua"] = DRAWS_ONCE
+          .. "compy.before_exit = function() end\n"
+          .. "function love.mousereleased()"
+          .. " compy.input.hooks.mousereleased = nil end\n" })
+        K.start()
+        local calls = 0
+        env().compy.before_exit = function() calls = calls + 1 end
+        F.session.mousepressed(10, 10, 1, false, 1)
+        F.session.mousereleased(10, 10, 1, false, 1)
+        assert.is_true(K.cc.run_live)
+        for _ = 1, 10 do K.frame(0.1) end
+        assert.is_false(K.cc.run_live == true)
+        assert.same(1, calls)
+        assert.same("picture", mode())
+      end)
+
     --- k3's second finding: a keypad key's own character
     it("drops a keypad key's own text after it goes back",
       function()

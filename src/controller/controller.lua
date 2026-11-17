@@ -328,6 +328,10 @@ local owed_releases = { }
 --- so ahead of it (k3, k4); the route asks it again before any
 --- chain. A paused
 --- program keeps its route for continue(), and is no end.
+--- What shows as the end is found goes to the end itself
+--- (end_naturally), which sets the screen whenever it is made:
+--- at once, or once the frame's update returns, where the click
+--- timer's derived clicks come (k5).
 --- @param CC ConsoleController
 --- @return boolean found
 local function found_ended(CC)
@@ -337,7 +341,9 @@ local function found_ended(CC)
     return false
   end
   Controller.release_keyboard_route(CC)
-  End.defer(function() CC:end_naturally(false) end)
+  local screen = CC.model and CC.model.screen
+  local shown = screen and screen:get()
+  End.defer(function() CC:end_naturally(false, shown) end)
   return true
 end
 
@@ -1284,17 +1290,15 @@ Controller = {
     local screen = CC.model and CC.model.screen
 
     --- Every event's first step: a run that can act no more is
-    --- found ended (found_ended) before anything takes the event.
-    --- A picture on show stays on show for it, as a program that
-    --- ended by itself leaves its picture (ScreenModel:
-    --- ended_by_itself), so that the way back and F12 act on what
-    --- the person saw: a key or a click goes back and types or
-    --- clicks nothing, F12 steps from the picture (k4).
+    --- found ended (found_ended) before anything takes the event
+    --- (k4). A picture on show stays on show through that end, as
+    --- a program that ended by itself leaves its picture, so that
+    --- a key or a click goes back and types or clicks nothing and
+    --- F12 steps from the picture; the end sets it (k5). A derived
+    --- click is the IDE's own timer: it may find the end, and goes
+    --- back from nothing.
     local function enter()
-      local shown = screen and screen:get()
-      if found_ended(CC) and shown == 'picture' then
-        screen:ended_by_itself()
-      end
+      found_ended(CC)
     end
 
     --- F12: the screen's next mode in the console, idle,
