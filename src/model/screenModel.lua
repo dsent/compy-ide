@@ -124,6 +124,14 @@ function ScreenModel:resume()
   self.paused = nil
 end
 
+--- A run ended by itself, its picture drawn: the picture stays
+--- on show, and back() (any key) goes to the console (the lead's
+--- decision 1 of November 17, 2026)
+function ScreenModel:ended_by_itself()
+  self.mode = 'picture'
+  self.paused = nil
+end
+
 --- A run ended, by a stop, an error in its first lines or
 --- reset(): the console shows, and the picture is kept on the
 --- canvas for a mode that shows it

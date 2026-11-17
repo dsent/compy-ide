@@ -342,6 +342,8 @@ local function occupy_input(userlove, CC, resume)
       --- first (asked as the event comes, before any chain)
       if not can_act(pic.compy_input) then
         Controller.release_keyboard_route(CC)
+        --- its natural end, made once the event is done (stage 4)
+        End.defer(function() CC:end_naturally(false) end)
         --- a release is of a press the program got: it goes to
         --- no one, the console having seen no press (p3)
         if RELEASES[k] then return end

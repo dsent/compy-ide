@@ -87,7 +87,10 @@ describe("run's second entry point #console", function()
   --- the editor runs "main.lua only for now"
   it("runs main.lua with Ctrl+T from the editor after a second.lua"
     .. " run", function()
-      reset(FILES)
+      local files = { ["main.lua"] = FILES["main.lua"]
+        .. "function love.update() end\n" }
+      files["second.lua"] = FILES["second.lua"]
+      reset(files)
       run("run(nil, 'second.lua')")
       K.keys("lctrl", "q")
       run("edit('main.lua')")
@@ -95,6 +98,7 @@ describe("run's second entry point #console", function()
       K.keys("lctrl", "t")
       K.frame()
       assert.same("main", env().which)
+      K.keys("lctrl", "q")
     end)
 
   --- "Ctrl+R should do nothing at the console. End of story."
@@ -165,14 +169,17 @@ describe("run's second entry point #console", function()
     assert.is_falsy(K.cc.run_live)
   end)
 
-  it("refuses a folder before the run that ended is touched",
+  it("refuses a folder before the program it would replace is touched",
     function()
       local files = { ["assets/a.png"] = "png",
-        ["idle.lua"] = "which = 'idle'\n" }
+        ["idle.lua"] = "which = 'idle'\nfunction love.update()\n"
+          .. "  if go then go = false; run(nil, 'assets') end\nend\n" }
       for k, v in pairs(FILES) do files[k] = v end
       reset(files)
       run("run(nil, 'idle.lua')")
-      run("run(nil, 'assets')")
+      --- the program's own run(), which replaces it when it can
+      env().go = true
+      K.frame()
       assert.same("idle", env().which)
       assert.truthy(K.console_text():find(
         "There is no assets in this project.", 1, true),

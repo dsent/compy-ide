@@ -162,15 +162,23 @@ returns.
   input hooks and shortcuts go with it; then no variable,
   `love` handler or module of an earlier run, or of a line
   typed before it, is there, and the graphics settings are
-  reset. A program that ends by itself leaves its variables
-  for the console to look at until the next run. Stopping a
-  program, by `stop()`, Ctrl+Q, an error in its first lines or
-  closing its project, clears them too and puts the keyboard
-  and the volume back as the IDE set them; a sound it started
-  plays to its end,
+  reset. Stopping a program, by `stop()`, Ctrl+Q, an error in
+  its first lines or closing its project, clears them too and
+  puts the keyboard and the volume back as the IDE set them; a
+  sound it started plays to its end,
   and one set to repeat plays once more and stops. A pause keeps
-  everything for `continue()`. `dofile()` runs in the
-  environment as it stands.
+  everything for `continue()`.
+
+  A program also stops by itself when its code has run to the
+  end and nothing of it can act any more: no `love.update` or
+  `love.draw`, no key, mouse or touch handler, hook or shortcut,
+  no input field showing, no serial handler. That is a stop
+  like `stop()`: what the program made goes, its variables and
+  functions too. To keep what a file defines and use it from
+  the console, run it with `dofile("main.lua")`: it runs in the
+  console's environment, as it stands, and what it defines
+  stays there. `run()` runs a program that starts clean and
+  leaves nothing behind.
 
 ### The screen
 

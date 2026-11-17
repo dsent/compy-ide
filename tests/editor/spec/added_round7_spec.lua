@@ -226,7 +226,9 @@ describe("round seven #editor #spec", function()
 
     spec_it("IS1.4 Resume after running a project: a held Ctrl+T "
         .. "runs the project once", function()
-      K.reset({ ["main.lua"] = "runs = (runs or 0) + 1\n" })
+      --- live, so that its run is there to count
+      K.reset({ ["main.lua"] = "runs = (runs or 0) + 1\n"
+        .. "function love.update() end\n" })
       K.open()
       K.hold("lctrl")
       K.hold("t")
@@ -238,6 +240,7 @@ describe("round seven #editor #spec", function()
       K.release("lctrl")
       assert.are_not.same("editor", K.app_state())
       assert.same(1, K.cc:get_project_env().runs)
+      K.keys("lctrl", "q")
     end)
   end)
 

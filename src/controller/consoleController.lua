@@ -768,6 +768,12 @@ function ConsoleController:_run_project(name, stopped, entry)
             love.state.paused_from = 'ready'
           else
             love.state.app_state = 'ready'
+            --- a program that can do nothing more has ended: its
+            --- natural end is a stop (stage 4)
+            if not self.main_ctrl.program_owns_input() then
+              self:end_naturally(true)
+              return
+            end
           end
           -- Without a widget or a pointer handler nothing of the
           -- program answers the pointer, and the console is on
@@ -2789,6 +2795,25 @@ function ConsoleController:_stop_project_run()
   return self:flush_program_state(true)
 end
 
+--- A program's natural end: its code has ended and it can no
+--- longer act (Controller.program_owns_input). It is the stop's
+--- flush, before_exit and sounds playing out included (the
+--- maintainer's ruling "The natural end is a stop; the build
+--- waits for the canvas", built in stage 4 of the canvas plan).
+--- At the end of its first lines a program that drew leaves its
+--- picture on show until a key or a click (the lead's decision
+--- 1 of November 17, 2026); one found ended as an event comes
+--- leaves the console, which that event reaches.
+--- @param at_last_line boolean
+function ConsoleController:end_naturally(at_last_line)
+  if not self.run_live then return end
+  local drawn = self.model.output:is_drawn()
+  self:stop_project_run()
+  if at_last_line and drawn then
+    self.model.screen:ended_by_itself()
+  end
+end
+
 function ConsoleController:quit_project()
   local stopped = self:stop_project_run()
   --- a clean console first, so what closing says stays on it
@@ -3384,7 +3409,9 @@ end
 --- common case returns at once.
 function ConsoleController:drew()
   local output, screen = self.model.output, self.model.screen
-  if self.typing then
+  --- the typed line's own code, not a program's handler it ran
+  --- (an owed release at continue(): round c4)
+  if self.typing and End.user <= self.typing then
     output.drawn = true
     screen:typed_drew()
     return

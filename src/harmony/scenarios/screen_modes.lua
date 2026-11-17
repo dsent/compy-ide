@@ -14,11 +14,14 @@ local D = require('harmony.drive')
 
 local YELLOW = { 1, .8, .2 }
 
---- a program that draws once and ends
+--- a program that draws once and ends: its natural end is a stop
 local DRAWS = [[
 love.graphics.setColor(1, .8, .2)
 love.graphics.rectangle('fill', 300, 150, 300, 200)
 ]]
+
+--- the same, live behind the console until it is stopped
+local DRAWS_LIVE = DRAWS .. 'function love.update() end\n'
 
 --- a program that draws its own screen and pauses itself
 local PAUSES = [[
@@ -60,7 +63,7 @@ end
 
 scenario('picture-then-console', function(wait)
   wait(.1)
-  local before = project(wait, 'h-screen-a', DRAWS)
+  local before = project(wait, 'h-screen-a', DRAWS_LIVE)
   local ground = at_picture(before)
   D.enter(wait, 'run()')
   wait(.3)
@@ -88,7 +91,7 @@ end)
 --- from the full picture to the text, typing nothing
 scenario('f12-and-any-key', function(wait)
   wait(.1)
-  project(wait, 'h-screen-d', DRAWS)
+  project(wait, 'h-screen-e', DRAWS)
   D.enter(wait, 'run()')
   wait(.3)
   D.eq(mode(), 'picture', 'a run that drew shows its picture')
@@ -112,6 +115,32 @@ scenario('f12-and-any-key', function(wait)
   D.eq(mode(), 'text', 'a key goes back to the text, past '
     .. 'combined')
   D.eq(P.console_draft(), '', 'the key typed nothing')
+  hm_done()
+end)
+
+--- a program that drew and ended by itself is stopped, and leaves
+--- its picture on show (the lead's decision 1); back() is what
+--- any key does once the key gate takes it (stage 2)
+scenario('natural-end-shows-picture', function(wait)
+  wait(.1)
+  local before = project(wait, 'h-screen-d', DRAWS)
+  local ground = at_picture(before)
+  D.enter(wait, 'run()')
+  wait(.3)
+  assert(not P.cc().run_live, 'the program ended by itself')
+  assert(mode() == 'picture', 'its picture shows, the mode is '
+    .. mode())
+  local shown = P.capture(wait)
+  D.shot(wait, 'picture-after-natural-end')
+  assert(P.near(at_picture(shown), YELLOW), 'the picture whole: '
+    .. P.show(at_picture(shown)))
+  P.cc().model.screen:back()
+  wait(.1)
+  assert(mode() == 'text', 'back to the console, the mode is '
+    .. mode())
+  local console = P.capture(wait)
+  assert(P.near(at_picture(console), ground), 'the console on its '
+    .. 'ground: ' .. P.show(at_picture(console)))
   hm_done()
 end)
 

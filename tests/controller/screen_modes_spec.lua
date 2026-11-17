@@ -152,6 +152,27 @@ describe('the screen modes #canvas', function()
       assert.equal('picture', mode())
     end)
 
+  --- c4's first finding: a program's handler that continue()
+  --- runs (a key's owed release) is the program's drawing, though
+  --- a typed line called continue()
+  it('shows the picture when a release owed at continue() draws',
+    function()
+      F.run_project(function()
+        local env = F.cc:get_project_env()
+        env.love.keyreleased = function() draw() end
+        env.love.update = function() end
+      end)
+      F.session.press('x')
+      F.cc:suspend_run('paused')
+      F.love_update(0.1)
+      assert.equal('inspect', love.state.app_state)
+      F.session.release('x')
+      submit('continue()')
+      F.cc:get_project_env().love.keyreleased = nil
+      F.cc:get_project_env().love.update = nil
+      assert.equal('picture', mode())
+    end)
+
   for name, stop in pairs({
     ['Ctrl+Q'] = function() press({ 'lctrl', 'q' }) end,
     ['stop()'] = function() F.cc:get_project_env().stop() end,
@@ -189,6 +210,23 @@ describe('the screen modes #canvas', function()
     F.cc:get_project_env().love.update = nil
     assert.equal('text', mode())
     assert.is_false(F.cc.model.output:is_drawn())
+  end)
+
+  --- the lead's decision 1 of November 17, 2026: a program that
+  --- ended by itself and drew leaves its picture on show; one that
+  --- drew nothing leaves the console
+  it('shows the picture after a drawing program\'s natural end',
+    function()
+      F.run_project(draw)
+      assert.is_false(F.cc.run_live)
+      assert.equal('picture', mode())
+      assert.is_true(F.cc.model.output:is_drawn())
+    end)
+
+  it('shows text after a printing program\'s natural end', function()
+    F.run_project(function() print('x') end)
+    assert.is_false(F.cc.run_live)
+    assert.equal('text', mode())
   end)
 
   it('switches to the picture once per run', function()
@@ -310,6 +348,26 @@ describe('the screen modes #canvas', function()
         assert.same({ .5, .5, .5, .5 }, at_draw.color)
       end)
 
+    --- c4's second finding: the ground under the picture is
+    --- opaque, as a screen shows a translucent clear colour, so a
+    --- translucent ground counts once wherever it was set
+    it('lays the picture on its ground opaque', function()
+      local saved_color, saved_rect = gfx.setColor, gfx.rectangle
+      local color, ground
+      gfx.setColor = function(r, g, b, a)
+        color = type(r) == 'table' and r or { r, g, b, a }
+      end
+      gfx.rectangle = function() ground = ground or color end
+      finally(function()
+        gfx.setColor, gfx.rectangle = saved_color, saved_rect
+      end)
+      F.cc.model.output:keep_background(1, 0, 0, .5)
+      F.cc.model.output.canvas = { }
+      draw_screen('picture')
+      assert.same({ 1, 0, 0, 1 },
+        { ground[1], ground[2], ground[3], ground[4] or 1 })
+    end)
+
     it('picture: the picture alone', function()
       F.cc.model.output.canvas = { }
       draw_screen('picture')
@@ -412,8 +470,10 @@ describe('the screen modes #canvas', function()
       F.run_project(function()
         screen().show('text')
         draw()
+        F.cc:get_project_env().love.update = function() end
       end)
       assert.equal('text', mode())
+      F.cc:get_project_env().love.update = nil
     end)
 
     it('is the run\'s: the next run starts in text and its drawing'

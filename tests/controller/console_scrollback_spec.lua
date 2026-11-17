@@ -822,12 +822,12 @@ describe("the console's scrolling keys #console", function()
       assert.is_not_nil(view())
     end)
 
-  it("scroll the output of a program that finished and idles "
-    .. "behind the console", function()
+  it("scroll the output of a program that ended by itself",
+    function()
       reset({ ["main.lua"] =
         "for i = 1, 40 do print('L' .. i) end\n" })
       run("run()")
-      assert.is_true(K.cc.run_live)
+      assert.is_false(K.cc.run_live)
       K.keys("lctrl", "up")
       assert.is_not_nil(view())
     end)

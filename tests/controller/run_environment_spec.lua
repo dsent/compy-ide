@@ -64,12 +64,18 @@ describe("a run's environment #console", function()
       env().love.update = nil
     end)
 
-  it("has no global a run before it set, which stays readable "
-    .. "after that run", function()
+  --- a run that ends by itself leaves nothing: its natural end
+  --- is a stop (stage 4 of the canvas plan); dofile() keeps what
+  --- a file defines
+  it("has no global a run before it set, and a run that ended "
+    .. "leaves none", function()
       reset({ ["main.lua"] = "g = 41 + 1\n" })
       run("run()")
       run("print('after ' .. tostring(g))")
-      assert.is_true(said("after 42"))
+      assert.is_true(said("after nil"))
+      run("dofile('main.lua')")
+      run("print('dofile ' .. tostring(g))")
+      assert.is_true(said("dofile 42"))
       K.write_outside("main.lua", "print('in the run ' .. tostring(g))\n")
       run("run()")
       assert.is_true(said("in the run nil"))
@@ -112,9 +118,7 @@ describe("a run's environment #console", function()
     reset({ ["main.lua"] = "local m = require('mod')\n"
       .. "m.count = m.count + 1\n"
       .. "print('count ' .. m.count)\n"
-      -- the finished run stays live behind the console with
-      -- its picture, and, able to do nothing more, leaves the
-      -- input to it
+      -- able to do nothing more, the run ends at its last line
       .. "",
       ["mod.lua"] = "return { count = 0 }\n" })
     -- the memory project's loader, as opening a project puts
@@ -128,7 +132,6 @@ describe("a run's environment #console", function()
     end)
     run("run()")
     assert.is_true(said("count 1"))
-    assert.is_true(K.cc.run_live)
     run("run()")
     assert.is_false(said("count 2"), K.console_text())
     assert.is_true(select(2, K.console_text():gsub("count 1", "")) == 2,

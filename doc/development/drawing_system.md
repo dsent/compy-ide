@@ -65,7 +65,7 @@ of it is one call there.
 | --- | --- | --- |
 | `text` | The output on its ground, no picture | Shown |
 | `combined` | The picture on its ground, then the output on a translucent ground, without cell backgrounds | Shown |
-| `picture` | The picture on the program's background colour, on the whole screen | None |
+| `picture` | The picture on the program's background colour, opaque, on the whole screen | None |
 
 In the combined mode the theme's `screen.combined.ground` is the opacity
 of the output's ground over the picture, and `screen.combined.text` that
@@ -83,6 +83,8 @@ What sets the mode:
 | A typed line's drawing call, in `text` | `combined` |
 | A pause | `text`, whatever the program draws while paused; `continue()` brings back the mode before it, or the picture when the program first drew while paused, whatever F12 showed meanwhile |
 | A stop, an error in top-level code, `reset()` | `text` |
+| A program's natural end at its last line (a stop) | `picture` when it drew, until a key or a click; `text` otherwise |
+| A program's natural end found as an event comes | `text` |
 | `compy.screen.show(mode)`, from a program or a typed line | `mode`, which holds against the run's first drawing (`ScreenModel:choose`) |
 | F12 in the console (`ScreenModel:step`) | the next of `text`, `combined`, `picture` |
 | A key or a button on the full picture while no program can act (`ScreenModel:back`) | `text` |

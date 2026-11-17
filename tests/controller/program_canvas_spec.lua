@@ -421,12 +421,15 @@ describe('a program\'s canvas after it stops #canvas', function()
       assert.equal('typed', who())
     end)
 
-  it('the same line after a run that finished: the stop keeps'
-    .. ' its picture, and nothing after it draws', function()
+  --- a run that ended by itself is stopped already (stage 4): its
+  --- picture stays, the line's stop is refused, and it draws on
+  it('the same line after a run that ended by itself: the picture'
+    .. ' stays until the line draws over it', function()
       F.run_project(function() draw('prog') end)
+      assert.is_false(F.cc.run_live)
       assert.equal('prog', who())
       submit_stop_and_draw()
-      assert.equal('prog', who())
+      assert.equal('typed', who())
     end)
 
   -- Enter reaches the program's input hook, which here stops the

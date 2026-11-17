@@ -165,12 +165,15 @@ describe('input surface: inbound events — global platform'
         assert.equal(open, P.current)
       end)
 
-    -- A program that finished its top-level code is idle, not
-    -- stopped: its picture and its handlers are still there
-    -- behind the console (ConsoleController.run_live).
+    -- A program that finished its top-level code and can still
+    -- act is idle, not stopped: its picture and its handlers are
+    -- still there behind the console (ConsoleController.run_live).
+    -- One that can do nothing more has ended (stage 4).
     it('stops a program that idles behind the console',
       function()
-        F.run_project(function() end)
+        F.run_project(function()
+          F.compy_input().hooks.mousepressed = function() end
+        end)
         assert.equal('ready', love.state.app_state)
         assert.is_true(F.cc.run_live)
         local open = P.current
