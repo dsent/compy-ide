@@ -1227,6 +1227,9 @@ Controller = {
       elseif program_live() then
         CC:stop_project_run()
       end
+      --- a finished program's picture on show goes as any key
+      --- takes it, Ctrl+Q's included: the gate's one way back
+      --- from the full picture (picture_only, below; round c5)
     end
 
     -- Ctrl+R restarts a live program from the entry point it

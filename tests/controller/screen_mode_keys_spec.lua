@@ -434,21 +434,26 @@ describe("the screen modes' keys #canvas", function()
 
     --- k2's third finding: the frame between a pause's request
     --- and the pause keeps the mode, which the pause saves for
-    --- continue(). The frame is set by hand: a program that can
-    --- act no more while its pause waits ends at the next event
-    --- (its natural end), so no program holds it open here.
+    --- continue(). The program's one handler pauses it and goes,
+    --- so it can act no more while the pause waits for its frame.
     it("leaves the picture alone between a pause's request and the"
       .. " pause", function()
-        picture()
-        love.state.app_state = "snapshot"
-        finally(function() love.state.app_state = "ready" end)
+        K.reset({ ["main.lua"] = DRAWS_ONCE .. "function"
+          .. " love.keypressed() pause()"
+          .. " compy.input.hooks.keypressed = nil end\n" })
+        K.start()
+        assert.same("picture", mode())
+        F.session.press("x")
+        assert.same("snapshot", K.app_state())
         F.session.press("z")
-        F.session.release("z")
         F.session.mousepressed(10, 10, 1, false, 1)
         F.session.mousereleased(10, 10, 1, false, 1)
-        love.handlers.touchpressed("t1", 10, 10, 0, 0, 1)
-        love.handlers.touchreleased("t1", 10, 10, 0, 0, 1)
-        assert.same("picture", mode())
+        F.session.release("z")
+        F.session.release("x")
+        K.frame()
+        assert.same("inspect", K.app_state())
+        --- the mode the pause saved for continue()
+        assert.same("picture", K.cc.model.screen.paused)
       end)
 
     --- text with no key of its own (a paste, a method of
