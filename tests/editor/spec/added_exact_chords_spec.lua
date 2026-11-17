@@ -273,24 +273,22 @@ describe("every chord is its own key #editor #spec", function()
       K.release("f1")
     end)
 
-    -- a program that runs with no key handler of its own lets
-    -- F1 fall through to the console, whose card then shows
+    -- turned around on November 17: a running program owns all
+    -- input, F1 too, so no console card comes up over it, and
+    -- Ctrl+Q, reserved, stops it with F1 held
     spec_it("IS3.16 Show the key card: over a running program "
-        .. "that leaves F1 to the console, Ctrl+Q under the card "
-        .. "does nothing", function()
+        .. "F1 is the program's, no card comes up, and Ctrl+Q "
+        .. "stops it with F1 held", function()
       K.reset({ ["main.lua"] = "function love.update() end\n" })
       K.type("run()")
       K.keys("return")
       assert.same("running", K.app_state())
       K.hold("f1")
-      assert.is_not_nil(K.key_card())
-      K.keys("lctrl", "q")
-      assert.same("running", K.app_state())
-      K.release("f1")
-      assert.same("running", K.app_state())
+      assert.is_nil(K.key_card())
       K.keys("lctrl", "q")
       assert.same("ready", K.app_state())
       assert.is_false(K.cc.run_live)
+      K.release("f1")
     end)
   end)
 

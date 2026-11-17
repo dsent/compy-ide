@@ -570,6 +570,121 @@ describe("terminal full row", function()
     end)
 end)
 
+--- The grid's height follows the screen it has: the console
+--- gives the output a row more while no input field is drawn
+--- under it and takes it back when one is. A row given comes at
+--- the bottom, blank. A row taken goes from the bottom if
+--- nothing is there; if text or the cursor is there the grid
+--- rolls up first, as at a line end on the last row, and the row
+--- that leaves the top is handed on to be kept.
+describe("terminal height", function()
+  local function rows(t)
+    local out = { }
+    for y, row in ipairs(t.buffer) do
+      out[y] = (table.concat(row):gsub(" +$", ""))
+    end
+    return out
+  end
+
+  --- a grid of 20 by 20 with `text` written, and the rows that
+  --- left its top
+  local function written(text)
+    local t = new_term()
+    local left = { }
+    t.on_row_leaving = function(chars)
+      left[#left + 1] = (table.concat(chars):gsub(" +$", ""))
+    end
+    t:print(text)
+    t:update(1000)
+    return t, left
+  end
+
+  it("gives a blank row at the bottom, in the cursor's colors",
+    function()
+      local t = written("a")
+      t:set_height(19)
+      t:set_cursor_backcolor(0, 0, 1, 1)
+      t:update(1000)
+      t:set_height(20)
+      assert.equal(20, t.height)
+      assert.equal(20, #t.buffer)
+      assert.equal(20, #t.state_buffer)
+      assert.equal("", rows(t)[20])
+      assert.same({ 0, 0, 1, 1 }, t.state_buffer[20][1].backcolor)
+      assert.is_true(t.dirty)
+    end)
+
+  it("takes an empty row from the bottom and rolls nothing",
+    function()
+      local t, left = written("a\nb")
+      t:set_height(19)
+      assert.equal(19, t.height)
+      assert.equal(19, #t.buffer)
+      assert.same({ "a", "b" }, { rows(t)[1], rows(t)[2] })
+      assert.same({ }, left)
+      assert.same({ 2, 2 }, { t.cursor_x, t.cursor_y })
+    end)
+
+  it("rolls up when the row it takes holds text", function()
+    local t, left = written(string.rep("L\n", 19) .. "last")
+    assert.equal("last", rows(t)[20])
+    t:set_height(19)
+    assert.same({ "L" }, left)
+    assert.equal("last", rows(t)[19])
+    assert.same({ 5, 19 }, { t.cursor_x, t.cursor_y })
+  end)
+
+  it("rolls up when the cursor is on the row it takes", function()
+    local t, left = written(string.rep("L\n", 19))
+    assert.equal(20, t.cursor_y)
+    t:set_height(19)
+    assert.same({ "L" }, left)
+    assert.equal("", rows(t)[19])
+    assert.same({ 1, 19 }, { t.cursor_x, t.cursor_y })
+  end)
+
+  it("rolls by as many rows as hold text below the new last",
+    function()
+      local t, left = written("a\nb\n" .. string.rep("\n", 16) .. "y\nz")
+      t:move_to(1, 5)
+      t:update(1000)
+      t:set_height(18)
+      assert.same({ "a", "b" }, left)
+      assert.same({ "y", "z" }, { rows(t)[17], rows(t)[18] })
+      assert.equal(3, t.cursor_y)
+    end)
+
+  it("keeps a full last row's wait for its wrap", function()
+    local full = string.rep("x", 20)
+    local t = written(string.rep("L\n", 19) .. full)
+    t:set_height(19)
+    assert.same({ 21, 19 }, { t.cursor_x, t.cursor_y })
+    t:print("y")
+    t:update(1000)
+    assert.same({ full, "y" }, { rows(t)[18], rows(t)[19] })
+  end)
+
+  it("lets what waits to be written land on the grid as it is "
+    .. "then", function()
+    local t = new_term()
+    t:move_to(1, 20)
+    t:print("low")
+    t:set_height(19)
+    t:update(1000)
+    assert.equal("low", rows(t)[19])
+  end)
+
+  it("goes no higher than the rows it was made with, and no "
+    .. "lower than one", function()
+    local t = new_term()
+    t:set_height(25)
+    assert.equal(20, t.height)
+    t:set_height(0)
+    assert.equal(1, t.height)
+    assert.equal(1, #t.buffer)
+  end)
+end)
+
 --- The queue of what waits to be written. A frame writes a few
 --- characters of it; what the frame costs must not depend on how
 --- much still waits behind them (a program that prints 2,000 lines
@@ -857,14 +972,25 @@ describe("terminal view", function()
     function()
       local t = view_term()
       t:print("ab→c")
-      assert.same({ "0 ab", "2 →", "3 c" }, drawn(t, 0, true))
+      assert.same({ "0 ab", "2 →", "3 c" }, drawn(t, 0, 1))
     end)
+
+  --- c1's sixth finding: over a picture that does not change,
+  --- the output is not drawn again each frame
+  it("draws the output over a program's picture once, whatever "
+    .. "its opacity, which the canvas takes as it is drawn", function()
+    local t = view_term()
+    t:print("ab")
+    assert.same({ "0 ab" }, drawn(t, 0, 1))
+    assert.same({ }, drawn(t, 0, 1))
+    assert.same({ }, drawn(t, 0, .5))
+  end)
 
   it("draws the output on its ground again once the program's "
     .. "picture is gone, and then lets it be", function()
     local t = view_term()
     t:print("ab")
-    assert.same({ "0 ab" }, drawn(t, 0, true))
+    assert.same({ "0 ab" }, drawn(t, 0, 1))
     assert.same({ "back 0 20", "0 ab" }, drawn(t, 0))
     assert.same({ }, drawn(t, 0))
   end)

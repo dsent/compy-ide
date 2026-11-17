@@ -1593,8 +1593,8 @@ was running and the one `ctrl+r` just started both see none of them. The reason:
 from `ctrl+alt+r` to `ctrl+r`, and a program handles a plain `r`, so the restarted program took
 the key as its own (seen on a Compy on 2026-11-16). With it, every key's repeats and release go
 to the receiver of its press, and nowhere once that receiver is gone; a release a paused program
-is owed comes at its `continue()` (the gate in `controller.lua`, `delivered` and
-`owed_releases`). What relied on the old contract: the input-contract tests that a project's own
+is owed comes at its `continue()` (the gate in `controller.lua`, `receivers` and
+`owed_releases`; since 2026-11-17 a mouse button and a touch by the same record and path). What relied on the old contract: the input-contract tests that a project's own
 binding of `ctrl+pause` still runs after the suspend, and that a shortcut leaves the key to the
 route (`input_global_shortcuts_spec.lua`, `input_shortcuts_click_spec.lua`), now turned around,
 and the input guide's sentence that reservations pass the event on; no shipped program binds a
@@ -1626,6 +1626,14 @@ idles behind the console, the same condition under which `ctrl+q` stops one (`pr
 run ends. With none live it does nothing, in the console and the file editor alike, and the
 editor's key card no longer lists it. `ctrl+t` from the editor runs `main.lua` ("main.lua only for
 now"). A packaged build restarts as before.
+
+**Note, 2026-11-17 — `f12` cycles the screen's modes, by the maintainer's ruling ("yes and
+yes": the IDE takes F12 from programs, and the key card lists it).** Bare F12, matched exactly as
+every reservation is, shows the screen's next mode, text, combined, the picture
+(`model/screenModel.lua`), in the console, idle, running or paused; in the editor and in a
+packaged build it does nothing. It acts once a press and consumes its press, repeats and release,
+as every reservation does. F12 with a modifier is the program's. With F10 it is the second
+reservation without a modifier.
 
 **Owner ruling, 2026-08-16.** **Amends D-ASK-THE-DEVICE point 3**, which named this
 table, declined to commit to it, and required that if it were ever built it be

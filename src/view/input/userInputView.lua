@@ -31,7 +31,8 @@ end
 --- @field controller UserInputController
 --- @field statusline table
 --- @field canvas love.Canvas
---- @field field_hidden boolean? --- the console's field behind a program that owns the keys: its status line alone
+--- @field field_hidden boolean? --- the console's field behind a program that owns the input: its status line alone
+--- @field bare_status Status? --- what the status line says while no field is drawn under it; it is then the screen's last row
 UserInputView = class.create(new)
 
 local get_colors = function(cf_colors)
@@ -123,6 +124,7 @@ end
 --- The rows a message may take in the band: one, or up to
 --- three when it is wider than the screen
 local NOTICE_ROWS = 3
+UserInputView.NOTICE_ROWS = NOTICE_ROWS
 
 --- The rows of the message the band shows, nil when none
 --- shows; one longer than the band ends in an ellipsis.
@@ -236,7 +238,7 @@ function UserInputView:render_input(input, status, time)
   local wrap_forward = vc.wrap_forward
 
 
-  self.start_h = self:status_y(inLines)
+  self.start_h = self:status_y(self.bare_status and 0 or inLines)
 
   local function drawCursor()
     --- the cursor blinks (H-NFR4.4): in its hidden phase
@@ -291,9 +293,9 @@ function UserInputView:render_input(input, status, time)
   drawBackground()
 
   gfx.push('all')
-  self.statusline:draw(status, 0)
+  self.statusline:draw(self.bare_status or status, 0)
   gfx.pop()
-  --- hidden behind a program that owns the keyboard: the status
+  --- hidden behind a program that owns the input: the status
   --- line alone, the field's rows background, no cursor
   if self.field_hidden then return end
 
@@ -466,8 +468,10 @@ end
 --- @param status Status
 function UserInputView:render(input, status, time)
   local gfx = love.graphics
-  --- what this render shows of the cursor's blink
+  --- what this render shows of the cursor's blink, and of the
+  --- screen's mode on the status line
   self.cursor_shown = Blink.shown(self.cfg.blink)
+  self.mode_shown = status and status.mode
   --- @diagnostic disable-next-line: undefined-field
   if gfx.mock then return end
   local err_text = input.wrapped_error or {}
@@ -503,7 +507,12 @@ function UserInputView:draw()
   local project = love.state.user_input_controller
   local shown = Blink.shown(self.cfg.blink)
   local turned = shown ~= self.cursor_shown
-  if self.controller ~= project or turned then
+  --- and when the screen's mode its status line names changes
+  --- (round j1)
+  local model = self.controller and self.controller.model
+  local source = model and model.screen_source
+  local moded = source ~= nil and source() ~= self.mode_shown
+  if self.controller ~= project or turned or moded then
     self.controller:update_view()
   end
   local h = self.start_h

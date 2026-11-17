@@ -196,6 +196,21 @@ describe("the key card #editor", function()
     end
   end)
 
+  --- the screen modes' key (the program's canvas, stage 2): the
+  --- console's alone, idle and live; the editor has none
+  it("lists F12 in the console, among the keys now, and not in"
+      .. " the editor", function()
+    for _, live in ipairs({ false, true }) do
+      local now = group_of(KeyCard.console_cells(live))
+      assert.same("screen", now["F12"])
+    end
+    for _, state in ipairs({ "browsing", "inserting", "replacing" }) do
+      local now, other = group(state, false)
+      assert.is_nil(now["F12"])
+      assert.is_nil(other["F12"])
+    end
+  end)
+
   it("takes one column where two do not fit", function()
     local lines = KeyCard.lines("browsing", true, 40, 40)
     assert.same(27, #lines)

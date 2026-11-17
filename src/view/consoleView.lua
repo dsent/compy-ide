@@ -40,13 +40,16 @@ ConsoleView = class.create(new)
 
 --- @param terminal table
 --- @param canvas love.Canvas
---- @param snapshot love.Image?
-function ConsoleView:draw(terminal, canvas, snapshot)
+--- @param mode ScreenMode --- what the screen shows of the
+--- output and the program's picture (model/screenModel.lua)
+function ConsoleView:draw(terminal, canvas, mode)
   if love.DEBUG then
     self:draw_placeholder()
   end
 
   local function drawConsole()
+    --- the output as high as this frame's screen leaves it
+    self.controller:fit_output()
     --- the key card over the output and the field alike,
     --- the status line beneath it (IS3.16)
     if self.controller:key_card() then
@@ -58,16 +61,25 @@ function ConsoleView:draw(terminal, canvas, snapshot)
     local tc = self.controller.model.output.term_canvas
     self.canvas:draw(
       terminal, canvas, tc,
-      self.drawable_height, snapshot,
+      self.drawable_height, mode,
       self.controller.model.output)
+    --- the full picture is the picture alone: no status line,
+    --- no field
+    if mode == 'picture' then return end
 
     if ViewUtils.conditional_draw('show_input') then
-      --- behind a live program that owns the keyboard the field
+      --- behind a live program that owns the input the field
       --- and its cursor are hidden, its status line stays (the
       --- maintainer's question of November 16, 2026, the lead's
       --- option B): the field takes no typing there
-      local hidden = self.controller.main_ctrl.program_owns_keys()
+      local hidden = self.controller.main_ctrl.program_owns_input()
       self.input.field_hidden = hidden
+      --- with no field drawn at all the field's row is the
+      --- output's, and the status line is the screen's last
+      --- row, saying only what runs (the maintainer's ruling of
+      --- November 17, 2026)
+      self.input.bare_status = self.controller:fieldless()
+          and self.controller:running_status() or nil
       self.input:draw()
       --- the notice band over the output's last rows, on
       --- the output's row grid (IS3.14)

@@ -186,13 +186,17 @@ describe("the console's channels #console", function()
       it((case[1] == "pause" and "pause('Look here')" or "Ctrl+Pause")
         .. " shows in the band, orange, the output untouched",
         function()
+          --- the output's rows, the grid's height apart: it has
+          --- 17 rows while the program owns the input and 16 with
+          --- the field back (ruling 1.3)
+          local function rows(t) return (t:gsub("%s+$", "")) end
           local before = paused_by(case[1])
           assert.same({ case[2] }, band())
           assert.same("notice", K.cc.input:message_kind())
-          assert.same(before, K.console_text())
+          assert.same(rows(before), rows(K.console_text()))
           K.cc:get_project_env().continue()
           K.frame(100)
-          assert.same(before, K.console_text())
+          assert.same(rows(before), rows(K.console_text()))
           K.cc:get_project_env().love.update = nil
         end)
     end

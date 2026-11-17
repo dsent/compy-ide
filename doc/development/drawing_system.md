@@ -1,91 +1,106 @@
 # Drawing System
 
-<!-- authored By LLM; human-approved NOT YET -->
+The console's text and a program's picture are two records kept apart:
+the output (the terminal grid and its kept rows) and the program's
+canvas. The screen shows them in one of three modes. This is the
+proposal "The Program's Canvas and the Viewing Modes", built as if
+accepted (the maintainer's ruling of November 17, 2026).
 
-## Two Modes
+## Two Ways A Program Draws
 
-User projects can draw in one of two ways, selected by whether `love.draw` is overridden.
+**Once, or on events.** Code calls `gfx.*` at its top level, in a
+handler, or in `love.update`. What it draws stays on the canvas, since
+nothing clears the canvas between frames. Example: `src/examples/sine`
+plots its curve once and defines no `love.draw`.
 
-### Pen-and-paper mode (default)
+**Each frame.** The program defines `love.draw`. The IDE's own
+`love.draw` calls it each frame onto the canvas, after clearing the
+canvas to the program's background colour with the transform at its
+origin, as `love.run` clears the screen before a LÖVE program's draw.
+The canvas then holds the last frame drawn.
 
-Project code calls `gfx.*` primitives imperatively — in response to events (clicks, input) or at startup. There is no per-frame redraw loop. The framework composites everything on each frame regardless, but the virtual canvas only changes when the project explicitly draws to it, so unchanged content persists for free while the program runs. The canvas is cleared when the run stops (see [Canvas lifetime](#canvas-lifetime)).
+Either way, every line of program code and every typed line runs with
+the canvas bound (`ConsoleController:use_canvas`): top-level code and
+typed lines (`run_user_code`), every routed event (`with_canvas_and_errors`
+in `controller.lua`), `love.update`, `love.draw` (`draw_program`),
+`compy.before_exit` and the serial handlers (`SerialPort:update`). A
+field's validator, highlighter and parser are the one exception: they
+run while the IDE renders the field into its own canvas. What the code pushed and did not pop is popped when
+it returns, raises or is ended, before the target goes back: a push
+saves the state it is made in, the program's canvas bound, and one left
+behind would bind it again wherever it is popped. A program's `love.graphics.setCanvas()` with no
+target binds its canvas, as LÖVE's binds the screen, and its
+`getCanvas()` answers `nil` there, and its `reset()` makes its canvas the
+target again (`prepare_project_env`). So a program
+that draws through a canvas of its own and goes "back to the screen"
+lands on its picture.
 
-**Example:** `src/examples/sine` — plots the curve once at startup and defines no `love.draw`; the plot stays on the canvas with nothing redrawing it.
+## The Canvas Record
 
-### Real-time draw mode
+`CanvasModel.canvas` (`src/model/canvasModel.lua`) is the screen's size.
 
-Project sets `love.draw` directly. The framework detects this on the next `update()` tick, wraps the user draw in `gfx.push/pop` + error handling, and appends the input widget if it is shown. The framework console UI is bypassed.
+- A run's start (the run seam, Ctrl+R) clears it, so does `reset()`.
+- A stop keeps it: `stop()`, Ctrl+Q, Ctrl+T, an error in top-level code,
+  the program's own quit, a project's close. What `before_exit` draws
+  stays too.
+- A pause keeps it, and the paused frame is the last one drawn: the
+  pause takes no screenshot.
+- `CanvasModel:clear_canvas` clears the whole canvas whatever scissor or
+  colour mask the program left, and puts the caller's state back.
+- With the canvas the record keeps whether anything is drawn on it
+  since it was cleared (`is_drawn`) and the background colour the
+  program chose (`get_background`): the program's
+  `love.graphics.setBackgroundColor` keeps each colour it sets there, and
+  so do its `pop()` when it puts another back and its `reset()`, so
+  neither the flush's reset nor the state a draw gives back after its
+  frame changes it. A program's `love.draw` frame is cleared to it,
+  premultiplied, as the canvas holds its colours.
 
-**Example:** `src/examples/balloons` — sets `love.draw = hooks["draw"]` and `love.update = hook("update")` in `game_init()`.
+## The Screen's Modes
 
----
+`ScreenModel` (`src/model/screenModel.lua`) holds the mode; every change
+of it is one call there.
 
-## How It Works
+| Mode | Draws (`CanvasView:draw`) | Status line and field |
+| --- | --- | --- |
+| `text` | The output on its ground, no picture | Shown |
+| `combined` | The picture on its ground, then the output on a translucent ground, without cell backgrounds | Shown |
+| `picture` | The picture on the program's background colour, opaque, on the whole screen | None |
 
-### Virtual canvas
+In the combined mode the theme's `screen.combined.ground` is the opacity
+of the output's ground over the picture, and `screen.combined.text` that
+of its characters (`src/conf/colors.lua`), which the output's canvas
+takes as it is drawn, its characters whole on it. The program's canvas
+is drawn with premultiplied alpha, since what is drawn on a canvas
+carries its alpha in its colour already.
 
-`CanvasModel` holds a `love.Canvas` (`model.output.canvas`) that serves as the drawing surface for all user project code. It is composited over the terminal by `CanvasView:draw()` during the framework's render pass (`src/view/canvas/canvasView.lua`).
+What sets the mode:
 
-### Canvas lifetime
+| Event | Mode |
+| --- | --- |
+| A run starts | `text` |
+| A running program's first drawing call of its run | `picture` |
+| A typed line's drawing call, in `text` | `combined` |
+| A pause | `text`, whatever the program draws while paused; `continue()` brings back the mode before it, or the picture when the program first drew while paused, whatever F12 showed meanwhile |
+| A stop, an error in top-level code, `reset()` | `text` |
+| A program's natural end at its last line (a stop; a pause, asked for or made, is none) | `picture` when it drew, until a key or a click; `text` otherwise |
+| A program's natural end found as an event comes (the gate asks first, at every event) | `text`; the picture when it showed, which that event, a key or a click, then leaves for `text` |
+| Ctrl+Q with nothing live, the full picture showing | `text` (`ScreenModel:back`, the way any key goes) |
+| `compy.screen.show(mode)`, from a program or a typed line | `mode`, which holds against the run's first drawing (`ScreenModel:choose`) |
+| F12 in the console (`ScreenModel:step`) | the next of `text`, `combined`, `picture` |
+| A key or a button on the full picture while no program can act (`ScreenModel:back`) | `text` |
 
-The canvas belongs to the run that drew on it, and to the console between runs:
+A drawing call is one of the program's `love.graphics` drawing
+functions (`arc`, `circle`, `draw`, `drawInstanced`, `drawLayer`,
+`ellipse`, `line`, `points`, `polygon`, `print`, `printf`,
+`rectangle`) or a fill or stroke of its `compy.graphics.shape2d`; each
+calls `ConsoleController:drew`. `clear` erases and draws nothing. Lua's
+`print` goes to the output alone.
 
-- A run starts on a blank canvas. A project that fails to load clears it too, so its error shows on a blank console.
-- Every stop clears it: Ctrl+Q, Ctrl+T, `stop()`, restart (Ctrl+R), the program's own quit, and a top-level error. `_stop_project_run` clears it after the project's `before_exit` hook, so what the hook draws goes too.
-- The clear covers the whole canvas whatever scissor or color mask the program left; `CanvasModel:clear_canvas` puts the caller's graphics state back.
-- A program's call that stops its own run and goes on drawing is cleared again when its `use_canvas` call unwinds: the run was live when the call began and is stopped now (`run_live`), so the clear holds whatever run replaced it, unless that replacement is live (restart), which keeps its canvas. A top-level error clears only its own run's canvas (`run_id`), never a rerun it started.
-- Console code passes `console = true` and owns no run. A console line that stops and then draws keeps its drawing, in every state: when no run is live afterwards its `use_canvas` call moves `canvas_handed` on, and the program call that encloses the submitting keypress leaves the canvas alone. The exception is a line that starts a run with `run()` before it draws: the nested run ends by unbinding the canvas, so what the line draws next misses it (a known limit of nested execution).
-- Drawing typed at the console shares the canvas: it lasts until the next stop, run or close, and a stop clears it too, with no program running.
-- A paused run (Ctrl+Pause, an error in a handler) has not stopped: its canvas stays, and `continue()` draws on it again.
-- A run that finishes its top-level code is in `ready`, not stopped, and keeps its picture until it stops or the project closes. That covers a run with nothing live (no handlers, no widget), as the sine example is, and a run with live handlers but no `update` or `draw`. Ctrl+Q, `stop()`, Ctrl+T and restart end it: Ctrl+Q stops a run that is not stopped (`run_live`), whether it is `running`, paused or idle in `ready`.
+## The IDE's Draw
 
-### `use_canvas(f)` — `ConsoleController:use_canvas` in `src/controller/consoleController.lua`
-
-```lua
-function ConsoleController:use_canvas(f, console)
-  gfx.setCanvas({ canvas, stencil = true })
-  local r = f()
-  gfx.setCanvas()
-  -- a program's call that began live and finds no run live now:
-  -- clear again, unless console code took the canvas over
-  -- (canvas_handed)
-  return r
-end
-```
-
-Project input code is wrapped in `guarded` (`controller.lua`), which calls `use_canvas` internally. It wraps the point where a **route is entered** rather than each handler, so a whole dispatch walk — shortcuts, hooks and the input widget alike — runs with the canvas bound (`../decisions/input.md`, D-ONE-LIFETIME). User `love.update` is also run inside `use_canvas` (see `controller.lua`, `set_love_update`). This means any `gfx.*` calls in project input handlers or update automatically go to the virtual canvas, not the screen.
-
-### User `love.draw` detection — `src/controller/controller.lua`, `set_love_update`
-
-On each frame's `update()`, the framework compares `love.draw` against its last known value (`View.prev_draw`). If they differ, it replaces `love.draw` with a wrapper:
-
-```lua
-local draw = function()
-  gfx.push('all')
-  wrap(ldr, CC)        -- user draw, error-handled
-  gfx.pop()
-  -- append the input widget if it is active
-  local ui = get_user_input()
-  if ui then ui.V:draw() end
-end
-love.draw = draw
-View.prev_draw = draw
-```
-
-The framework console UI is not drawn in this path; only the user draw and the optional input widget.
-
-### Framework's default `love.draw` — `src/view/view.lua`, `src/controller/controller.lua:set_love_draw`
-
-Calls `View.draw(CC, CV)` which renders: background → terminal → virtual canvas, in blend-mode layers. The virtual canvas is drawn with `gfx.draw(canvas)` as a single texture blit per frame.
-
----
-
-## Summary
-
-| | Pen-and-paper | Real-time |
-|---|---|---|
-| Draw trigger | Event / explicit call | Every frame (`love.draw`) |
-| Draws to | Virtual canvas (via `use_canvas`) | Screen directly (framework wraps it) |
-| Framework UI | Composited on top | Bypassed; input widget appended separately |
-| GC / CPU cost | Low — canvas persists until the run stops | Per-frame cost, project's responsibility |
-| Suitable for | Board games, static visuals | Animations, physics, continuous updates |
+`set_love_draw` (`controller.lua`) installs the IDE's `love.draw` for
+good: the program's frame onto its canvas (`draw_program`), then
+`View.draw`, which draws the screen by its mode in the IDE's own
+graphics state (`src/view/ownState.lua`), then a running program's own
+input field, over every mode, then the frame-rate overlay.

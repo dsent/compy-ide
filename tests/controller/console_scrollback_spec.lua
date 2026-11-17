@@ -675,16 +675,17 @@ describe("the console's scrolling keys #console", function()
     end)
 
   it("Home and End with text in the field are the field's keys, "
-    .. "and bring the screen back", function()
+    .. "and leave the view where it is", function()
       print_lines(1, 80)
       K.type("abc")
       K.keys("pageup")
+      local v = view()
+      assert.is_not_nil(v)
       K.keys("home")
-      assert.is_nil(view())
+      assert.same(v, view())
       assert.same({ "abc", 1, 1 }, field())
-      K.keys("pageup")
       K.keys("end")
-      assert.is_nil(view())
+      assert.same(v, view())
       assert.same({ "abc", 1, 4 }, field())
     end)
 
@@ -714,25 +715,57 @@ describe("the console's scrolling keys #console", function()
     end
   end)
 
-  it("a typed character, Enter, Escape, an arrow and Ctrl+T "
-    .. "bring the screen back", function()
+  --- the maintainer's ruling of November 17, 2026: "I can
+  --- scroll up, look at something in the history while typing a
+  --- new command"
+  it("typing, an arrow, Backspace and Escape leave the view "
+    .. "where it is", function()
       print_lines(1, 40)
-      local function scrolled() K.keys("lctrl", "up") end
-      scrolled()
-      K.type("x")
-      assert.is_nil(view())
-      assert.equal("x", K.console_draft())
-      scrolled()
+      K.keys("lctrl", "up")
+      local v = view()
+      K.type("x = 1")
+      assert.same(v, view(), "typed text")
+      assert.equal("x = 1", K.console_draft())
       K.keys("left")
-      assert.is_nil(view())
-      scrolled()
+      K.keys("backspace")
+      assert.same(v, view(), "an arrow and Backspace")
       K.keys("escape")
-      assert.is_nil(view())
-      scrolled()
-      K.type("y = 1")
+      assert.same(v, view(), "Escape")
+      assert.equal("", K.console_draft())
+    end)
+
+  it("Enter on a line that runs brings the screen back", function()
+    print_lines(1, 40)
+    K.keys("lctrl", "up")
+    K.type("y = 1")
+    assert.is_true(output():is_scrolled())
+    K.keys("return")
+    assert.is_nil(view())
+  end)
+
+  it("Enter on a line that does not run leaves the view where "
+    .. "it is", function()
+      print_lines(1, 40)
+      K.keys("lctrl", "up")
+      local v = view()
+      -- nothing to run
       K.keys("return")
-      assert.is_nil(view())
-      scrolled()
+      assert.same(v, view(), "an empty field")
+      -- a statement that goes on
+      K.type("if x then")
+      K.keys("return")
+      assert.same(v, view(), "an unfinished statement")
+      K.keys("escape")
+      -- Lua refuses it
+      K.type("x = = 1")
+      K.keys("return")
+      assert.same(v, view(), "a line Lua does not load")
+    end)
+
+  it("Ctrl+T, to the editor and back, brings the screen back",
+    function()
+      print_lines(1, 40)
+      K.keys("lctrl", "up")
       K.keys("lctrl", "t")
       K.keys("lctrl", "t")
       assert.same("ready", K.app_state())
@@ -789,12 +822,12 @@ describe("the console's scrolling keys #console", function()
       assert.is_not_nil(view())
     end)
 
-  it("scroll the output of a program that finished and idles "
-    .. "behind the console", function()
+  it("scroll the output of a program that ended by itself",
+    function()
       reset({ ["main.lua"] =
         "for i = 1, 40 do print('L' .. i) end\n" })
       run("run()")
-      assert.is_true(K.cc.run_live)
+      assert.is_false(K.cc.run_live)
       K.keys("lctrl", "up")
       assert.is_not_nil(view())
     end)
@@ -1096,10 +1129,15 @@ describe("the scrolled view at a transition #console", function()
     assert.is_false(output():is_scrolled(), what)
   end
 
+  --- a line typed behind a program that can act reaches no
+  --- console (November 17): the program prints the rows, and
+  --- the output's own Home scrolls them (ruling 1.1)
   it("a run started anew by Ctrl+R", function()
-    reset({ ["main.lua"] = RUNS })
+    reset({ ["main.lua"] = "for i = 1, 40 do print('L' .. i) end\n"
+      .. RUNS })
     K.start()
-    scrolled()
+    K.keys("home")
+    assert.is_true(output():is_scrolled())
     K.keys("lctrl", "r")
     at_rest("Ctrl+R")
   end)
@@ -1123,18 +1161,19 @@ describe("the scrolled view at a transition #console", function()
   end)
 
   it("a stop by Ctrl+Q", function()
-    reset({ ["main.lua"] = RUNS })
+    reset({ ["main.lua"] = "for i = 1, 40 do print('L' .. i) end\n"
+      .. RUNS })
     run("run()")
-    print_lines(1, 40)
     output():to_oldest()
+    assert.is_true(output():is_scrolled())
     K.keys("lctrl", "q")
     at_rest("Ctrl+Q")
   end)
 
   it("a pause and its end", function()
-    reset({ ["main.lua"] = RUNS })
+    reset({ ["main.lua"] = "for i = 1, 40 do print('L' .. i) end\n"
+      .. RUNS })
     run("run()")
-    print_lines(1, 40)
     output():to_oldest()
     K.keys("lctrl", "pause")
     K.frame()
@@ -1148,14 +1187,18 @@ describe("the scrolled view at a transition #console", function()
     K.cc:get_project_env().love.update = nil
   end)
 
+  --- the pause is made in the frame of the error: the program
+  --- raises once the view is scrolled
   it("an error that pauses the program", function()
-    reset({ ["main.lua"] =
-      "function love.update() love.update = nil; error('x') end\n" })
+    reset({ ["main.lua"] = "function love.update()\n"
+      .. "  if go then love.update = nil; error('x') end\n"
+      .. "end\n" })
     run("run()")
     print_lines(1, 40)
     output():to_oldest()
+    K.cc:get_project_env().go = true
     K.frame()
-    K.cc:suspend()
+    assert.same("inspect", K.app_state())
     at_rest("the error's pause")
   end)
 
@@ -1239,34 +1282,81 @@ describe("the scrolled view at a transition #console", function()
     env.compy.input.hooks.textinput = nil
   end
 
-  it("a key a program takes after the view scrolled", function()
+  --- turned around on November 17, 2026: input no longer moves
+  --- a scrolled view, a program's no more than the console's
+  it("not a key a program takes after the view scrolled", function()
     reset({ ["main.lua"] = takes_later("keypressed",
       "function() return true end") })
     run("run()")
     K.keys("home")
     assert.is_true(output():is_scrolled(), "Home, before the hook")
     for _ = 1, 30 do K.frame() end
-    assert.is_true(output():is_scrolled(),
-      "the hook alone leaves the view")
+    local t = output():top()
     K.keys("end")
-    at_rest("the key the program took")
-    K.frame(100)
-    local s = table.concat(screen(), "\n")
-    assert.truthy(s:find("Ready for keys.", 1, true))
+    K.keys("x")
+    assert.equal(t, output():top(), "the keys the program took")
     forget_program()
   end)
 
-  it("a text a program takes after the view scrolled", function()
-    reset({ ["main.lua"] = takes_later("textinput",
-      "function() return true end") })
+  it("not a text a program takes after the view scrolled",
+    function()
+      reset({ ["main.lua"] = takes_later("textinput",
+        "function() return true end") })
+      run("run()")
+      K.keys("home")
+      for _ = 1, 30 do K.frame() end
+      local t = output():top()
+      love.handlers.textinput("a")
+      assert.equal(t, output():top(), "the text the program took")
+      forget_program()
+    end)
+
+  --- a program's field shown from the start, and what it is
+  --- given printed
+  local ASKS = "for i = 1, 40 do print('L' .. i) end\n"
+      .. "compy.input.show { on_text_entered = function(t)\n"
+      .. "  print('got ' .. t) end }\n" .. RUNS
+
+  it("not typing in a program's field", function()
+    reset({ ["main.lua"] = ASKS })
     run("run()")
-    K.keys("home")
-    for _ = 1, 30 do K.frame() end
-    assert.is_true(output():is_scrolled())
-    love.handlers.textinput("a")
-    at_rest("the text the program took")
-    forget_program()
+    assert.is_true(love.state.user_input_controller:is_shown())
+    -- a shown field has the scrolling keys: the view moves as
+    -- the wheel moves it
+    output():to_oldest()
+    local t = output():top()
+    assert.is_not_nil(t)
+    K.type("abc")
+    K.keys("left")
+    assert.equal(t, output():top())
+    K.cc:get_project_env().love.update = nil
   end)
+
+  it("Enter that hands a program's field its answer", function()
+    reset({ ["main.lua"] = ASKS })
+    run("run()")
+    output():to_oldest()
+    assert.is_true(output():is_scrolled())
+    K.type("abc")
+    K.keys("return")
+    at_rest("the answer given")
+    K.frame(100)
+    assert.truthy(table.concat(screen(), "\n"):find("got abc", 1, true))
+    K.cc:get_project_env().love.update = nil
+  end)
+
+  it("not Enter in a program's field that takes no answer",
+    function()
+      reset({ ["main.lua"] = ASKS })
+      run("run()")
+      output():to_oldest()
+      local t = output():top()
+      assert.is_not_nil(t)
+      -- an empty field hands nothing over
+      K.keys("return")
+      assert.equal(t, output():top())
+      K.cc:get_project_env().love.update = nil
+    end)
 
   --- turned around on November 16, 2026: a key the program
   --- leaves goes nowhere, the console's scrolling included (a
@@ -1284,11 +1374,238 @@ describe("the scrolled view at a transition #console", function()
       assert.equal(t, output():top(), "Ctrl+Up the program leaves")
       K.keys("lshift")
       assert.equal(t, output():top(), "a lone Shift the program took")
-      K.keys("x")
-      at_rest("x, which the program took")
       forget_program()
     end)
 end)
+
+--- The field's row is the output's while no input field is
+--- drawn (the maintainer's ruling of November 17, 2026: "when
+--- the console input widget is hidden (when a program runs),
+--- the freed lines should be available to the program with no
+--- restriction. when the widget is back, if there's something
+--- there, it scrolls up. The status line goes to the bottom and
+--- shows only the relevant information: project, entry point
+--- name, 'running'").
+describe("the output's rows with no field under it #console",
+  function()
+    before_each(function() reset() end)
+    after_each(cleanup)
+
+    local RUNS = "function love.update() end\n"
+    --- a program that takes the keys and shows no field
+    local OWNS = "compy.input.hooks.keypressed = function()\n"
+        .. "  return true end\n" .. RUNS
+
+    local function rows() return output().terminal.height end
+
+    local function env() return K.cc:get_project_env() end
+
+    local function owning()
+      reset({ ["main.lua"] = OWNS })
+      run("run()")
+      K.frame()
+    end
+
+    --- the program's handlers go with it: the fixture keeps its
+    --- tables for the next run in this file
+    local function forget()
+      env().love.update = nil
+      env().compy.input.hooks.keypressed = nil
+    end
+
+    --- `text` written on the grid's last row
+    local function on_last_row(text)
+      output().terminal:move_to(1, rows())
+      output():write(text)
+      K.frame(100)
+      assert.equal(text, screen()[rows()])
+    end
+
+    it("are 16 in the console", function()
+      assert.equal(16, rows())
+      print_lines(1, 40)
+      assert.equal(16, rows())
+    end)
+
+    it("are 17 behind a program that owns the keys", function()
+      owning()
+      assert.equal(17, rows())
+      assert.equal(17, #screen())
+      forget()
+    end)
+
+    it("are 16 while the program shows a field of its own, and "
+      .. "17 again once it hides it", function()
+        owning()
+        env().compy.input.show { }
+        K.frame()
+        assert.equal(16, rows())
+        env().compy.input.hide()
+        K.frame()
+        assert.equal(17, rows())
+        forget()
+      end)
+
+    it("lose the 17th at a stop, what is on it rolled up and the "
+      .. "top row kept", function()
+        owning()
+        on_last_row("last")
+        local top, kept_before = screen()[1], output().kept:count()
+        K.keys("lctrl", "q")
+        K.frame()
+        assert.equal(16, rows())
+        assert.equal("last", screen()[16])
+        assert.equal(kept_before + 1, output().kept:count())
+        local k = kept()
+        assert.equal(top, k[#k])
+      end)
+
+    it("lose an empty 17th at a stop and keep nothing", function()
+      owning()
+      local before, kept_before = screen(), output().kept:count()
+      assert.equal("", before[17])
+      K.keys("lctrl", "q")
+      K.frame()
+      assert.equal(16, rows())
+      assert.equal(before[1], screen()[1])
+      assert.equal(kept_before, output().kept:count())
+    end)
+
+    it("lose the 17th at a pause", function()
+      owning()
+      on_last_row("last")
+      K.keys("lctrl", "pause")
+      K.frame()
+      K.cc:suspend()
+      K.frame()
+      assert.same("inspect", K.app_state())
+      assert.equal(16, rows())
+      assert.equal("last", screen()[16])
+      forget()
+    end)
+
+    it("roll up for a program's field that comes up over text",
+      function()
+        owning()
+        on_last_row("last")
+        env().compy.input.show { }
+        K.frame()
+        assert.equal(16, rows())
+        assert.equal("last", screen()[16])
+        forget()
+      end)
+
+    it("let gotoxy reach the 17th row while it is there, and the "
+      .. "16th otherwise", function()
+        owning()
+        env().compy.terminal.gotoxy(1, 17)
+        output():write("deep")
+        K.frame(100)
+        assert.equal("deep", screen()[17])
+        K.keys("lctrl", "q")
+        K.frame()
+        assert.equal(16, rows())
+        env().compy.terminal.clear()
+        env().compy.terminal.gotoxy(1, 17)
+        output():write("shallow")
+        K.frame(100)
+        assert.equal("shallow", screen()[16])
+      end)
+
+    it("show a scrolled view 17 rows high", function()
+      owning()
+      for i = 1, 40 do output():push("L" .. i) end
+      K.frame(100)
+      output():to_oldest()
+      assert.equal(17, #view())
+      forget()
+    end)
+
+    --- the grid is as high as the screen drawn shows it: a
+    --- program's update that shows or hides its field comes
+    --- after the frame's own step (review o1)
+    it("are 16 in the very frame whose update shows the "
+      .. "program's field, and 17 in the one that hides it",
+      function()
+        reset({ ["main.lua"] = "compy.input.hooks.keypressed = "
+          .. "function() return true end\n"
+          .. "function love.update()\n"
+          .. "  if want == 'show' then compy.input.show { } end\n"
+          .. "  if want == 'hide' then compy.input.hide() end\n"
+          .. "  want = nil\n"
+          .. "end\n" })
+        run("run()")
+        K.frame()
+        assert.equal(17, rows())
+        env().want = "show"
+        K.frame()
+        local s = K.screen()
+        assert.equal(16, rows(), "the frame that shows the field")
+        assert.equal(1, s.field_rows)
+        env().want = "hide"
+        K.frame()
+        s = K.screen()
+        assert.equal(17, rows(), "the frame that hides it")
+        assert.equal(0, s.field_rows)
+        forget()
+      end)
+
+    --- an erase is made at once: nothing it erased is on the grid
+    --- for the row's return to keep (review o1)
+    it("keep nothing of what reset() erased when the 17th row "
+      .. "goes", function()
+        owning()
+        for i = 1, 30 do output():push("old " .. i) end
+        K.frame(100)
+        assert.equal(17, output().terminal.cursor_y)
+        K.cc:reset()
+        K.frame()
+        K.frame(100)
+        assert.equal(16, rows())
+        for _, r in ipairs(kept()) do
+          assert.is_nil(r:find("old", 1, true), r)
+        end
+        for _, r in ipairs(screen()) do
+          assert.is_nil(r:find("old", 1, true), r)
+        end
+      end)
+
+    it("have a status line that fits the screen with a long "
+      .. "entry name, the name cut and \"running\" whole", function()
+        owning()
+        K.cc.entry = string.rep("e", 60) .. ".lua"
+        local s = K.screen()
+        local v = K.cc.cfg.view
+        local last = s.field[#s.field]
+        assert.equal("running", last.text)
+        assert.is_true(last.x + 7 * v.fw <= v.w, "running at "
+          .. last.x .. " of " .. v.w)
+        local name = s.field[#s.field - 1].text
+        assert.equal("…", name:sub(-#"…"))
+        K.cc.entry = nil
+        forget()
+      end)
+
+    --- A pause takes no screenshot: the paused frame is on the
+    --- program's canvas (the canvas plan's stage 1), and a program
+    --- that draws nothing shows its output as it is
+    --- (Harmony scrollback.paused-output checks the pixels).
+
+    --- and the screen's mode, as the console's status line names
+    --- it in every state (the program's canvas, stage 2)
+    it("have the status line under them, naming the project, "
+      .. "the entry point and that it runs, the screen's mode, and "
+      .. "nothing else", function()
+        owning()
+        local s = K.screen()
+        local line = { }
+        for _, t in ipairs(s.field) do line[#line + 1] = t.text end
+        local name = K.cc.model.projects.current.name
+        assert.same({ "text", name, "main.lua", "running" }, line)
+        assert.equal(0, s.field_rows, "rows under the status line")
+        forget()
+      end)
+  end)
 
 --- The view's one rule (CanvasModel:show): its top lies between
 --- the oldest kept row and the filled view's top, however the
@@ -1470,14 +1787,14 @@ describe("the scrollback and the console's notice #console",
       assert.is_false(output():is_scrolled())
     end)
 
-    it("brings the screen back for a line the syntax refuses, "
-      .. "unechoed", function()
+    it("leaves the view where it is for a line the syntax "
+      .. "refuses, unechoed", function()
         print_lines(1, 40)
         K.keys("lctrl", "up")
         K.type("x = = 1")
         K.keys("return")
         K.frame(100)
-        assert.is_false(output():is_scrolled())
+        assert.is_true(output():is_scrolled())
         assert.is_true(K.cc.input:has_error())
         assert.equal("x = = 1", K.console_draft())
         for _, r in ipairs(screen()) do
@@ -1542,15 +1859,113 @@ describe("the scrollback and the console's notice #console",
           "the band over the output's bottom rows")
       end)
 
-    it("lets a typed key dismiss a message over a scrolled view, "
-      .. "bring the screen back and type once", function()
+    it("lets a typed key dismiss a message over a scrolled view "
+      .. "and type once, the view left where it is", function()
         print_lines(1, 40)
         K.keys("lctrl", "up")
         K.cc.input:set_error({ "a message" })
         assert.is_true(output():is_scrolled())
         K.type("q")
         assert.is_false(K.cc.input:has_error())
-        assert.is_false(output():is_scrolled())
+        assert.is_true(output():is_scrolled())
         assert.equal("q", K.console_draft())
       end)
   end)
+
+-- Ruling 1.1 of November 17, 2026: behind a program that owns
+-- the input, the output stays in use and takes its own keys and
+-- the wheel when the program leaves them ("the program that only
+-- prints into the text buffer, allows scrolling with both
+-- keyboard and mouse wheel"). What the program's chain takes,
+-- event by event, the output does not get.
+describe("the output behind a program that owns the input #console",
+  function()
+    before_each(function() reset() end)
+    after_each(cleanup)
+
+    local PRINTS = "for i = 1, 40 do print('L' .. i) end\n"
+    local RUNS = "function love.update() end\n"
+
+    local function wheel(y)
+      require("tests.helpers.input_fixture").session.wheelmoved(0, y)
+      K.frame()
+    end
+
+    it("scrolls with the wheel in the console", function()
+      print_lines(1, 40)
+      wheel(1)
+      assert.is_true(output():is_scrolled())
+      wheel(-5)
+      assert.is_false(output():is_scrolled())
+    end)
+
+    it("scrolls with the wheel behind a program that prints",
+      function()
+        reset({ ["main.lua"] = PRINTS .. RUNS })
+        run("run()")
+        assert.same("running", K.app_state())
+        wheel(1)
+        assert.is_true(output():is_scrolled())
+      end)
+
+    it("takes no other key of the console's behind it", function()
+      reset({ ["main.lua"] = PRINTS .. RUNS })
+      run("run()")
+      K.keys("lctrl", "l")
+      assert.truthy(K.console_text():find("L40", 1, true))
+      K.keys("x")
+      assert.same("", K.console_draft())
+    end)
+
+    it("gets only the wheel behind a program whose love.keypressed"
+      .. " takes every key", function()
+        reset({ ["main.lua"] = PRINTS
+          .. "function love.keypressed() end\n" .. RUNS })
+        run("run()")
+        K.keys("lctrl", "up")
+        assert.is_false(output():is_scrolled())
+        wheel(1)
+        assert.is_true(output():is_scrolled())
+      end)
+
+    it("gets a key a hook leaves, and not one it takes", function()
+      reset({ ["main.lua"] = PRINTS
+        .. "compy.input.hooks.keypressed = function(k)\n"
+        .. "  return k == 'pageup'\nend\n" .. RUNS })
+      run("run()")
+      K.keys("pageup")
+      assert.is_false(output():is_scrolled())
+      K.keys("lctrl", "up")
+      assert.is_true(output():is_scrolled())
+    end)
+
+    it("gets no wheel a program's own handler takes", function()
+      reset({ ["main.lua"] = PRINTS
+        .. "function love.wheelmoved() end\n" .. RUNS })
+      run("run()")
+      wheel(1)
+      assert.is_false(output():is_scrolled())
+    end)
+  end)
+
+-- p1's Major, gone with ruling 1.2: a scrolling key a program's
+-- hook takes leaves a scrolled view where it is
+describe("a scrolled view behind a program's key #console", function()
+  before_each(function() reset() end)
+  after_each(cleanup)
+
+  it("stays when the program's hook takes PgUp", function()
+    reset({ ["main.lua"] = "for i = 1, 40 do print('L' .. i) end\n"
+      .. "compy.input.hooks.keypressed = function(k)\n"
+      .. "  return k == 'pageup'\nend\n"
+      .. "function love.update() end\n" })
+    run("run()")
+    require("tests.helpers.input_fixture").session.wheelmoved(0, 1)
+    K.frame()
+    assert.is_true(output():is_scrolled())
+    local t = output():top()
+    K.keys("pageup")
+    assert.is_true(output():is_scrolled())
+    assert.equal(t, output():top())
+  end)
+end)

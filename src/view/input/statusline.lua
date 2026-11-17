@@ -7,6 +7,10 @@ Statusline = class.create(function(cfg)
 end)
 
 
+--- The room the console's position may take at the line's end,
+--- before which the screen's mode stands
+local POSITION_ROOM = 'L99:999'
+
 --- The columns `text` takes with the gap after it.
 --- @param text string?
 --- @return integer
@@ -95,6 +99,27 @@ function Statusline:draw(status, start_y)
     else
       return ''
     end
+  end
+
+  --- The console names the screen's mode, `text` or
+  --- `combined`, right-aligned at one place in every state: its
+  --- end stands where the room a position such as "L99:999"
+  --- takes begins, whether a position shows or not, so that the
+  --- word does not move as the position grows; a wider position
+  --- pushes it left. The full picture has no status line.
+  --- @param pos_x number? --- where the position begins, if one
+  --- shows
+  --- @return number? left --- where the word begins
+  local function drawMode(pos_x)
+    local mode = status.mode
+    if not mode or mode == 'picture' then return nil end
+    local right = math.min(endTextX - cols(POSITION_ROOM),
+      pos_x or endTextX) - 2 * cf.fw
+    local left = right - cols(mode)
+    gfx.setColor(colors.fg2 or colors.fg)
+    gfx.print(mode, left, start_box.y + pad)
+    gfx.setColor(colors.fg)
+    return left
   end
 
   local function drawStatus()
@@ -242,8 +267,10 @@ function Statusline:draw(status, start_y)
         local lw = cols(pos_l)
         local cw = cols(pos_c)
         local sx = endTextX - (lw + cw)
-        --- the project's name ends before the position
-        drawLeft(sx)
+        local left_end = drawMode(sx) or sx
+        --- the project's name ends before the mode and the
+        --- position
+        drawLeft(left_end)
         if ln == l_lim then
           gfx.setColor(colors.indicator)
         end
@@ -251,6 +278,12 @@ function Statusline:draw(status, start_y)
         gfx.setColor(colors.fg)
         gfx.print(pos_c, sx + lw, start_text.y)
       end
+    else
+      --- a status with no cursor names things alone: what runs
+      --- behind a hidden field, and the screen's mode where the
+      --- console's status line has it. A long name is cut, the
+      --- state kept whole, within the screen.
+      drawLeft(drawMode() or endTextX)
     end
   end
 

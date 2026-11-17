@@ -35,6 +35,11 @@ local messages = {
   end,
   --- only a card that cannot hold scratchpad leaves none open
   no_project      = 'No project is open: the SD card cannot be used.',
+  --- a pause shows the console; a picture the program drew
+  --- waits behind it (the lead's decision 7 of November 17,
+  --- 2026, after the maintainer's "press F12 to see the drawing
+  --- canvas")
+  picture_hint    = 'F12 shows the picture',
   --- run() makes no project: project() does
   no_such_project = function(name)
     return string.format('There is no project %s: project(%q) creates it.',
@@ -60,10 +65,13 @@ local program_loaded = { }
 --- one bound stays bound. The font is the IDE's too, and
 --- run_project sets it after.
 local function reset_graphics()
+  --- the target bound now: a push the program left saved the
+  --- state it was made in, its canvas bound, and popping it puts
+  --- that binding back (round c2's first finding)
+  local canvas = gfx.getCanvas()
   if End.ide_pushes == 0 and gfx.getStackDepth then
     while gfx.getStackDepth() > 0 do gfx.pop() end
   end
-  local canvas = gfx.getCanvas()
   gfx.reset()
   if canvas then gfx.setCanvas({ canvas, stencil = true }) end
 end
@@ -151,6 +159,10 @@ function ConsoleController.new(M, main_ctrl)
   M.input.project_source = function()
     local p = M.projects and M.projects.current
     return p and p.name
+  end
+  --- and the screen's mode, where it shows (model/screenModel.lua)
+  M.input.screen_source = function()
+    return M.screen and M.screen:get()
   end
   -- initialize the user environment
   ConsoleController.prepare_project_env(self)
@@ -279,10 +291,13 @@ end
 --- widget's highlighter to whichever bound it last. The
 --- evaluator is part of what the run owns.
 --- @param cfg table
-local function build_input_widget(cfg)
+--- @param on_accepted function --- called as the field takes an
+---   answer
+local function build_input_widget(cfg, on_accepted)
   local eval = Evaluator.plain('text input')
   local model = UserInputModel(cfg, eval)
   local widget = UserInputController(model)
+  widget.on_accepted = on_accepted
   -- The project widget's one shipped default, seated on the
   -- LEAST-DESTRUCTIVE basis: submit consumes the content,
   -- because a project processes a submission through its
@@ -683,7 +698,9 @@ function ConsoleController:_run_project(name, stopped, entry)
     -- A run starts on a blank canvas, whatever the last one
     -- left there; a project that fails to load leaves the
     -- error on a blank console, not under the old picture.
+    -- Its text shows until it draws.
     self.model.output:clear_canvas()
+    self.model.screen:run_starts()
     --- the project to run is the open one by now: it is not
     --- looked for again
     local f, load_err, path, refused = P:run(nil, runner_env, entry)
@@ -702,7 +719,19 @@ function ConsoleController:_run_project(name, stopped, entry)
       -- quickswitch call stop+run directly, never re-open:
       -- construct-at-open would leave every restart on the
       -- previous run's widget.
-      build_input_widget(self.cfg)
+      --- an answer the program's field takes brings the output's
+      --- screen back, as a console line that runs does
+      build_input_widget(self.cfg, function()
+        self.model.output:to_rest()
+      end)
+      --- its status line names the screen's mode, as the
+      --- console's does (round j1)
+      local field = love.state.user_input_controller
+      if field then
+        field.model.screen_source = function()
+          return self.model.screen:get()
+        end
+      end
       -- The program speaks for the board from here on; the
       -- console's own listeners wait until it has stopped.
       SerialPort:programStarted()
@@ -741,7 +770,19 @@ function ConsoleController:_run_project(name, stopped, entry)
           -- stopped, so its handlers stay, but it is no longer
           -- the one speaking and the console listens again.
           SerialPort:programIdle()
-          love.state.app_state = 'ready'
+          --- a pause the first lines asked for goes on, and
+          --- continue() resumes the program idle (p1)
+          if love.state.app_state == 'snapshot' then
+            love.state.paused_from = 'ready'
+          else
+            love.state.app_state = 'ready'
+            --- a program that can do nothing more has ended: its
+            --- natural end is a stop (stage 4)
+            if not self.main_ctrl.program_owns_input() then
+              self:end_naturally(true)
+              return
+            end
+          end
           -- Without a widget or a pointer handler nothing of the
           -- program answers the pointer, and the console is on
           -- screen: it needs its mouse now, even if keys or the
@@ -807,6 +848,53 @@ local compy_audio = require("util.audio")
 local compy_graphics = {
   shape2d = require("util.graphics.shape2d")
 }
+
+--- compy.screen for a program or a typed line: what the screen
+--- shows of the console's text and the program's picture
+--- (model/screenModel.lua). The maintainer ruled the shape
+--- (pre-release rulings, "The picture and the text"); its names
+--- are LÖVE's kind (docs: the user API naming proposal).
+--- @param cc ConsoleController
+--- @return table
+local function screen_api(cc)
+  local modes = '"text", "combined" or "picture"'
+  return {
+    --- show(mode): one of the three; a wrong one stops the
+    --- program at the line that called it, as gotoxy does
+    show = function(m)
+      if not ScreenModel.is_mode(m) then
+        error('compy.screen.show: the mode is ' .. modes
+          .. ', not ' .. (type(m) == 'string'
+            and string.format('%q', m) or tostring(m)), 2)
+      end
+      cc.model.screen:choose(m)
+    end,
+    --- @return ScreenMode
+    getMode = function()
+      return cc.model.screen:get()
+    end,
+  }
+end
+
+--- compy.graphics for a program: its shape2d's fills and
+--- strokes say that it drew (ConsoleController:drew), as its
+--- love.graphics calls do
+--- @param cc ConsoleController
+--- @return table
+local function drawing_graphics(cc)
+  local shape2d = { }
+  for name, f in pairs(compy_graphics.shape2d) do
+    if name:match('_fill$') or name:match('_stroke$') then
+      shape2d[name] = function(...)
+        cc:drew()
+        return f(...)
+      end
+    else
+      shape2d[name] = f
+    end
+  end
+  return { shape2d = shape2d }
+end
 -- Builds the `compy.terminal` sub-namespace — the console
 -- OUTPUT surface. These wrap the live `terminal` (the
 -- REPL/console text grid): position the grid cursor
@@ -1596,7 +1684,11 @@ local function build_simple_surface(input, get_env)
         armed = { widget = love.state.user_input_controller,
           config = save_config(input) }
       end
-      input.configure(ASK_FLAGS)
+      --- a copy: configure merges the widget's callbacks into
+      --- the table it is given, and the shared flags would keep a
+      --- stopped program's callbacks and environment alive (Beads
+      --- compy-ide-ask-flags-keep-a-stopped-programs-callbacks)
+      input.configure(table.clone(ASK_FLAGS))
       local cb = input.callbacks
       cb.on_text_entered = function(t) conclude(t) end
       cb.after_cancel = function() conclude(nil) end
@@ -1652,7 +1744,8 @@ local get_compy_namespace = function(terminal, with_input,
   local ns = {
     terminal = get_compy_terminal(terminal),
     audio = compy_audio,
-    graphics = compy_graphics,
+    graphics = cc and drawing_graphics(cc) or compy_graphics,
+    screen = cc and screen_api(cc) or nil,
     fonts = CompyFonts(),
   }
   -- D-SIMPLE-SURFACE statement 2: the simple names are PLAIN
@@ -1707,12 +1800,74 @@ function ConsoleController.prepare_project_env(cc)
 
   local P                      = cc.model.projects
 
-  project_env.gfx              = love.graphics
   -- The env the old prepare_env wired was the global environment,
   -- so its `gfx` write surfaced as the global the console core
   -- (use_canvas) and the projects read; main.lua sets the same
   -- global for the app. Keep that alias on the unified prep.
   gfx                          = love.graphics
+  --- A program's screen is its canvas: setCanvas() with no
+  --- target binds it, as LÖVE's binds the screen, and
+  --- getCanvas() answers nil there, so code written for the
+  --- screen draws where it would under LÖVE, a program that
+  --- draws through a canvas of its own included. The `gfx`
+  --- alias is the same table.
+  local program_gfx            = project_env.love.graphics
+  --- the screen, as a program names it: no target, nil, or a
+  --- table without a canvas, which `{ getCanvas() }` makes there
+  local function names_the_screen(n, t)
+    if n == 0 or t == nil then return true end
+    return n == 1 and type(t) == 'table' and t[1] == nil
+  end
+  program_gfx.setCanvas        = function(...)
+    if names_the_screen(select('#', ...), (...)) then
+      return love.graphics.setCanvas({
+        cc.model.output.canvas, stencil = true })
+    end
+    return love.graphics.setCanvas(...)
+  end
+  program_gfx.getCanvas        = function()
+    if love.graphics.getCanvas() == cc.model.output.canvas then
+      return nil
+    end
+    return love.graphics.getCanvas()
+  end
+  --- the ground a program or a typed line chooses is kept with
+  --- its picture, as it is chosen: neither the flush's reset nor
+  --- the state a draw gives back after its frame changes it
+  --- (rounds c1 and c2)
+  program_gfx.setBackgroundColor = function(...)
+    love.graphics.setBackgroundColor(...)
+    cc.model.output:keep_background(love.graphics.getBackgroundColor())
+  end
+  --- a pop of the program's puts back the ground its push saved,
+  --- as LÖVE's does; one that changes it is a choice too (round
+  --- c3)
+  program_gfx.pop              = function()
+    local r, g, b, a = love.graphics.getBackgroundColor()
+    love.graphics.pop()
+    local r2, g2, b2, a2 = love.graphics.getBackgroundColor()
+    if r ~= r2 or g ~= g2 or b ~= b2 or a ~= a2 then
+      cc.model.output:keep_background(r2, g2, b2, a2)
+    end
+  end
+  --- a program's reset() makes its canvas the target, as LÖVE's
+  --- makes the screen, and its ground black (round c3)
+  program_gfx.reset            = function()
+    love.graphics.reset()
+    love.graphics.setCanvas({ cc.model.output.canvas, stencil = true })
+    cc.model.output:keep_background(love.graphics.getBackgroundColor())
+  end
+  --- each drawing call says that the program drew
+  --- (ConsoleController:drew); clear() erases, and draws none
+  for _, name in ipairs({ 'arc', 'circle', 'draw', 'drawInstanced',
+    'drawLayer', 'ellipse', 'line', 'points', 'polygon', 'print',
+    'printf', 'rectangle' }) do
+    program_gfx[name] = function(...)
+      cc:drew()
+      return love.graphics[name](...)
+    end
+  end
+  project_env.gfx              = program_gfx
 
   --- @param f function
   local check_microbit_path    = function(f, ...)
@@ -1928,9 +2083,12 @@ function ConsoleController.prepare_project_env(cc)
   end
   project_env.continue         = function()
     if love.state.app_state == 'inspect' then
-      -- resume
-      love.state.app_state = 'running'
+      -- resume, in the state the pause found the program in
+      love.state.app_state = love.state.paused_from or 'running'
+      love.state.paused_from = nil
+      SerialPort:programContinued()
       cc.model.output:to_rest()
+      cc.model.screen:resume()
       cc.main_ctrl.restore_user_handlers(cc)
       -- After the handlers: a cursor the program has released
       -- raises here, and the program runs on regardless.
@@ -2033,9 +2191,44 @@ function ConsoleController:pass_time(dt)
     self.model.output:to_rest()
   end
   self.field_shown = field
+  self:fit_output()
   --- the text cursor blinks on the frames' time
   Blink.pass_time(dt)
   self.model.output.terminal:update(dt)
+end
+
+--- Whether no input field is drawn: the console's is hidden
+--- behind a program that owns the input (ConsoleView:draw), and
+--- the program shows none of its own.
+--- @return boolean
+function ConsoleController:fieldless()
+  if not self.main_ctrl.program_owns_input() then return false end
+  local w = love.state.user_input_controller
+  return not (w ~= nil and w:is_shown())
+end
+
+--- With no field drawn under it the output has the field's row.
+--- Asked at each frame's step and again as the screen is drawn
+--- (ConsoleView:draw): a program's update that shows or hides
+--- its field comes between the two, and the grid drawn is as
+--- high as the screen that frame shows.
+function ConsoleController:fit_output()
+  self.model.output:field_drawn(not self:fieldless())
+end
+
+--- What the status line says while no field is drawn: the
+--- project, the file the run started from, and that it runs.
+--- @return Status
+function ConsoleController:running_status()
+  local P = self.model.projects
+  return {
+    custom = {
+      project = P.current and P.current.name,
+      name = self.entry or 'main.lua',
+      state = 'running',
+    },
+    mode = self.model.screen:get(),
+  }
 end
 
 ---@return number
@@ -2080,6 +2273,10 @@ function ConsoleController:_evaluate_input()
         --- the band is the field's, for a line not taken (the
         --- maintainer's rulings of November 15 and 16, 2026)
         inter:remember()
+        --- a line that runs brings the output's screen back from
+        --- a scrolled view, so that its echo and what it prints
+        --- are seen; typing it did not (CanvasModel:to_rest)
+        self.model.output:to_rest()
         self.model.output:echo(text)
         --- a typed line leaves state for a flush to end, as a
         --- live run does
@@ -2129,6 +2326,9 @@ function ConsoleController:reset()
   --- audio)
   if love.audio and love.audio.stop then love.audio.stop() end
   self.model.output:erase()
+  --- and the picture: the canvas is cleared as the output is
+  self.model.output:clear_canvas()
+  self.model.screen:ended()
   local P = self.model.projects
   local name = P.current and P.current.name or ProjectService.DEFAULT
   print(messages.reset_done(name))
@@ -2178,6 +2378,47 @@ function ConsoleController:_set_base_env(t)
   table.protect(t)
 end
 
+--- A pause's text with how to see the picture behind it: on the
+--- pause's own row, in brackets after its text, where both fit,
+--- so that the band covers no more of the output; on a row of
+--- its own where they do not (the lead's ruling of November 17,
+--- 2026: ASCII alone in the words the screen shows), the text
+--- cut to the band's rows less the hint's, as the band cuts a
+--- message, so that the hint is always seen; alone after a
+--- pause with no text. The text is measured as the band shows
+--- it: bytes that are not UTF-8 made shown first (k1).
+--- @param text string?
+--- @param visible VisibleContent?
+--- @return string|string[]
+local function with_picture_hint(text, visible)
+  local hint = messages.picture_hint
+  if not text then return hint end
+  local w = visible and visible.wrap_w or 64
+  local plain = (string.scrub(text):gsub('\r\n?', '\n'))
+  local lines = string.lines(plain)
+  if #lines > 1 and lines[#lines] == '' then lines[#lines] = nil end
+  local rows = { }
+  for _, line in ipairs(lines) do
+    for _, row in ipairs(string.wrap_words(line, w)) do
+      rows[#rows + 1] = row
+    end
+  end
+  --- a word wider than a row is cut by characters, as the band
+  --- cuts it (k2)
+  rows = string.wrap_array(rows, w)
+  if #rows == 1
+      and string.ulen(rows[1]) + 3 + string.ulen(hint) <= w then
+    return rows[1] .. ' (' .. hint .. ')'
+  end
+  local room = UserInputView.NOTICE_ROWS - 1
+  if #rows > room then
+    for i = #rows, room + 1, -1 do rows[i] = nil end
+    rows[room] = string.usub(rows[room], 1, w - 1) .. '…'
+  end
+  rows[#rows + 1] = hint
+  return rows
+end
+
 function ConsoleController:suspend()
   if love.state.app_state ~= 'snapshot' then
     return
@@ -2186,14 +2427,19 @@ function ConsoleController:suspend()
   Log.info('Suspending project run')
   love.state.app_state = 'inspect'
   self.model.output:to_rest()
+  --- the console shows while the program waits; its picture
+  --- stays on its canvas
+  self.model.screen:pause()
   --- a pause is the debugger's: what it says shows in the
   --- band as a notice, and the program's screen is not touched
   --- (the maintainer's ruling of November 16, 2026)
   local msg = love.state.suspend_msg
-  if msg then
-    self.input:notice({ tostring(msg) })
-    love.state.suspend_msg = nil
+  love.state.suspend_msg = nil
+  local says = msg ~= nil and tostring(msg) or nil
+  if self.model.output:is_drawn() then
+    says = with_picture_hint(says, self.input.model.visible)
   end
+  if says then self.input:notice(says) end
 
   self.model.output:invalidate_terminal()
 
@@ -2202,14 +2448,23 @@ function ConsoleController:suspend()
   self.paused_mouse = get_mouse()
   set_mouse(CONSOLE_MOUSE)
   self.main_ctrl.save_user_handlers(runner_env['love'])
+  --- the program's serial handlers wait with it (p1)
+  SerialPort:programPaused()
   self.main_ctrl.set_default_handlers(self, self.view)
 end
 
 --- @param msg string?
+--- A program that runs, or one idle behind the console that
+--- can still act (its key handlers alone, say), pauses: the
+--- console and its field come back, and continue() gives the
+--- program back the state it was paused in
 function ConsoleController:suspend_run(msg)
-  if love.state.app_state ~= 'running' then
+  local st = love.state.app_state
+  if st ~= 'running' and not (st == 'ready' and self.run_live
+        and self.main_ctrl.program_owns_input()) then
     return
   end
+  love.state.paused_from = st
   love.state.app_state = 'snapshot'
   love.state.suspend_msg = msg
 end
@@ -2326,7 +2581,6 @@ function ConsoleController:_close_project()
     if lf then
       table.delete_by_value(package.loaders, lf)
     end
-    View.clear_snapshot()
     return ok, fresh
   end
   return true, fresh
@@ -2469,7 +2723,8 @@ function ConsoleController:flush_program_state(call_exit)
     --- the hook is a live run's: with none, one a typed line set
     --- is removed and not called (round 22)
     if call_exit and live then
-      framework_before_exit(compy)
+      --- program code, drawing on the program's canvas
+      self:use_canvas(function() framework_before_exit(compy) end)
     else
       compy.before_exit = default_before_exit
     end
@@ -2487,9 +2742,15 @@ function ConsoleController:flush_program_state(call_exit)
   --- a question the program left unanswered goes with its
   --- widget
   if self.forget_question then self.forget_question() end
-  -- What the run drew on the console's canvas goes with it,
-  -- after the project's own hook, which may still draw.
-  self.model.output:clear_canvas()
+  -- What the run drew stays on its canvas, a record as the
+  -- console's output is, to be seen in a mode that shows it
+  -- (the proposal "The Program's Canvas and the Viewing Modes",
+  -- built as if accepted on November 17, 2026); a run's start
+  -- and reset() clear it. The ground the program chose goes
+  -- with the graphics state below; the canvas has kept it as the
+  -- program set it (setBackgroundColor, prepare_project_env). The
+  -- console shows.
+  self.model.screen:ended()
   --- the IDE draws on from here: under the program's scissor,
   --- colour or wireframe its key card and editor came out
   --- clipped and outlined (the device night of November 16)
@@ -2509,10 +2770,10 @@ function ConsoleController:flush_program_state(call_exit)
   if kb and kb.setKeyRepeat then kb.setKeyRepeat(true) end
   if kb and kb.setTextInput then kb.setTextInput(true) end
   self.run_live = false
+  love.state.paused_from = nil
   --- the entry point lives with the run (the maintainer's
   --- ruling of November 16, 2026)
   self.entry = nil
-  View.clear_snapshot()
   self.main_ctrl.set_love_draw(self, self.view)
   self.main_ctrl.clear_user_handlers(self)
   -- The program's serial handlers go with its other handlers:
@@ -2543,6 +2804,35 @@ end
 --- stopped, and its picture and globals stay.
 function ConsoleController:_stop_project_run()
   return self:flush_program_state(true)
+end
+
+--- A program's natural end: its code has ended and it can no
+--- longer act (Controller.program_owns_input). It is the stop's
+--- flush, before_exit and sounds playing out included (the
+--- maintainer's ruling "The natural end is a stop; the build
+--- waits for the canvas", built in stage 4 of the canvas plan).
+--- At the end of its first lines a program that drew leaves its
+--- picture on show until a key or a click (the lead's decision
+--- 1 of November 17, 2026); one found ended as an event comes
+--- leaves the console, which that event reaches, or the picture
+--- when it is on show as the end is made (`shown`; stage 2's k5
+--- and k6: the screen after the end is set here, by the end
+--- itself, whether it is made at once or once the frame's update
+--- returns, after the event that found it).
+--- @param at_last_line boolean
+--- @param shown ScreenMode? --- what shows as the end is made
+function ConsoleController:end_naturally(at_last_line, shown)
+  if not self.run_live then return end
+  --- a pause, asked for or made, is no end (round c5)
+  local st = love.state.app_state
+  if st == 'snapshot' or st == 'inspect' then return end
+  self:stop_project_run()
+  --- read after the stop: what before_exit drew is the picture
+  --- too (round j1)
+  local drawn = self.model.output:is_drawn()
+  if (at_last_line and drawn) or shown == 'picture' then
+    self.model.screen:ended_by_itself()
+  end
 end
 
 function ConsoleController:quit_project()
@@ -2805,7 +3095,6 @@ function ConsoleController:textinput(t)
     --- its key press. A chord's own glyph never comes here:
     --- the event gate stops it (Key.chord_text)
     input:clear_error()
-    self.model.output:to_rest()
     input:textinput(t)
   end
 end
@@ -2858,26 +3147,48 @@ local ACTIONS = {
   end,
 }
 
---- The keys that move the output's view (consoleKeys.lua);
---- Home and End only while the field is empty
+--- The output's own scrolling actions (consoleKeys.lua), which
+--- it takes behind a program that leaves them (output_key)
 local SCROLLS = {
   scroll_row = true, scroll_page = true, scroll_end = true,
 }
 
---- Every key but the ones that scroll brings the screen back
---- before it does its work, so that no one types under an
---- output whose newest row is hidden
+--- Rows a wheel's notch scrolls the output
+local WHEEL_ROWS = 3
+
+--- The output stays in use behind a program that owns the
+--- input (ruling 1.1 of November 17, 2026: "the scrollback
+--- area is visible so it takes keys and mouse events that
+--- normally belong to it, if the program doesn't take these
+--- keys and events"): a key the program's chain left that is
+--- one of the output's scrolling keys scrolls it. Home and End
+--- go to the oldest row and back to rest, the field being
+--- hidden. Nothing else of the console's keys acts.
 --- @param k string
---- @param entry table? --- the console's table's entry
-function ConsoleController:_back_to_screen(k, entry)
-  local scrolls = entry and SCROLLS[entry.act]
-      and (entry.act ~= 'scroll_end' or self.input:is_empty())
-  --- a modifier or a lock on its own, and the help key, leave
-  --- the view where it is
-  if scrolls or Key.is_lone(k) or k == KeyCard.KEY then
-    return
+--- @param isrepeat boolean?
+--- @return boolean scrolled
+function ConsoleController:output_key(k, isrepeat)
+  local entry = ConsoleKeys:lookup('live', Key.combo(k))
+  if not (entry and SCROLLS[entry.act]) then return false end
+  if isrepeat and not entry.repeats then return true end
+  local out = self.model.output
+  if entry.act == 'scroll_end' then
+    if k == 'home' then out:to_oldest() else out:to_rest() end
+  else
+    ACTIONS[entry.act](self, k)
   end
-  self.model.output:to_rest()
+  return true
+end
+
+--- The wheel scrolls the output, a notch WHEEL_ROWS rows, in
+--- the console and behind a program that left it (ruling 1.1)
+--- @param y number
+function ConsoleController:output_wheel(y)
+  if not y or y == 0 then return end
+  local dir = y > 0 and -1 or 1
+  for _ = 1, WHEEL_ROWS * math.abs(y) do
+    self.model.output:scroll_row(dir)
+  end
 end
 
 --- In the console a key is looked up by its full chord in the
@@ -2921,7 +3232,6 @@ function ConsoleController:keypressed(k, sc, isrepeat)
     self:_terminal_test()
     return
   end
-  self:_back_to_screen(k, entry)
 
   -- A message is a hint that blocks nothing (IS3.14): the
   -- next key dismisses it and does its usual work, Enter and
@@ -2974,7 +3284,10 @@ function ConsoleController:mousereleased(
     if self.cfg.editor.mouse_enabled then
       self.editor.input:mousereleased(x, y, btn, touch, presses)
     end
-  elseif not self:key_card() then
+  else
+    --- a release goes where its press went: the gate drops the
+    --- release of a press the card held back, and hands this
+    --- one the release of a press made before the card (p1)
     self.input:mousereleased(x, y, btn, touch, presses)
   end
 end
@@ -3002,7 +3315,7 @@ function ConsoleController:wheelmoved(x, y)
       self.editor.input:wheelmoved(x, y)
     end
   elseif not self:key_card() then
-    self.input:wheelmoved(x, y)
+    self:output_wheel(y)
   end
 end
 
@@ -3036,7 +3349,10 @@ function ConsoleController:touchreleased(id, x, y,
       self.editor.input:touchreleased(id, x, y,
         dx, dy, pressure)
     end
-  elseif not self:key_card() then
+  else
+    --- a release goes where its touch began: the gate drops the
+    --- release of one the card held back, and hands this one the
+    --- release of one begun before the card (p2)
     self.input:touchreleased(id, x, y, dx, dy, pressure)
   end
 end
@@ -3073,16 +3389,57 @@ end
 --- draws comes after the stop's clear.
 --- @param f function
 --- @return any ... result of f
+--- Run program code, or a typed line, drawing on the program's
+--- canvas: every entry point does (top-level code and typed
+--- lines, routed events, love.update, love.draw, before_exit).
+--- What the code pushed and did not pop is popped when it
+--- returns, raised or was ended, before the target goes back: a
+--- push saves the state it is made in, the program's canvas
+--- bound, and one left behind would bind it again where it is
+--- popped (the lead's ruling on rounds c1 and c2).
+--- @param f function
 function ConsoleController:use_canvas(f)
   local canvas = self.model.output.canvas
+  --- inside program code already (a stop's before_exit, a run
+  --- a handler starts) the canvas stays bound after
+  local outer = gfx.getCanvas()
+  local depth = gfx.getStackDepth and gfx.getStackDepth()
   gfx.setCanvas({
     canvas, -- this is actually [1] = canvas
     stencil = true
   })
   local r = { pcall(f) }
-  gfx.setCanvas()
+  if depth then
+    while gfx.getStackDepth() > depth do gfx.pop() end
+  end
+  if outer == canvas then
+    gfx.setCanvas({ canvas, stencil = true })
+  else
+    gfx.setCanvas()
+  end
   if not r[1] then error(r[2], 0) end
   return unpack(r, 2)
+end
+
+--- A program or a typed line drew on the program's canvas
+--- (through the drawing calls of its love.graphics and
+--- compy.graphics, prepare_project_env): the canvas holds a
+--- picture, and the screen shows it, a running program's first
+--- drawing as its picture, a typed line's under the console's
+--- text (ScreenModel). Called for each drawing call, so the
+--- common case returns at once.
+function ConsoleController:drew()
+  local output, screen = self.model.output, self.model.screen
+  --- the typed line's own code, not a program's handler it ran
+  --- (an owed release at continue(): round c4)
+  if self.typing and End.user <= self.typing then
+    output.drawn = true
+    screen:typed_drew()
+    return
+  end
+  if output.drawn and screen.switched then return end
+  output.drawn = true
+  screen:program_drew()
 end
 
 --- @return ViewData

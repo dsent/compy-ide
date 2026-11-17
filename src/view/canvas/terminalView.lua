@@ -115,8 +115,7 @@ end
 --- @param chars string[]
 --- @param styles table[]
 --- @param at integer
---- @param overlay boolean?
-local function draw_text(terminal, chars, styles, at, overlay)
+local function draw_text(terminal, chars, styles, at)
   local cw = terminal.char_width
   local top = (at - 1) * terminal.char_height
   --- the run in progress: its first cell, and its color once a
@@ -125,9 +124,6 @@ local function draw_text(terminal, chars, styles, at, overlay)
   local function flush(to)
     if not from then return end
     if color then
-      if overlay then
-        color = Color.with_alpha(color, 0.75)
-      end
       gfx.setColor(unpack(color))
     end
     gfx.print(table.concat(chars, '', from, to),
@@ -160,29 +156,37 @@ local function draw_text(terminal, chars, styles, at, overlay)
   flush(#chars)
 end
 
---- The canvases last drawn over a program's picture: faint
---- characters and no backgrounds
+--- The canvases last drawn over a program's picture: no
+--- backgrounds there
 --- @type table<love.Canvas, boolean>
 local overlaid = setmetatable({ }, { __mode = 'k' })
 
 --- @param terminal table
---- @param overlay boolean?
+--- @param overlay boolean? --- over a program's picture (the
+--- combined mode): no backgrounds
 --- @param window ViewRow[]? --- a scrolled view's rows; the
 --- grid as it is when nil
 local function terminal_draw(terminal, canvas, overlay, window)
   local char_width, char_height =
       terminal.char_width, terminal.char_height
 
-  -- A canvas drawn over a program's picture is drawn again once
-  -- the picture is gone, though the output did not change: it
-  -- would show its faint characters on no ground until the next
-  -- output.
-  if terminal.dirty or overlay or overlaid[canvas] then
-    overlaid[canvas] = overlay or nil
+  -- A canvas is drawn again when it is to be drawn otherwise
+  -- than it was, over a picture or on its ground, though the
+  -- output did not change. Over a picture it is drawn when the
+  -- output changes, as on its own ground (c1's sixth finding).
+  if terminal.dirty or overlaid[canvas] ~= overlay then
+    overlaid[canvas] = overlay
     gfx.push('all')
     gfx.setCanvas(canvas)
     gfx.setFont(terminal.font)
-    gfx.clear(terminal.clear_color_alpha)
+    --- over a picture the canvas is drawn premultiplied, so it is
+    --- cleared to nothing at all: a white clear gave the glyphs'
+    --- edges a pale fringe (round c2's fourth finding)
+    if overlay then
+      gfx.clear(0, 0, 0, 0)
+    else
+      gfx.clear(terminal.clear_color_alpha)
+    end
     --- the rows to draw: their characters, styles and place
     local rows = { }
     local function grid(y, at)
@@ -218,7 +222,7 @@ local function terminal_draw(terminal, canvas, overlay, window)
     end
     gfx.setBlendMode('alpha', "alphamultiply")
     for _, r in ipairs(rows) do
-      draw_text(terminal, r[1], r[2], r[3], overlay)
+      draw_text(terminal, r[1], r[2], r[3])
     end
     terminal.dirty = false
     gfx.pop()
@@ -237,14 +241,25 @@ local function terminal_draw(terminal, canvas, overlay, window)
 end
 
 --- @param terminal table
+--- @param overlay number? --- drawn over a program's picture
+--- (the combined mode): no cell backgrounds, the characters at
+--- this opacity
 --- @param y number? --- where its first row starts: under the
 --- strip the screen may reserve at its top
 --- @param window ViewRow[]? --- a scrolled view's rows
-function TerminalView.draw(terminal, canvas, snapshot, y, window)
+function TerminalView.draw(terminal, canvas, overlay, y, window)
   gfx.setCanvas()
   gfx.push('all')
 
-  terminal_draw(terminal, canvas, snapshot and true or nil, window)
+  terminal_draw(terminal, canvas, overlay and true or nil, window)
+  --- over a picture the characters take their opacity here,
+  --- whole on the canvas: counted once, and the canvas is not
+  --- drawn again for another opacity. What is drawn on a canvas
+  --- carries its alpha in its colour already.
+  if overlay then
+    gfx.setBlendMode('alpha', 'premultiplied')
+    gfx.setColor(overlay, overlay, overlay, overlay)
+  end
   gfx.draw(canvas, 0, y or 0)
   gfx.setBlendMode('alpha') -- default
   gfx.pop()

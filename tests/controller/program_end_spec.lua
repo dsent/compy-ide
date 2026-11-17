@@ -180,9 +180,14 @@ describe("a lifecycle call ends the code that made it #console",
       end)
 
     describe("a typed line", function()
+      --- a paused program is live, and the console takes lines
+      --- behind it (a program that ended its code and can do
+      --- nothing more has ended: stage 4 of the canvas plan)
       it("stop(); print(1) prints nothing after the stop", function()
-        reset({ ["main.lua"] = LIVE })
+        reset({ ["main.lua"] = "x = 1\npause('here')\n" })
         run("run()")
+        assert.same("inspect", K.app_state())
+        assert.is_true(K.cc.run_live)
         run("stop(); print('AFTER' .. '_STOP')")
         assert.is_nil(K.console_text():find("AFTER_STOP", 1, true))
         assert.is_false(K.cc.run_live)
@@ -267,11 +272,16 @@ describe("a lifecycle call ends the code that made it #console",
         assert.same(K.PROJECT, K.cc.model.projects.current.name)
       end)
 
-    it("a typed run() while a program runs is refused, and the line"
-      .. " goes on", function()
+    --- a program that runs owns the input; a line is typed while
+    --- it is paused (November 17)
+    it("a typed run() while a program is paused is refused, and"
+      .. " the line goes on", function()
         reset({ ["main.lua"] = LIVE })
         local said = notes()
         run("run()")
+        K.cc:suspend_run()
+        K.cc:suspend()
+        assert.same("inspect", K.app_state())
         run("run(); note('after')")
         assert.same({ "after" }, said)
         assert.truthy(K.console_text():find("already running", 1, true))
@@ -298,26 +308,35 @@ describe("a lifecycle call ends the code that made it #console",
         assert.is_false(K.cc.run_live)
       end)
 
+    --- from the program's own code, which can stop it
     it("an edit() its admission refuses ends nothing", function()
-      reset({ ["main.lua"] = "compy.input.hooks.mousepressed = function() end\n" })
+      reset({ ["main.lua"] = "x = 1\nfunction love.update()\n"
+        .. "  if go then go = false; edit('../bad'); note('after') end\n"
+        .. "end\n" })
       local said = notes()
       run("run()")
       assert.is_true(K.cc.run_live)
-      run("edit('../bad'); note('after')")
+      env().go = true
+      K.frame()
       assert.same({ "after" }, said, K.console_text())
       assert.is_true(K.cc.run_live)
+      K.keys("lctrl", "q")
     end)
 
     it("a run() whose main.lua cannot be read ends nothing",
       function()
-        reset({ ["main.lua"] = "compy.input.hooks.mousepressed = function() end\n" })
+        reset({ ["main.lua"] = "x = 1\nfunction love.update()\n"
+          .. "  if go then go = false; run(); note('after') end\n"
+          .. "end\n" })
         local said = notes()
         run("run()")
         assert.is_true(K.cc.run_live)
         K.fail_reads("main.lua")
-        run("run(); note('after')")
+        env().go = true
+        K.frame()
         assert.same({ "after" }, said)
         assert.is_true(K.cc.run_live)
+        K.keys("lctrl", "q")
       end)
 
     it("a refused call ends nothing", function()
@@ -369,4 +388,31 @@ describe("compy.ask at a stop #console", function()
     collectgarbage("collect")
     assert.is_nil(held[1])
   end)
+end)
+
+-- Beads compy-ide-ask-flags-keep-a-stopped-programs-callbacks:
+-- a question's flags are no store of a program's callbacks
+describe("compy.ask's flags at a stop #console", function()
+  after_each(cleanup)
+
+  it("keep no stopped program's callback, capture or environment",
+    function()
+      reset({ ["main.lua"] = "BIG = { }\n"
+        .. "compy.input.callbacks.on_text_entered = function()\n"
+        .. "  return BIG\nend\n"
+        .. "compy.ask('name?')\n"
+        .. "function love.update() end\n" })
+      run("run()")
+      local env = K.cc:get_project_env()
+      local held = setmetatable({ env.BIG, env,
+        env.compy.input.callbacks.on_text_entered }, { __mode = "v" })
+      env = nil
+      assert.is_not_nil(held[1])
+      K.keys("lctrl", "q")
+      assert.is_false(K.cc.run_live)
+      collectgarbage("collect")
+      collectgarbage("collect")
+      assert.is_nil(held[1])
+      assert.is_nil(held[2])
+    end)
 end)

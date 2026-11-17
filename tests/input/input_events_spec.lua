@@ -88,9 +88,15 @@ describe('input surface: inbound events — dispatch #input',
           local input = F.activate_project()
           local fired = false
           input.hooks[event] = function() fired = true end
-          -- a release reaches the route after its press did
+          -- a release, and a touch's move, reach the route after
+          -- their press did, the pointer's and a touch's as the
+          -- key's (one record of receivers for all three)
           if event == 'keyreleased' then
             F.session.handlers.keypressed('a', '', false)
+          elseif event == 'mousereleased' then
+            F.session.handlers.mousepressed(unpack(ARGS.mousepressed))
+          elseif event == 'touchreleased' or event == 'touchmoved' then
+            F.session.handlers.touchpressed(unpack(ARGS.touchpressed))
           end
           F.session.handlers[event](unpack(args))
           assert.is_true(fired)
@@ -900,10 +906,13 @@ describe('input surface: inbound events — dispatch #input',
       function()
         F.activate_project()
         F.show_widget({ text = 'keep' })
-        F.widget:hide()
+        -- held: a program that can do nothing more ends at the
+        -- event that finds it, its widget with it (stage 4)
+        local widget = F.widget
+        widget:hide()
         F.console:add_text('ab')
         F.session.press('backspace')
-        assert.same({ 'keep' }, F.widget:get_text())
+        assert.same({ 'keep' }, widget:get_text())
         assert.same({ 'a' }, F.console:get_text())
       end)
 

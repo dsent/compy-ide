@@ -35,6 +35,14 @@ return {
       inserting = 'quit the IDE', replacing = 'quit the IDE' },
     console = { idle = 'quit the IDE', live = 'quit the IDE' },
   },
+  --- the screen's next mode: text, combined, the picture (the
+  --- proposal "The Program's Canvas and the Viewing Modes",
+  --- built as if accepted, November 17, 2026): the console's,
+  --- idle, running or paused; nothing in the editor. Once a
+  --- press: a held F12 does not flicker through the modes.
+  { chord = 'f12', name = 'screen_mode', card = 'F12',
+    console = { idle = 'screen', live = 'screen' },
+  },
   { chord = 'ctrl+pause', name = 'suspend', repeats = true },
   --- reserved in a profiling build alone (conf.lua's
   --- love.PROFILE); elsewhere a program gets them

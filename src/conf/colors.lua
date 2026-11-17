@@ -101,6 +101,20 @@ return {
     error = Color[Color.red],
     refusal = { 0x93 / 255, 0x49 / 255, 0, 1 },
   },
+  --- The screen's modes (model/screenModel.lua). In the
+  --- combined mode the output is drawn over the program's
+  --- picture: `ground` is the opacity of the output's ground
+  --- over the picture, `text` the opacity of its characters.
+  --- The lead's decision 5 of November 17, 2026 starts here,
+  --- the picture dimmed and the text whole, for legibility; the
+  --- maintainer's words, "the text half-transparent over the
+  --- canvas", are ground 0 and text 0.5. The maintainer chooses.
+  screen = {
+    combined = {
+      ground = .6,
+      text = 1,
+    },
+  },
   editor = {
     fg = Color[Color.black],
     bg = Color[Color.white],

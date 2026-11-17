@@ -34,6 +34,11 @@ end
 local user_update
 --- @type boolean
 local user_draw
+--- The program's own love.draw, which the IDE's draw calls onto
+--- the program's canvas each frame (draw_program); nil while
+--- none is installed, at a pause included
+--- @type function?
+local program_draw
 --- @type boolean
 -- set when a project installs any pointer/click handler.
 -- Together with a shown input widget it marks a non-blocking
@@ -228,53 +233,42 @@ local function project_handlers(userlove, CC)
 end
 
 
---- An event the project's chain did not consume goes back to
---- the console, which is where it went before a project run
---- held every channel for its whole lifetime
---- (doc/development/internals/event_dispatch_layers.md,
---- "Layer 2 — `love.<event>`, the active route's handler").
---- Two guards, and both are the point rather than defence:
---- `user_draw` because a project painting over the console
---- would otherwise let the user type into a prompt they cannot
---- see, and the nil check because the two derived clicks have
---- no console default at all (`_defaults`, above).
---- `user_is_blocking()` cannot serve as the first guard: it
---- also answers true for a project that hooks only `update`,
---- which is exactly the class this serves.
---- @param event string
---- The keys whose press fell through to the console: the gate
---- records the console as their receiver, so that their repeats
---- and release go there and never to the program, which saw no
---- press of them (handlers.keypressed)
-local fell_through = { }
+--- The release events, each the end of a press
+local RELEASES = { keyreleased = true, mousereleased = true,
+  touchreleased = true }
 
-local function fall_through(event, ...)
-  if user_draw then return end
-  local console = Controller._defaults[event]
-  if not console then return end
-  if event == 'keypressed' then fell_through[(...)] = true end
-  return console(...)
-end
+--- The press the gate is handing over, { event = the love.*
+--- event }, until the route's first call for that event takes
+--- it. Marked `console` when the route, going back to the
+--- console, hands the press to it: the gate then records the
+--- console as the press's receiver. A stop or a run the
+--- program's handler asks for changes the route too, but the
+--- press was the program's (p4), so the route after the press
+--- is no answer; and an event the handler raises itself is no
+--- hand-over of the press (p5).
+--- @type table?
+local handing = nil
 
---- The key and text events, the keyboard's
-local KEYBOARD = { keypressed = true, keyreleased = true,
-  textinput = true }
+--- The serial handlers a program may set, by field
+local SERIAL_FIELDS = { 'onConnect', 'onDisconnect', 'onBytes',
+  'onLine', 'onTick' }
 
---- Whether a live program takes keys, asked as each key or text
---- event comes, before its chain runs, since hooks and shortcuts
---- come and go: a key or text hook (its own love.keypressed,
---- keyreleased or textinput among them, seeded as hooks when its
---- run began: the hook table is the one record, round 19), a key
---- or text shortcut, or its own shown field. Such a program owns
---- the keyboard: what its chain leaves goes nowhere, not to the
---- console (the maintainer's ruling of November 16, 2026). An
---- empty shortcut table, and a hook or a shortcut for the
---- pointer or a touch, take no keys.
+--- Whether the program whose route holds the input can still
+--- act: an update or a draw, a hook or a non-empty shortcut
+--- table on any channel, its own shown field, or a serial
+--- handler. Such a program owns all input (the maintainer's
+--- ruling of November 17, 2026: "all input is the program's
+--- while it runs"); one that can do none of these has ended at
+--- its last line, and the input is the console's again. Asked
+--- as each event comes, since hooks and shortcuts come and go;
+--- the hook table is the one record (a program's own love.*
+--- handlers are seeded there when its run begins).
 --- @param compy_input table?
 --- @return boolean
-local function takes_keys(compy_input)
-  for event in pairs(KEYBOARD) do
-    if compy_input then
+local function can_act(compy_input)
+  if user_update or user_draw then return true end
+  if compy_input then
+    for _, event in ipairs(_bindable) do
       if compy_input.hooks[event] then return true end
       if next(compy_input.shortcuts[event] or { }) then
         return true
@@ -282,21 +276,15 @@ local function takes_keys(compy_input)
     end
   end
   local field = love.state.user_input_controller
-  return field ~= nil and field:is_shown() == true
-end
-
---- A key or a text that a running program takes brings the
---- console's output back from its scrolled view, whatever took
---- it: the program's field, a hook, a shortcut or its own
---- handler, as any key but the scrolling ones does in the
---- console. A modifier or a lock on its own leaves the view,
---- and so does a key's release, a pointer or a touch.
---- @param event string
---- @param k string?
---- @return boolean
-local function takes_screen(event, k)
-  if event == 'textinput' then return true end
-  return event == 'keypressed' and not Key.is_lone(k)
+  if field ~= nil and field:is_shown() == true then return true end
+  local port = rawget(_G, 'SerialPort')
+  local serial = port and port.table_for and port:table_for('program')
+  if serial then
+    for _, f in ipairs(SERIAL_FIELDS) do
+      if serial[f] then return true end
+    end
+  end
+  return false
 end
 
 --- The project route occupies the keyboard/text handlers for
@@ -313,15 +301,16 @@ end
 -- the console fork), so PIC is wired explicitly here. See
 -- doc/development/decisions/input.md #1 "route-centric routing"
 -- + #11 "route connects only while running". It installs even
--- with no project handlers: the walk decides, per event, and an
--- unconsumed one falls back to the console unless the project
--- owns the screen (fall_through, above). (`userlove` rename:
+-- with no project handlers: per event, a program that can act
+-- (can_act, above) owns it, and one that can act no more gives
+-- the route back to the console. (`userlove` rename:
 -- technical_debt.)
 --- Who has the keys now: 'console' (the console and the file
 --- editor), or the number of the program run whose route holds
 --- them; a pause and continue() keep the run's number, a new
 --- run takes the next (set_user_handlers)
 local route_owner, program_count = 'console', 0
+
 --- Releases a paused program is owed, by its number: a key it
 --- got the press of and that was let go while it waited. They
 --- come at continue(), and go with the run otherwise.
@@ -329,6 +318,39 @@ local owed_releases = { }
 
 --- @param resume boolean? --- continue(): the hooks are as the
 ---   pause left them, and none is seeded anew (round 20)
+--- A program whose route holds the input and that can act no
+--- more has ended at its last line, found as an event comes:
+--- the input is the console's again, and its natural end is made
+--- once the event is done (stage 4). One place for every event:
+--- the gate asks it first, at the entry of every event kind,
+--- before the reservations, the key card and the way back from
+--- the full picture, so that nothing that takes an event can do
+--- so ahead of it (k3, k4); the route asks it again before any
+--- chain. A paused
+--- program keeps its route for continue(), and is no end.
+--- What shows when the end is made goes to the end itself
+--- (end_naturally), which sets the screen: at once, or once the
+--- frame's update returns, where the click timer's derived clicks
+--- come (k5, k6).
+--- @param CC ConsoleController
+--- @return boolean found
+local function found_ended(CC)
+  if route_owner == 'console' then return false end
+  if love.state.app_state == 'inspect' then return false end
+  if can_act(Controller.project_input.compy_input) then
+    return false
+  end
+  Controller.release_keyboard_route(CC)
+  local screen = CC.model and CC.model.screen
+  --- the screen as it is when the end is made: at once, as it
+  --- was found; deferred, as the event that found it left it (a
+  --- key that went back has made it text) (k6)
+  End.defer(function()
+    CC:end_naturally(false, screen and screen:get())
+  end)
+  return true
+end
+
 local function occupy_input(userlove, CC, resume)
   local pic = Controller.project_input
   local compy = CC:get_project_env().compy
@@ -341,24 +363,45 @@ local function occupy_input(userlove, CC, resume)
   -- `love.keypressed = pic.keypressed` would drop `self`.
   for _, k in ipairs(_bindable) do
     love[k] = with_canvas_and_errors(CC, function(...)
-      --- the program's as the event comes, not as its chain
-      --- leaves it: a hook that removes itself does not hand
-      --- that event on (round 19)
-      local owns = KEYBOARD[k] and takes_keys(pic.compy_input)
-      -- LÖVE discards a handler's return, so the
-      -- walk's verdict is spent here or not at all.
-      if pic[k](pic, ...) then
-        if takes_screen(k, ...) then CC.model.output:to_rest() end
+      --- the press in hand, when this is its hand-over
+      local press = handing
+      if press and press.event == k then
+        handing = nil
+      else
+        press = nil
+      end
+      --- a program that can no longer act has ended at its last
+      --- line: the input is the console's again, this event
+      --- first (asked as the event comes, before any chain)
+      if found_ended(CC) then
+        --- a release is of a press the program got: it goes to
+        --- no one, the console having seen no press (p3)
+        if RELEASES[k] then return end
+        local console = Controller._defaults[k]
+        if press then press.console = true end
+        if console then return console(...) end
         return
       end
+      -- LÖVE discards a handler's return, so the
+      -- walk's verdict is spent here or not at all. What the
+      -- program's chain leaves goes nowhere: a program that can
+      -- act owns all input (November 17). A key it takes leaves
+      -- a scrolled view where it is (ruling 1.2).
+      if pic[k](pic, ...) then return end
       --- an event whose handler asked to stop or replace the run
-      --- is that request's: the console does not get it before
-      --- the run ends (util.program_end)
+      --- is that request's: the output does not get it either
+      --- (util.program_end)
       if End.pending then return end
-      --- a program that takes keys owns the keyboard: no key,
-      --- repeat, release or text it leaves reaches the console
-      if owns then return end
-      return fall_through(k, ...)
+      --- the one exception, ruling 1.1: the output stays in use,
+      --- and takes its own scrolling keys and the wheel when
+      --- the program's chain left them
+      if k == 'keypressed' then
+        local key, _, isr = ...
+        CC:output_key(key, isr)
+      elseif k == 'wheelmoved' then
+        local _, y = ...
+        CC:output_wheel(y)
+      end
     end)
   end
   route_owner = program_count
@@ -371,11 +414,13 @@ local function deliver_owed()
   local run = route_owner
   local due = owed_releases[run]
   owed_releases = { }
-  for k, sc in pairs(due or { }) do
+  for _, e in ipairs(due or { }) do
     --- a release that asked to stop or replace the run is the
-    --- last the program sees (util.program_end)
-    if End.pending then return end
-    love.keyreleased(k, sc)
+    --- last the program sees (util.program_end), and so is one
+    --- after which the program can act no more (p6)
+    if End.pending or route_owner ~= run then return end
+    local handler = love[e.event]
+    if handler then handler(unpack(e.args, 1, e.args.n)) end
   end
 end
 
@@ -418,19 +463,44 @@ local function draw_field(CC, V)
   own(CC.cfg.view.font, V.draw, V)
 end
 
+--- A program's love.draw draws on its canvas, which the IDE's
+--- own draw shows by the screen's mode (draw_program); the
+--- IDE's draw stays love.draw
 --- @param userlove table
 local function hook_draw(userlove)
   local udr = userlove.draw
-  local mdr = View.main_draw
-  if udr and udr ~= mdr then
-    --- @diagnostic disable-next-line: duplicate-set-field
-    local ndr = function()
-      udr()
-      View.drawFPS()
-    end
-    love.draw = ndr
+  if udr and udr ~= View.main_draw then
+    program_draw = udr
     user_draw = true
   end
+end
+
+--- The program's frame, on its canvas: cleared first to the
+--- ground the program chose (CanvasModel:get_background, which
+--- a choice in love.draw reaches though the frame's state is
+--- given back after it), as love.run clears the screen
+--- before love.draw, the transform at its origin, and drawn in
+--- the program's own graphics state, which is given back after
+--- it: use_canvas pops the IDE's push and whatever the frame
+--- pushed and did not pop, a stop in it included. A stop or a
+--- run the program's draw asks for is made once the frame is
+--- done (util.program_end). The canvas keeps the frame for a
+--- mode that shows it, and through a pause.
+--- @param CC ConsoleController
+local function draw_program(CC)
+  local udr = program_draw
+  if not udr then return end
+  End.ide_pushes = End.ide_pushes + 1
+  local ok, err = pcall(CC.use_canvas, CC, function()
+    gfx.push('all')
+    gfx.origin()
+    --- the canvas holds premultiplied colour (round c3)
+    local r, g, b, a = unpack(CC.model.output:get_background())
+    gfx.clear(r * a, g * a, b * a, a)
+    wrap(udr, CC)
+  end)
+  End.ide_pushes = End.ide_pushes - 1
+  if not ok then error(err, 0) end
 end
 
 local click_delay = 0.4
@@ -715,7 +785,12 @@ Controller = {
         Prof.update()
       end
       if Serial and SerialPort then
-        for _, f in ipairs(SerialPort:update(dt)) do
+        --- a program's serial handlers are program code: on its
+        --- canvas, through the one helper (round c3)
+        local faults = CC:use_canvas(function()
+          return SerialPort:update(dt)
+        end)
+        for _, f in ipairs(faults or { }) do
           print('serial fault [' .. f.env .. ']: ' ..
             tostring(f.err))
         end
@@ -725,31 +800,6 @@ Controller = {
         if click_timer <= 0 then emit_pending_click() end
       end
 
-      local ddr = View.prev_draw
-      local ldr = love.draw
-      if ldr ~= ddr then
-        --- a stop the program's draw asks for is made after its
-        --- pop (util.program_end): the IDE draws on from the
-        --- stop's own reset
-        local draw = function()
-          End.held(function()
-            if ldr then
-              gfx.push('all')
-              End.ide_pushes = End.ide_pushes + 1
-              wrap(ldr, CC)
-              End.ide_pushes = End.ide_pushes - 1
-              gfx.pop()
-            end
-            local ui = get_user_input()
-            if ui then
-              draw_field(CC, ui.V)
-            end
-          end)
-        end
-
-        View.prev_draw = draw
-        love.draw = draw
-      end
       CC:pass_time(dt)
 
       local uup = Controller._userhandlers.update
@@ -759,13 +809,9 @@ Controller = {
           wrap(uup, CC, dt)
         end)
       end
+      --- the paused frame is on the program's canvas already
       if love.state.app_state == 'snapshot' then
-        gfx.captureScreenshot(function(img)
-          local snap = gfx.newImage(img)
-          if View.snapshot then View.snapshot:release() end
-          View.snapshot = snap
-          CC:suspend()
-        end)
+        CC:suspend()
       end
 
       if love.harmony then
@@ -801,6 +847,7 @@ Controller = {
     --- is made once the draw is done (util.program_end)
     local function draw()
       End.held(function()
+        draw_program(CC)
         View.draw(CC, CV)
         local ui = get_user_input()
         if ui then draw_field(CC, ui.V) end
@@ -809,7 +856,6 @@ Controller = {
     end
     love.draw = draw
 
-    View.prev_draw = love.draw
     View.main_draw = love.draw
     View.end_draw = function()
       local w, h = gfx.getDimensions()
@@ -1127,6 +1173,7 @@ Controller = {
     user_update = false
     Controller.set_love_update(CC)
     user_draw = false
+    program_draw = nil
     user_pointer = false
     for _, k in ipairs(_derived) do
       love[k] = nil
@@ -1196,9 +1243,11 @@ Controller = {
     --- it is paused, or it idles behind the console with its
     --- picture or its handlers still there (run_live)
     --- @return boolean
+    --- a run in the frame its pause is asked in ('snapshot') is
+    --- live too (round c6)
     local function program_live()
       local st = love.state.app_state
-      return st == 'running' or st == 'inspect'
+      return st == 'running' or st == 'inspect' or st == 'snapshot'
           or (st == 'ready' and CC.run_live == true)
     end
 
@@ -1210,6 +1259,9 @@ Controller = {
       elseif program_live() then
         CC:stop_project_run()
       end
+      --- a finished program's picture on show goes as any key
+      --- takes it, Ctrl+Q's included: the gate's one way back
+      --- from the full picture (picture_only, below; round c5)
     end
 
     -- Ctrl+R restarts a live program from the entry point it
@@ -1237,6 +1289,57 @@ Controller = {
       if nxt then love.PROFILE.fpsc = nxt end
     end
 
+    --- the screen's modes, where a console runs (a bare
+    --- driver of the gate has none)
+    local screen = CC.model and CC.model.screen
+
+    --- Every event's first step: a run that can act no more is
+    --- found ended (found_ended) before anything takes the event
+    --- (k4). A picture on show stays on show through that end, as
+    --- a program that ended by itself leaves its picture, so that
+    --- a key or a click goes back and types or clicks nothing and
+    --- F12 steps from the picture; the end sets it (k5). A derived
+    --- click is the IDE's own timer: it may find the end, and goes
+    --- back from nothing.
+    local function enter()
+      found_ended(CC)
+    end
+
+    --- F12: the screen's next mode in the console, idle,
+    --- running or paused; the editor shows no mode, and
+    --- playback no console
+    local function reserved_screen_mode()
+      if playback or not screen then return end
+      --- the editor shows no mode; between a pause's request and
+      --- the pause (`snapshot`) a step would be the mode the
+      --- pause saves for continue() (k1)
+      local st = love.state.app_state
+      if st == 'editor' or st == 'snapshot' then return end
+      screen:step()
+    end
+
+    --- The full picture shows, and no program that can act
+    --- runs: the screen is a picture to look at, with no field
+    --- and no status line. Any key or button goes back from it
+    --- to the text and goes nowhere else (the maintainer: "if
+    --- any key gets us back into console, this is good
+    --- enough"); text, the wheel and movement do
+    --- nothing, as no field shows to take them. A program that
+    --- can act keeps all its input, and F12 is its way back.
+    --- @return boolean
+    --- Playback has no console: a packaged program's picture is
+    --- all there is (k1).
+    local function picture_only()
+      --- between a pause's request and the pause (`snapshot`) the
+      --- screen keeps its mode, which the pause saves for
+      --- continue() (k2)
+      return not playback
+          and love.state.app_state ~= 'snapshot'
+          and screen ~= nil and screen:get() == 'picture'
+          and love.state.app_state ~= 'editor'
+          and not Controller.program_owns_input()
+    end
+
     -- The gate's own reservations
     -- (doc/development/decisions/input.md, D-RESERVE-TABLE): a
     -- SECOND, PRIVILEGED table, structurally separate from a
@@ -1258,15 +1361,16 @@ Controller = {
       profile_start = reserved_profile_start,
       profile_stop = reserved_profile_stop,
       overlay = reserved_overlay,
+      screen_mode = reserved_screen_mode,
       exit = Application.request_application_exit,
     }
     local RESERVED = { keypressed = { }, keyreleased = { } }
     local REPEATS = { }
     -- The key card's gate (IS3.16): a key's press is passed on
     -- only while no card shows, and its repeats and release
-    -- follow its press to its receiver. `delivered` holds each
-    -- key from its press passed on to its release, with its
-    -- receiver: the route in force at the press (route_owner),
+    -- follow its press to its receiver. `receivers.key` (below)
+    -- holds each key from its press passed on to its release,
+    -- with its receiver: the route in force at the press,
     -- or the IDE for a reserved chord, whose key is the IDE's
     -- for the whole press (the maintainer's ruling of November
     -- 16, 2026: D-RESERVE-TABLE's reservations consume). A
@@ -1283,7 +1387,113 @@ Controller = {
     -- at its key's press (Ctrl+Escape: the exit is owed once
     -- Escape goes down with Ctrl held, and comes on Escape's
     -- release whatever is held by then, the card up or not).
-    local delivered, owed = { }, { }
+    local owed = { }
+    --- The text of a key that went back from the full picture
+    --- goes nowhere, by two rules that need no guess about which
+    --- comes first, a key or its text (k2): every text that comes
+    --- while the full picture shows is dropped, which is the key's
+    --- own text on a Compy, where it comes first; and after the
+    --- key's press a text is dropped only if it is the key's own
+    --- character, whatever its case, and comes before the key's
+    --- release and before any other key's press or repeat, which
+    --- is the desktop's order. Anything else is typed. A shifted
+    --- character other than a letter's (Shift+1's "!") slips
+    --- through on a desktop; a Compy never shows it.
+    --- @type string? --- the character a text is dropped for
+    local swallow_for = nil
+
+    --- The character a key types on its own, nil when it has no
+    --- single one
+    --- @param k string
+    --- @return string?
+    local function own_char(k)
+      if k == 'space' then return ' ' end
+      if #k == 1 and k:match('%g') then return k end
+      --- the keypad's: kp1, kp+, kp. (k3)
+      return k:match('^kp([%d%.,/%*%-%+=])$')
+    end
+    --- the buttons that went back from the full picture, from
+    --- their press to their release: their moves go nowhere
+    --- either, also into a program resumed meanwhile (k1)
+    local back_buttons = { }
+
+    --- Who each press went to, for a key, a mouse button and a
+    --- touch alike, by kind and by the key's name, the button's
+    --- number or the touch's id: the route in force when the
+    --- press is handed over (route_owner: 'console', or a run's
+    --- number), the console when the route, going back to it
+    --- because the program can act no more, handed it the press,
+    --- a table for a key the IDE keeps for its whole press (a
+    --- reserved chord), or false for a press held back (under
+    --- the key card). Decided at the hand-over, before a stop or
+    --- a run the press's own handler asked for is carried out:
+    --- a receiver that ends during its own press gets nothing
+    --- more, nor does its successor (p4).
+    local receivers = { key = { }, button = { }, touch = { } }
+
+    --- Hand a press to the route in force, and record where it
+    --- went
+    --- @param kind 'key'|'button'|'touch'
+    --- @param id any
+    --- @param event string --- the press's love.* event
+    local function hand_press(kind, id, event, ...)
+      local to = route_owner
+      local press, outer = { event = event }, handing
+      --- recorded before the handler runs, so that a release it
+      --- raises itself finds its press (p6)
+      receivers[kind][id] = to
+      handing = press
+      local r
+      if love[event] then r = love[event](...) end
+      handing = outer
+      if press.console and receivers[kind][id] == to then
+        receivers[kind][id] = 'console'
+      end
+      return r
+    end
+
+    --- A press that goes no further: under the card, or kept
+    --- by the IDE (`keep`, a key's reservation)
+    --- @param kind 'key'|'button'|'touch'
+    --- @param id any
+    --- @param keep table?
+    local function hold_press(kind, id, keep)
+      receivers[kind][id] = keep or false
+    end
+
+    --- The follow-up of a press (a move, a repeat) goes to its
+    --- receiver while it has the input, the console's behind a
+    --- program that does not own it; a release (`ends`) does so
+    --- too, ends the record, and waits for a paused program's
+    --- continue(). Nothing goes to a receiver that is gone.
+    --- @param kind 'key'|'button'|'touch'
+    --- @param id any
+    --- @param event string --- the follow-up's love.* event
+    --- @param ends boolean --- a release
+    --- @return boolean went, any result
+    local function follow(kind, id, event, ends, ...)
+      local to = receivers[kind][id]
+      if ends then receivers[kind][id] = nil end
+      if not to or type(to) == 'table' then return false end
+      if to == route_owner then
+        if love[event] then return true, love[event](...) end
+        return true
+      elseif to == 'console' then
+        --- not while a program owns the input: the console's
+        --- field is hidden (p1)
+        if not ends and Controller.program_owns_input() then
+          return false
+        end
+        local console = Controller._defaults[event]
+        if console then return true, console(...) end
+        return true
+      elseif ends then
+        owed_releases[to] = owed_releases[to] or { }
+        table.insert(owed_releases[to], { event = event,
+          args = { n = select('#', ...), ... } })
+      end
+      return false
+    end
     for _, r in ipairs(require('model.input.reservedKeys')) do
       -- the profiling keys only where conf.lua set love.PROFILE,
       -- which it does before love.load builds this gate
@@ -1295,6 +1505,7 @@ Controller = {
     end
 
     handlers.keypressed = function(k, sc, isr)
+      enter()
       --- a key press shows the text cursor (H-NFR4.4)
       Blink.restart()
       -- While a key card shows, in the editor or the console,
@@ -1306,6 +1517,9 @@ Controller = {
       if not isr then
         owed[k] = RESERVED.keyreleased[combo_string(k)]
       end
+      --- a key's text follows its press: whatever this key types
+      --- is no longer the text of a key that went back
+      swallow_for = nil
       -- Not a reservation: this fires on ANY key in playback
       -- while shutting down, not on one combo, so it cannot be
       -- a table entry.
@@ -1313,7 +1527,7 @@ Controller = {
         love.event.quit()
       end
       local card = CC:card_shows()
-      local to = delivered[k]
+      local to = receivers.key[k]
       local chord = combo_string(k)
       local reservation = RESERVED.keypressed[chord]
       if isr then
@@ -1322,30 +1536,41 @@ Controller = {
         -- reaches a natural stop (reservedKeys.lua): a held
         -- Ctrl+T does not flip between the run and the editor
         if type(to) == 'table' then
+          if to.back then swallow_for = own_char(k) end
           if to.again then to.act() end
           return
         end
-        --- a key whose press fell through to the console repeats
-        --- there, whoever has the keys now
-        if to == 'console' and route_owner ~= 'console' then
-          local console = Controller._defaults.keypressed
-          if console then return console(k, sc, isr) end
-          return
-        end
-        if to ~= route_owner then return end
+        if CC.editor then CC.editor:key_begins() end
+        local _, handled = follow('key', k, 'keypressed', false,
+          k, sc, isr)
+        if CC.editor then CC.editor:gate_key_done() end
+        return handled
       elseif card and k ~= KeyCard.KEY then
-        delivered[k] = nil
+        hold_press('key', k)
         return
-      elseif reservation or owed[k] then
-        -- the IDE's for the whole press, Ctrl+Escape's Escape too
-        delivered[k] = { act = reservation, again = REPEATS[chord] }
+      elseif picture_only() and not Key.is_lone(k)
+          and reservation ~= reserved_screen_mode then
+        -- back from the full picture: the key is the IDE's for
+        -- its whole press, and a reserved chord acts as well
+        -- (F12 is the cycle, whose next mode is text)
+        screen:back()
+        swallow_for = own_char(k)
+        hold_press('key', k,
+          { act = reservation, again = REPEATS[chord], back = true })
         if not reservation then return end
         if CC.editor then CC.editor:key_begins() end
         reservation()
         if CC.editor then CC.editor:gate_key_done() end
         return
-      else
-        delivered[k] = route_owner
+      elseif reservation or owed[k] then
+        -- the IDE's for the whole press, Ctrl+Escape's Escape too
+        hold_press('key', k,
+          { act = reservation, again = REPEATS[chord] })
+        if not reservation then return end
+        if CC.editor then CC.editor:key_begins() end
+        reservation()
+        if CC.editor then CC.editor:gate_key_done() end
+        return
       end
       if CC.editor then CC.editor:key_begins() end
 
@@ -1358,18 +1583,7 @@ Controller = {
       -- here. (Mirrors stock LÖVE's love.handlers[name] ->
       -- love[name].) See doc/development/decisions/input.md #1
       -- "route-centric routing" + #11.
-      local handled
-      fell_through[k] = nil
-      if love.keypressed then
-        handled = love.keypressed(k, sc, isr)
-      end
-      --- a press the program's route left to the console is the
-      --- console's: its repeats and release go there. A repeat
-      --- changes no receiver (round 19)
-      if not isr and fell_through[k] and route_owner ~= 'console' then
-        delivered[k] = 'console'
-      end
-      fell_through[k] = nil
+      local handled = hand_press('key', k, 'keypressed', k, sc, isr)
       -- a refusal at the gate holds back this key press alone
       -- (EditorController:refuse_to_leave), never a later one
       if CC.editor then CC.editor:gate_key_done() end
@@ -1393,9 +1607,12 @@ Controller = {
     end)
 
     handlers.textinput = function(t)
+      enter()
       Blink.restart()
       if not love.textinput then return end
       if CC:card_shows() then return end
+      if picture_only() then return end
+      if swallow_for and t:lower() == swallow_for then return end
       if Key.chord_text(t) then
         if RESERVED.keypressed[combo_string(t)] then return end
         local console = Controller._defaults.textinput
@@ -1406,29 +1623,21 @@ Controller = {
     end
 
     handlers.keyreleased = function(k, sc)
+      enter()
       -- here, whichever route has the keys: the help key's
       -- release ends its card wherever its press went
       CC:key_released(k)
+      if swallow_for and swallow_for == own_char(k) then
+        swallow_for = nil
+      end
       local reservation = owed[k]
       owed[k] = nil
       if reservation then reservation() end
       -- a release goes on exactly for a press that did, to its
       -- receiver: the route in force, the console behind a
       -- program, or a paused program at its continue()
-      local to = delivered[k]
-      delivered[k] = nil
-      if not to or type(to) == 'table' then return end
-      if to == route_owner then
-        if love.keyreleased then
-          return love.keyreleased(k, sc)
-        end
-      elseif to == 'console' then
-        local console = Controller._defaults.keyreleased
-        if console then return console(k, sc) end
-      else
-        owed_releases[to] = owed_releases[to] or { }
-        owed_releases[to][k] = sc or k
-      end
+      local _, r = follow('key', k, 'keyreleased', true, k, sc)
+      return r
     end
 
     --- @param x integer
@@ -1446,25 +1655,34 @@ Controller = {
     -- press that went through gets its release under the
     -- card, so that no route is left with half a click.
     -- Touches follow the same rule, paired by the touch's id.
-    local held_press = { }
-    local held_touch = { }
+    -- Buttons and touches share the keys' record and paths
+    -- (receivers, hand_press, follow, above): a release goes
+    -- only to the receiver of its press, a paused program's at
+    -- its continue().
 
     -- The gateway entry: hand the event to whoever occupies
     -- the slot. Under a project run that is the project
     -- route's chain; otherwise the console's own handler.
     handlers.mousepressed = function(x, y, btn, touch, presses)
+      enter()
       Blink.restart()
       if CC:card_shows() then
-        held_press[btn] = true
+        hold_press('button', btn)
         return
       end
-      held_press[btn] = nil
+      --- a button goes back from the full picture, as a key
+      --- does, and its release goes nowhere either
+      if picture_only() then
+        screen:back()
+        hold_press('button', btn)
+        back_buttons[btn] = true
+        return
+      end
       if btn == 1 then
         press_pos, press_dragged = { x = x, y = y }, false
       end
-      if love.mousepressed then
-        return love.mousepressed(x, y, btn, touch, presses)
-      end
+      return hand_press('button', btn, 'mousepressed',
+        x, y, btn, touch, presses)
     end
 
     --- @param x integer
@@ -1473,15 +1691,11 @@ Controller = {
     --- @param touch boolean
     --- @param presses number
     handlers.mousereleased = function(x, y, btn, touch, presses)
-      if held_press[btn] then
-        held_press[btn] = nil
-        return
-      end
-      local result
-      if love.mousereleased then
-        result = love.mousereleased(x, y, btn, touch, presses)
-      end
-      if btn == 1 then finish_click(x, y) end
+      enter()
+      back_buttons[btn] = nil
+      local went, result = follow('button', btn, 'mousereleased',
+        true, x, y, btn, touch, presses)
+      if went and btn == 1 then finish_click(x, y) end
       return result
     end
 
@@ -1491,8 +1705,10 @@ Controller = {
     --- @param dy number
     --- @param touch boolean
     handlers.mousemoved = function(x, y, dx, dy, touch)
+      enter()
       track_click_motion(x, y)
-      if CC:card_shows() then return end
+      if CC:card_shows() or picture_only() then return end
+      if next(back_buttons) then return end
       if love.mousemoved then
         return love.mousemoved(x, y, dx, dy, touch)
       end
@@ -1508,7 +1724,8 @@ Controller = {
     --- @param x number
     --- @param y number
     handlers.wheelmoved = function(x, y)
-      if CC:card_shows() then return end
+      enter()
+      if CC:card_shows() or picture_only() then return end
       if love.wheelmoved then
         return love.wheelmoved(x, y)
       end
@@ -1521,7 +1738,8 @@ Controller = {
     -- on those routes the slot is simply empty.
     for _, name in ipairs(_derived) do
       handlers[name] = function(x, y)
-        if CC:card_shows() then return end
+        enter()
+        if CC:card_shows() or picture_only() then return end
         if love[name] then return love[name](x, y) end
       end
     end
@@ -1533,14 +1751,18 @@ Controller = {
     --- @param dy number?
     --- @param pressure number?
     handlers.touchpressed = function(id, x, y, dx, dy, pressure)
+      enter()
       if CC:card_shows() then
-        held_touch[id] = true
+        hold_press('touch', id)
         return
       end
-      held_touch[id] = nil
-      if love.touchpressed then
-        return love.touchpressed(id, x, y, dx, dy, pressure)
+      if picture_only() then
+        screen:back()
+        hold_press('touch', id)
+        return
       end
+      return hand_press('touch', id, 'touchpressed',
+        id, x, y, dx, dy, pressure)
     end
 
     --- @param id userdata
@@ -1550,13 +1772,10 @@ Controller = {
     --- @param dy number?
     --- @param pressure number?
     handlers.touchreleased = function(id, x, y, dx, dy, pressure)
-      if held_touch[id] then
-        held_touch[id] = nil
-        return
-      end
-      if love.touchreleased then
-        return love.touchreleased(id, x, y, dx, dy, pressure)
-      end
+      enter()
+      local _, r = follow('touch', id, 'touchreleased', true,
+        id, x, y, dx, dy, pressure)
+      return r
     end
 
     --- @param id userdata
@@ -1566,11 +1785,12 @@ Controller = {
     --- @param dy number?
     --- @param pressure number?
     handlers.touchmoved = function(id, x, y, dx, dy, pressure)
+      enter()
       --- a touch begun under the card moves nothing after it
-      if held_touch[id] or CC:card_shows() then return end
-      if love.touchmoved then
-        return love.touchmoved(id, x, y, dx, dy, pressure)
-      end
+      if CC:card_shows() or picture_only() then return end
+      local _, r = follow('touch', id, 'touchmoved', false,
+        id, x, y, dx, dy, pressure)
+      return r
     end
 
 
@@ -1595,14 +1815,14 @@ Controller = {
     return (love.state.user_input ~= nil) or user_pointer
   end,
 
-  --- A program's route holds the keys and the program takes
-  --- keys (takes_keys): it owns the keyboard, and the console's
+  --- A program's route holds the input and the program can
+  --- still act (can_act): it owns all input, and the console's
   --- field is hidden (ConsoleView:draw). False at a pause, a
-  --- stop, and once the program takes keys no more.
+  --- stop, and once the program can act no more.
   --- @return boolean
-  program_owns_keys = function()
+  program_owns_input = function()
     if route_owner == 'console' then return false end
-    return takes_keys(Controller.project_input.compy_input)
+    return can_act(Controller.project_input.compy_input)
   end,
 
   --- @param userlove table
@@ -1632,7 +1852,6 @@ Controller = {
   --- @param CC ConsoleController?
   clear_user_handlers = function(CC)
     Controller._userhandlers = {}
-    View.clear_snapshot()
     if not CC then return end
     -- Only the surface's own stores. The widget's outputs are
     -- not re-seeded here and no longer can be: the widget

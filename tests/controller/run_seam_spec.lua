@@ -23,7 +23,21 @@ local function run(line)
   K.frame()
 end
 local function env() return K.cc:get_project_env() end
+--- Code run behind a live program, which owns the input, so no
+--- line can be typed there (November 17): run as the IDE's own
+--- call in the program's environment
+local function behind(code)
+  local f = assert(loadstring(code))
+  setfenv(f, env())
+  local r = f()
+  K.frame()
+  return r
+end
 local function said(s) return K.console_text():find(s, 1, true) ~= nil end
+--- A rerun's program that stays live, so that what its run left
+--- can be looked at: a program that can do nothing more ends at
+--- its last line, its globals with it (stage 4 of the canvas plan)
+local FRESH = 'fresh = true\nfunction love.update() end\n'
 
 describe('the run seam #console', function()
   after_each(function()
@@ -43,7 +57,7 @@ end
 ]]})
     run('run()')
     assert.equal('ready', K.app_state())
-    K.write_outside('main.lua', 'fresh = true\n')
+    K.write_outside('main.lua', FRESH)
     -- the idle program takes keys, so no line reaches the
     -- console: the rerun is the IDE's own call
     K.cc:run_project()
@@ -62,7 +76,7 @@ compy.input.shortcuts.keypressed.f2 = function()
 end
 ]]})
     run('run()')
-    K.write_outside('main.lua', 'fresh = true\n')
+    K.write_outside('main.lua', FRESH)
     K.cc:run_project()
     K.frame()
     assert.is_true(env().fresh)
@@ -72,17 +86,25 @@ end
 
   --- the rerun ends the idle run as a stop does, so its exit
   --- hook runs then, once, and never again
+  --- the idle run stays live by a pointer hook (one that can do
+  --- nothing more ends at its last line, its hook called then):
+  --- round c5's third finding
   it('clears an idle run before_exit', function()
     reset({['main.lua'] = [[
 compy.before_exit = function() print('OLD_EXIT') end
+compy.input.hooks.mousepressed = function() end
 ]]})
     run('run()')
-    K.write_outside('main.lua', 'fresh = true\n')
-    run('run()')
+    assert.is_true(K.cc.run_live)
+    assert.is_false(said('OLD_EXIT'), K.console_text())
+    K.write_outside('main.lua', FRESH)
+    behind('run()')
     assert.is_true(env().fresh)
+    local n = select(2, K.console_text():gsub('OLD_EXIT', ''))
+    assert.equal(1, n, K.console_text())
     K.keys('lctrl', 'q')
     K.frame()
-    local n = select(2, K.console_text():gsub('OLD_EXIT', ''))
+    n = select(2, K.console_text():gsub('OLD_EXIT', ''))
     assert.equal(1, n, K.console_text())
   end)
 
@@ -91,8 +113,10 @@ compy.before_exit = function() print('OLD_EXIT') end
 compy.serial.onLine = function(s) print('OLD_LINE:' .. s) end
 ]]})
     run('run()')
-    K.write_outside('main.lua', 'fresh = true\n')
-    run('run()')
+    K.write_outside('main.lua', FRESH)
+    -- the program's serial handler can act: it owns the input,
+    -- and the rerun is the IDE's own
+    behind('run()')
     assert.is_true(env().fresh)
     SerialPort.dispatcher:push('line', 'hello')
     assert.same({}, SerialPort.dispatcher:pump())
@@ -107,7 +131,7 @@ compy.input.show({text = 'OLD_WIDGET'})
     run('run()')
     assert.is_true(F.is_widget_visible())
     local previous = love.state.user_input_controller
-    K.write_outside('main.lua', 'fresh = true\n')
+    K.write_outside('main.lua', FRESH)
     K.keys('return')
     assert.is_true(env().fresh)
     assert.is_not.equal(previous, love.state.user_input_controller)
@@ -165,7 +189,7 @@ setmetatable(_G, {
 })
 ]]})
       run('run()')
-      K.write_outside('main.lua', 'fresh = true\nprobe = missing\n')
+      K.write_outside('main.lua', FRESH .. 'probe = missing\n')
       run('run()')
       assert.is_true(env().fresh, K.console_text())
       assert.is_nil(env().probe)
@@ -176,7 +200,7 @@ setmetatable(_G, {
   --- line queued for the board stays, and an exit hook it set
   --- is not called (round 21: nor does it reach the run)
   it('ends nothing when nothing is live', function()
-    reset({['main.lua'] = 'fresh = true\n'})
+    reset({['main.lua'] = FRESH})
     local drops, drop = 0, SerialPort.drop
     SerialPort.drop = function(...)
       drops = drops + 1
@@ -265,7 +289,7 @@ end
   --- resumes with it
   for _, case in ipairs({
     { "Ctrl+Q", function() K.keys('lctrl', 'q') end },
-    { "stop()", function() run('stop()') end },
+    { "stop()", function() behind('stop()') end },
     -- the close itself: close_project() would reopen the
     -- default project from the real directory
     { "a project's close", function() K.cc:_close_project() end },
@@ -358,13 +382,16 @@ end
       local view = assert(loadfile('src/view/view.lua'))
       view()
       local real = View
-      View, love.graphics.newFont = stub, newFont
+      --- the module's View is the global table's, which the
+      --- console's own draw reads: the stub goes back there
+      getfenv(view).View, love.graphics.newFont = stub, newFont
       gfx.setScissor(0, 0, 300, 300)
       local seen = 'not drawn'
       local C = {
         cfg = { view = { font = { } } },
         get_terminal = function() end,
         get_canvas = function() end,
+        model = { screen = { get = function() return 'text' end } },
       }
       local CV = { draw = function()
         seen = scissor() == nil and 'clean' or 'clipped'
@@ -386,7 +413,6 @@ end
       local view = assert(loadfile('src/view/view.lua'))
       view()
       local real = View
-      View, love.graphics.newFont = stub, newFont
       local profile, timer, print_ = love.PROFILE, love.timer,
           love.graphics.print
       love.PROFILE = { fpsc = 'T_L' }
@@ -395,9 +421,13 @@ end
       love.graphics.print = function()
         seen = scissor() == nil and 'clean' or 'clipped'
       end
+      --- the module's View is the global table's, which the
+      --- console's own draw reads, as drawFPS does: the stub goes
+      --- back there once the case is done
       finally(function()
         love.PROFILE, love.timer, love.graphics.print =
             profile, timer, print_
+        getfenv(view).View, love.graphics.newFont = stub, newFont
       end)
       gfx.setScissor(0, 0, 300, 300)
       real.drawFPS()
@@ -521,20 +551,25 @@ end
     end)
 
   --- round 17: a stop made while the IDE's own push is under way
-  --- pops nothing, so that push's pop still finds it
+  --- pops nothing, so that push's pop still finds it. A push the
+  --- program's top-level code left is popped as that code
+  --- returns (use_canvas), so none is left to pop here.
   it('pops nothing of the IDE\'s own push at a stop inside it',
     function()
       reset({['main.lua'] = 'gfx.push()\nfunction love.update() end\n'})
       local depth = counted_stack()
       run('run()')
-      assert.equal(1, depth())
+      assert.equal(0, depth())
       local own = require('view.ownState')
+      local inside
       local ok, err = pcall(own, nil, function()
         K.cc:stop_project_run()
+        inside = depth()
       end)
       assert.is_true(ok, tostring(err))
       assert.is_false(K.cc.run_live)
-      assert.equal(1, depth())
+      assert.equal(1, inside)
+      assert.equal(0, depth())
     end)
 
   --- design B: stop() ends the handler before its pop, and the
@@ -588,7 +623,7 @@ function love.update(dt) Timer.update(dt) end
   --- goes at the run, as at reset()
   it('cleans registrations typed before a run with nothing live',
     function()
-    reset({['main.lua'] = 'fresh = true\n'})
+    reset({['main.lua'] = FRESH})
     run("compy.input.shortcuts.keypressed.f2 = function() print('OLD_TYPED') end")
     run('run()')
     assert.is_true(env().fresh)
@@ -609,7 +644,7 @@ function love.update(dt) Timer.update(dt) end
   --- exit hook a typed line set; it removes it
   it('calls no typed exit hook as run("other") closes the project',
     function()
-      reset({['main.lua'] = 'fresh = true\n'})
+      reset({['main.lua'] = FRESH})
       run("compy.before_exit = function() print('OLD' .. 'EXIT') end")
       K.next_project('other', {['main.lua'] = 'x = 43\n'})
       run("run('other')")
@@ -619,7 +654,7 @@ function love.update(dt) Timer.update(dt) end
 
   it('drops a serial handler typed before a run with nothing live',
     function()
-      reset({['main.lua'] = 'fresh = true\n'})
+      reset({['main.lua'] = FRESH})
       run("compy.serial.onLine = function() end")
       assert.is_function(SerialPort:table_for('program').onLine)
       run('run()')
@@ -628,7 +663,7 @@ function love.update(dt) Timer.update(dt) end
     end)
 
   it('keeps project files open across editor run and return', function()
-    reset({['main.lua'] = 'x = 42\n'})
+    reset({['main.lua'] = 'x = 42\nfunction love.update() end\n'})
     K.open('main.lua')
     local file = K.cc.editor:get_active_buffer()
     assert.is_not_nil(file)
@@ -678,7 +713,8 @@ gfx.setColor(1, 0, 0, 1)
     end)
     run('run()')
     K.keys('lctrl', 'q')
-    K.write_outside('main.lua', 'observed_colour = {gfx.getColor()}\n')
+    K.write_outside('main.lua', 'observed_colour = {gfx.getColor()}\n'
+      .. 'function love.update() end\n')
     run('run()')
     assert.same({1, 1, 1, 1}, env().observed_colour)
   end)
@@ -697,8 +733,9 @@ observed_mouse = {
   love.mouse.getRelativeMode(), love.mouse.isGrabbed(),
   love.mouse.isVisible(), love.mouse.getCursor()
 }
+function love.update() end
 ]])
-    run('run()')
+    behind('run()')
     assert.same({false, false, true}, env().observed_mouse)
   end)
 
@@ -723,7 +760,8 @@ observed_mouse = {
     end)
     run('run()')
     K.keys('lctrl', 'q')
-    K.write_outside('main.lua', 'observed_scissor = {gfx.getScissor()}\n')
+    K.write_outside('main.lua', 'observed_scissor = {gfx.getScissor()}\n'
+      .. 'function love.update() end\n')
     run('run()')
     assert.same({}, env().observed_scissor)
   end)
@@ -731,9 +769,10 @@ observed_mouse = {
   --- a program reaches its environment as _G (the tixy
   --- example compiles its formulas there)
   it('leaves _G naming the environment the run is in', function()
-    reset({['main.lua'] = "_G.flag = 7\nseen = flag\n"})
+    reset({['main.lua'] = "_G.flag = 7\nseen = flag\n"
+      .. "function love.update() end\n"})
     run('run()')
-    run('run()')
+    behind('run()')
     assert.equal(env(), env()._G)
     assert.equal(7, env().seen)
   end)
@@ -769,7 +808,7 @@ end
     F.session.mousepressed(10, 10, 1, false, 1)
     F.session.mousereleased(10, 10, 1, false, 1)
     assert.equal(1, env().clicks)
-    run('run()')
+    behind('run()')
     assert.equal(0, env().clicks)
     F.session.mousepressed(10, 10, 1, false, 1)
     F.session.mousereleased(10, 10, 1, false, 1)
@@ -778,7 +817,7 @@ end
 
   --- one stop, one reset, one module clear for each way in
   it('makes the environment once and clears modules once', function()
-    reset({['main.lua'] = 'x = 42\n'})
+    reset({['main.lua'] = 'x = 42\nfunction love.update() end\n'})
     local cc = K.cc
     local reset_env, evacuate = cc._reset_executor_env, cc.evacuate_required
     local resets, clears = 0, 0
@@ -798,20 +837,25 @@ end
     resets, clears = 0, 0
     K.keys('lctrl', 'r')
     assert.same({1, 1}, {resets, clears})
+    K.keys('lctrl', 'q')
     resets, clears = 0, 0
-    K.next_project('other', {['main.lua'] = 'x = 43\n'})
+    K.next_project('other', {['main.lua'] = 'x = 43\n'
+      .. 'function love.update() end\n'})
     run("run('other')")
     assert.same({1, 1}, {resets, clears})
   end)
 
-  it('keeps typed writes during a run, and clears them at its stop',
-    function()
+  --- turned around on November 17: the program owns the input,
+  --- so no line is typed during its run; its globals go at the
+  --- stop
+  it('takes no typed line during a run, and clears its globals at'
+    .. ' its stop', function()
       reset({['main.lua'] = 'x = 42\nfunction love.update() end\n'})
       run('run()')
       local previous = env()
       run('y = 43')
       assert.equal(previous, env())
-      assert.equal(43, env().y)
+      assert.is_nil(env().y)
       K.keys('lctrl', 'q')
       run("print('READ:' .. tostring(x) .. ':' .. tostring(y))")
       assert.is_true(said('READ:nil:nil'), K.console_text())
