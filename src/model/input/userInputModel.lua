@@ -285,10 +285,11 @@ function UserInputModel:reformat(text, at)
     return
   end
   self:_record_edit('format', true)
+  --- whatever rewrites the text clears the selection
+  self:clear_selection()
   local cl, cc = self:get_cursor_pos()
   local nl, nc = cursor_map.cursor(self:get_text(), lines, cl, cc)
   if at then
-    self:clear_selection()
     nl, nc = at.l, at.c
   end
   self.entered = InputText(lines)
@@ -320,8 +321,11 @@ end
 --- @param keep_cursor boolean
 function UserInputModel:set_text(text, keep_cursor)
   --- programmatic content is a new baseline: the text
-  --- level lives only inside one edit block (#45, spec 1.1)
+  --- level lives only inside one edit block (#45, spec 1.1).
+  --- Whatever replaces or rewrites the text clears the
+  --- selection.
   self.edit_history:reset()
+  self:clear_selection()
   local lines = normalized_lines(text)
   if lines then
     self.entered = InputText(lines)
@@ -929,6 +933,9 @@ end
 --- @return boolean? limit --- no row lies that way
 function UserInputModel:cursor_vertical_move(dir)
   if dir ~= 'up' and dir ~= 'down' then return end
+  --- a plain Up or Down clears the selection, at the draft's
+  --- edge too, where the cursor may not move
+  if not self.selection.held then self:clear_selection() end
   local nl, nrow = self:_neighbor_row(dir)
   if not nl then
     --- IS3.8: in the editor's field, Up on the first row
@@ -1609,7 +1616,8 @@ end
 --- @return boolean --- there was one to remove
 function UserInputModel:delete_selection()
   if not self:has_selection() then return false end
-  self:_record_edit('remove', true)
+  --- a kind of its own: the deletion after it is a new step
+  self:_record_edit('remove_selection', true)
   self:pop_selected_text()
   self:_note_edit()
   return true

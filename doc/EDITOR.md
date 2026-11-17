@@ -48,7 +48,12 @@
   <kbd>Shift</kbd> with a movement key, or a drag of the mouse,
   selects a part of the draft: typing replaces it, and
   <kbd>Backspace</kbd> or <kbd>Delete</kbd> removes it, which
-  <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes back. Nothing copies or
+  <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes back. Every other key keeps
+  its meaning: a plain arrow clears the selection and moves as
+  it always does, and <kbd>Escape</kbd> drops the edit. Beside a
+  selection the cursor is a thin bar at the left edge of its
+  cell, so that a selected character it stands on stays seen;
+  without one it is the block. Nothing copies or
   pastes: <kbd>Ctrl</kbd>+<kbd>Insert</kbd>,
   <kbd>Ctrl</kbd>+<kbd>Delete</kbd> and
   <kbd>Shift</kbd>+<kbd>Insert</kbd> keep their meaning for

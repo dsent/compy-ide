@@ -174,7 +174,7 @@ The console's input view is `input_max = 14` lines high; the editor's field show
 
 ### Selection
 
-A field selects a part of its draft, without a clipboard (the maintainer's ruling of 2026-11-17, which changes "Selection is off until the clipboard is designed" in part). Shift with each movement key of the field's table (`model/input/fieldKeys.lua`, the `select` entry: Left, Right, Ctrl+Left, Ctrl+Right, Home, End, Ctrl+Home, Ctrl+End, Up, Down) runs that movement through `UserInputModel:select_by`, which holds the selection from where it began, or from the cursor, to where the cursor lands; Up on the first row and Down on the last go to the draft's ends and recall no history. A press in the field places the cursor and clears the selection; a drag from it selects (`UserInputController:mousemoved`, `select_to`). Typing (`add_text`) and a line break replace the selection; Backspace, Delete, Ctrl+Backspace, Ctrl+W and Ctrl+K remove it alone (`delete_selection`), each one step on the field's undo, whose snapshot keeps the selection so that Ctrl+Z brings it back with the text. A plain movement clears it (`move_cursor`), and so does Alt+Shift+Up/Down before it moves the cursor's line. The view draws a selected cell in the draft's own lines and columns (`render_input`, `is_selected`), over a wrapped line's mark; beside a selection the cursor is a bar at its cell's left edge, so that the selected cell it stands on stays seen. Nothing copies, cuts or pastes.
+A field selects a part of its draft, without a clipboard (the maintainer's ruling of 2026-11-17, which changes "Selection is off until the clipboard is designed" in part). Shift with each movement key of the field's table (`model/input/fieldKeys.lua`, the `select` entry: Left, Right, Ctrl+Left, Ctrl+Right, Home, End, Ctrl+Home, Ctrl+End, Up, Down) runs that movement through `UserInputModel:select_by`, which holds the selection from where it began, or from the cursor, to where the cursor lands; Up on the first row and Down on the last go to the draft's ends and recall no history. A press in the field places the cursor and clears the selection; a drag from it selects (`UserInputController:mousemoved`, `select_to`). Typing (`add_text`) and a line break replace the selection; Backspace, Delete, Ctrl+Backspace, Ctrl+W and Ctrl+K remove it alone (`delete_selection`), each one step on the field's undo, whose snapshot keeps the selection so that Ctrl+Z brings it back with the text. Whatever replaces or rewrites the text clears it (`set_text`, `reformat`, history recall); a plain movement clears it (`move_cursor`, and `cursor_vertical_move` at the draft's edge too) and then moves as it always does, and Alt+Shift+Up/Down clears it before it moves the cursor's line; Escape and Enter keep their meaning. One key keeps one meaning with or without a selection, as the classic text-mode editors do (the lead's decisions of 2026-11-17). The view draws a selected cell in the draft's own lines and columns (`render_input`, `is_selected`), over a wrapped line's mark; beside a selection the cursor is a bar at its cell's left edge, so that the selected cell it stands on stays seen. Nothing copies, cuts or pastes.
 
 A click on the input widget (translated from screen coordinates to input grid via `_translate_to_input_grid`) places the cursor, in every field: the console's, the file editor's and a project's (the project route passes `love.state.user_input_controller` as its widget, so there is no project-specific translation path). The coordinate translation is bottom-relative: line 0 is the bottom line of the input, which is non-obvious.
 
@@ -648,8 +648,8 @@ held from a capital) and Delete, Ctrl+Backspace and Ctrl+W deleting what Ctrl+Le
 would cross (at a line's start, the break and the word before it), Ctrl+K the rest of its line,
 Shift+Enter and Alt+Enter breaking the line, Ctrl+Z and Ctrl+Y undoing and redoing the draft
 (D-UNDO-KEYS), bare Enter submitting and bare Escape cancelling. Every owner gets the same keys.
-Alt+Up/Down are the editor's block move and the widget's for no owner. It has no selection
-and no clipboard keys and never inserts literal characters — see "Text Input Widget" above for why
+Alt+Up/Down are the editor's block move and the widget's for no owner. Shift with each move
+selects (see "Selection" above); it has no clipboard keys and never inserts literal characters — see "Text Input Widget" above for why
 `keypressed` and `textinput` divide the work this way. Ahead of the table run the error lock and the
 web build's space.
 
@@ -802,7 +802,9 @@ it. (`ConsoleController:wrap_handler`, which used to do this per handler, is gon
 
 `UserInputController` handles mouse events on the input widget:
 - `mousepressed`: translates screen (x, y) → input grid (col, line) via `_translate_to_input_grid`. Grid is bottom-relative (y increases upward in input space). Moves the cursor there (`translate_grid_to_cursor`, `move_cursor`), in every field; a press outside the field's rows does nothing.
-- `mousemoved` and `mousereleased`: nothing. A drag selects nothing.
+- `mousepressed` also clears a selection and marks where a drag would start (`drag_from`).
+- `mousemoved`: while the left button is down after such a press, selects from where the press was to the cell under the pointer, while it is in the field's rows; with the button up, ends the drag, its release unseen.
+- `mousereleased`: ends the drag.
 
 The file editor forwards a press to its field (`EditorController:mousepressed`) while `cfg.editor.mouse_enabled` is on, as `main.lua` ships it; a click on the document view does nothing (PR #28, D-MOUSE-BROWSE).
 

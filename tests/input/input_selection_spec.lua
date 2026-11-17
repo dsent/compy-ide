@@ -250,6 +250,98 @@ describe("selection in the draft #input", function()
     end)
   end)
 
+  -- the review's round s1: whatever replaces or rewrites the
+  -- field's text clears the selection; a removal is a step of
+  -- its own; a plain Up or Down clears it at the draft's edge
+  describe("what clears it", function()
+    it("a program's set_text, keeping the cursor", function()
+      K.reset()
+      F.activate_project()
+      local w = F.show_widget({ text = "" })
+      w:set_text({ "abc", "def" })
+      w:set_cursor_pos(1, 1)
+      K.keys("lctrl", "lshift", "end")
+      assert.is_not_nil(selected(w))
+      F.compy_input().set_text("ok", true)
+      assert.is_nil(selected(w))
+      K.type("X")
+      assert.same("okX", table.concat(w:get_text(), "\n"))
+    end)
+
+    it("the editor's formatting of a draft", function()
+      K.reset({ ["main.lua"] = "" })
+      K.open()
+      local im = K.ed.input.model
+      im:set_text({ "  v1=1" })
+      im:move_cursor(1, 7)
+      K.keys("lshift", "left")
+      assert.same("1", selected(K.ed.input))
+      im:reformat({ "v1 = 1" })
+      assert.is_nil(selected(K.ed.input))
+    end)
+
+    in_every_field("a plain Up or Down at the draft's edge",
+      function(owner)
+        local f = field_of(owner, { "abcdef" }, 1, 7)
+        K.keys("lshift", "left")
+        assert.same("f", selected(f), owner)
+        K.keys("down")
+        assert.is_nil(selected(f), owner)
+        K.keys("lshift", "left")
+        K.keys("up")
+        assert.is_nil(selected(f), owner)
+      end)
+
+    in_every_field("a removal is a step of its own, apart from the "
+        .. "deletion after it", function(owner)
+      local f = field_of(owner, { "abcde" }, 1, 3)
+      K.keys("lshift", "right")
+      K.keys("lshift", "right")
+      K.keys("delete")
+      assert.same("abe", text(f), owner)
+      K.keys("delete")
+      assert.same("ab", text(f), owner)
+      K.keys("lctrl", "z")
+      assert.same("abe", text(f), owner)
+      K.keys("lctrl", "z")
+      assert.same("abcde", text(f), owner)
+    end)
+
+    it("the editor's redo brings back the result, and undo the "
+        .. "selection, through the file's timeline too", function()
+      K.reset({ ["notes.txt"] = "" })
+      K.open("notes.txt")
+      K.type("abc")
+      K.keys("lshift", "left")
+      K.type("X")
+      assert.same("abX", K.draft())
+      K.keys("lctrl", "z")
+      assert.same("abc", K.draft())
+      assert.same("c", selected(K.ed.input))
+      K.keys("lctrl", "z")
+      K.keys("lctrl", "y")
+      assert.same("abc", K.draft())
+      assert.same("c", selected(K.ed.input))
+      K.keys("lctrl", "y")
+      assert.same("abX", K.draft())
+    end)
+
+    it("a drag ends when the button is up, its release unseen",
+      function()
+        local f = field_of("console", nil, 1, 1)
+        local v = f.model.cfg.view
+        local bottom = love.graphics.getHeight() - Layout(v).bottom
+        local x, y = v.fw * 1.2, bottom - v.fh * 1.5
+        F.set_mouse_down(true)
+        F.session.mousepressed(x, y, 1, false, 1)
+        -- the release goes elsewhere: the button is up
+        F.set_mouse_down(false)
+        F.session.mousemoved(v.fw * 4.2, y, 3, 0, false)
+        K.frame()
+        assert.is_nil(selected(f))
+      end)
+  end)
+
   describe("the other keys keep their meaning", function()
     it("Enter runs the console's whole line", function()
       K.reset()

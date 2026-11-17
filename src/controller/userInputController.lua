@@ -895,6 +895,11 @@ end
 function UserInputController:mousemoved(x, y, dx, dy, touch)
   local from = self.drag_from
   if not from then return end
+  --- a release this field did not see ends the drag too
+  if not love.mouse.isDown(1) then
+    self.drag_from = nil
+    return
+  end
   local l, c = self:_point(x, y)
   if not l then return end
   self.model:select_to(from[1], from[2], l, c)
