@@ -84,7 +84,7 @@ What sets the mode:
 | A pause | `text`, whatever the program draws while paused; `continue()` brings back the mode before it, or the picture when the program first drew while paused, whatever F12 showed meanwhile |
 | A stop, an error in top-level code, `reset()` | `text` |
 | A program's natural end at its last line (a stop; a pause, asked for or made, is none) | `picture` when it drew, until a key or a click; `text` otherwise |
-| A program's natural end found as an event comes | `text` |
+| A program's natural end found as an event comes (the gate asks first, at every event) | `text`; the picture when it showed, which that event, a key or a click, then leaves for `text` |
 | Ctrl+Q with nothing live, the full picture showing | `text` (`ScreenModel:back`, the way any key goes) |
 | `compy.screen.show(mode)`, from a program or a typed line | `mode`, which holds against the run's first drawing (`ScreenModel:choose`) |
 | F12 in the console (`ScreenModel:step`) | the next of `text`, `combined`, `picture` |

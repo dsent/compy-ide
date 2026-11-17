@@ -299,6 +299,108 @@ describe("the screen modes' keys #canvas", function()
         end)
     end
 
+    --- k4's finding, as a class: every event finds a run that
+    --- can act no more ended before anything takes it, a reserved
+    --- chord included; and no chord changes what it does to a
+    --- run that can still act
+    describe("each reserved chord on a run that can act no more",
+      function()
+        --- a drawing program whose last handler goes at a release;
+        --- `live` keeps it running with an update
+        local function program(live)
+          return DRAWS_ONCE
+            .. "compy.before_exit = function() end\n"
+            .. "function love.mousereleased()"
+            .. " compy.input.hooks.mousereleased = nil end\n"
+            .. (live and "function love.update() end\n" or "")
+        end
+        --- the program's before_exit, counted from here
+        local calls = 0
+        local function byes() return calls end
+        local function start(live)
+          K.reset({ ["main.lua"] = program(live) })
+          K.start()
+          calls = 0
+          env().compy.before_exit = function() calls = calls + 1 end
+          F.session.mousepressed(10, 10, 1, false, 1)
+          F.session.mousereleased(10, 10, 1, false, 1)
+          assert.is_true(K.cc.run_live)
+          assert.same("picture", mode())
+          assert.same(0, byes())
+        end
+        local CHORDS = {
+          ["Ctrl+Q"] = { keys = { "lctrl", "q" },
+            done = function() assert.is_false(K.cc.run_live == true) end,
+            live = function()
+              assert.is_false(K.cc.run_live == true)
+              assert.same(1, byes())
+            end },
+          ["Ctrl+R"] = { keys = { "lctrl", "r" },
+            done = function() assert.is_false(K.cc.run_live == true) end,
+            live = function()
+              assert.is_true(K.cc.run_live)
+              assert.same(1, byes())
+            end },
+          ["Ctrl+T"] = { keys = { "lctrl", "t" },
+            done = function() assert.same("editor", K.app_state()) end,
+            live = function()
+              assert.same("editor", K.app_state())
+              assert.same(1, byes())
+            end },
+          ["Ctrl+Pause"] = { keys = { "lctrl", "pause" },
+            done = function()
+              assert.are_not.same("inspect", K.app_state())
+            end,
+            live = function()
+              assert.same("inspect", K.app_state())
+              assert.same(0, byes())
+            end },
+          ["F12"] = { keys = { "f12" },
+            done = function() assert.same("text", mode()) end,
+            live = function()
+              assert.same("text", mode())
+              assert.is_true(K.cc.run_live)
+              assert.same(0, byes())
+            end },
+          --- on the full picture F1 is any key: it goes back, and
+          --- the card comes with the next press
+          ["F1"] = { hold = "f1",
+            done = function()
+              assert.same("text", mode())
+              assert.is_false(K.cc:card_shows())
+            end,
+            live = function()
+              assert.is_false(K.cc:card_shows())
+              assert.same(0, byes())
+            end },
+          ["Ctrl+Escape"] = { keys = { "lctrl", "escape" },
+            done = function() assert.same(1, #F.quits()) end,
+            live = function()
+              assert.same(1, #F.quits())
+              assert.same(0, byes())
+            end },
+        }
+        for name, c in pairs(CHORDS) do
+          local function chord()
+            F.quits()
+            if c.hold then K.hold(c.hold) else K.keys(unpack(c.keys)) end
+          end
+          it(name .. " ends it first, then acts", function()
+            start(false)
+            chord()
+            assert.same(1, byes())
+            c.done()
+            if c.hold then K.release(c.hold) end
+          end)
+          it(name .. " acts as ever on a run that can act", function()
+            start(true)
+            chord()
+            c.live()
+            if c.hold then K.release(c.hold) end
+          end)
+        end
+      end)
+
     --- k3's second finding: a keypad key's own character
     it("drops a keypad key's own text after it goes back",
       function()
