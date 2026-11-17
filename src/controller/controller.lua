@@ -1213,9 +1213,11 @@ Controller = {
     --- it is paused, or it idles behind the console with its
     --- picture or its handlers still there (run_live)
     --- @return boolean
+    --- a run in the frame its pause is asked in ('snapshot') is
+    --- live too (round c6)
     local function program_live()
       local st = love.state.app_state
-      return st == 'running' or st == 'inspect'
+      return st == 'running' or st == 'inspect' or st == 'snapshot'
           or (st == 'ready' and CC.run_live == true)
     end
 
