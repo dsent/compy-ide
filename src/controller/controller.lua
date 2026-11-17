@@ -232,6 +232,13 @@ end
 local RELEASES = { keyreleased = true, mousereleased = true,
   touchreleased = true }
 
+--- Set when the route, going back to the console, hands it the
+--- event in hand: the gate then records the console as the
+--- press's receiver. A stop or a run the program's handler asks
+--- for changes the route too, but the press was the program's
+--- (p4), so the route after the press is no answer.
+local handed_to_console = false
+
 --- The serial handlers a program may set, by field
 local SERIAL_FIELDS = { 'onConnect', 'onDisconnect', 'onBytes',
   'onLine', 'onTick' }
@@ -294,12 +301,6 @@ end
 --- run takes the next (set_user_handlers)
 local route_owner, program_count = 'console', 0
 
---- Whether a receiver the gate recorded is a program run's
---- @param to any
---- @return boolean
-local function to_program(to)
-  return type(to) == 'number'
-end
 --- Releases a paused program is owed, by its number: a key it
 --- got the press of and that was let go while it waited. They
 --- come at continue(), and go with the run otherwise.
@@ -328,6 +329,7 @@ local function occupy_input(userlove, CC, resume)
         --- no one, the console having seen no press (p3)
         if RELEASES[k] then return end
         local console = Controller._defaults[k]
+        handed_to_console = true
         if console then return console(...) end
         return
       end
@@ -1354,17 +1356,19 @@ Controller = {
       -- love[name].) See doc/development/decisions/input.md #1
       -- "route-centric routing" + #11.
       local handled
+      handed_to_console = false
       if love.keypressed then
         handled = love.keypressed(k, sc, isr)
       end
-      --- a press during which the input went back to the console
+      --- a press the route, going back to the console, handed it
       --- (the program could no longer act) reached the console:
-      --- its repeats and release go there. A repeat changes no
-      --- receiver
-      if not isr and to_program(delivered[k])
-          and route_owner == 'console' then
+      --- its repeats and release go there. One whose handler
+      --- asked for a stop or a run was the program's (p4). A
+      --- repeat changes no receiver
+      if not isr and handed_to_console then
         delivered[k] = 'console'
       end
+      handed_to_console = false
       -- a refusal at the gate holds back this key press alone
       -- (EditorController:refuse_to_leave), never a later one
       if CC.editor then CC.editor:gate_key_done() end
@@ -1469,13 +1473,16 @@ Controller = {
       if btn == 1 then
         press_pos, press_dragged = { x = x, y = y }, false
       end
+      --- the route in force, or the console when the route went
+      --- back to it with this press (p3, p4)
+      local to = route_owner
+      handed_to_console = false
       local r
       if love.mousepressed then
         r = love.mousepressed(x, y, btn, touch, presses)
       end
-      --- the receiver after the press: the route may have gone
-      --- back to the console during it (p3)
-      press_to[btn] = route_owner
+      press_to[btn] = handed_to_console and 'console' or to
+      handed_to_console = false
       return r
     end
 
@@ -1548,11 +1555,14 @@ Controller = {
         touch_to[id] = false
         return
       end
+      local to = route_owner
+      handed_to_console = false
       local r
       if love.touchpressed then
         r = love.touchpressed(id, x, y, dx, dy, pressure)
       end
-      touch_to[id] = route_owner
+      touch_to[id] = handed_to_console and 'console' or to
+      handed_to_console = false
       return r
     end
 

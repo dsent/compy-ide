@@ -406,3 +406,81 @@ describe("a pointer across the end of a program's acting #input",
         assert.same({ }, seen)
       end)
   end)
+
+-- p4: a press during which the program stops or is replaced
+-- (a request its hook makes) went to the program: its release
+-- goes to no one, neither the console nor the next run
+describe("a pointer across a stop or a run its press asks for #input",
+  function()
+    setup(K.setup)
+    teardown(K.teardown)
+    after_each(K.cleanup)
+
+    for _, call in ipairs({ "stop()", "run()" }) do
+      it("gives no one the release when the press hook calls "
+        .. call, function()
+          K.reset({ ["main.lua"] = "RELEASES = 0\n"
+            .. "compy.input.hooks.mousereleased = function()"
+            .. " RELEASES = RELEASES + 1 end\n"
+            .. "compy.input.hooks.touchreleased = function()"
+            .. " RELEASES = RELEASES + 1 end\n"
+            .. "compy.input.hooks.mousepressed = function() "
+            .. call .. " end\n"
+            .. "compy.input.hooks.touchpressed = function() "
+            .. call .. " end\n" })
+          K.start()
+          local field = K.cc.input
+          local ends = 0
+          local was_m, was_t = field.mousereleased, field.touchreleased
+          field.mousereleased = function(...)
+            ends = ends + 1
+            return was_m(...)
+          end
+          field.touchreleased = function(...)
+            ends = ends + 1
+            return was_t(...)
+          end
+          finally(function()
+            field.mousereleased, field.touchreleased = was_m, was_t
+          end)
+          local x, y = on_field(1)
+          F.session.mousepressed(x, y, 1, false, 1)
+          F.session.mousereleased(x, y, 1, false, 1)
+          assert.same(0, ends)
+          assert.same(0, K.cc:get_project_env().RELEASES or 0)
+          --- the touch from a program of its own: the stop has
+          --- given the console the input
+          if call == "stop()" then K.start() end
+          local H = love.handlers
+          H.touchpressed("t1", x, y, 0, 0, 1)
+          H.touchreleased("t1", x, y, 0, 0, 1)
+          assert.same(0, ends)
+          assert.same(0, K.cc:get_project_env().RELEASES or 0)
+        end)
+    end
+  end)
+
+describe("a key across a stop its press asks for #input", function()
+  setup(K.setup)
+  teardown(K.teardown)
+  after_each(K.cleanup)
+
+  it("gives the console no release of the key", function()
+    K.reset({ ["main.lua"] = "compy.input.hooks.keypressed ="
+      .. " function(k) if k == 'x' then stop() end end\n"
+      .. "function love.update() end\n" })
+    K.start()
+    local field = K.cc.input
+    local ends = 0
+    local was = field.keyreleased
+    field.keyreleased = function(...)
+      ends = ends + 1
+      return was(...)
+    end
+    finally(function() field.keyreleased = was end)
+    F.session.press("x")
+    assert.is_false(K.cc.run_live)
+    F.session.release("x")
+    assert.same(0, ends)
+  end)
+end)
