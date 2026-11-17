@@ -379,8 +379,9 @@ local function deliver_owed()
   owed_releases = { }
   for _, e in ipairs(due or { }) do
     --- a release that asked to stop or replace the run is the
-    --- last the program sees (util.program_end)
-    if End.pending then return end
+    --- last the program sees (util.program_end), and so is one
+    --- after which the program can act no more (p6)
+    if End.pending or route_owner ~= run then return end
     local handler = love[e.event]
     if handler then handler(unpack(e.args, 1, e.args.n)) end
   end
@@ -1314,11 +1315,16 @@ Controller = {
     local function hand_press(kind, id, event, ...)
       local to = route_owner
       local press, outer = { event = event }, handing
+      --- recorded before the handler runs, so that a release it
+      --- raises itself finds its press (p6)
+      receivers[kind][id] = to
       handing = press
       local r
       if love[event] then r = love[event](...) end
       handing = outer
-      receivers[kind][id] = press.console and 'console' or to
+      if press.console and receivers[kind][id] == to then
+        receivers[kind][id] = 'console'
+      end
       return r
     end
 
