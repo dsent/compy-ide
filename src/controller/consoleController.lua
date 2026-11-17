@@ -279,10 +279,13 @@ end
 --- widget's highlighter to whichever bound it last. The
 --- evaluator is part of what the run owns.
 --- @param cfg table
-local function build_input_widget(cfg)
+--- @param on_accepted function --- called as the field takes an
+---   answer
+local function build_input_widget(cfg, on_accepted)
   local eval = Evaluator.plain('text input')
   local model = UserInputModel(cfg, eval)
   local widget = UserInputController(model)
+  widget.on_accepted = on_accepted
   -- The project widget's one shipped default, seated on the
   -- LEAST-DESTRUCTIVE basis: submit consumes the content,
   -- because a project processes a submission through its
@@ -702,7 +705,11 @@ function ConsoleController:_run_project(name, stopped, entry)
       -- quickswitch call stop+run directly, never re-open:
       -- construct-at-open would leave every restart on the
       -- previous run's widget.
-      build_input_widget(self.cfg)
+      --- an answer the program's field takes brings the output's
+      --- screen back, as a console line that runs does
+      build_input_widget(self.cfg, function()
+        self.model.output:to_rest()
+      end)
       -- The program speaks for the board from here on; the
       -- console's own listeners wait until it has stopped.
       SerialPort:programStarted()
@@ -2080,6 +2087,10 @@ function ConsoleController:_evaluate_input()
         --- the band is the field's, for a line not taken (the
         --- maintainer's rulings of November 15 and 16, 2026)
         inter:remember()
+        --- a line that runs brings the output's screen back from
+        --- a scrolled view, so that its echo and what it prints
+        --- are seen; typing it did not (CanvasModel:to_rest)
+        self.model.output:to_rest()
         self.model.output:echo(text)
         --- a typed line leaves state for a flush to end, as a
         --- live run does
@@ -2805,7 +2816,6 @@ function ConsoleController:textinput(t)
     --- its key press. A chord's own glyph never comes here:
     --- the event gate stops it (Key.chord_text)
     input:clear_error()
-    self.model.output:to_rest()
     input:textinput(t)
   end
 end
@@ -2858,28 +2868,6 @@ local ACTIONS = {
   end,
 }
 
---- The keys that move the output's view (consoleKeys.lua);
---- Home and End only while the field is empty
-local SCROLLS = {
-  scroll_row = true, scroll_page = true, scroll_end = true,
-}
-
---- Every key but the ones that scroll brings the screen back
---- before it does its work, so that no one types under an
---- output whose newest row is hidden
---- @param k string
---- @param entry table? --- the console's table's entry
-function ConsoleController:_back_to_screen(k, entry)
-  local scrolls = entry and SCROLLS[entry.act]
-      and (entry.act ~= 'scroll_end' or self.input:is_empty())
-  --- a modifier or a lock on its own, and the help key, leave
-  --- the view where it is
-  if scrolls or Key.is_lone(k) or k == KeyCard.KEY then
-    return
-  end
-  self.model.output:to_rest()
-end
-
 --- In the console a key is looked up by its full chord in the
 --- table of the console's state (consoleKeys.lua), then in the
 --- text field's (fieldKeys.lua); a chord neither names does
@@ -2921,7 +2909,6 @@ function ConsoleController:keypressed(k, sc, isrepeat)
     self:_terminal_test()
     return
   end
-  self:_back_to_screen(k, entry)
 
   -- A message is a hint that blocks nothing (IS3.14): the
   -- next key dismisses it and does its usual work, Enter and

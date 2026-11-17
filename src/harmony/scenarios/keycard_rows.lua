@@ -430,7 +430,10 @@ local CONSOLE = {
     D.eq(out:top(), t, 'Ctrl+Down, a row newer')
     D.eq(P.console_draft(), D0, 'the draft stays')
     D.key(wait, 'escape')
-    assert(not out:is_scrolled(), 'Esc brings the screen back')
+    assert(out:is_scrolled(), 'Esc moved the scrolled view')
+    D.key(wait, 'end')
+    assert(not out:is_scrolled(),
+      'End on an empty field left the view scrolled')
   end },
   ['Ctrl+L'] = { 'clear screen', function(wait)
     D.key(wait, 'escape')

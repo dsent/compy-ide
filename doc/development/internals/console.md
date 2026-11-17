@@ -98,14 +98,31 @@ a window of 16 consecutive rows of the sequence, drawn by
 either; a number names the same row while new rows arrive, so new
 output leaves the view where it is. `scroll_row`, `scroll_page`,
 `to_oldest` and `to_rest` move it (the keys in
-`src/model/input/consoleKeys.lua`). Every other key brings the
-screen back first, except a modifier or a lock key on its own and
-F1 (`ConsoleController:_back_to_screen`). A key or a text that a
-running program takes brings it back too, except a lone modifier
-or lock (`takes_screen` in `src/controller/controller.lua`), and
-so does a running program's input field when it comes up
-(`ConsoleController:pass_time`); a paused program's field leaves
-the keys to the console.
+`src/model/input/consoleKeys.lua`).
+
+What brings the screen back from a scrolled view is one rule
+(the maintainer's ruling of November 17, 2026): input does not,
+a line that runs does, and so does a change of what the screen is
+for. Typing, the arrows, Escape, Enter on a line that does not
+run, and a key or a text a running program takes all leave the
+view where it is, as new output does. The screen comes back:
+
+- when a line runs: Enter on a console line that loads
+  (`ConsoleController:_evaluate_input`), and an answer a
+  program's field accepts (`UserInputController:submit_flow`
+  calls `on_accepted`, which the console sets on the field it
+  builds);
+- on End with an empty field, and on Ctrl+L;
+- at a transition: a run starts, stops, pauses or continues, a
+  project opens or closes, the editor comes forward or steps
+  aside, and a running program's input field comes up
+  (`ConsoleController:pass_time`); a paused program's field
+  leaves the keys to the console.
+
+Every one of these is a call of `CanvasModel:to_rest`. One
+consequence: a text program that takes every key leaves a
+scrolled view only by the mouse wheel, since its keys no longer
+bring the screen back and End is its own.
 `CanvasView:draw_cues` draws the editor's continuation cue
 (`src/view/continuationCue.lua`) at a cut edge of a scrolled view.
 

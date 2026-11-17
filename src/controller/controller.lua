@@ -285,20 +285,6 @@ local function takes_keys(compy_input)
   return field ~= nil and field:is_shown() == true
 end
 
---- A key or a text that a running program takes brings the
---- console's output back from its scrolled view, whatever took
---- it: the program's field, a hook, a shortcut or its own
---- handler, as any key but the scrolling ones does in the
---- console. A modifier or a lock on its own leaves the view,
---- and so does a key's release, a pointer or a touch.
---- @param event string
---- @param k string?
---- @return boolean
-local function takes_screen(event, k)
-  if event == 'textinput' then return true end
-  return event == 'keypressed' and not Key.is_lone(k)
-end
-
 --- The project route occupies the keyboard/text handlers for
 --- the run; the project's own handlers ride along for
 --- delegation (never route owners themselves).
@@ -347,10 +333,7 @@ local function occupy_input(userlove, CC, resume)
       local owns = KEYBOARD[k] and takes_keys(pic.compy_input)
       -- LÖVE discards a handler's return, so the
       -- walk's verdict is spent here or not at all.
-      if pic[k](pic, ...) then
-        if takes_screen(k, ...) then CC.model.output:to_rest() end
-        return
-      end
+      if pic[k](pic, ...) then return end
       --- an event whose handler asked to stop or replace the run
       --- is that request's: the console does not get it before
       --- the run ends (util.program_end)

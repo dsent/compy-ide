@@ -80,10 +80,11 @@ a project must be selected first.
 The console keeps the last 1,000 rows that scroll off the top of
 its output, and the keys above scroll over them. A scrolled view
 fills the screen and is marked at its edges where more lies
-beyond; new output leaves it where it is, and any other key but
-a modifier, a lock key or <kbd>F1</kbd> brings the screen back,
-as do a program's start, stop or pause and a key the program
-takes. Each line the console runs is
+beyond. New output leaves it where it is, and so does typing:
+you can look at what scrolled away while you write the next
+line. <kbd>Enter</kbd> on a line that runs brings the screen
+back, as do a program's start, stop or pause. Each line the
+console runs is
 written to the output in blue before it runs, and its error
 after it, in red. A command that refuses says why in the output,
 in orange. The band above the status line belongs to the line

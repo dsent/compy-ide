@@ -42,6 +42,8 @@ end
 --- @class UserInputController
 --- @field model UserInputModel
 --- @field view UserInputView?
+--- @field on_accepted function? --- called as a submission is
+--- accepted, before the field's own callbacks
 UserInputController = class.create(new)
 
 --- @param v UserInputView
@@ -537,6 +539,9 @@ function UserInputController:submit_flow()
   --- accepted: the line enters the history (the classic
   --- shell's, which holds only lines that ran)
   self.model:remember()
+  --- the surface that owns this field hears of an answer taken,
+  --- before the program does
+  if self.on_accepted then self.on_accepted() end
   dispose(self, self.clear_on_submit, self.hide_on_submit)
   run_callback(self, 'on_text_entered', text)
   run_callback(self, 'after_submit', text)

@@ -675,16 +675,17 @@ describe("the console's scrolling keys #console", function()
     end)
 
   it("Home and End with text in the field are the field's keys, "
-    .. "and bring the screen back", function()
+    .. "and leave the view where it is", function()
       print_lines(1, 80)
       K.type("abc")
       K.keys("pageup")
+      local v = view()
+      assert.is_not_nil(v)
       K.keys("home")
-      assert.is_nil(view())
+      assert.same(v, view())
       assert.same({ "abc", 1, 1 }, field())
-      K.keys("pageup")
       K.keys("end")
-      assert.is_nil(view())
+      assert.same(v, view())
       assert.same({ "abc", 1, 4 }, field())
     end)
 
@@ -714,25 +715,57 @@ describe("the console's scrolling keys #console", function()
     end
   end)
 
-  it("a typed character, Enter, Escape, an arrow and Ctrl+T "
-    .. "bring the screen back", function()
+  --- the maintainer's ruling of November 17, 2026: "I can
+  --- scroll up, look at something in the history while typing a
+  --- new command"
+  it("typing, an arrow, Backspace and Escape leave the view "
+    .. "where it is", function()
       print_lines(1, 40)
-      local function scrolled() K.keys("lctrl", "up") end
-      scrolled()
-      K.type("x")
-      assert.is_nil(view())
-      assert.equal("x", K.console_draft())
-      scrolled()
+      K.keys("lctrl", "up")
+      local v = view()
+      K.type("x = 1")
+      assert.same(v, view(), "typed text")
+      assert.equal("x = 1", K.console_draft())
       K.keys("left")
-      assert.is_nil(view())
-      scrolled()
+      K.keys("backspace")
+      assert.same(v, view(), "an arrow and Backspace")
       K.keys("escape")
-      assert.is_nil(view())
-      scrolled()
-      K.type("y = 1")
+      assert.same(v, view(), "Escape")
+      assert.equal("", K.console_draft())
+    end)
+
+  it("Enter on a line that runs brings the screen back", function()
+    print_lines(1, 40)
+    K.keys("lctrl", "up")
+    K.type("y = 1")
+    assert.is_true(output():is_scrolled())
+    K.keys("return")
+    assert.is_nil(view())
+  end)
+
+  it("Enter on a line that does not run leaves the view where "
+    .. "it is", function()
+      print_lines(1, 40)
+      K.keys("lctrl", "up")
+      local v = view()
+      -- nothing to run
       K.keys("return")
-      assert.is_nil(view())
-      scrolled()
+      assert.same(v, view(), "an empty field")
+      -- a statement that goes on
+      K.type("if x then")
+      K.keys("return")
+      assert.same(v, view(), "an unfinished statement")
+      K.keys("escape")
+      -- Lua refuses it
+      K.type("x = = 1")
+      K.keys("return")
+      assert.same(v, view(), "a line Lua does not load")
+    end)
+
+  it("Ctrl+T, to the editor and back, brings the screen back",
+    function()
+      print_lines(1, 40)
+      K.keys("lctrl", "up")
       K.keys("lctrl", "t")
       K.keys("lctrl", "t")
       assert.same("ready", K.app_state())
@@ -1239,34 +1272,81 @@ describe("the scrolled view at a transition #console", function()
     env.compy.input.hooks.textinput = nil
   end
 
-  it("a key a program takes after the view scrolled", function()
+  --- turned around on November 17, 2026: input no longer moves
+  --- a scrolled view, a program's no more than the console's
+  it("not a key a program takes after the view scrolled", function()
     reset({ ["main.lua"] = takes_later("keypressed",
       "function() return true end") })
     run("run()")
     K.keys("home")
     assert.is_true(output():is_scrolled(), "Home, before the hook")
     for _ = 1, 30 do K.frame() end
-    assert.is_true(output():is_scrolled(),
-      "the hook alone leaves the view")
+    local t = output():top()
     K.keys("end")
-    at_rest("the key the program took")
-    K.frame(100)
-    local s = table.concat(screen(), "\n")
-    assert.truthy(s:find("Ready for keys.", 1, true))
+    K.keys("x")
+    assert.equal(t, output():top(), "the keys the program took")
     forget_program()
   end)
 
-  it("a text a program takes after the view scrolled", function()
-    reset({ ["main.lua"] = takes_later("textinput",
-      "function() return true end") })
+  it("not a text a program takes after the view scrolled",
+    function()
+      reset({ ["main.lua"] = takes_later("textinput",
+        "function() return true end") })
+      run("run()")
+      K.keys("home")
+      for _ = 1, 30 do K.frame() end
+      local t = output():top()
+      love.handlers.textinput("a")
+      assert.equal(t, output():top(), "the text the program took")
+      forget_program()
+    end)
+
+  --- a program's field shown from the start, and what it is
+  --- given printed
+  local ASKS = "for i = 1, 40 do print('L' .. i) end\n"
+      .. "compy.input.show { on_text_entered = function(t)\n"
+      .. "  print('got ' .. t) end }\n" .. RUNS
+
+  it("not typing in a program's field", function()
+    reset({ ["main.lua"] = ASKS })
     run("run()")
-    K.keys("home")
-    for _ = 1, 30 do K.frame() end
-    assert.is_true(output():is_scrolled())
-    love.handlers.textinput("a")
-    at_rest("the text the program took")
-    forget_program()
+    assert.is_true(love.state.user_input_controller:is_shown())
+    -- a shown field has the scrolling keys: the view moves as
+    -- the wheel moves it
+    output():to_oldest()
+    local t = output():top()
+    assert.is_not_nil(t)
+    K.type("abc")
+    K.keys("left")
+    assert.equal(t, output():top())
+    K.cc:get_project_env().love.update = nil
   end)
+
+  it("Enter that hands a program's field its answer", function()
+    reset({ ["main.lua"] = ASKS })
+    run("run()")
+    output():to_oldest()
+    assert.is_true(output():is_scrolled())
+    K.type("abc")
+    K.keys("return")
+    at_rest("the answer given")
+    K.frame(100)
+    assert.truthy(table.concat(screen(), "\n"):find("got abc", 1, true))
+    K.cc:get_project_env().love.update = nil
+  end)
+
+  it("not Enter in a program's field that takes no answer",
+    function()
+      reset({ ["main.lua"] = ASKS })
+      run("run()")
+      output():to_oldest()
+      local t = output():top()
+      assert.is_not_nil(t)
+      -- an empty field hands nothing over
+      K.keys("return")
+      assert.equal(t, output():top())
+      K.cc:get_project_env().love.update = nil
+    end)
 
   --- turned around on November 16, 2026: a key the program
   --- leaves goes nowhere, the console's scrolling included (a
@@ -1284,8 +1364,6 @@ describe("the scrolled view at a transition #console", function()
       assert.equal(t, output():top(), "Ctrl+Up the program leaves")
       K.keys("lshift")
       assert.equal(t, output():top(), "a lone Shift the program took")
-      K.keys("x")
-      at_rest("x, which the program took")
       forget_program()
     end)
 end)
@@ -1470,14 +1548,14 @@ describe("the scrollback and the console's notice #console",
       assert.is_false(output():is_scrolled())
     end)
 
-    it("brings the screen back for a line the syntax refuses, "
-      .. "unechoed", function()
+    it("leaves the view where it is for a line the syntax "
+      .. "refuses, unechoed", function()
         print_lines(1, 40)
         K.keys("lctrl", "up")
         K.type("x = = 1")
         K.keys("return")
         K.frame(100)
-        assert.is_false(output():is_scrolled())
+        assert.is_true(output():is_scrolled())
         assert.is_true(K.cc.input:has_error())
         assert.equal("x = = 1", K.console_draft())
         for _, r in ipairs(screen()) do
@@ -1542,15 +1620,15 @@ describe("the scrollback and the console's notice #console",
           "the band over the output's bottom rows")
       end)
 
-    it("lets a typed key dismiss a message over a scrolled view, "
-      .. "bring the screen back and type once", function()
+    it("lets a typed key dismiss a message over a scrolled view "
+      .. "and type once, the view left where it is", function()
         print_lines(1, 40)
         K.keys("lctrl", "up")
         K.cc.input:set_error({ "a message" })
         assert.is_true(output():is_scrolled())
         K.type("q")
         assert.is_false(K.cc.input:has_error())
-        assert.is_false(output():is_scrolled())
+        assert.is_true(output():is_scrolled())
         assert.equal("q", K.console_draft())
       end)
   end)
