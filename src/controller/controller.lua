@@ -769,6 +769,11 @@ Controller = {
       end
       if love.state.app_state == 'snapshot' then
         gfx.captureScreenshot(function(img)
+          --- A frame that is not shown asks again, and every
+          --- screenshot asked for comes later: the first one
+          --- makes the pause, and the rest find it made and do
+          --- nothing.
+          if love.state.app_state ~= 'snapshot' then return end
           --- The screenshot is the picture of a program that
           --- draws. One that draws nothing has no picture but
           --- the console's output, which the console draws as

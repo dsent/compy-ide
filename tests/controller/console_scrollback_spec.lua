@@ -1591,31 +1591,36 @@ describe("the output's rows with no field under it #console",
     --- fixture's screenshot never comes and its View drops
     --- nothing: here the screenshot comes at once and is
     --- dropped as view/view.lua drops it.
-    local function screenshot_comes()
+    --- With `held`, the screenshots asked for wait in it until
+    --- the test hands them over. The fixture's own functions
+    --- are back when the test ends, however it ends.
+    --- @param held function[]?
+    local function screenshot_comes(held)
       local gfx = love.graphics
       local shot, image = gfx.captureScreenshot, gfx.newImage
       local clear = View.clear_snapshot
-      gfx.captureScreenshot = function(taken) taken({ }) end
+      gfx.captureScreenshot = function(taken)
+        if held then held[#held + 1] = taken else taken({ }) end
+      end
       gfx.newImage = function()
         return { release = function() end }
       end
       View.clear_snapshot = function() View.snapshot = nil end
-      return function()
+      finally(function()
         gfx.captureScreenshot, gfx.newImage = shot, image
         View.clear_snapshot = clear
         View.snapshot = nil
-      end
+      end)
     end
 
     it("keep no picture of a paused program that draws nothing",
       function()
         owning()
-        local back = screenshot_comes()
+        screenshot_comes()
         K.keys("lctrl", "pause")
         K.frame()
         assert.same("inspect", K.app_state())
         assert.is_nil(View.snapshot)
-        back()
         forget()
       end)
 
@@ -1624,7 +1629,7 @@ describe("the output's rows with no field under it #console",
         reset({ ["main.lua"] = "function love.draw() end\n" .. RUNS })
         run("run()")
         K.frame()
-        local back = screenshot_comes()
+        screenshot_comes()
         K.keys("lctrl", "pause")
         K.frame()
         assert.same("inspect", K.app_state())
@@ -1632,7 +1637,31 @@ describe("the output's rows with no field under it #console",
         run("continue()")
         assert.same("running", K.app_state())
         assert.is_nil(View.snapshot)
-        back()
+        env().love.update = nil
+        env().love.draw = nil
+      end)
+
+    --- a frame that is not shown asks again, as behind a
+    --- minimized window; every screenshot asked for comes later
+    --- (review o3)
+    it("keep that picture when a second screenshot of the same "
+      .. "pause comes after the first", function()
+        reset({ ["main.lua"] = "function love.draw() end\n" .. RUNS })
+        run("run()")
+        K.frame()
+        local held = { }
+        screenshot_comes(held)
+        K.keys("lctrl", "pause")
+        K.frame()
+        K.frame()
+        assert.is_true(1 < #held, "screenshots asked for")
+        held[1]({ })
+        assert.same("inspect", K.app_state())
+        local picture = View.snapshot
+        assert.is_not_nil(picture)
+        for i = 2, #held do held[i]({ }) end
+        assert.equal(picture, View.snapshot)
+        assert.same("inspect", K.app_state())
         env().love.update = nil
         env().love.draw = nil
       end)
