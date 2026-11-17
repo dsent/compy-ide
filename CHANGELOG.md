@@ -205,12 +205,13 @@ Project-author guide: `doc/input_api.md`.
   a row at a time, PageUp / PageDown a page of 15 rows with one carried over, and, while the
   field is empty, Home and End go to the oldest and the newest row. A scrolled view fills
   the screen, carries the editor's continuation cue at an edge with more beyond, and stays
-  where it is while new output arrives; any other key but a modifier, a lock key or F1
-  brings the screen back, and so do a program's start, stop or pause, a key or text a
-  running program takes, and its input field coming up. The field keeps its text and
-  cursor. PageUp and PageDown no longer recall the history, which Up and
-  Down still do. While a program's input field shows, or the program takes the keys
-  itself, the keys are the program's. The key card lists Ctrl+Up/Down and Home/End.
+  where it is while new output arrives and while you type, in the console and in a
+  program's field alike. Enter on a line that runs brings the screen back, and so do an
+  answer a program's field takes, a program's start, stop or pause, and its input field
+  coming up. The field keeps its text and cursor. PageUp and PageDown no longer recall
+  the history, which Up and Down still do. While a program's input field shows, or the
+  program takes the keys itself, the keys are the program's. The key card lists
+  Ctrl+Up/Down and Home/End.
 - **Ctrl+L empties the console**: the screen, the kept output, and output still waiting
   to be written when it is pressed. A program's `compy.terminal.clear()` clears the
   screen alone, and what was on it is gone. `list_projects()` no longer clears the screen:
@@ -266,7 +267,10 @@ Project-author guide: `doc/input_api.md`.
 - **A program that can act owns all input.** While a program has an update or a draw, a
   hook or a shortcut, its own field shown, or a serial handler, every key, text, mouse and
   touch event is the program's, and what it does not take goes nowhere; the console's field
-  and cursor are hidden, the output and the status line staying. The output keeps its own
+  and cursor are hidden. The prompt's row is the program's meanwhile: the output has 17 rows,
+  `compy.terminal.gotoxy` reaches the 17th, and the status line is the screen's last row,
+  showing the project, the file the program runs from and "running". When a field comes
+  back, what is on the 17th row scrolls up. The output keeps its own
   scrolling keys and the wheel when the program does not take them, so a program that only
   prints can be scrolled. A program that can do nothing more, its picture staying or not,
   gives the console back. Before, a key or text a program left was typed into the console.

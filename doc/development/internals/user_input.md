@@ -547,9 +547,9 @@ binding to apply, deliberately not a rule the tier enforces.
 - **Ctrl+Up/Ctrl+Down, PageUp/PageDown, and Home/End with an empty field**: scroll the output
   over its kept rows, a row, a page of 15 rows with one carried over, and to the oldest or the
   newest row; they recall nothing and leave the field's text and cursor as they are. With text
-  in the field, Home and End are the field's own keys. Every other key brings the screen back
-  before it does its work (`ConsoleController:_back_to_screen`); a modifier or a lock key on
-  its own and F1 leave the view. See `console.md`, "The Output and Its Kept Rows".
+  in the field, Home and End are the field's own keys. Typing and every other key leave a
+  scrolled view where it is; Enter on a line that runs brings the screen back. See
+  `console.md`, "The Output and Its Kept Rows", for everything that does.
 - **Up/Down at input boundary**: history navigation, through the widget's `on_limit_reached`
   (below). The walk is the classic shell's (`model/input/history.lua`): the entries are the lines
   that ran, and walking never changes one. Up from the line being typed keeps it in a slot below

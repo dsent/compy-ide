@@ -713,9 +713,13 @@ shortcut on any channel (its own `love.*` handlers among them), its own
 shown field, or a serial handler, every key, text, mouse and touch event
 is yours, and one that nothing of yours takes goes nowhere: the console
 does not get it. The console's field and its cursor are hidden while it
-runs, the output and the status line staying on show; the field comes back
-when the program stops (Ctrl+Q), pauses (Ctrl+Pause), or can do nothing
-more. A program that wants typing shows its own field. The one exception:
+runs, and its row is then your program's: the output has 17 rows where it
+had 16, `gotoxy` reaches the 17th, and the status line sits on the
+screen's last row, naming the project, the file it runs from and
+"running". The field comes back when the program stops (Ctrl+Q), pauses
+(Ctrl+Pause), or can do nothing more, and so does the 16-row output when
+your program shows a field of its own: what is on the 17th row then
+scrolls up. A program that wants typing shows its own field. The one exception:
 the output stays in use, so a key press or a wheel event you leave that
 belongs to it scrolls it (Ctrl+Up and Ctrl+Down, PgUp and PgDn, Home and
 End, and the wheel). An event is yours when a shortcut or a hook for it

@@ -279,10 +279,13 @@ end
 --- widget's highlighter to whichever bound it last. The
 --- evaluator is part of what the run owns.
 --- @param cfg table
-local function build_input_widget(cfg)
+--- @param on_accepted function --- called as the field takes an
+---   answer
+local function build_input_widget(cfg, on_accepted)
   local eval = Evaluator.plain('text input')
   local model = UserInputModel(cfg, eval)
   local widget = UserInputController(model)
+  widget.on_accepted = on_accepted
   -- The project widget's one shipped default, seated on the
   -- LEAST-DESTRUCTIVE basis: submit consumes the content,
   -- because a project processes a submission through its
@@ -702,7 +705,11 @@ function ConsoleController:_run_project(name, stopped, entry)
       -- quickswitch call stop+run directly, never re-open:
       -- construct-at-open would leave every restart on the
       -- previous run's widget.
-      build_input_widget(self.cfg)
+      --- an answer the program's field takes brings the output's
+      --- screen back, as a console line that runs does
+      build_input_widget(self.cfg, function()
+        self.model.output:to_rest()
+      end)
       -- The program speaks for the board from here on; the
       -- console's own listeners wait until it has stopped.
       SerialPort:programStarted()
@@ -2045,9 +2052,41 @@ function ConsoleController:pass_time(dt)
     self.model.output:to_rest()
   end
   self.field_shown = field
+  self:fit_output()
   --- the text cursor blinks on the frames' time
   Blink.pass_time(dt)
   self.model.output.terminal:update(dt)
+end
+
+--- Whether no input field is drawn: the console's is hidden
+--- behind a program that owns the input (ConsoleView:draw), and
+--- the program shows none of its own.
+--- @return boolean
+function ConsoleController:fieldless()
+  if not self.main_ctrl.program_owns_input() then return false end
+  local w = love.state.user_input_controller
+  return not (w ~= nil and w:is_shown())
+end
+
+--- With no field drawn under it the output has the field's row.
+--- Asked at each frame's step and again as the screen is drawn
+--- (ConsoleView:draw): a program's update that shows or hides
+--- its field comes between the two, and the grid drawn is as
+--- high as the screen that frame shows.
+function ConsoleController:fit_output()
+  self.model.output:field_drawn(not self:fieldless())
+end
+
+--- What the status line says while no field is drawn: the
+--- project, the file the run started from, and that it runs.
+--- @return Status
+function ConsoleController:running_status()
+  local P = self.model.projects
+  return { custom = {
+    project = P.current and P.current.name,
+    name = self.entry or 'main.lua',
+    state = 'running',
+  } }
 end
 
 ---@return number
@@ -2092,6 +2131,10 @@ function ConsoleController:_evaluate_input()
         --- the band is the field's, for a line not taken (the
         --- maintainer's rulings of November 15 and 16, 2026)
         inter:remember()
+        --- a line that runs brings the output's screen back from
+        --- a scrolled view, so that its echo and what it prints
+        --- are seen; typing it did not (CanvasModel:to_rest)
+        self.model.output:to_rest()
         self.model.output:echo(text)
         --- a typed line leaves state for a flush to end, as a
         --- live run does
@@ -2827,7 +2870,6 @@ function ConsoleController:textinput(t)
     --- its key press. A chord's own glyph never comes here:
     --- the event gate stops it (Key.chord_text)
     input:clear_error()
-    self.model.output:to_rest()
     input:textinput(t)
   end
 end
@@ -2880,8 +2922,8 @@ local ACTIONS = {
   end,
 }
 
---- The keys that move the output's view (consoleKeys.lua);
---- Home and End only while the field is empty
+--- The output's own scrolling actions (consoleKeys.lua), which
+--- it takes behind a program that leaves them (output_key)
 local SCROLLS = {
   scroll_row = true, scroll_page = true, scroll_end = true,
 }
@@ -2922,22 +2964,6 @@ function ConsoleController:output_wheel(y)
   for _ = 1, WHEEL_ROWS * math.abs(y) do
     self.model.output:scroll_row(dir)
   end
-end
-
---- Every key but the ones that scroll brings the screen back
---- before it does its work, so that no one types under an
---- output whose newest row is hidden
---- @param k string
---- @param entry table? --- the console's table's entry
-function ConsoleController:_back_to_screen(k, entry)
-  local scrolls = entry and SCROLLS[entry.act]
-      and (entry.act ~= 'scroll_end' or self.input:is_empty())
-  --- a modifier or a lock on its own, and the help key, leave
-  --- the view where it is
-  if scrolls or Key.is_lone(k) or k == KeyCard.KEY then
-    return
-  end
-  self.model.output:to_rest()
 end
 
 --- In the console a key is looked up by its full chord in the
@@ -2981,7 +3007,6 @@ function ConsoleController:keypressed(k, sc, isrepeat)
     self:_terminal_test()
     return
   end
-  self:_back_to_screen(k, entry)
 
   -- A message is a hint that blocks nothing (IS3.14): the
   -- next key dismisses it and does its usual work, Enter and

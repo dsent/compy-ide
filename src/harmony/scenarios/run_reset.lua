@@ -119,13 +119,14 @@ scenario('console-while-running', function(wait)
   D.enter(wait, 'run()')
   wait(.4)
   D.in_state('running')
-  D.key(wait, 'C-l')
-  wait(.2)
   local running = P.capture(wait)
   D.shot(wait, 'console-running')
   local v = P.cc().cfg.view
   local l = require('view.layout')(v)
-  local status = v.h - l.bottom - v.fh - l.status_h
+  -- the program owns the input and shows no field: the field's
+  -- row is the output's, and the status line the screen's last
+  -- row (rulings 1 and 1.3, November 17)
+  local status = v.h - l.bottom - l.status_h
   same(before, running, 'the console while a program runs',
     { { 600, 120 }, { 800, 300 }, { 40, 40 } })
   -- the status line takes the running theme's ground, whole

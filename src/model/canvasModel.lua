@@ -13,6 +13,7 @@ local gfx = love.graphics
 --- @field view_top integer? --- the scrolled view's first row
 --- @field canvas love.Canvas
 --- @field term_canvas love.Canvas
+--- @field rows integer --- the grid's rows while a field is drawn
 --- @field cfg table
 --- @field write function
 --- @field push function
@@ -43,12 +44,18 @@ function CanvasModel.new(cfg)
   -- only revealed once a newline scrolls the buffer up (#149). The
   -- drawing canvas above keeps the full size, so canvas programs are
   -- unaffected.
-  local term_h = h
+  --- The field's own row, under the status line, is made with
+  --- the grid: it is the output's while no input field is drawn
+  --- (field_drawn), and the grid is a row shorter otherwise.
+  local term_h, field_rows = h, 0
   if not cfg.view.sizedebug then
-    term_h = ViewUtils.get_drawable_height(cfg.view)
+    term_h = ViewUtils.get_drawable_height(cfg.view) + cfg.view.fh
+    field_rows = 1
   end
   local term = Terminal(w, term_h, cfg.view.font,
     nil, custom_height)
+  local rows = term.max_height - field_rows
+  term:set_height(rows)
 
   local color = cfg.view.colors.terminal
   term:hide_cursor()
@@ -66,6 +73,7 @@ function CanvasModel.new(cfg)
     canvas = canvas,
     term_canvas = t_canvas,
     cfg = cfg,
+    rows = rows,
   }, CanvasModel)
 
   return self
@@ -88,6 +96,22 @@ function CanvasModel:push(newResult)
   else
     self:write(tostring(newResult) .. '\n')
   end
+end
+
+--- Whether an input field is drawn under the output. With one,
+--- the grid has its own rows; with none, the field's row is the
+--- grid's too, with no restriction: a program prints and moves
+--- there as on any row. When a field comes back, text or the
+--- cursor on that row rolls the grid up and its top row is
+--- kept; an empty row just goes (Terminal:set_height). A
+--- scrolled view keeps its rule on the grid as it is then.
+--- @param drawn boolean
+function CanvasModel:field_drawn(drawn)
+  local t = self.terminal
+  local rows = drawn and self.rows or t.max_height
+  if rows == t.height then return end
+  t:set_height(rows)
+  self:show(self.view_top)
 end
 
 --- An accepted console line, written to the output before it
@@ -147,8 +171,18 @@ end
 --- and what still waited to be written when it was pressed, so
 --- that none of it appears afterwards
 function CanvasModel:erase()
-  self.terminal:discard()
+  local t = self.terminal
+  t:discard()
   self:reset()
+  --- The clear is made at once, with the styles that waited:
+  --- left in the queue, it would find a grid that lost a row
+  --- meanwhile (field_drawn), whose roll had put a row of the
+  --- erased screen into the kept rows forgotten here.
+  local waits, budget = 0, t.accumulator
+  for _ in t:waiting() do waits = waits + 1 end
+  t.accumulator = 0
+  t:update((waits + 1) * t.char_cost / t.speed)
+  t.accumulator = budget
   self.kept:forget()
   self:to_rest()
 end

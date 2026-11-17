@@ -266,20 +266,6 @@ local function can_act(compy_input)
   return false
 end
 
---- A key or a text that a running program takes brings the
---- console's output back from its scrolled view, whatever took
---- it: the program's field, a hook, a shortcut or its own
---- handler, as any key but the scrolling ones does in the
---- console. A modifier or a lock on its own leaves the view,
---- and so does a key's release, a pointer or a touch.
---- @param event string
---- @param k string?
---- @return boolean
-local function takes_screen(event, k)
-  if event == 'textinput' then return true end
-  return event == 'keypressed' and not Key.is_lone(k)
-end
-
 --- The project route occupies the keyboard/text handlers for
 --- the run; the project's own handlers ride along for
 --- delegation (never route owners themselves).
@@ -341,15 +327,16 @@ local function occupy_input(userlove, CC, resume)
       -- LÖVE discards a handler's return, so the
       -- walk's verdict is spent here or not at all. What the
       -- program's chain leaves goes nowhere: a program that can
-      -- act owns all input (November 17)
-      if pic[k](pic, ...) then
-        if takes_screen(k, ...) then CC.model.output:to_rest() end
-        return
-      end
+      -- act owns all input (November 17). A key it takes leaves
+      -- a scrolled view where it is (ruling 1.2).
+      if pic[k](pic, ...) then return end
+      --- an event whose handler asked to stop or replace the run
+      --- is that request's: the output does not get it either
+      --- (util.program_end)
+      if End.pending then return end
       --- the one exception, ruling 1.1: the output stays in use,
       --- and takes its own scrolling keys and the wheel when
       --- the program's chain left them
-      if End.pending then return end
       if k == 'keypressed' then
         local key, _, isr = ...
         CC:output_key(key, isr)
@@ -1617,13 +1604,6 @@ Controller = {
   program_owns_input = function()
     if route_owner == 'console' then return false end
     return can_act(Controller.project_input.compy_input)
-  end,
-
-  --- the name scrollback-writer's branch may still read, until
-  --- it is merged here
-  --- @return boolean
-  program_owns_keys = function()
-    return Controller.program_owns_input()
   end,
 
   --- @param userlove table

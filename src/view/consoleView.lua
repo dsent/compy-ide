@@ -47,6 +47,8 @@ function ConsoleView:draw(terminal, canvas, snapshot)
   end
 
   local function drawConsole()
+    --- the output as high as this frame's screen leaves it
+    self.controller:fit_output()
     --- the key card over the output and the field alike,
     --- the status line beneath it (IS3.16)
     if self.controller:key_card() then
@@ -62,12 +64,18 @@ function ConsoleView:draw(terminal, canvas, snapshot)
       self.controller.model.output)
 
     if ViewUtils.conditional_draw('show_input') then
-      --- behind a live program that owns the keyboard the field
+      --- behind a live program that owns the input the field
       --- and its cursor are hidden, its status line stays (the
       --- maintainer's question of November 16, 2026, the lead's
       --- option B): the field takes no typing there
       local hidden = self.controller.main_ctrl.program_owns_input()
       self.input.field_hidden = hidden
+      --- with no field drawn at all the field's row is the
+      --- output's, and the status line is the screen's last
+      --- row, saying only what runs (the maintainer's ruling of
+      --- November 17, 2026)
+      self.input.bare_status = self.controller:fieldless()
+          and self.controller:running_status() or nil
       self.input:draw()
       --- the notice band over the output's last rows, on
       --- the output's row grid (IS3.14)
