@@ -1225,6 +1225,12 @@ Controller = {
         CC:finish_edit()
       elseif program_live() then
         CC:stop_project_run()
+      else
+        --- what of a program is on show: a finished program's
+        --- picture goes as any key takes it (ScreenModel:back,
+        --- round c5; the ruling "Ctrl+Q also ends a paused
+        --- program and one that sits finished")
+        CC.model.screen:back()
       end
     end
 

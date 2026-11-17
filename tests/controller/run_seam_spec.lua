@@ -86,17 +86,25 @@ end
 
   --- the rerun ends the idle run as a stop does, so its exit
   --- hook runs then, once, and never again
+  --- the idle run stays live by a pointer hook (one that can do
+  --- nothing more ends at its last line, its hook called then):
+  --- round c5's third finding
   it('clears an idle run before_exit', function()
     reset({['main.lua'] = [[
 compy.before_exit = function() print('OLD_EXIT') end
+compy.input.hooks.mousepressed = function() end
 ]]})
     run('run()')
+    assert.is_true(K.cc.run_live)
+    assert.is_false(said('OLD_EXIT'), K.console_text())
     K.write_outside('main.lua', FRESH)
-    run('run()')
+    behind('run()')
     assert.is_true(env().fresh)
+    local n = select(2, K.console_text():gsub('OLD_EXIT', ''))
+    assert.equal(1, n, K.console_text())
     K.keys('lctrl', 'q')
     K.frame()
-    local n = select(2, K.console_text():gsub('OLD_EXIT', ''))
+    n = select(2, K.console_text():gsub('OLD_EXIT', ''))
     assert.equal(1, n, K.console_text())
   end)
 

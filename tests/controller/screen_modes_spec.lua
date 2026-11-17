@@ -223,6 +223,15 @@ describe('the screen modes #canvas', function()
       assert.is_true(F.cc.model.output:is_drawn())
     end)
 
+  --- round c5's second finding: Ctrl+Q acts where something of a
+  --- program shows, its finished picture included
+  it('leaves a finished program\'s picture with Ctrl+Q', function()
+    F.run_project(draw)
+    assert.equal('picture', mode())
+    press({ 'lctrl', 'q' })
+    assert.equal('text', mode())
+  end)
+
   it('shows text after a printing program\'s natural end', function()
     F.run_project(function() print('x') end)
     assert.is_false(F.cc.run_live)

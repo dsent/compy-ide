@@ -7,6 +7,7 @@
 -- flushes nothing. Keys only, through the K helper.
 
 local K = require("tests.helpers.editor_keys")
+local F = require("tests.helpers.input_fixture")
 
 local unrouted
 local function reset(contents)
@@ -196,6 +197,25 @@ describe("the terminate flush #console", function()
       assert.equal(1, env().g)
       K.keys("lctrl", "q")
     end)
+
+    --- round c5's first finding: an event that comes before the
+    --- pause is made finds the program unable to act, and a pause
+    --- is no end
+    it("is no end for a paused program an event finds unable to act",
+      function()
+        reset()
+        F.run_project(function()
+          local e = env()
+          e.g = 42
+          e.pause('look')
+        end)
+        assert.same("snapshot", K.app_state())
+        F.session.mousemoved(5, 5, 1, 1)
+        K.frame(100)
+        assert.same("inspect", K.app_state())
+        assert.equal(42, env().g)
+        run("continue()")
+      end)
 
     it("is no end for a program whose first lines paused it",
       function()

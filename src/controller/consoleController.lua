@@ -2755,6 +2755,9 @@ end
 --- @param at_last_line boolean
 function ConsoleController:end_naturally(at_last_line)
   if not self.run_live then return end
+  --- a pause, asked for or made, is no end (round c5)
+  local st = love.state.app_state
+  if st == 'snapshot' or st == 'inspect' then return end
   local drawn = self.model.output:is_drawn()
   self:stop_project_run()
   if at_last_line and drawn then
