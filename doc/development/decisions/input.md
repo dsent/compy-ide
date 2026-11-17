@@ -1593,8 +1593,8 @@ was running and the one `ctrl+r` just started both see none of them. The reason:
 from `ctrl+alt+r` to `ctrl+r`, and a program handles a plain `r`, so the restarted program took
 the key as its own (seen on a Compy on 2026-11-16). With it, every key's repeats and release go
 to the receiver of its press, and nowhere once that receiver is gone; a release a paused program
-is owed comes at its `continue()` (the gate in `controller.lua`, `delivered` and
-`owed_releases`). What relied on the old contract: the input-contract tests that a project's own
+is owed comes at its `continue()` (the gate in `controller.lua`, `receivers` and
+`owed_releases`; since 2026-11-17 a mouse button and a touch by the same record and path). What relied on the old contract: the input-contract tests that a project's own
 binding of `ctrl+pause` still runs after the suspend, and that a shortcut leaves the key to the
 route (`input_global_shortcuts_spec.lua`, `input_shortcuts_click_spec.lua`), now turned around,
 and the input guide's sentence that reservations pass the event on; no shipped program binds a

@@ -88,14 +88,14 @@ describe('input surface: inbound events — dispatch #input',
           local input = F.activate_project()
           local fired = false
           input.hooks[event] = function() fired = true end
-          -- a release reaches the route after its press did,
-          -- the pointer's and a touch's as the key's (p2: a
-          -- release goes only to the receiver of its press)
+          -- a release, and a touch's move, reach the route after
+          -- their press did, the pointer's and a touch's as the
+          -- key's (one record of receivers for all three)
           if event == 'keyreleased' then
             F.session.handlers.keypressed('a', '', false)
           elseif event == 'mousereleased' then
             F.session.handlers.mousepressed(unpack(ARGS.mousepressed))
-          elseif event == 'touchreleased' then
+          elseif event == 'touchreleased' or event == 'touchmoved' then
             F.session.handlers.touchpressed(unpack(ARGS.touchpressed))
           end
           F.session.handlers[event](unpack(args))
