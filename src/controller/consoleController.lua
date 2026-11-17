@@ -724,6 +724,14 @@ function ConsoleController:_run_project(name, stopped, entry)
       build_input_widget(self.cfg, function()
         self.model.output:to_rest()
       end)
+      --- its status line names the screen's mode, as the
+      --- console's does (round j1)
+      local field = love.state.user_input_controller
+      if field then
+        field.model.screen_source = function()
+          return self.model.screen:get()
+        end
+      end
       -- The program speaks for the board from here on; the
       -- console's own listeners wait until it has stopped.
       SerialPort:programStarted()
@@ -2818,8 +2826,10 @@ function ConsoleController:end_naturally(at_last_line, shown)
   --- a pause, asked for or made, is no end (round c5)
   local st = love.state.app_state
   if st == 'snapshot' or st == 'inspect' then return end
-  local drawn = self.model.output:is_drawn()
   self:stop_project_run()
+  --- read after the stop: what before_exit drew is the picture
+  --- too (round j1)
+  local drawn = self.model.output:is_drawn()
   if (at_last_line and drawn) or shown == 'picture' then
     self.model.screen:ended_by_itself()
   end

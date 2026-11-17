@@ -468,8 +468,10 @@ end
 --- @param status Status
 function UserInputView:render(input, status, time)
   local gfx = love.graphics
-  --- what this render shows of the cursor's blink
+  --- what this render shows of the cursor's blink, and of the
+  --- screen's mode on the status line
   self.cursor_shown = Blink.shown(self.cfg.blink)
+  self.mode_shown = status and status.mode
   --- @diagnostic disable-next-line: undefined-field
   if gfx.mock then return end
   local err_text = input.wrapped_error or {}
@@ -505,7 +507,12 @@ function UserInputView:draw()
   local project = love.state.user_input_controller
   local shown = Blink.shown(self.cfg.blink)
   local turned = shown ~= self.cursor_shown
-  if self.controller ~= project or turned then
+  --- and when the screen's mode its status line names changes
+  --- (round j1)
+  local model = self.controller and self.controller.model
+  local source = model and model.screen_source
+  local moded = source ~= nil and source() ~= self.mode_shown
+  if self.controller ~= project or turned or moded then
     self.controller:update_view()
   end
   local h = self.start_h
