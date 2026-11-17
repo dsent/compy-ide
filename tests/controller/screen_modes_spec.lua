@@ -318,4 +318,32 @@ describe('the screen modes #canvas', function()
       assert.is_nil(oc)
     end)
   end)
+
+  --- the steps a key takes (F12, any key back): the model's
+  describe('stepping through the modes', function()
+    it('goes text, combined, picture and round again', function()
+      local S = F.cc.model.screen
+      local seen = { }
+      for _ = 1, 4 do
+        S:step()
+        seen[#seen + 1] = S:get()
+      end
+      assert.same({ 'combined', 'picture', 'text', 'combined' }, seen)
+    end)
+
+    it('goes back from the picture to the mode before it', function()
+      local S = F.cc.model.screen
+      S:set('combined')
+      S:step()
+      assert.equal('picture', S:get())
+      S:back()
+      assert.equal('combined', S:get())
+    end)
+
+    it('goes back to text from a picture a run brought up', function()
+      F.run_project(draw)
+      F.cc.model.screen:back()
+      assert.equal('text', mode())
+    end)
+  end)
 end)

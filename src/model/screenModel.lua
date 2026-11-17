@@ -18,11 +18,14 @@ local class = require('util.class')
 --- @class ScreenModel
 --- @field mode ScreenMode
 --- @field paused ScreenMode? --- the mode a pause replaced
---- @field switched boolean --- this run has shown its picture
+--- @field before ScreenMode? --- the mode the picture replaced
+--- @field switched boolean --- this run has shown its picture, or
+--- chosen its mode
 ScreenModel = class.create(function()
   return {
     mode = 'text',
     paused = nil,
+    before = nil,
     switched = false,
   }
 end)
@@ -46,10 +49,41 @@ function ScreenModel:get()
   return self.mode
 end
 
+--- Show `m`. The mode the full picture replaces is kept for
+--- back().
 --- @param m ScreenMode
 function ScreenModel:set(m)
   assert(valid[m], 'no such screen mode: ' .. tostring(m))
+  if m == 'picture' and self.mode ~= 'picture' then
+    self.before = self.mode
+  end
   self.mode = m
+end
+
+--- The next mode, in MODES' order and round again: the key that
+--- steps through them
+function ScreenModel:step()
+  local at = 1
+  for i, m in ipairs(ScreenModel.MODES) do
+    if m == self.mode then at = i end
+  end
+  self:set(ScreenModel.MODES[at % #ScreenModel.MODES + 1])
+end
+
+--- From the full picture back to the mode it replaced, text
+--- when none did
+function ScreenModel:back()
+  if self.mode ~= 'picture' then return end
+  self.mode = self.before or 'text'
+  self.before = nil
+end
+
+--- A program or a typed line chose `m` (compy.screen.show): it
+--- holds against the run's first drawing
+--- @param m ScreenMode
+function ScreenModel:choose(m)
+  self:set(m)
+  self.switched = true
 end
 
 --- A run starts: its text shows, and its first drawing will
@@ -57,6 +91,7 @@ end
 function ScreenModel:run_starts()
   self.mode = 'text'
   self.paused = nil
+  self.before = nil
   self.switched = false
 end
 
@@ -69,10 +104,11 @@ function ScreenModel:program_drew()
   --- while paused the console stays, and continue() shows the
   --- picture (round c2's third finding: a serial handler draws)
   if self.paused then
+    self.before = self.paused
     self.paused = 'picture'
     return
   end
-  self.mode = 'picture'
+  self:set('picture')
 end
 
 --- A typed line drew: the console's text over the picture, so
@@ -99,4 +135,5 @@ end
 function ScreenModel:ended()
   self.mode = 'text'
   self.paused = nil
+  self.before = nil
 end
