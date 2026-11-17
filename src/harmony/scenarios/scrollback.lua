@@ -271,6 +271,118 @@ scenario('seventeenth-row', function(wait)
   hm_done()
 end)
 
+--- The first `rows` rows of the grid as the screen should show
+--- them: every background, then each cell's character at its
+--- own place, as bytes of pixels
+--- @param t table --- the terminal
+--- @param rows integer
+--- @return string
+local function grid_picture(t, rows)
+  local gfx = love.graphics
+  local cw, ch = t.char_width, t.char_height
+  local canvas = gfx.newCanvas(t.width * cw, rows * ch)
+  gfx.push('all')
+  gfx.setCanvas(canvas)
+  gfx.origin()
+  gfx.clear(0, 0, 0, 1)
+  gfx.setFont(t.font)
+  for pass = 1, 2 do
+    for y = 1, rows do
+      for x, char in ipairs(t.buffer[y]) do
+        local st = t.state_buffer[y][x]
+        local back, fore = st.backcolor, st.color
+        if st.reversed then back, fore = fore, back end
+        local left, up = (x - 1) * cw, (y - 1) * ch
+        if pass == 1 then
+          gfx.setColor(back)
+          gfx.rectangle('fill', left, up, cw, ch)
+        else
+          gfx.setColor(fore)
+          gfx.print(char, left, up)
+        end
+      end
+    end
+  end
+  gfx.pop()
+  return canvas:newImageData():getString()
+end
+
+--- The screen's pixels over the grid's first `rows` rows
+--- @param img love.ImageData
+--- @param t table
+--- @param rows integer
+--- @return string
+local function screen_rows(img, t, rows)
+  local w, h = t.width * t.char_width, rows * t.char_height
+  local part = love.image.newImageData(w, h)
+  part:paste(img, 0, 0, 0, top(), w, h)
+  return part:getString()
+end
+
+--- How many pixels of two pictures differ
+local function differ(a, b)
+  if a == b then return 0 end
+  local n = 0
+  for i = 1, #a, 4 do
+    if a:sub(i, i + 3) ~= b:sub(i, i + 3) then n = n + 1 end
+  end
+  return n
+end
+
+--- A program that draws nothing of its own has no picture but
+--- the output. When it pauses, and when it runs again after
+--- continue(), the screen shows the grid's rows as they are, each
+--- once: the pause's screenshot is the picture of a program
+--- that draws, and laid under the output of one that does not
+--- it showed every row twice, a row apart once the grid had
+--- rolled for the field (seen on a Compy on November 17, 2026).
+--- This is checked here and not in the unit tests: their
+--- fixture's captureScreenshot never delivers, so no pause there
+--- has a screenshot and nothing is drawn over one; what a pause
+--- shows, pixel by pixel, is Harmony's to check.
+scenario('paused-output', function(wait)
+  wait(.1)
+  D.key(wait, 'escape')
+  D.key(wait, 'C-l')
+  D.enter(wait, "project('h-paused')")
+  P.put('h-paused', 'main.lua',
+    "for i = 1, 16 do print(string.format('ROW %02d', i)) end\n"
+    .. "io.write('ROW 17 holds text')\n"
+    .. "function love.update() end\n")
+  D.key(wait, 'C-l')
+  D.enter(wait, 'run_project()')
+  settle(wait)
+  local t = output().terminal
+  D.eq(t.height, 17, 'rows while the program runs')
+  -- once to bring every glyph into the font's texture
+  grid_picture(t, 17)
+
+  D.key(wait, 'C-pause')
+  wait(.5)
+  D.in_state('inspect')
+  D.eq(t.height, 16, 'rows at the pause')
+  local img = P.capture(wait)
+  D.shot(wait, 'paused-output')
+  -- the notice band lies over the last row
+  D.eq(differ(screen_rows(img, t, 15), grid_picture(t, 15)), 0,
+    'pixels of the paused output that are not the grid\'s rows')
+
+  D.key(wait, 'escape')
+  D.enter(wait, 'continue()')
+  settle(wait)
+  D.in_state('running')
+  D.eq(t.height, 17, 'rows once it runs again')
+  img = P.capture(wait)
+  D.shot(wait, 'continued-output')
+  D.eq(differ(screen_rows(img, t, 17), grid_picture(t, 17)), 0,
+    'pixels of the continued output that are not the grid\'s rows')
+
+  D.key(wait, 'C-q')
+  wait(.2)
+  D.in_state('ready')
+  hm_done()
+end)
+
 --- The output's view draws a row in runs: a rectangle for each
 --- run of one background, a print for each run of one color
 --- (view/canvas/terminalView.lua). Its picture is, pixel for
