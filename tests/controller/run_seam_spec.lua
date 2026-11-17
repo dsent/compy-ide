@@ -527,20 +527,25 @@ end
     end)
 
   --- round 17: a stop made while the IDE's own push is under way
-  --- pops nothing, so that push's pop still finds it
+  --- pops nothing, so that push's pop still finds it. A push the
+  --- program's top-level code left is popped as that code
+  --- returns (use_canvas), so none is left to pop here.
   it('pops nothing of the IDE\'s own push at a stop inside it',
     function()
       reset({['main.lua'] = 'gfx.push()\nfunction love.update() end\n'})
       local depth = counted_stack()
       run('run()')
-      assert.equal(1, depth())
+      assert.equal(0, depth())
       local own = require('view.ownState')
+      local inside
       local ok, err = pcall(own, nil, function()
         K.cc:stop_project_run()
+        inside = depth()
       end)
       assert.is_true(ok, tostring(err))
       assert.is_false(K.cc.run_live)
-      assert.equal(1, depth())
+      assert.equal(1, inside)
+      assert.equal(0, depth())
     end)
 
   --- design B: stop() ends the handler before its pop, and the

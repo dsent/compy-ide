@@ -441,10 +441,8 @@ end
 --- given back after it), as love.run clears the screen
 --- before love.draw, the transform at its origin, and drawn in
 --- the program's own graphics state, which is given back after
---- it. What the frame pushed and did not pop is popped at its
---- end, so the IDE's own pop is its own push's, whose saved
---- state has the program's canvas bound, whatever the frame
---- did, a stop in it included (c1's first finding). A stop or a
+--- it: use_canvas pops the IDE's push and whatever the frame
+--- pushed and did not pop, a stop in it included. A stop or a
 --- run the program's draw asks for is made once the frame is
 --- done (util.program_end). The canvas keeps the frame for a
 --- mode that shows it, and through a pause.
@@ -452,19 +450,15 @@ end
 local function draw_program(CC)
   local udr = program_draw
   if not udr then return end
-  CC:use_canvas(function()
+  End.ide_pushes = End.ide_pushes + 1
+  local ok, err = pcall(CC.use_canvas, CC, function()
     gfx.push('all')
-    End.ide_pushes = End.ide_pushes + 1
-    local depth = gfx.getStackDepth and gfx.getStackDepth()
     gfx.origin()
     gfx.clear(CC.model.output:get_background())
     wrap(udr, CC)
-    if depth then
-      while gfx.getStackDepth() > depth do gfx.pop() end
-    end
-    End.ide_pushes = End.ide_pushes - 1
-    gfx.pop()
   end)
+  End.ide_pushes = End.ide_pushes - 1
+  if not ok then error(err, 0) end
 end
 
 local click_delay = 0.4

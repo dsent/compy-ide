@@ -17,14 +17,16 @@ plots its curve once and defines no `love.draw`.
 `love.draw` calls it each frame onto the canvas, after clearing the
 canvas to the program's background colour with the transform at its
 origin, as `love.run` clears the screen before a LÖVE program's draw.
-What the frame pushed and did not pop is popped at its end, a stop in
-it included. The canvas then holds the last frame drawn.
+The canvas then holds the last frame drawn.
 
 Either way, every line of program code and every typed line runs with
 the canvas bound (`ConsoleController:use_canvas`): top-level code and
 typed lines (`run_user_code`), every routed event (`with_canvas_and_errors`
 in `controller.lua`), `love.update`, `love.draw` (`draw_program`) and
-`compy.before_exit`. A program's `love.graphics.setCanvas()` with no
+`compy.before_exit`. What the code pushed and did not pop is popped when
+it returns, raises or is ended, before the target goes back: a push
+saves the state it is made in, the program's canvas bound, and one left
+behind would bind it again wherever it is popped. A program's `love.graphics.setCanvas()` with no
 target binds its canvas, as LÖVE's binds the screen, and its
 `getCanvas()` answers `nil` there (`prepare_project_env`). So a program
 that draws through a canvas of its own and goes "back to the screen"

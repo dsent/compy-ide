@@ -3183,18 +3183,28 @@ end
 --- @param f function
 --- @return any ... result of f
 --- Run program code, or a typed line, drawing on the program's
---- canvas
+--- canvas: every entry point does (top-level code and typed
+--- lines, routed events, love.update, love.draw, before_exit).
+--- What the code pushed and did not pop is popped when it
+--- returns, raised or was ended, before the target goes back: a
+--- push saves the state it is made in, the program's canvas
+--- bound, and one left behind would bind it again where it is
+--- popped (the lead's ruling on rounds c1 and c2).
 --- @param f function
 function ConsoleController:use_canvas(f)
   local canvas = self.model.output.canvas
   --- inside program code already (a stop's before_exit, a run
   --- a handler starts) the canvas stays bound after
   local outer = gfx.getCanvas()
+  local depth = gfx.getStackDepth and gfx.getStackDepth()
   gfx.setCanvas({
     canvas, -- this is actually [1] = canvas
     stencil = true
   })
   local r = { pcall(f) }
+  if depth then
+    while gfx.getStackDepth() > depth do gfx.pop() end
+  end
   if outer == canvas then
     gfx.setCanvas({ canvas, stencil = true })
   else

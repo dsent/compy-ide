@@ -661,6 +661,65 @@ describe('a program\'s canvas after it stops #canvas', function()
       assert.equal(0, gfx.getStackDepth())
     end)
 
+  --- Program code runs on its canvas through one helper
+  --- (use_canvas), which unwinds what the code pushed and did not
+  --- pop before it gives the target back: no push of the
+  --- program's outlives the call that made it, whatever entry
+  --- point ran it (the lead's ruling on round c2)
+  describe('program code that pushes and never pops leaves nothing'
+    .. ' pushed after it, the screen the target', function()
+    local function clean()
+      assert.equal(0, gfx.getStackDepth())
+      assert.is_nil(target)
+    end
+
+    it('its top-level code', function()
+      F.run_project(function() gfx.push('all') end)
+      clean()
+    end)
+
+    it('its love.update', function()
+      F.run_project(function()
+        F.cc:get_project_env().love.update = function()
+          gfx.push('all')
+        end
+      end)
+      F.love_update(0.1)
+      F.cc:get_project_env().love.update = nil
+      clean()
+    end)
+
+    it('its key handler', function()
+      F.run_project(function()
+        F.cc:get_project_env().love.keypressed = function()
+          gfx.push('all')
+        end
+        F.cc:get_project_env().love.update = function() end
+      end)
+      F.session.press('a')
+      F.session.release('a')
+      F.cc:get_project_env().love.keypressed = nil
+      F.cc:get_project_env().love.update = nil
+      clean()
+    end)
+
+    it('a typed line', function()
+      F.cc:get_project_env().mark = function() gfx.push('all') end
+      F.session.type('mark()')
+      press({ 'return' })
+      clean()
+    end)
+
+    it('its before_exit at a stop', function()
+      run_drawing()
+      F.cc:get_project_env().compy.before_exit = function()
+        gfx.push('all')
+      end
+      F.cc:stop_project_run()
+      clean()
+    end)
+  end)
+
   it('a love.draw that pushes and never pops leaves nothing pushed'
     .. ' after its frame', function()
       F.run_project(function()
