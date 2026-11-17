@@ -422,6 +422,74 @@ describe("the screen modes' keys #canvas", function()
         assert.same("picture", mode())
       end)
 
+    --- k6: every event kind on a finished run's picture, at once
+    --- and inside a held End (where the end waits for the hold's
+    --- close): the run ends once, and the screen is what the event
+    --- made of it (text after a key or a press that goes back, the
+    --- picture otherwise)
+    describe("every event kind, at once and held", function()
+      local End = require("util.program_end")
+      local calls
+      local function finished()
+        K.reset({ ["main.lua"] = DRAWS_ONCE
+          .. "function love.mousereleased()"
+          .. " compy.input.hooks.mousereleased = nil end\n" })
+        K.start()
+        calls = 0
+        env().compy.before_exit = function() calls = calls + 1 end
+        F.session.press("m")
+        F.session.mousepressed(10, 10, 2, false, 1)
+        love.handlers.touchpressed("one", 10, 10, 0, 0, 1)
+        F.session.mousepressed(10, 10, 1, false, 1)
+        F.session.mousereleased(10, 10, 1, false, 1)
+        assert.is_true(K.cc.run_live)
+        assert.same("picture", mode())
+      end
+      after_each(function() End.reset() end)
+      local hh = function() return love.handlers end
+      local EVENTS = {
+        key = { "text", function() F.session.press("a") end },
+        repeat_key = { "picture",
+          function() F.session.repeat_press("m") end },
+        key_release = { "picture", function() F.session.release("m") end },
+        modifier = { "picture", function() F.session.press("lshift") end },
+        text = { "picture", function() F.session.type("x") end },
+        f12 = { "text", function() F.session.press("f12") end },
+        mouse_press = { "text", function()
+          F.session.mousepressed(10, 10, 1, false, 1)
+        end },
+        mouse_release = { "picture", function()
+          F.session.mousereleased(10, 10, 2, false, 1)
+        end },
+        mouse_move = { "picture", function()
+          F.session.mousemoved(20, 10, 10, 0, false)
+        end },
+        wheel = { "picture", function() F.session.wheelmoved(0, 1) end },
+        touch_press = { "text", function()
+          hh().touchpressed("one", 10, 10, 0, 0, 1)
+        end },
+        touch_move = { "picture", function()
+          hh().touchmoved("one", 20, 10, 10, 0, 1)
+        end },
+        touch_release = { "picture", function()
+          hh().touchreleased("one", 10, 10, 0, 0, 1)
+        end },
+        singleclick = { "picture",
+          function() hh().singleclick(10, 10) end },
+      }
+      for name, e in pairs(EVENTS) do
+        for _, held in ipairs({ false, true }) do
+          it(name .. (held and ", held" or ", at once"), function()
+            finished()
+            if held then End.held(e[2]) else e[2]() end
+            assert.same(1, calls)
+            assert.is_false(K.cc.run_live == true)
+            assert.same(e[1], mode())
+          end)
+        end
+      end
+    end)
+
     --- k3's second finding: a keypad key's own character
     it("drops a keypad key's own text after it goes back",
       function()

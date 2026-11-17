@@ -328,10 +328,10 @@ local owed_releases = { }
 --- so ahead of it (k3, k4); the route asks it again before any
 --- chain. A paused
 --- program keeps its route for continue(), and is no end.
---- What shows as the end is found goes to the end itself
---- (end_naturally), which sets the screen whenever it is made:
---- at once, or once the frame's update returns, where the click
---- timer's derived clicks come (k5).
+--- What shows when the end is made goes to the end itself
+--- (end_naturally), which sets the screen: at once, or once the
+--- frame's update returns, where the click timer's derived clicks
+--- come (k5, k6).
 --- @param CC ConsoleController
 --- @return boolean found
 local function found_ended(CC)
@@ -342,8 +342,12 @@ local function found_ended(CC)
   end
   Controller.release_keyboard_route(CC)
   local screen = CC.model and CC.model.screen
-  local shown = screen and screen:get()
-  End.defer(function() CC:end_naturally(false, shown) end)
+  --- the screen as it is when the end is made: at once, as it
+  --- was found; deferred, as the event that found it left it (a
+  --- key that went back has made it text) (k6)
+  End.defer(function()
+    CC:end_naturally(false, screen and screen:get())
+  end)
   return true
 end
 

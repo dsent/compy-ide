@@ -2807,11 +2807,12 @@ end
 --- picture on show until a key or a click (the lead's decision
 --- 1 of November 17, 2026); one found ended as an event comes
 --- leaves the console, which that event reaches, or the picture
---- when it was on show as the end was found (`shown`; stage 2's
---- k5: the screen after the end is set here, by the end itself,
---- whether it is made at once or once the frame's update returns).
+--- when it is on show as the end is made (`shown`; stage 2's k5
+--- and k6: the screen after the end is set here, by the end
+--- itself, whether it is made at once or once the frame's update
+--- returns, after the event that found it).
 --- @param at_last_line boolean
---- @param shown ScreenMode? --- what showed as the end was found
+--- @param shown ScreenMode? --- what shows as the end is made
 function ConsoleController:end_naturally(at_last_line, shown)
   if not self.run_live then return end
   --- a pause, asked for or made, is no end (round c5)
