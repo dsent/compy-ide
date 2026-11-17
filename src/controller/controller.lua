@@ -232,12 +232,17 @@ end
 local RELEASES = { keyreleased = true, mousereleased = true,
   touchreleased = true }
 
---- Set when the route, going back to the console, hands it the
---- event in hand: the gate then records the console as the
---- press's receiver. A stop or a run the program's handler asks
---- for changes the route too, but the press was the program's
---- (p4), so the route after the press is no answer.
-local handed_to_console = false
+--- The press the gate is handing over, { event = the love.*
+--- event }, until the route's first call for that event takes
+--- it. Marked `console` when the route, going back to the
+--- console, hands the press to it: the gate then records the
+--- console as the press's receiver. A stop or a run the
+--- program's handler asks for changes the route too, but the
+--- press was the program's (p4), so the route after the press
+--- is no answer; and an event the handler raises itself is no
+--- hand-over of the press (p5).
+--- @type table?
+local handing = nil
 
 --- The serial handlers a program may set, by field
 local SERIAL_FIELDS = { 'onConnect', 'onDisconnect', 'onBytes',
@@ -320,6 +325,13 @@ local function occupy_input(userlove, CC, resume)
   -- `love.keypressed = pic.keypressed` would drop `self`.
   for _, k in ipairs(_bindable) do
     love[k] = with_canvas_and_errors(CC, function(...)
+      --- the press in hand, when this is its hand-over
+      local press = handing
+      if press and press.event == k then
+        handing = nil
+      else
+        press = nil
+      end
       --- a program that can no longer act has ended at its last
       --- line: the input is the console's again, this event
       --- first (asked as the event comes, before any chain)
@@ -329,7 +341,7 @@ local function occupy_input(userlove, CC, resume)
         --- no one, the console having seen no press (p3)
         if RELEASES[k] then return end
         local console = Controller._defaults[k]
-        handed_to_console = true
+        if press then press.console = true end
         if console then return console(...) end
         return
       end
@@ -365,11 +377,12 @@ local function deliver_owed()
   local run = route_owner
   local due = owed_releases[run]
   owed_releases = { }
-  for k, sc in pairs(due or { }) do
+  for _, e in ipairs(due or { }) do
     --- a release that asked to stop or replace the run is the
     --- last the program sees (util.program_end)
     if End.pending then return end
-    love.keyreleased(k, sc)
+    local handler = love[e.event]
+    if handler then handler(unpack(e.args, 1, e.args.n)) end
   end
 end
 
@@ -1258,9 +1271,9 @@ Controller = {
     local REPEATS = { }
     -- The key card's gate (IS3.16): a key's press is passed on
     -- only while no card shows, and its repeats and release
-    -- follow its press to its receiver. `delivered` holds each
-    -- key from its press passed on to its release, with its
-    -- receiver: the route in force at the press (route_owner),
+    -- follow its press to its receiver. `receivers.key` (below)
+    -- holds each key from its press passed on to its release,
+    -- with its receiver: the route in force at the press,
     -- or the IDE for a reserved chord, whose key is the IDE's
     -- for the whole press (the maintainer's ruling of November
     -- 16, 2026: D-RESERVE-TABLE's reservations consume). A
@@ -1277,7 +1290,80 @@ Controller = {
     -- at its key's press (Ctrl+Escape: the exit is owed once
     -- Escape goes down with Ctrl held, and comes on Escape's
     -- release whatever is held by then, the card up or not).
-    local delivered, owed = { }, { }
+    local owed = { }
+
+    --- Who each press went to, for a key, a mouse button and a
+    --- touch alike, by kind and by the key's name, the button's
+    --- number or the touch's id: the route in force when the
+    --- press is handed over (route_owner: 'console', or a run's
+    --- number), the console when the route, going back to it
+    --- because the program can act no more, handed it the press,
+    --- a table for a key the IDE keeps for its whole press (a
+    --- reserved chord), or false for a press held back (under
+    --- the key card). Decided at the hand-over, before a stop or
+    --- a run the press's own handler asked for is carried out:
+    --- a receiver that ends during its own press gets nothing
+    --- more, nor does its successor (p4).
+    local receivers = { key = { }, button = { }, touch = { } }
+
+    --- Hand a press to the route in force, and record where it
+    --- went
+    --- @param kind 'key'|'button'|'touch'
+    --- @param id any
+    --- @param event string --- the press's love.* event
+    local function hand_press(kind, id, event, ...)
+      local to = route_owner
+      local press, outer = { event = event }, handing
+      handing = press
+      local r
+      if love[event] then r = love[event](...) end
+      handing = outer
+      receivers[kind][id] = press.console and 'console' or to
+      return r
+    end
+
+    --- A press that goes no further: under the card, or kept
+    --- by the IDE (`keep`, a key's reservation)
+    --- @param kind 'key'|'button'|'touch'
+    --- @param id any
+    --- @param keep table?
+    local function hold_press(kind, id, keep)
+      receivers[kind][id] = keep or false
+    end
+
+    --- The follow-up of a press (a move, a repeat) goes to its
+    --- receiver while it has the input, the console's behind a
+    --- program that does not own it; a release (`ends`) does so
+    --- too, ends the record, and waits for a paused program's
+    --- continue(). Nothing goes to a receiver that is gone.
+    --- @param kind 'key'|'button'|'touch'
+    --- @param id any
+    --- @param event string --- the follow-up's love.* event
+    --- @param ends boolean --- a release
+    --- @return boolean went, any result
+    local function follow(kind, id, event, ends, ...)
+      local to = receivers[kind][id]
+      if ends then receivers[kind][id] = nil end
+      if not to or type(to) == 'table' then return false end
+      if to == route_owner then
+        if love[event] then return true, love[event](...) end
+        return true
+      elseif to == 'console' then
+        --- not while a program owns the input: the console's
+        --- field is hidden (p1)
+        if not ends and Controller.program_owns_input() then
+          return false
+        end
+        local console = Controller._defaults[event]
+        if console then return true, console(...) end
+        return true
+      elseif ends then
+        owed_releases[to] = owed_releases[to] or { }
+        table.insert(owed_releases[to], { event = event,
+          args = { n = select('#', ...), ... } })
+      end
+      return false
+    end
     for _, r in ipairs(require('model.input.reservedKeys')) do
       -- the profiling keys only where conf.lua set love.PROFILE,
       -- which it does before love.load builds this gate
@@ -1307,7 +1393,7 @@ Controller = {
         love.event.quit()
       end
       local card = CC:card_shows()
-      local to = delivered[k]
+      local to = receivers.key[k]
       local chord = combo_string(k)
       local reservation = RESERVED.keypressed[chord]
       if isr then
@@ -1319,30 +1405,23 @@ Controller = {
           if to.again then to.act() end
           return
         end
-        --- a key whose press fell through to the console repeats
-        --- there, whoever has the keys now
-        if to == 'console' and route_owner ~= 'console' then
-          --- not while the program owns the input: the console's
-          --- field is hidden (p1)
-          if Controller.program_owns_input() then return end
-          local console = Controller._defaults.keypressed
-          if console then return console(k, sc, isr) end
-          return
-        end
-        if to ~= route_owner then return end
+        if CC.editor then CC.editor:key_begins() end
+        local _, handled = follow('key', k, 'keypressed', false,
+          k, sc, isr)
+        if CC.editor then CC.editor:gate_key_done() end
+        return handled
       elseif card and k ~= KeyCard.KEY then
-        delivered[k] = nil
+        hold_press('key', k)
         return
       elseif reservation or owed[k] then
         -- the IDE's for the whole press, Ctrl+Escape's Escape too
-        delivered[k] = { act = reservation, again = REPEATS[chord] }
+        hold_press('key', k,
+          { act = reservation, again = REPEATS[chord] })
         if not reservation then return end
         if CC.editor then CC.editor:key_begins() end
         reservation()
         if CC.editor then CC.editor:gate_key_done() end
         return
-      else
-        delivered[k] = route_owner
       end
       if CC.editor then CC.editor:key_begins() end
 
@@ -1355,20 +1434,7 @@ Controller = {
       -- here. (Mirrors stock LÖVE's love.handlers[name] ->
       -- love[name].) See doc/development/decisions/input.md #1
       -- "route-centric routing" + #11.
-      local handled
-      handed_to_console = false
-      if love.keypressed then
-        handled = love.keypressed(k, sc, isr)
-      end
-      --- a press the route, going back to the console, handed it
-      --- (the program could no longer act) reached the console:
-      --- its repeats and release go there. One whose handler
-      --- asked for a stop or a run was the program's (p4). A
-      --- repeat changes no receiver
-      if not isr and handed_to_console then
-        delivered[k] = 'console'
-      end
-      handed_to_console = false
+      local handled = hand_press('key', k, 'keypressed', k, sc, isr)
       -- a refusal at the gate holds back this key press alone
       -- (EditorController:refuse_to_leave), never a later one
       if CC.editor then CC.editor:gate_key_done() end
@@ -1414,20 +1480,8 @@ Controller = {
       -- a release goes on exactly for a press that did, to its
       -- receiver: the route in force, the console behind a
       -- program, or a paused program at its continue()
-      local to = delivered[k]
-      delivered[k] = nil
-      if not to or type(to) == 'table' then return end
-      if to == route_owner then
-        if love.keyreleased then
-          return love.keyreleased(k, sc)
-        end
-      elseif to == 'console' then
-        local console = Controller._defaults.keyreleased
-        if console then return console(k, sc) end
-      else
-        owed_releases[to] = owed_releases[to] or { }
-        owed_releases[to][k] = sc or k
-      end
+      local _, r = follow('key', k, 'keyreleased', true, k, sc)
+      return r
     end
 
     --- @param x integer
@@ -1445,21 +1499,10 @@ Controller = {
     -- press that went through gets its release under the
     -- card, so that no route is left with half a click.
     -- Touches follow the same rule, paired by the touch's id.
-    -- Each records its press's receiver, as the keys do: false
-    -- for one the card held back, else the route in force; a
-    -- release goes on only to that receiver, still in force
-    -- (p2: a button the program got the press of, released while
-    -- the console has the pointer, reaches neither).
-    local press_to = { }
-    local touch_to = { }
-
-    --- whether a release recorded as `to` goes on now
-    --- @param to any
-    --- @return boolean
-    local function release_goes(to)
-      if to == false then return false end
-      return to == nil or to == route_owner
-    end
+    -- Buttons and touches share the keys' record and paths
+    -- (receivers, hand_press, follow, above): a release goes
+    -- only to the receiver of its press, a paused program's at
+    -- its continue().
 
     -- The gateway entry: hand the event to whoever occupies
     -- the slot. Under a project run that is the project
@@ -1467,23 +1510,14 @@ Controller = {
     handlers.mousepressed = function(x, y, btn, touch, presses)
       Blink.restart()
       if CC:card_shows() then
-        press_to[btn] = false
+        hold_press('button', btn)
         return
       end
       if btn == 1 then
         press_pos, press_dragged = { x = x, y = y }, false
       end
-      --- the route in force, or the console when the route went
-      --- back to it with this press (p3, p4)
-      local to = route_owner
-      handed_to_console = false
-      local r
-      if love.mousepressed then
-        r = love.mousepressed(x, y, btn, touch, presses)
-      end
-      press_to[btn] = handed_to_console and 'console' or to
-      handed_to_console = false
-      return r
+      return hand_press('button', btn, 'mousepressed',
+        x, y, btn, touch, presses)
     end
 
     --- @param x integer
@@ -1492,14 +1526,9 @@ Controller = {
     --- @param touch boolean
     --- @param presses number
     handlers.mousereleased = function(x, y, btn, touch, presses)
-      local to = press_to[btn]
-      press_to[btn] = nil
-      if not release_goes(to) then return end
-      local result
-      if love.mousereleased then
-        result = love.mousereleased(x, y, btn, touch, presses)
-      end
-      if btn == 1 then finish_click(x, y) end
+      local went, result = follow('button', btn, 'mousereleased',
+        true, x, y, btn, touch, presses)
+      if went and btn == 1 then finish_click(x, y) end
       return result
     end
 
@@ -1552,18 +1581,11 @@ Controller = {
     --- @param pressure number?
     handlers.touchpressed = function(id, x, y, dx, dy, pressure)
       if CC:card_shows() then
-        touch_to[id] = false
+        hold_press('touch', id)
         return
       end
-      local to = route_owner
-      handed_to_console = false
-      local r
-      if love.touchpressed then
-        r = love.touchpressed(id, x, y, dx, dy, pressure)
-      end
-      touch_to[id] = handed_to_console and 'console' or to
-      handed_to_console = false
-      return r
+      return hand_press('touch', id, 'touchpressed',
+        id, x, y, dx, dy, pressure)
     end
 
     --- @param id userdata
@@ -1573,12 +1595,9 @@ Controller = {
     --- @param dy number?
     --- @param pressure number?
     handlers.touchreleased = function(id, x, y, dx, dy, pressure)
-      local to = touch_to[id]
-      touch_to[id] = nil
-      if not release_goes(to) then return end
-      if love.touchreleased then
-        return love.touchreleased(id, x, y, dx, dy, pressure)
-      end
+      local _, r = follow('touch', id, 'touchreleased', true,
+        id, x, y, dx, dy, pressure)
+      return r
     end
 
     --- @param id userdata
@@ -1589,12 +1608,10 @@ Controller = {
     --- @param pressure number?
     handlers.touchmoved = function(id, x, y, dx, dy, pressure)
       --- a touch begun under the card moves nothing after it
-      if not release_goes(touch_to[id]) or CC:card_shows() then
-        return
-      end
-      if love.touchmoved then
-        return love.touchmoved(id, x, y, dx, dy, pressure)
-      end
+      if CC:card_shows() then return end
+      local _, r = follow('touch', id, 'touchmoved', false,
+        id, x, y, dx, dy, pressure)
+      return r
     end
 
 
