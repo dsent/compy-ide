@@ -740,12 +740,8 @@ describe("IS1 files #editor #spec", function()
       })
       K.open()
       K.keys("lctrl", "t")
-      -- the error suspends the run; the move from the snapshot
-      -- to 'inspect' is the screenshot's callback, which needs
-      -- a real graphics context
+      -- the error pauses the run, in the frame it raises in
       K.frame()
-      assert.same("snapshot", K.app_state())
-      K.cc:suspend()
       assert.same("inspect", K.app_state())
       assert.same({ "now", "exit program" }, { card_ctrl_q() })
       K.hold("f1")

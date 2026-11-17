@@ -44,15 +44,25 @@ function CanvasView:draw_cues(terminal, window, top, above, below)
   end
 end
 
+--- The screen by its mode (model/screenModel.lua):
+--- - text: the console's output on its ground, no picture;
+--- - combined: the program's picture on its ground, then the
+---   output over it on a translucent ground of its own, its
+---   text unshaded, with the two opacities of the theme's
+---   `screen.combined` (the lead's decision 5 of November 17,
+---   2026, open to the maintainer's choice);
+--- - picture: the picture on the ground the program chose, on
+---   the whole screen, alone.
 --- @param terminal table
---- @param canvas love.Canvas
+--- @param canvas love.Canvas --- the program's
 --- @param term_canvas love.Canvas
 --- @param drawable_height number
---- @param snapshot love.Image?
+--- @param mode ScreenMode
 --- @param output CanvasModel? --- whose view of its rows is
---- drawn: scrolled, or the screen at rest
+--- drawn: scrolled, or the screen at rest; and whose picture's
+--- ground
 function CanvasView:draw(
-    terminal, canvas, term_canvas, drawable_height, snapshot,
+    terminal, canvas, term_canvas, drawable_height, mode,
     output
 )
   local cfg = self.cfg
@@ -61,34 +71,48 @@ function CanvasView:draw(
   --- in the IDE's own state already (View.draw)
   gfx.push('all')
   gfx.setBlendMode('alpha', 'alphamultiply') -- default
-  if ViewUtils.conditional_draw('show_snapshot') then
-    if snapshot then
-      gfx.draw(snapshot)
-    end
-    self.bg:draw(drawable_height)
-  end
 
   if not test then
-    if ViewUtils.conditional_draw('show_terminal') then
-      --- a strip reserved at the screen's top takes the
-      --- output's ground
+    local pictured = mode == 'combined' or mode == 'picture'
+    if pictured and ViewUtils.conditional_draw('show_canvas') then
+      local ground = output and output:get_background()
+          or { 0, 0, 0, 1 }
+      gfx.setColor(ground)
+      gfx.rectangle('fill', 0, 0, cfg.w, cfg.h)
+      gfx.setColor(1, 1, 1, 1)
+      gfx.draw(canvas)
+    end
+    if mode ~= 'picture'
+        and ViewUtils.conditional_draw('show_terminal') then
       local top = Layout(cfg).top
-      if 0 < top and not snapshot then
-        gfx.setColor(cfg.colors.terminal.bg)
-        gfx.rectangle('fill', 0, 0, cfg.w, top)
+      --- the text's own ground: whole in text, translucent over
+      --- the picture
+      local shade
+      if mode == 'combined' then
+        local c = cfg.colors.screen.combined
+        shade = c.text
+        gfx.setColor(Color.with_alpha(cfg.colors.terminal.bg,
+          c.ground))
+        gfx.rectangle('fill', 0, 0, cfg.w, top + drawable_height)
         gfx.setColor(1, 1, 1, 1)
+      else
+        if ViewUtils.conditional_draw('show_snapshot') then
+          self.bg:draw(drawable_height)
+        end
+        --- a strip reserved at the screen's top takes the
+        --- output's ground
+        if 0 < top then
+          gfx.setColor(cfg.colors.terminal.bg)
+          gfx.rectangle('fill', 0, 0, cfg.w, top)
+          gfx.setColor(1, 1, 1, 1)
+        end
       end
-      -- gfx.setBlendMode('multiply', "premultiplied")
       local window, above, below
       if output then window, above, below = output:window() end
-      TerminalView.draw(terminal, term_canvas, snapshot, top,
-        window)
+      TerminalView.draw(terminal, term_canvas, shade, top, window)
       if window then
         self:draw_cues(terminal, window, top, above, below)
       end
-    end
-    if ViewUtils.conditional_draw('show_canvas') then
-      gfx.draw(canvas)
     end
     gfx.setBlendMode('alpha', 'alphamultiply') -- default
   else
@@ -109,7 +133,7 @@ function CanvasView:draw(
           -- gfx.setBlendMode('alpha') -- default
           if ViewUtils.conditional_draw('show_terminal') then
             b.blend()
-            TerminalView.draw(terminal, term_canvas, snapshot)
+            TerminalView.draw(terminal, term_canvas)
           end
           gfx.setBlendMode('alpha') -- default
           if ViewUtils.conditional_draw('show_canvas') then

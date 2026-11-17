@@ -683,7 +683,9 @@ function ConsoleController:_run_project(name, stopped, entry)
     -- A run starts on a blank canvas, whatever the last one
     -- left there; a project that fails to load leaves the
     -- error on a blank console, not under the old picture.
+    -- Its text shows until it draws.
     self.model.output:clear_canvas()
+    self.model.screen:run_starts()
     --- the project to run is the open one by now: it is not
     --- looked for again
     local f, load_err, path, refused = P:run(nil, runner_env, entry)
@@ -807,6 +809,26 @@ local compy_audio = require("util.audio")
 local compy_graphics = {
   shape2d = require("util.graphics.shape2d")
 }
+
+--- compy.graphics for a program: its shape2d's fills and
+--- strokes say that it drew (ConsoleController:drew), as its
+--- love.graphics calls do
+--- @param cc ConsoleController
+--- @return table
+local function drawing_graphics(cc)
+  local shape2d = { }
+  for name, f in pairs(compy_graphics.shape2d) do
+    if name:match('_fill$') or name:match('_stroke$') then
+      shape2d[name] = function(...)
+        cc:drew()
+        return f(...)
+      end
+    else
+      shape2d[name] = f
+    end
+  end
+  return { shape2d = shape2d }
+end
 -- Builds the `compy.terminal` sub-namespace — the console
 -- OUTPUT surface. These wrap the live `terminal` (the
 -- REPL/console text grid): position the grid cursor
@@ -1652,7 +1674,7 @@ local get_compy_namespace = function(terminal, with_input,
   local ns = {
     terminal = get_compy_terminal(terminal),
     audio = compy_audio,
-    graphics = compy_graphics,
+    graphics = cc and drawing_graphics(cc) or compy_graphics,
     fonts = CompyFonts(),
   }
   -- D-SIMPLE-SURFACE statement 2: the simple names are PLAIN
@@ -1707,12 +1729,43 @@ function ConsoleController.prepare_project_env(cc)
 
   local P                      = cc.model.projects
 
-  project_env.gfx              = love.graphics
   -- The env the old prepare_env wired was the global environment,
   -- so its `gfx` write surfaced as the global the console core
   -- (use_canvas) and the projects read; main.lua sets the same
   -- global for the app. Keep that alias on the unified prep.
   gfx                          = love.graphics
+  --- A program's screen is its canvas: setCanvas() with no
+  --- target binds it, as LÖVE's binds the screen, and
+  --- getCanvas() answers nil there, so code written for the
+  --- screen draws where it would under LÖVE, a program that
+  --- draws through a canvas of its own included. The `gfx`
+  --- alias is the same table.
+  local program_gfx            = project_env.love.graphics
+  program_gfx.setCanvas        = function(...)
+    local n = select('#', ...)
+    if n == 0 or (n == 1 and (...) == nil) then
+      return love.graphics.setCanvas({
+        cc.model.output.canvas, stencil = true })
+    end
+    return love.graphics.setCanvas(...)
+  end
+  program_gfx.getCanvas        = function()
+    if love.graphics.getCanvas() == cc.model.output.canvas then
+      return nil
+    end
+    return love.graphics.getCanvas()
+  end
+  --- each drawing call says that the program drew
+  --- (ConsoleController:drew); clear() erases, and draws none
+  for _, name in ipairs({ 'arc', 'circle', 'draw', 'drawInstanced',
+    'drawLayer', 'ellipse', 'line', 'points', 'polygon', 'print',
+    'printf', 'rectangle' }) do
+    program_gfx[name] = function(...)
+      cc:drew()
+      return love.graphics[name](...)
+    end
+  end
+  project_env.gfx              = program_gfx
 
   --- @param f function
   local check_microbit_path    = function(f, ...)
@@ -1931,6 +1984,7 @@ function ConsoleController.prepare_project_env(cc)
       -- resume
       love.state.app_state = 'running'
       cc.model.output:to_rest()
+      cc.model.screen:resume()
       cc.main_ctrl.restore_user_handlers(cc)
       -- After the handlers: a cursor the program has released
       -- raises here, and the program runs on regardless.
@@ -2129,6 +2183,9 @@ function ConsoleController:reset()
   --- audio)
   if love.audio and love.audio.stop then love.audio.stop() end
   self.model.output:erase()
+  --- and the picture: the canvas is cleared as the output is
+  self.model.output:clear_canvas()
+  self.model.screen:ended()
   local P = self.model.projects
   local name = P.current and P.current.name or ProjectService.DEFAULT
   print(messages.reset_done(name))
@@ -2186,6 +2243,9 @@ function ConsoleController:suspend()
   Log.info('Suspending project run')
   love.state.app_state = 'inspect'
   self.model.output:to_rest()
+  --- the console shows while the program waits; its picture
+  --- stays on its canvas
+  self.model.screen:pause()
   --- a pause is the debugger's: what it says shows in the
   --- band as a notice, and the program's screen is not touched
   --- (the maintainer's ruling of November 16, 2026)
@@ -2326,7 +2386,6 @@ function ConsoleController:_close_project()
     if lf then
       table.delete_by_value(package.loaders, lf)
     end
-    View.clear_snapshot()
     return ok, fresh
   end
   return true, fresh
@@ -2469,7 +2528,8 @@ function ConsoleController:flush_program_state(call_exit)
     --- the hook is a live run's: with none, one a typed line set
     --- is removed and not called (round 22)
     if call_exit and live then
-      framework_before_exit(compy)
+      --- program code, drawing on the program's canvas
+      self:use_canvas(function() framework_before_exit(compy) end)
     else
       compy.before_exit = default_before_exit
     end
@@ -2487,9 +2547,18 @@ function ConsoleController:flush_program_state(call_exit)
   --- a question the program left unanswered goes with its
   --- widget
   if self.forget_question then self.forget_question() end
-  -- What the run drew on the console's canvas goes with it,
-  -- after the project's own hook, which may still draw.
-  self.model.output:clear_canvas()
+  -- What the run drew stays on its canvas, a record as the
+  -- console's output is, to be seen in a mode that shows it
+  -- (the proposal "The Program's Canvas and the Viewing Modes",
+  -- built as if accepted on November 17, 2026); a run's start
+  -- and reset() clear it. The ground the program chose goes
+  -- with the graphics state below, so the canvas keeps it, after
+  -- the project's own hook, which may still set it. The console
+  -- shows.
+  if gfx.getBackgroundColor then
+    self.model.output:keep_background(gfx.getBackgroundColor())
+  end
+  self.model.screen:ended()
   --- the IDE draws on from here: under the program's scissor,
   --- colour or wireframe its key card and editor came out
   --- clipped and outlined (the device night of November 16)
@@ -2512,7 +2581,6 @@ function ConsoleController:flush_program_state(call_exit)
   --- the entry point lives with the run (the maintainer's
   --- ruling of November 16, 2026)
   self.entry = nil
-  View.clear_snapshot()
   self.main_ctrl.set_love_draw(self, self.view)
   self.main_ctrl.clear_user_handlers(self)
   -- The program's serial handlers go with its other handlers:
@@ -3073,16 +3141,45 @@ end
 --- draws comes after the stop's clear.
 --- @param f function
 --- @return any ... result of f
+--- Run program code, or a typed line, drawing on the program's
+--- canvas
+--- @param f function
 function ConsoleController:use_canvas(f)
   local canvas = self.model.output.canvas
+  --- inside program code already (a stop's before_exit, a run
+  --- a handler starts) the canvas stays bound after
+  local outer = gfx.getCanvas()
   gfx.setCanvas({
     canvas, -- this is actually [1] = canvas
     stencil = true
   })
   local r = { pcall(f) }
-  gfx.setCanvas()
+  if outer == canvas then
+    gfx.setCanvas({ canvas, stencil = true })
+  else
+    gfx.setCanvas()
+  end
   if not r[1] then error(r[2], 0) end
   return unpack(r, 2)
+end
+
+--- A program or a typed line drew on the program's canvas
+--- (through the drawing calls of its love.graphics and
+--- compy.graphics, prepare_project_env): the canvas holds a
+--- picture, and the screen shows it, a running program's first
+--- drawing as its picture, a typed line's under the console's
+--- text (ScreenModel). Called for each drawing call, so the
+--- common case returns at once.
+function ConsoleController:drew()
+  local output, screen = self.model.output, self.model.screen
+  if self.typing then
+    output.drawn = true
+    screen:typed_drew()
+    return
+  end
+  if output.drawn and screen.switched then return end
+  output.drawn = true
+  screen:program_drew()
 end
 
 --- @return ViewData

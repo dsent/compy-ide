@@ -43,12 +43,9 @@ local PROGRAM_KINDS = { "ends", "idles", "pauses" }
 local function run_from_editor(kind)
   K.keys("lctrl", "t")
   if kind == "pauses" then
-    -- the error in its handler pauses it; the move from the
-    -- snapshot to 'inspect' is the screenshot's callback,
-    -- which needs a real graphics context
+    -- the error in its handler pauses it, in the frame it
+    -- raises in
     K.frame()
-    assert.same("snapshot", K.app_state())
-    K.cc:suspend()
     assert.same("inspect", K.app_state())
   else
     assert.same("ready", K.app_state())

@@ -38,6 +38,14 @@ Project-author guide: `doc/input_api.md`.
 
 ### Changed
 
+- **A program's picture is kept apart from the console's text.** What a program prints
+  goes to the console's text and what it draws to its picture, and the screen shows the
+  text, the text over the picture, or the picture alone. A run starts with the text; its
+  first drawing shows its picture, whole; a line typed in the console that draws shows the
+  text over the picture. A pause shows the text, and `continue()` brings back what showed
+  before. A stop shows the text and keeps the picture, which the next run and `reset()`
+  clear. A program's `love.draw` draws on its picture each frame, and its
+  `love.graphics.setCanvas()` with no canvas draws there too.
 - **In the console's output a character wider than its cell shows whole.** The next
   cell's background used to cut it at the cell's right edge. A block or a box line now
   keeps the faint pixel it has at each side, and an arrow or a CJK character runs a few
@@ -291,8 +299,8 @@ Project-author guide: `doc/input_api.md`.
   first lines and the close of its project now all end it through one flush: its handlers,
   input hooks, shortcuts, `before_exit` hook, serial handlers, input field and modules go,
   as before, and now also its variables, the master volume, and key repeat and text input as
-  it set them; its
-  picture is cleared and the graphics settings reset. A sound it started plays to its end,
+  it set them; the graphics settings are reset, and its picture is kept, apart from the
+  console's text (see *A program's picture is kept apart*). A sound it started plays to its end,
   and one set to repeat plays once more and stops; `reset()` silences them. A pause
   clears nothing, so `continue()` resumes as it was. The console's output and history and
   the editor's files stay.

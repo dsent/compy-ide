@@ -11,7 +11,9 @@ local gfx = love.graphics
 --- @field terminal table
 --- @field kept KeptRows --- the rows scrolled off its top
 --- @field view_top integer? --- the scrolled view's first row
---- @field canvas love.Canvas
+--- @field canvas love.Canvas --- the program's picture
+--- @field drawn boolean? --- drawn on since it was cleared
+--- @field background number[]? --- the program's chosen ground
 --- @field term_canvas love.Canvas
 --- @field cfg table
 --- @field write function
@@ -311,9 +313,45 @@ function CanvasModel:get_canvas()
   return self.canvas
 end
 
+--------------------------
+--- the program's canvas ---
+--------------------------
+--- `canvas` is the program's record, kept apart from the
+--- console's text (the proposal "The Program's Canvas and the
+--- Viewing Modes", built as if accepted on November 17, 2026):
+--- what a program or a typed line draws stays on it through a
+--- stop, and a run's start and reset() clear it. With it are
+--- kept whether anything is drawn on it since it was cleared,
+--- and the ground the program chose
+--- (love.graphics.setBackgroundColor), which the screen puts
+--- under the picture where it shows the picture whole.
+
+--- @return boolean
+function CanvasModel:is_drawn()
+  return self.drawn == true
+end
+
+function CanvasModel:mark_drawn()
+  self.drawn = true
+end
+
+--- @param r number
+--- @param g number
+--- @param b number
+--- @param a number?
+function CanvasModel:keep_background(r, g, b, a)
+  self.background = { r, g, b, a or 1 }
+end
+
+--- @return number[]
+function CanvasModel:get_background()
+  return self.background or { 0, 0, 0, 1 }
+end
+
 --- Clear the whole canvas, whatever graphics state a program
 --- left: a scissor or a color mask would spare part of it.
 --- The caller's scissor, mask and render target come back.
+--- The picture is gone, and so is the ground it was on.
 function CanvasModel:clear_canvas()
   local sx, sy, sw, sh = gfx.getScissor()
   local r, g, b, a = gfx.getColorMask()
@@ -326,6 +364,8 @@ function CanvasModel:clear_canvas()
   if sx then
     gfx.setScissor(sx, sy, sw, sh)
   end
+  self.drawn = false
+  self.background = nil
 end
 
 function CanvasModel:draw_to()

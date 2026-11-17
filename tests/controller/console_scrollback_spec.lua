@@ -1148,14 +1148,18 @@ describe("the scrolled view at a transition #console", function()
     K.cc:get_project_env().love.update = nil
   end)
 
+  --- the pause is made in the frame of the error: the program
+  --- raises once the view is scrolled
   it("an error that pauses the program", function()
-    reset({ ["main.lua"] =
-      "function love.update() love.update = nil; error('x') end\n" })
+    reset({ ["main.lua"] = "function love.update()\n"
+      .. "  if go then love.update = nil; error('x') end\n"
+      .. "end\n" })
     run("run()")
     print_lines(1, 40)
     output():to_oldest()
+    K.cc:get_project_env().go = true
     K.frame()
-    K.cc:suspend()
+    assert.same("inspect", K.app_state())
     at_rest("the error's pause")
   end)
 

@@ -473,10 +473,9 @@ describe('input surface: inbound events — route lifetime #input',
     -- (doc/development/technical_debt/input.md, "A raise from
     -- project top-level and from a handler surface
     -- differently" describes this as the handler-side
-    -- behaviour). suspend_run moves 'running' to 'snapshot';
-    -- the screenshot callback that completes the move to
-    -- 'inspect' needs a real graphics context, so 'snapshot'
-    -- is the observable this far.
+    -- behaviour). suspend_run moves 'running' to 'snapshot',
+    -- and the frame's update completes the move to 'inspect':
+    -- outside the update, 'snapshot' is the observable.
     -- Each case asserts the handler RAN before it raised, so a
     -- silently-skipped handler cannot pass the case by never
     -- reaching its error.
@@ -504,7 +503,7 @@ describe('input surface: inbound events — route lifetime #input',
         })
         F.love_update(0.1)
         assert.equal(1, ran)
-        assert.equal('snapshot', love.state.app_state)
+        assert.equal('inspect', love.state.app_state)
       end)
 
       -- The control: this channel already worked, because the

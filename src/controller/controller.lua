@@ -34,6 +34,11 @@ end
 local user_update
 --- @type boolean
 local user_draw
+--- The program's own love.draw, which the IDE's draw calls onto
+--- the program's canvas each frame (draw_program); nil while
+--- none is installed, at a pause included
+--- @type function?
+local program_draw
 --- @type boolean
 -- set when a project installs any pointer/click handler.
 -- Together with a shown input widget it marks a non-blocking
@@ -418,19 +423,38 @@ local function draw_field(CC, V)
   own(CC.cfg.view.font, V.draw, V)
 end
 
+--- A program's love.draw draws on its canvas, which the IDE's
+--- own draw shows by the screen's mode (draw_program); the
+--- IDE's draw stays love.draw
 --- @param userlove table
 local function hook_draw(userlove)
   local udr = userlove.draw
-  local mdr = View.main_draw
-  if udr and udr ~= mdr then
-    --- @diagnostic disable-next-line: duplicate-set-field
-    local ndr = function()
-      udr()
-      View.drawFPS()
-    end
-    love.draw = ndr
+  if udr and udr ~= View.main_draw then
+    program_draw = udr
     user_draw = true
   end
+end
+
+--- The program's frame, on its canvas: cleared first to the
+--- ground the program chose, as love.run clears the screen
+--- before love.draw, the transform at its origin, and drawn in
+--- the program's own graphics state, which is given back after
+--- it. A stop or a run the program's draw asks for is made once
+--- the frame is done (util.program_end). The canvas keeps the
+--- frame for a mode that shows it, and through a pause.
+--- @param CC ConsoleController
+local function draw_program(CC)
+  local udr = program_draw
+  if not udr then return end
+  CC:use_canvas(function()
+    gfx.push('all')
+    End.ide_pushes = End.ide_pushes + 1
+    gfx.origin()
+    gfx.clear(gfx.getBackgroundColor())
+    wrap(udr, CC)
+    End.ide_pushes = End.ide_pushes - 1
+    gfx.pop()
+  end)
 end
 
 local click_delay = 0.4
@@ -725,31 +749,6 @@ Controller = {
         if click_timer <= 0 then emit_pending_click() end
       end
 
-      local ddr = View.prev_draw
-      local ldr = love.draw
-      if ldr ~= ddr then
-        --- a stop the program's draw asks for is made after its
-        --- pop (util.program_end): the IDE draws on from the
-        --- stop's own reset
-        local draw = function()
-          End.held(function()
-            if ldr then
-              gfx.push('all')
-              End.ide_pushes = End.ide_pushes + 1
-              wrap(ldr, CC)
-              End.ide_pushes = End.ide_pushes - 1
-              gfx.pop()
-            end
-            local ui = get_user_input()
-            if ui then
-              draw_field(CC, ui.V)
-            end
-          end)
-        end
-
-        View.prev_draw = draw
-        love.draw = draw
-      end
       CC:pass_time(dt)
 
       local uup = Controller._userhandlers.update
@@ -759,13 +758,9 @@ Controller = {
           wrap(uup, CC, dt)
         end)
       end
+      --- the paused frame is on the program's canvas already
       if love.state.app_state == 'snapshot' then
-        gfx.captureScreenshot(function(img)
-          local snap = gfx.newImage(img)
-          if View.snapshot then View.snapshot:release() end
-          View.snapshot = snap
-          CC:suspend()
-        end)
+        CC:suspend()
       end
 
       if love.harmony then
@@ -801,6 +796,7 @@ Controller = {
     --- is made once the draw is done (util.program_end)
     local function draw()
       End.held(function()
+        draw_program(CC)
         View.draw(CC, CV)
         local ui = get_user_input()
         if ui then draw_field(CC, ui.V) end
@@ -809,7 +805,6 @@ Controller = {
     end
     love.draw = draw
 
-    View.prev_draw = love.draw
     View.main_draw = love.draw
     View.end_draw = function()
       local w, h = gfx.getDimensions()
@@ -1127,6 +1122,7 @@ Controller = {
     user_update = false
     Controller.set_love_update(CC)
     user_draw = false
+    program_draw = nil
     user_pointer = false
     for _, k in ipairs(_derived) do
       love[k] = nil
@@ -1632,7 +1628,6 @@ Controller = {
   --- @param CC ConsoleController?
   clear_user_handlers = function(CC)
     Controller._userhandlers = {}
-    View.clear_snapshot()
     if not CC then return end
     -- Only the surface's own stores. The widget's outputs are
     -- not re-seeded here and no longer can be: the widget

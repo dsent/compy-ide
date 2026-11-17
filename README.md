@@ -166,6 +166,23 @@ returns.
   everything for `continue()`. `dofile()` runs in the
   environment as it stands.
 
+### The screen
+
+What a program prints goes to the console's text, and what it
+draws goes to its picture, kept apart. The screen shows them in
+one of three ways:
+
+- **text**: the console's text, the status line and the field;
+- **combined**: the console's text over the picture, the way to
+  draw from the console;
+- **picture**: the picture alone, on the whole screen.
+
+A run starts with the text. When the running program first
+draws, its picture shows; a line typed in the console that draws
+shows the text over the picture. A pause shows the text, and
+`continue()` brings back what showed before. A stop shows the
+text and keeps the picture until the next run or `reset()`.
+
 - `example_projects()`
 
   Copy the included example projects to the projects folder.
@@ -179,8 +196,9 @@ returns.
 
   Stop the program if one runs, clear what it and the lines
   typed before left (variables, handlers, settings), silence
-  every sound, and empty the console as
-  <kbd>Ctrl</kbd>+<kbd>L</kbd> does; then it says
+  every sound, empty the console as
+  <kbd>Ctrl</kbd>+<kbd>L</kbd> does and clear the program's
+  picture; then it says
   `Runtime reset for <project>. All files kept.`; like `stop()`,
   it ends the code that called it and returns nothing. The history
   and the editor's files stay. Only `reset()` with

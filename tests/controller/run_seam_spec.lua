@@ -358,13 +358,16 @@ end
       local view = assert(loadfile('src/view/view.lua'))
       view()
       local real = View
-      View, love.graphics.newFont = stub, newFont
+      --- the module's View is the global table's, which the
+      --- console's own draw reads: the stub goes back there
+      getfenv(view).View, love.graphics.newFont = stub, newFont
       gfx.setScissor(0, 0, 300, 300)
       local seen = 'not drawn'
       local C = {
         cfg = { view = { font = { } } },
         get_terminal = function() end,
         get_canvas = function() end,
+        model = { screen = { get = function() return 'text' end } },
       }
       local CV = { draw = function()
         seen = scissor() == nil and 'clean' or 'clipped'
@@ -386,7 +389,6 @@ end
       local view = assert(loadfile('src/view/view.lua'))
       view()
       local real = View
-      View, love.graphics.newFont = stub, newFont
       local profile, timer, print_ = love.PROFILE, love.timer,
           love.graphics.print
       love.PROFILE = { fpsc = 'T_L' }
@@ -395,9 +397,13 @@ end
       love.graphics.print = function()
         seen = scissor() == nil and 'clean' or 'clipped'
       end
+      --- the module's View is the global table's, which the
+      --- console's own draw reads, as drawFPS does: the stub goes
+      --- back there once the case is done
       finally(function()
         love.PROFILE, love.timer, love.graphics.print =
             profile, timer, print_
+        getfenv(view).View, love.graphics.newFont = stub, newFont
       end)
       gfx.setScissor(0, 0, 300, 300)
       real.drawFPS()

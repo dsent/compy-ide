@@ -193,12 +193,8 @@ describe("round five #editor #spec", function()
       K.reset({ ["main.lua"] = PAUSES })
       K.open()
       K.keys("lctrl", "t")
+      -- the error pauses it in the frame it raises in
       K.frame()
-      assert.same("snapshot", K.app_state())
-      -- the move from the snapshot to 'inspect' is the
-      -- screenshot's callback, which needs a real graphics
-      -- context
-      K.cc:suspend()
       assert.same("inspect", K.app_state())
       K.type("a")
       K.hold("f1")

@@ -40,8 +40,9 @@ ConsoleView = class.create(new)
 
 --- @param terminal table
 --- @param canvas love.Canvas
---- @param snapshot love.Image?
-function ConsoleView:draw(terminal, canvas, snapshot)
+--- @param mode ScreenMode --- what the screen shows of the
+--- output and the program's picture (model/screenModel.lua)
+function ConsoleView:draw(terminal, canvas, mode)
   if love.DEBUG then
     self:draw_placeholder()
   end
@@ -58,8 +59,11 @@ function ConsoleView:draw(terminal, canvas, snapshot)
     local tc = self.controller.model.output.term_canvas
     self.canvas:draw(
       terminal, canvas, tc,
-      self.drawable_height, snapshot,
+      self.drawable_height, mode,
       self.controller.model.output)
+    --- the full picture is the picture alone: no status line,
+    --- no field
+    if mode == 'picture' then return end
 
     if ViewUtils.conditional_draw('show_input') then
       --- behind a live program that owns the keyboard the field

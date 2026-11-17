@@ -115,7 +115,8 @@ end
 --- @param chars string[]
 --- @param styles table[]
 --- @param at integer
---- @param overlay boolean?
+--- @param overlay number? --- over a program's picture: the
+--- characters' opacity
 local function draw_text(terminal, chars, styles, at, overlay)
   local cw = terminal.char_width
   local top = (at - 1) * terminal.char_height
@@ -125,8 +126,8 @@ local function draw_text(terminal, chars, styles, at, overlay)
   local function flush(to)
     if not from then return end
     if color then
-      if overlay then
-        color = Color.with_alpha(color, 0.75)
+      if overlay and overlay < 1 then
+        color = Color.with_alpha(color, overlay)
       end
       gfx.setColor(unpack(color))
     end
@@ -160,13 +161,14 @@ local function draw_text(terminal, chars, styles, at, overlay)
   flush(#chars)
 end
 
---- The canvases last drawn over a program's picture: faint
---- characters and no backgrounds
+--- The canvases last drawn over a program's picture: no
+--- backgrounds, and the characters at their opacity there
 --- @type table<love.Canvas, boolean>
 local overlaid = setmetatable({ }, { __mode = 'k' })
 
 --- @param terminal table
---- @param overlay boolean?
+--- @param overlay number? --- over a program's picture (the
+--- combined mode): the characters' opacity
 --- @param window ViewRow[]? --- a scrolled view's rows; the
 --- grid as it is when nil
 local function terminal_draw(terminal, canvas, overlay, window)
@@ -175,7 +177,7 @@ local function terminal_draw(terminal, canvas, overlay, window)
 
   -- A canvas drawn over a program's picture is drawn again once
   -- the picture is gone, though the output did not change: it
-  -- would show its faint characters on no ground until the next
+  -- would show its characters on no ground until the next
   -- output.
   if terminal.dirty or overlay or overlaid[canvas] then
     overlaid[canvas] = overlay or nil
@@ -237,14 +239,17 @@ local function terminal_draw(terminal, canvas, overlay, window)
 end
 
 --- @param terminal table
+--- @param overlay number? --- drawn over a program's picture
+--- (the combined mode): no cell backgrounds, the characters at
+--- this opacity
 --- @param y number? --- where its first row starts: under the
 --- strip the screen may reserve at its top
 --- @param window ViewRow[]? --- a scrolled view's rows
-function TerminalView.draw(terminal, canvas, snapshot, y, window)
+function TerminalView.draw(terminal, canvas, overlay, y, window)
   gfx.setCanvas()
   gfx.push('all')
 
-  terminal_draw(terminal, canvas, snapshot and true or nil, window)
+  terminal_draw(terminal, canvas, overlay, window)
   gfx.draw(canvas, 0, y or 0)
   gfx.setBlendMode('alpha') -- default
   gfx.pop()

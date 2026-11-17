@@ -980,7 +980,8 @@ local function draw_all(also)
   -- as love.draw does through View.draw (view/view.lua),
   -- which the fixture stubs
   local cc = K.cc
-  cc.view:draw(cc:get_terminal(), cc:get_canvas(), nil)
+  cc.view:draw(cc:get_terminal(), cc:get_canvas(),
+    cc.model.screen:get())
   if also then
     also()
   end
