@@ -46,6 +46,8 @@ Project-author guide: `doc/input_api.md`.
   before. A stop shows the text and keeps the picture, which the next run and `reset()`
   clear. A program's `love.draw` draws on its picture each frame, and its
   `love.graphics.setCanvas()` with no canvas draws there too.
+  `compy.screen.show("text" | "combined" | "picture")` shows one of them, and
+  `compy.screen.getMode()` says which shows.
 - **In the console's output a character wider than its cell shows whole.** The next
   cell's background used to cut it at the cell's right edge. A block or a box line now
   keeps the faint pixel it has at each side, and an arrow or a CJK character runs a few

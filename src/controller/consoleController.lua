@@ -813,6 +813,33 @@ local compy_graphics = {
   shape2d = require("util.graphics.shape2d")
 }
 
+--- compy.screen for a program or a typed line: what the screen
+--- shows of the console's text and the program's picture
+--- (model/screenModel.lua). The maintainer ruled the shape
+--- (pre-release rulings, "The picture and the text"); its names
+--- are LÖVE's kind (docs: the user API naming proposal).
+--- @param cc ConsoleController
+--- @return table
+local function screen_api(cc)
+  local modes = '"text", "combined" or "picture"'
+  return {
+    --- show(mode): one of the three; a wrong one stops the
+    --- program at the line that called it, as gotoxy does
+    show = function(m)
+      if not ScreenModel.is_mode(m) then
+        error('compy.screen.show: the mode is ' .. modes
+          .. ', not ' .. (type(m) == 'string'
+            and string.format('%q', m) or tostring(m)), 2)
+      end
+      cc.model.screen:choose(m)
+    end,
+    --- @return ScreenMode
+    getMode = function()
+      return cc.model.screen:get()
+    end,
+  }
+end
+
 --- compy.graphics for a program: its shape2d's fills and
 --- strokes say that it drew (ConsoleController:drew), as its
 --- love.graphics calls do
@@ -1678,6 +1705,7 @@ local get_compy_namespace = function(terminal, with_input,
     terminal = get_compy_terminal(terminal),
     audio = compy_audio,
     graphics = cc and drawing_graphics(cc) or compy_graphics,
+    screen = cc and screen_api(cc) or nil,
     fonts = CompyFonts(),
   }
   -- D-SIMPLE-SURFACE statement 2: the simple names are PLAIN

@@ -183,6 +183,18 @@ shows the text over the picture. A pause shows the text, and
 `continue()` brings back what showed before. A stop shows the
 text and keeps the picture until the next run or `reset()`.
 
+- `compy.screen.show(mode)`
+
+  Show `"text"`, `"combined"` or `"picture"`, from a program or
+  a line typed in the console. A program's choice holds against
+  its first drawing until the run ends; any other name stops the
+  program with an error on the line that called it.
+
+- `compy.screen.getMode()`
+
+  The mode the screen shows: `"text"`, `"combined"` or
+  `"picture"`.
+
 - `example_projects()`
 
   Copy the included example projects to the projects folder.

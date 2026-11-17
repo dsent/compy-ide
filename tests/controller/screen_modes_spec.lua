@@ -346,4 +346,79 @@ describe('the screen modes #canvas', function()
       assert.equal('text', mode())
     end)
   end)
+
+  --- compy.screen (stage 3; the maintainer ruled the shape "ok")
+  describe('compy.screen', function()
+    local function screen()
+      return F.cc:get_project_env().compy.screen
+    end
+
+    for _, m in ipairs({ 'text', 'combined', 'picture' }) do
+      it('show("' .. m .. '") shows it, and getMode() says so',
+        function()
+          screen().show(m)
+          assert.equal(m, mode())
+          assert.equal(m, screen().getMode())
+        end)
+    end
+
+    it('getMode() says the mode a run\'s drawing brought up',
+      function()
+        local seen
+        F.run_project(function()
+          draw()
+          seen = screen().getMode()
+        end)
+        assert.equal('picture', seen)
+      end)
+
+    for name, bad in pairs({
+      ['a name it has not'] = 'full',
+      ['no name'] = nil,
+      ['a number'] = 2,
+    }) do
+      it('stops the program at its own line for ' .. name,
+        function()
+          local ok, err = pcall(function() screen().show(bad) end)
+          assert.is_false(ok)
+          assert.matches('screen_modes_spec.lua:%d+: ', err)
+          assert.matches('"text", "combined" or "picture"', err)
+        end)
+    end
+
+    it('holds against the first drawing of the run', function()
+      F.run_project(function()
+        screen().show('text')
+        draw()
+      end)
+      assert.equal('text', mode())
+    end)
+
+    it('is the run\'s: the next run starts in text and its drawing'
+      .. ' brings up its picture', function()
+        F.run_project(function() screen().show('combined') end)
+        local seen
+        F.run_project(function()
+          seen = mode()
+          draw()
+        end)
+        assert.equal('text', seen)
+        assert.equal('picture', mode())
+      end)
+
+    it('goes at a stop', function()
+      F.run_project(function()
+        screen().show('combined')
+        F.cc:get_project_env().love.update = function() end
+      end)
+      F.cc:get_project_env().stop()
+      F.cc:get_project_env().love.update = nil
+      assert.equal('text', mode())
+    end)
+
+    it('shows the mode from a typed line too', function()
+      submit('compy.screen.show("picture")')
+      assert.equal('picture', mode())
+    end)
+  end)
 end)

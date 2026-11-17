@@ -76,6 +76,7 @@ What sets the mode:
 | A typed line's drawing call, in `text` | `combined` |
 | A pause | `text`, whatever the program draws while paused; `continue()` brings back the mode before it, or the picture when the program first drew while paused |
 | A stop, an error in top-level code, `reset()` | `text` |
+| `compy.screen.show(mode)`, from a program or a typed line | `mode`, which holds against the run's first drawing (`ScreenModel:choose`) |
 
 A drawing call is one of the program's `love.graphics` drawing
 functions (`arc`, `circle`, `draw`, `drawInstanced`, `drawLayer`,
