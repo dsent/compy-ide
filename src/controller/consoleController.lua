@@ -70,6 +70,7 @@ end
 
 --- @class ConsoleController
 --- @field typing integer? --- the depth of program code a typed line runs at
+--- @field forget_question function? --- drops compy.ask's armed question (the simple surface's)
 --- @field time number
 --- @field model Model
 --- @field main_ctrl table
@@ -1616,6 +1617,14 @@ local function build_simple_surface(input, get_env)
     unask = function()
       if disarm() then input.hide() end
     end,
+
+    --- The IDE's, never a program's: the program that asked
+    --- ends, and its question goes with it, holding neither
+    --- its widget nor what its callbacks captured (round 23:
+    --- the terminate flush releases what a program created)
+    forget = function()
+      armed = nil
+    end,
   }
 end
 
@@ -1656,6 +1665,7 @@ local get_compy_namespace = function(terminal, with_input,
       function() return cc and cc:get_project_env() end)
     ns.ask = simple.ask
     ns.unask = simple.unask
+    if cc then cc.forget_question = simple.forget end
   end
   return setmetatable(ns, {
     __index = function(t, k)
@@ -2474,6 +2484,9 @@ function ConsoleController:flush_program_state(call_exit)
   -- After the exit hook: it may still drive compy.input, and
   -- it must find a widget there when it does.
   destroy_input_widget()
+  --- a question the program left unanswered goes with its
+  --- widget
+  if self.forget_question then self.forget_question() end
   -- What the run drew on the console's canvas goes with it,
   -- after the project's own hook, which may still draw.
   self.model.output:clear_canvas()

@@ -350,3 +350,23 @@ describe("compy.ask with nothing live #console", function()
       K.keys("lctrl", "q")
     end)
 end)
+
+-- round 23: what a program created is released at its stop, a
+-- question it left unanswered included
+describe("compy.ask at a stop #console", function()
+  after_each(cleanup)
+
+  it("keeps no stopped program's widget alive", function()
+    reset({ ["main.lua"] = "compy.ask('name?')\n"
+      .. "function love.update() end\n" })
+    run("run()")
+    local held = setmetatable({ love.state.user_input_controller },
+      { __mode = "v" })
+    assert.is_not_nil(held[1])
+    K.keys("lctrl", "q")
+    assert.is_false(K.cc.run_live)
+    collectgarbage("collect")
+    collectgarbage("collect")
+    assert.is_nil(held[1])
+  end)
+end)
