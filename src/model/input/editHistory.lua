@@ -1,19 +1,19 @@
 local class = require('util.class')
 
---- The text-level undo of the open block (1.1). Born when
---- the block opens, dies when it closes; never touches the
---- file. Snapshots are taken before a mutation; consecutive
---- same-kind edits at the expected cursor coalesce into one
---- step, so undo removes a typed word, not a letter.
+--- A field's undo of its draft, in every input context
+--- (D-UNDO-KEYS): clearing or replacing the text wipes it, and
+--- it never touches a file. Snapshots are taken before a
+--- mutation; consecutive same-kind edits at the expected
+--- cursor coalesce into one step, so undo removes a typed
+--- word, not a letter. No step is dropped: every change to a
+--- draft stays undoable while its file is open (IS6.6).
 --- @class EditHistory
---- @field cap integer
 --- @field steps table[] --- snapshots {text, cursor}
 --- @field redo_steps table[]
 --- @field last_kind string?
 --- @field last_cursor table? --- {l, c} after the last edit
-EditHistory = class.create(function(cap)
+EditHistory = class.create(function()
   return {
-    cap = cap,
     steps = {},
     redo_steps = {},
     last_kind = nil,
@@ -39,7 +39,7 @@ end
 
 --- Record the state before a mutation
 --- @param snapshot table --- {text: string[], cursor: {l,c}}
---- @param kind string --- 'insert'|'remove'|'paste'|...
+--- @param kind string --- 'insert'|'remove'|'text'|...
 --- @param boundary boolean --- force a new step
 function EditHistory:record(snapshot, kind, boundary)
   local c = snapshot.cursor
@@ -48,9 +48,6 @@ function EditHistory:record(snapshot, kind, boundary)
       and self:_continues(c.l, c.c)
   if not coalesce then
     table.insert(self.steps, snapshot)
-    if #self.steps > self.cap then
-      table.remove(self.steps, 1)
-    end
   end
   self.redo_steps = {}
   self.last_kind = kind

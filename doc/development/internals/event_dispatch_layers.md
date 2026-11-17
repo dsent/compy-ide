@@ -34,9 +34,11 @@ The function body grabs the table LÖVE itself exposes — `local handlers = lov
 Each raw handler does exactly two jobs, in order:
 
 1. **Route-independent framework concerns** that must run no matter which route is currently
-   active: the global power hotkeys — Ctrl+T quickswitch (`controller.lua:879-900`), Ctrl+Alt+R
+   active: the global power hotkeys — Ctrl+T quickswitch (`controller.lua:879-900`), Ctrl+R
    restart (`:928-932`), Ctrl+Alt+P / F10 profiler toggle (`:933-955`), Ctrl+Esc quit (on the
-   *release* side, `handlers.keyreleased`, `:997-998`). The raw handler keeps only these: it
+   *release* side, `handlers.keyreleased`, `:997-998`), and on that side the end of a press the
+   console or the file editor recorded, which ends the key card (`CC:key_released`). The raw
+   handler keeps only these: it
    holds no state of its own, and whatever needs to know which modifiers are down asks the
    keyboard (`../decisions/input.md`, D-ASK-THE-DEVICE).
 2. **Forward to the active route.** Once the framework-level concerns have run, the raw handler
@@ -140,7 +142,7 @@ to be spent at the binding site or not at all — `occupy_input` spends it, call
 `Controller._defaults[event]`, the console's own handler for that channel, when the walk came back
 falsey.
 
-Two conditions hold it back, and they are the whole of the rule:
+Three conditions hold it back, and they are the whole of the rule:
 
 - **The project must not own the screen.** The gate is `user_draw`, the flag `hook_draw` sets. A
   project that took over `love.draw` is painting over the console, and typing into a prompt you
@@ -150,14 +152,27 @@ Two conditions hold it back, and they are the whole of the rule:
 - **The channel must have a console handler.** The console installs ten channels; the route binds
   twelve. The two derived clicks (`singleclick`, `doubleclick`) have no console default by design,
   so an unconsumed one falls through to nothing, without raising.
+- **A program that takes keys owns the keyboard** (the maintainer's ruling of 2026-11-16: "'Falling
+  through' of only unhandled keys to the console sounds quite unintuitive"). While it has any way
+  of taking keys or text (its own `love.keypressed`, `love.keyreleased` or `love.textinput`; a
+  key or text hook; a key or text shortcut; its own shown field), no key press, repeat, release
+  or text falls through to the console (`takes_keys` in `controller.lua`, asked as each key or
+  text event comes and before the chain runs, since hooks and shortcuts come and go; the hook
+  table is the one record, a program's own handlers being seeded there, so one whose hook the
+  program took away takes no keys). An empty shortcut table, and a
+  pointer or touch hook or shortcut, take no keys. A key whose press fell through to the console
+  before the program took keys is the console's: its repeats and release go there
+  (`fell_through`, read by the gate). Pointer and touch events are not part of this: they fall
+  through as before, held back only by `user_draw`.
 
-**Is this exact base parity?** Per channel, yes — once seeded handlers consume
-([`../decisions/input.md`](../decisions/input.md), D-HOOKS-SEEDED, *"a seeded handler consumes"*).
-At the PR base, binding was per channel: a project that defined no handler for a channel left it
-with the console, and one that did displaced the console's outright. The fall-through reproduces
-both halves.
+**Is this exact base parity?** Per channel, no longer for the keyboard. At the PR base, binding
+was per channel: a project that defined no handler for a channel left it with the console, and one
+that did displaced the console's outright. The pointer and touch channels keep that. The keyboard
+does not since 2026-11-16: a program that takes keys on any keyboard channel owns all three, so a
+program with only `love.textinput` also keeps an otherwise unhandled key press from the console,
+where at the base it reached it.
 
-**With one deliberate narrowing.** At the base there was no draw gate, so a project that took over
+**With two deliberate narrowings, then; the first is the draw gate.** At the base there was no draw gate, so a project that took over
 `love.draw` and defined no keyboard handler left `love.keypressed` with the console — **you could
 type into a prompt you could not see**. The gate keeps that closed. It is not a regression to keep
 it closed: today the route eats the event anyway, so this is base-era behaviour the branch had

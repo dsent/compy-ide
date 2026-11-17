@@ -4,13 +4,18 @@ require('util.string.string')
 --- lines, each ended by a newline in the file. The newline
 --- after the last line belongs to that line, so a file that
 --- ends in one reads as its lines alone, and a blank line at
---- its end is a line like any other.
+--- its end is a line like any other. Read, LF, CRLF and a
+--- lone CR each end a line; written, every line ends in LF.
 local M = {}
 
 --- @param text string?
 --- @return string[]
 function M.lines(text)
-  local lines = string.lines(text or '')
+  local lf = text or ''
+  if type(lf) == 'string' then
+    lf = string.gsub(lf, '\r\n?', '\n')
+  end
+  local lines = string.lines(lf)
   if lines[#lines] == '' then table.remove(lines) end
   return lines
 end

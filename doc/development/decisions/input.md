@@ -648,6 +648,12 @@ a captured handler, so it is the one where falling through would have reached th
 while looking at the keyboard channels and missed `tixy`'s `mousepressed`. Per-example measurement:
 `../wip/77-new-input-api/validation/notes/S83-legacy-handler-blast-radius.md`.)*
 
+**Note, 2026-11-14 — selection is gone, and the constructor argument with it.** No field selects
+text now (the maintainer's ruling "Selection is off until the clipboard is designed"), and
+`build_input_widget` builds the widget as `UserInputController(model)`: the argument that disabled
+selection no longer exists. The account above of the widget's use of the affected channels
+describes the build before that ruling; the migrations it lists stand.
+
 **Four examples deliberately keep the legacy spelling** — `clock`, `colors`, `life`, `pong`. They own
 the screen, show no widget, and have nothing below the handler for the wrap to shield, so for them
 this decision's *"code written against LÖVE works as expected"* is exactly true, and they are what
@@ -723,11 +729,16 @@ system does* (now pinned and reviewable) from *what we choose to change* (explic
 
 **Consequence.** Doc entries and tests that record a reverse-engineered behaviour carry this rationale
 explicitly ("discovered as existing behaviour, no mandate to alter — de-facto standard per the
-implementation"). Current members include: the submit guard being *Enter-without-Shift* (so Ctrl+Enter
-and Alt+Enter submit, not only bare Enter); `SearchController:keypressed` returning a jump target up
+implementation"). Current members include: the submit guard being *Enter-without-Shift-or-Alt* (so
+Ctrl+Enter submits, not only bare Enter; Alt+Enter breaks the line, as the editor principles' IS3.15
+rules — **ended 2026-11-14** by the maintainer's ruling that every chord is its own key: only a bare
+Enter submits, and Ctrl+Enter does nothing); `SearchController:keypressed` returning a jump target up
 its caller; and the input widget view's per-frame-render workaround keyed by widget identity. Each is
 individually revisable — but only by a named ruling, not by drift. See
 [`../technical_debt/input.md`](../technical_debt/input.md) for the live list.
+
+**Note, 2026-11-14 — one member is gone.** `SearchController` was removed with the editor's search
+(the maintainer's ruling "Search leaves the editor"), and its jump target with it.
 
 ---
 
@@ -1495,6 +1506,11 @@ the proposal.
 
 ## D-EXACT-RESERVE — a framework reservation matches its modifier set exactly
 
+**Note, 2026-11-14 — the reserved keys changed, the rule did not.** `ctrl+s` and `ctrl+shift+r`
+are no longer reservations, so the examples below that lean on them describe the map as it was;
+the new map is in D-RESERVE-TABLE's note of the same date. Every reservation that remains still
+matches its modifier set exactly.
+
 **Owner ruling, 2026-08-16.** Amends nothing; it states for the **gate** the rule
 D-COMBO-SHAPE already states for everyone else. D-COMBO-SHAPE, D-ASK-THE-DEVICE and D-THREE-MODS
 stand unchanged — D-COMBO-SHAPE rules that a combo *is* its modifier set exactly, D-ASK-THE-DEVICE
@@ -1561,7 +1577,55 @@ the Scope paragraph above puts it, at route level in `EditorController:_leave_ke
 gate's `ctrl+s` reservation is unchanged — it stops a *running* project and has never had an
 editor branch. See `technical_debt/input.md`, `T-CTRL-S-UNCLAIMED`.
 
+**Note, 2026-11-14 — the editor's half moved again.** Ctrl+Shift+S no longer leaves the editor
+(the maintainer's ruling "Keys removed from the editor"), and `EditorController:_leave_keys` is
+gone: the editor's key table names neither `ctrl+s` nor `ctrl+shift+s`, so both do nothing there.
+The checkpoint on Ctrl+K went with the editor's checkpoints (the ruling "The editor's own
+checkpoints go"), and the gate's `ctrl+s` reservation went too (D-RESERVE-TABLE's note of the same
+day).
+
 ## D-RESERVE-TABLE — the gate's reservations are combo strings in a privileged table
+
+**Note, 2026-11-16 — a reservation consumes its key, by the product owner's ruling.** This
+reverses "a reservation never consumes" below. A reserved chord's key is the IDE's for its whole
+press: the route sees neither its press, nor its repeats, nor its release, and the program that
+was running and the one `ctrl+r` just started both see none of them. The reason: run anew moved
+from `ctrl+alt+r` to `ctrl+r`, and a program handles a plain `r`, so the restarted program took
+the key as its own (seen on a Compy on 2026-11-16). With it, every key's repeats and release go
+to the receiver of its press, and nowhere once that receiver is gone; a release a paused program
+is owed comes at its `continue()` (the gate in `controller.lua`, `delivered` and
+`owed_releases`). What relied on the old contract: the input-contract tests that a project's own
+binding of `ctrl+pause` still runs after the suspend, and that a shortcut leaves the key to the
+route (`input_global_shortcuts_spec.lua`, `input_shortcuts_click_spec.lua`), now turned around,
+and the input guide's sentence that reservations pass the event on; no shipped program binds a
+reserved chord. The profiling keys (`f10` and the profiler pair) act only in a profiling build;
+since a reservation consumes, they are reserved there alone (`love.PROFILE`, set by `conf.lua`
+before the gate is built), and a program receives them in every other build.
+
+**Note, 2026-11-14 — the map in the table changed, by the product owner's decision.** *"What does
+not change"* below held for the change of representation it describes; this is a later change of
+behaviour. The table now holds:
+
+- `ctrl+q` returns to the console and keeps the project open. It stops a run that is running,
+  paused, or idle behind the console; from the file editor it leaves the editor with every file
+  on its stack, and is refused during an edit; in the console with no run it does nothing. It
+  takes the place of `ctrl+s`.
+- `ctrl+s` and `ctrl+shift+r` are reserved no longer: a project receives them. No key closes the
+  project, and nothing replaces the reset.
+- `ctrl+r` runs the project anew; `ctrl+alt+r`, which did, is reserved no longer.
+- `ctrl+escape` (on release), `ctrl+t`, `ctrl+pause`, the profiler pair and `f10` are as they
+  were.
+
+The table's contract is unchanged: privileged, exact, consulted before any route, and never
+consuming.
+
+**Note, 2026-11-16 — `ctrl+r` restarts a live program only, by the maintainer's ruling.** *"Ctrl+R
+should do nothing at the console. End of story."* It restarts a program that runs, is paused or
+idles behind the console, the same condition under which `ctrl+q` stops one (`program_live` in
+`controller.lua`), from the entry point it runs from, which lives with the run and goes when the
+run ends. With none live it does nothing, in the console and the file editor alike, and the
+editor's key card no longer lists it. `ctrl+t` from the editor runs `main.lua` ("main.lua only for
+now"). A packaged build restarts as before.
 
 **Owner ruling, 2026-08-16.** **Amends D-ASK-THE-DEVICE point 3**, which named this
 table, declined to commit to it, and required that if it were ever built it be
@@ -2273,6 +2337,11 @@ combinations are **four independent, project-owned boolean settings**:
    **It is NOT `compy.input.clear()`**: that call is `clear_input` + `clear_error` and does **not**
    touch history. Two operations, one English word, and the surface keeps both — so any prose
    naming a flag must say which.
+   *(Amended 2026-11-14, the maintainer's ruling that the console's history is the classic
+   shell's: it holds only lines that ran. Neither clear remembers now: a line enters the
+   history when it is accepted — in `submit_flow` once the validator takes it, flag or no flag,
+   and in the console once the line parses and loads, before it runs — and `model:cancel()` only
+   clears.)*
 5. **`auto_hide` is superseded by `hide_on_submit`** — and as built, the old name is gone
    entirely; the paragraph below records the reasoning that got there. *Both names are accepted for one release, the
    alias resolving to the flag, and **when both are given the explicit `hide_on_submit` wins.**
@@ -2422,8 +2491,9 @@ additive is worth one more setting.
    always sees empty. That contract is what the ruled default removes, and the criterion is kept
    rather than deleted because the console still holds the preserved half. Read as written, it would
    have pinned exactly the behaviour the release retires.)*
-5. **The console's Escape is unchanged** — remember-then-clear, now because `clear_on_cancel` is
-   seated on its instance rather than because the widget destroys unconditionally.
+5. **The console's Escape is unchanged** — it clears, now because `clear_on_cancel` is seated on
+   its instance rather than because the widget destroys unconditionally. *(Since 2026-11-14 it no
+   longer remembers the line it clears: statement 4's amendment.)*
 6. **The project surface's documented behaviour CHANGES, and the second branch of this criterion is
    the live one** (owner, 2026-09-07): the change is recorded in `../../input_api.md` **and**
    `../../../CHANGELOG.md`, with a justification-table row, for **both** verbs — submit now clears,
@@ -2459,6 +2529,12 @@ lives.)*
 ---
 
 ## D-EDITOR-KEYS — the editor's key contract is the product's, and this is the record of it
+
+**Note, 2026-11-14 — the keys this entry records have since changed.** The editor was rebuilt on
+three states (browsing, inserting, replacing) with no questions asked, and the gate's reserved map
+changed (D-RESERVE-TABLE's note of this date): `Ctrl+Q` leaves the editor for the console,
+`Ctrl+S` and `Ctrl+Shift+R` are reserved no longer. The entry below stands as the record of the
+contract of 2026-09-06; `doc/EDITOR.md` has the keys as built.
 
 **Status: RETROFITTED, 2026-09-06.** This entry records a design that was decided and built outside
 this ledger, and it exists because we were reasoning about those keys without a written statement of

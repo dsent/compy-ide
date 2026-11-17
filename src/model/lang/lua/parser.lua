@@ -35,6 +35,8 @@ return function(lib)
   end
 
   local mlc = require('metalua.metalua.compiler').new()
+  local a2s_module = 'metalua.metalua.compiler.ast_to_src'
+  local long_brackets = require(a2s_module).long_brackets
 
   --- Iterates over lexstream
   --- @param stream table
@@ -71,14 +73,6 @@ return function(lib)
   --- @return ParseResult
   local parse_stream = function(stream)
     return mlc:lexstream_to_ast(stream)
-  end
-
-  --- @param ast luaAST
-  --- @param ... any
-  --- @return Comment[]
-  local ast_extract_comments = function(ast, ...)
-    local a2s = mlc:a2s(...)
-    return a2s:extract_comments(ast)
   end
 
   --- Finds error location and message in parse result
@@ -234,7 +228,9 @@ return function(lib)
             colored_tokens[ls][i] = ct['comment']
           end
         else
-          local tl = 4 --- a block comment starts with '--[['
+          --- a block comment starts with '--' and its long
+          --- bracket, '[[' or one with a level, '[==['
+          local tl = 2 + #long_brackets(co.text)
           multiline(co.first, co.last, co.text, 'comment', tl)
         end
       end
@@ -265,6 +261,28 @@ return function(lib)
     return a2s:run(ast)
   end
 
+  --- The token the parser stopped at: the lexstream's current
+  --- one after a failed parse. Nil when the lexer itself
+  --- failed and has no token to show.
+  --- @param stream table
+  --- @return {l: integer, c: integer, eof: boolean}?
+  local failed_token = function(stream)
+    --- the parser fails with the lexer between tokens, right
+    --- after the last one it took or at the end; the lexer
+    --- fails inside a token, having read on into it
+    local last = stream.lineinfo_last_extracted
+    local between = stream.i == last.offset + 1
+        or last.offset > #stream.src
+    if not between then return nil end
+    local ok, tok = pcall(stream.peek, stream)
+    local li = ok and type(tok) == 'table' and tok.lineinfo
+    local first = li and li.first
+    if not first or not first.line then return nil end
+    return {
+      l = first.line, c = first.column, eof = tok.tag == 'Eof'
+    }
+  end
+
   --- Parses code to AST
   --- @param code str
   --- @return boolean success
@@ -276,6 +294,7 @@ return function(lib)
     if not ok then
       ---@diagnostic disable-next-line: param-type-mismatch
       ret = get_error(res)
+      ret.token = failed_token(stream)
     end
     return ok, ret
   end
@@ -339,149 +358,104 @@ return function(lib)
     return syntax_hl(tokens)
   end
 
+  --- The source lines of every comment in the code. A long
+  --- comment is one span; a run of `--` lines, which the lexer
+  --- hands over as one comment, is a span per line.
+  --- @param code str
+  --- @return integer[][] --- {first, last} line pairs
+  local comment_spans = function(code)
+    local ok, tokens = pcall(tokenize, code)
+    if not ok then return {} end
+    local spans, seen = {}, {}
+    local function add(list)
+      for _, c in ipairs(list or {}) do
+        local li = c.lineinfo
+        if not seen[li.first.id] then
+          seen[li.first.id] = true
+          local f, l = li.first.line, li.last.line
+          if c[2] then
+            table.insert(spans, { f, l })
+          else
+            for ln = f, l do table.insert(spans, { ln, ln }) end
+          end
+        end
+      end
+    end
+    for _, t in ipairs(tokens) do
+      add(t.lineinfo.first.comments)
+      add(t.lineinfo.last.comments)
+    end
+    return spans
+  end
+
+  --- Blocks of source lines, every line in exactly one block,
+  --- in order, as it is written: a block is the lines of
+  --- statements and comments that share a line, so that no
+  --- line boundary divides them; a blank line is an empty
+  --- block of its own; a line nothing claims (a `#!` first
+  --- line, which the parser skips) is a block of its own.
+  --- @param lines string[]
+  --- @param ast luaAST
+  --- @return Dequeue<Block>
+  local source_blocks = function(lines, ast)
+    local spans = comment_spans(lines)
+    for _, v in ipairs(ast) do
+      local li = v.lineinfo
+      table.insert(spans, { li.first.line, li.last.line })
+    end
+    table.sort(spans, function(a, b) return a[1] < b[1] end)
+    local n = #lines
+    local ret = Dequeue.typed('block')
+    local ln = 1
+    --- the lines from `ln` up to `stop`, which no span holds
+    local function single_lines(stop)
+      while ln < stop do
+        if string.match(lines[ln], '^%s*$') then
+          ret:push_back(Empty(ln))
+        else
+          ret:push_back(Chunk({ lines[ln] }, Range.singleton(ln)))
+        end
+        ln = ln + 1
+      end
+    end
+    local i = 1
+    while i <= #spans do
+      local s, e = spans[i][1], spans[i][2]
+      i = i + 1
+      while i <= #spans and spans[i][1] <= e do
+        e = math.max(e, spans[i][2])
+        i = i + 1
+      end
+      s, e = math.max(s, ln), math.min(e, n)
+      if s <= e then
+        single_lines(s)
+        ret:push_back(Chunk(table.slice(lines, s, e), Range(s, e)))
+        ln = e + 1
+      end
+    end
+    single_lines(n + 1)
+    return ret
+  end
+
   --- @param text string[]
-  --- @param w integer
+  --- @param _ integer --- the width; no block is wrapped to it
   --- @param single boolean
   --- @return boolean ok
   --- @return Block[]
   --- @return ParseResult<luaAST>
-  local chunker = function(text, w, single)
+  local chunker = function(text, _, single)
     require("model.editor.content")
     if string.is_non_empty_string_array(text) then
-      local wrap = w
-      local ret = Dequeue.typed('block')
       local ok, r = parse(text)
-
-      local has_lines = false
       if ok then
-        local idx = 1  -- block number
-        local last = 0 -- last line number
-        local comment_ids = {}
-        local comment_lines = {}
-        --- Create chunk from comment text and pos
-        --- @param ctext str
-        --- @param c Comment
-        --- @param range Range
-        local add_comment_block = function(ctext, c, range)
-          ret:insert(
-            Chunk.new(ctext, range),
-            idx)
-          comment_ids[c.idf] = true
-          comment_ids[c.idl] = true
-          comment_lines[c.first.l] = true
-        end
-        --- Take ownership of the comments the statement's own chunk
-        --- already carries. The chunk is sliced from the source
-        --- lines, so a comment starting inside its range is on
-        --- screen already; a block of its own would draw over the
-        --- code and grow the file on every render.
-        --- @param comments Comment[]
-        --- @param sfl integer --- statement's first line
-        --- @param sll integer --- statement's last line
-        local claim_own_comments = function(comments, sfl, sll)
-          for _, c in ipairs(comments) do
-            local cfl = c.first.l
-            if cfl >= sfl and cfl <= sll then
-              comment_ids[c.idf] = true
-              comment_ids[c.idl] = true
-              comment_lines[cfl] = true
-            end
-          end
-        end
-        --- One empty block per blank line before `ln', so a
-        --- run of blank lines stays a run
-        --- @param ln integer
-        local add_empties_before = function(ln)
-          for el = last + 1, ln - 1 do
-            ret:insert(Empty(el), idx)
-            idx = idx + 1
-          end
-        end
-        --- @param comments Comment[]
-        --- @param pos CommentPos
-        local get_comments = function(comments, pos)
-          for _, c in ipairs(comments) do
-            -- Log.warn('c', c.position)
-            -- Log.warn(Debug.terse_t(c, nil, nil, true))
-            if c.position == pos
-                and not (comment_ids[c.idl] or comment_ids[c.idf]
-                    or comment_lines[c.first.l])
-            then
-              local cfl, cll = c.first.l, c.last.l
-              add_empties_before(cfl)
-              if cfl == cll then
-                local ctext = '--' .. c.text
-                add_comment_block(ctext, c, Range.singleton(cfl))
-                idx = idx + 1
-                last = cll
-              else
-                local lines = string.lines(c.text)
-                if c.multiline then
-                  if c.prepend_newline then
-                    table.insert(lines, 1, '')
-                  end
-                  local l1 = lines[1] or ''
-                  if #lines == 1 then
-                    lines[1] = '--[[' .. l1 .. ']]'
-                  else
-                    local llast = lines[#lines] or ''
-                    lines[1] = '--[[' .. l1
-                    lines[#lines] = llast .. ']]'
-                  end
-                  local wrapped = string.wrap_array(lines, wrap)
-                  local w_t = string.unlines(wrapped)
-
-                  add_comment_block(wrapped, c, Range(cfl, cll))
-                  idx = idx + 1
-                  last = cll
-                else
-                  for i, l in ipairs(lines) do
-                    local ln = cfl + i - 1
-                    local ctext = '--' .. l
-                    add_comment_block(ctext, c, Range.singleton(ln))
-                    idx = idx + 1
-                    last = cll
-                  end
-                end
-              end
-            end
-          end
-        end
-
-        for _, v in ipairs(r) do
-          has_lines = true
-          local li = v.lineinfo
-          local fl, ll = li.first.line, li.last.line
-
-          local comments = ast_extract_comments(v, {}, wrap)
-
-          claim_own_comments(comments, fl, ll)
-          get_comments(comments, 'first')
-          add_empties_before(fl)
-          local tex = table.slice(text or {}, fl, ll)
-          local chunk = Chunk(tex, Range(fl, ll))
-          ret:insert(chunk, idx)
-          idx = idx + 1
-          last = ll
-
-          get_comments(comments, 'last')
-        end
-
-        if not has_lines then
-          --- @diagnostic disable-next-line: param-type-mismatch
-          local single_comment = ast_extract_comments(r, {}, wrap)
-          get_comments(single_comment, 'first')
-        end
-
-        if not single then
-          --- the blank lines ending the file; its final
-          --- newline ends its last line and is no block
-          add_empties_before(#text + 1)
-        elseif ret:last().tag ~= 'empty'
-            --- blank lines typed at the end of the block
-            and #string.lines(text) > last
-        then
-          ret:push_back(Empty(last + 1))
+        local lines = type(text) == 'string'
+            and string.lines(text) or text
+        local ret = source_blocks(lines, r)
+        --- blank lines typed at the end of the block are one
+        --- empty block
+        while single and #ret > 1 and ret:last():is_empty()
+          and ret[#ret - 1]:is_empty() do
+          ret:pop_back()
         end
         return true, ret, r
       else

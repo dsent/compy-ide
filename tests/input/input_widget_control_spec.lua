@@ -79,9 +79,9 @@ describe('input surface: widget control #input', function()
       function()
         local input = F.compy_input()
         input.show({ text = 'one' })
-        F.session.press('return')
-        input.show({ text = 'two', force = true })
-        F.session.press('return')
+        -- a walk needs entries: only lines that ran are ones
+        F.widget.model.history:remember({ 'one' })
+        F.widget.model.history:remember({ 'two' })
         F.widget:history_back()
         local walked = F.widget.model.history.index
         assert.is_not_nil(walked)
@@ -97,7 +97,7 @@ describe('input surface: widget control #input', function()
     -- the surface.
     it('a bare re-activation keeps the selection', function()
       local m = UserInputModel(F.cfg, InputEvalText)
-      local w = UserInputController(m, false)
+      local w = UserInputController(m)
       w:init_view({
         render = function() end,
         draw   = function() end,
@@ -758,7 +758,7 @@ describe('input surface: widget control #input', function()
     -- convention any hide() call would have silently broken.
     it('an always-shown widget refuses to hide', function()
       local m = UserInputModel(F.cfg, InputEvalText)
-      local w = UserInputController(m, true):always_shown()
+      local w = UserInputController(m):always_shown()
       assert.is_true(w:is_shown())
       w:hide()
       assert.is_true(w:is_shown())
@@ -769,7 +769,7 @@ describe('input surface: widget control #input', function()
     -- hide() that stopped working.
     it('an ordinary widget still hides', function()
       local m = UserInputModel(F.cfg, InputEvalText)
-      local w = UserInputController(m, true)
+      local w = UserInputController(m)
       w.shown = true
       w:hide()
       assert.is_false(w:is_shown())

@@ -34,21 +34,15 @@ The `snapshot` state is a one-frame transition: on the next `update()` tick, LÖ
 
 ---
 
-## Three Environments
+## Two Environments
 
-This is the most non-obvious architectural decision in the console. There are three Lua environments (tables used as `fenv`):
+There are two Lua environments (tables used as `fenv`):
 
-**`main_env`** — the live console environment. Code typed into the REPL runs here. Contains the project management commands, file I/O, `compy`, `gfx`, etc. Mutated by user REPL commands.
+**`base_env`** — the clean baseline, built once by `prepare_project_env` from a copy of the IDE's own globals (`pre_env`) and the console's commands, file I/O, `compy` (with its `input` surface), `gfx`, etc. Nothing runs in it.
 
-**`compy` is not the same table in both environments, and the difference is one member.** The console's `compy` has **no `input`** — the input surface is built for the project environment only (`get_compy_namespace(terminal, with_input)`, `consoleController.lua`). A console-side surface resolved whichever widget was current, so a command typed at the prompt could reconfigure a running project's widget, while its own hooks were dispatched by nobody; the release removes the member rather than making it work, *"because input API is not yet ready to run out of project sandbox"* (owner, 2026-09-08). **Assignment still raises in both**: `compy.input = {}` at the prompt fails loudly instead of handing the caller a plain table it would believe is the API. What a console-side input surface would have to be is designed and not scheduled — see `doc/development/technical_debt/input.md`, `T-CONSOLE-SURFACE-INTERFERES`, and the BACKLOG entry it points at.
+**`project_env`** — a deep copy of `base_env`, made anew when a project opens and before each run (`_reset_executor_env`). A project's code runs here, and so does every line typed in the console, paused or not (`get_effective_env` returns it): the console reads and changes what the last run left, until the next run makes it anew. `continue()` and `dofile()` run in it as it stands.
 
-**`base_env`** — a frozen snapshot of `project_env` at project-open time. Protected with `table.protect()` (writes are blocked). Serves as the clean baseline that `project_env` is reset to when a project is stopped without closing.
-
-**`project_env`** — the mutable environment in which a project's code runs. Started as a clone of `base_env`, then the project's own `require`/`dofile` calls and global assignments accumulate here. Reset to `base_env` on `_reset_executor_env()`.
-
-The reason for `base_env` vs `project_env`: restarting a project (`Ctrl+Alt+R`) should give it a clean global table, but reopening the project should not — the distinction allows "reset project state" without "close and reopen".
-
-Sources: `prepare_env` and `prepare_project_env` (consoleController.lua:341 and 482), `_set_base_env`, `_reset_executor_env`.
+Sources: `prepare_project_env`, `_set_base_env`, `_reset_executor_env`, `get_effective_env`.
 
 ---
 
@@ -58,12 +52,66 @@ When Enter is pressed in the REPL (`ConsoleController:keypressed`, line 1009):
 
 1. `evaluate_input()` is called
 2. The input text is validated via the `Evaluator` (LuaEval — parse via metalua)
-3. If parse succeeds: `codeload(code, run_env)` compiles the string into a chunk with the appropriate `fenv` (console env normally; project env during `inspect`)
-4. `run_user_code(f, self)` executes the chunk inside `use_canvas` — so any `gfx.*` calls go to the virtual canvas
-5. Output from `print()` goes to the terminal via the `redirect_to` mechanism (set up in `src/main.lua`)
-6. On success: input is cleared. On error: error is set on the input model and displayed in the status line.
+3. If parse succeeds: `codeload(code, run_env)` compiles the whole line, every statement in it, into one chunk whose `fenv` is the project's environment
+4. A line the parse refuses, or one Lua does not load, is not taken: its message shows in the notice band directly above the status line, as the file editor shows its messages, and the line stays in the field (`user_input.md`, "Error state"). A statement the parse continues takes Enter as its next line, and the band says so in orange (`UNFINISHED`, a notice).
+5. The line is accepted: it enters the history, and `CanvasModel:echo` writes it to the output in `colors.terminal.echo` (blue), on a row of its own, before it runs.
+6. `run_user_code(f, self)` executes the chunk inside `use_canvas` — so any `gfx.*` calls go to the virtual canvas. Output from `print()` goes to the terminal via the `redirect_to` mechanism (set up in `src/main.lua`)
+7. The input is cleared (`clear_text`) whether the line ended well or in an error; it is in the history, and Up brings it back (the maintainer's ruling of November 16, 2026). On error, `CanvasModel:write_error` writes the error to the output after what the line printed. Any message shown before the line's Enter went with that key. Only a line that was not taken stays in the field: one that does not parse, does not load, or is unfinished.
 
-During `inspect` state, the REPL runs code in `project_env`, allowing the user to inspect and mutate the paused project's state.
+The console has two channels (the maintainer's ruling of November 15, 2026). The notice band is the field's: it says why a line was not taken, and in orange a hint that is no error or a pause's text. What a command does is said in the output, each on a row of its own: `CanvasModel:write_error` writes a run's error in `colors.terminal.error` (red, for errors alone), `CanvasModel:write_refusal` a command's refusal in `colors.terminal.refusal` (a burnt orange), and an answer, such as "Project x opened", is printed in the output's own colour. Through `write_error` go a typed line's run error and a program's load and run errors (`run_project`, and `user_error_handler` in `controller.lua`, which pauses the program without a message); through `write_refusal` every console command's refusal (`messages` in `consoleController.lua`, and `ProjectService.messages` for a file or a project; `ProjectService:run` says which of its errors are refusals). A project is always open: `ConsoleController:open_project` refuses a name that cannot be a project's (`ProjectService.valid_name`) before it closes anything, puts back the project that was open when another cannot be opened or made on the card, and `close_project` lands in `scratchpad`. Only a card that cannot hold `scratchpad` leaves none open; every command that needs a project asks `ConsoleController:open_or_refuse`, which then says so as a refusal. Each run starts from a fresh environment (the maintainer's ruling "A run starts from a clean environment"). The run seam in `run_project` is one thing: end a run that is live exactly as a stop does (`stop_project_run`: handlers, input hooks and shortcuts, `before_exit`, serial handlers, the widget, then the modules, `evacuate_required`); with nothing live there is nothing to end, and only the modules go. Then a new environment, as opening the project makes it (`_reset_executor_env`), then the graphics state a program set goes (`reset_graphics`: `love.graphics.reset`; the bound canvas is bound again, and `run_project` sets the IDE's font after), then start. A run that ends for good resets the graphics state too, so the IDE draws on under its own (`_stop_project_run`, and the error of a program's first lines); a pause does not, so `continue()` resumes with the program's. The IDE draws its own things in its own graphics state, through one helper (`src/view/ownState.lua`: `push('all')`, `love.graphics.reset`, the IDE's font, the drawing, `pop()`). Every place the IDE draws goes through it: `View.draw` (the console's output and the program's canvas over it, the status line, the band, the field, the key card and the editor, the output's cached canvas among them), `draw_field` in `controller.lua` (a program's input field), `UserInputView:render` (a field's cached canvas, which also renders from a program's `show()` or `set_text()` or a key, outside any draw) and `View.drawFPS` (the frame-rate overlay). `CanvasModel:clear_canvas` clears the program's own canvas, and puts aside the scissor and colour mask itself. A program's scissor, wireframe, colour, shader, blending or transform reaches none of the IDE's pixels, running, paused or stopped, and the pop gives the program its state back, so a paused program resumes with it. This costs a reset and a font call a frame, and four calls more while a program's field shows. A stop or a run a program asks for is made once its code has returned (see "A lifecycle call ends the code that made it" below), after the draw wrapper's `pop()`, with no push of the program's still to be popped: the reset pops what the program pushed and never popped (`gfx.getStackDepth`), and none of it while one of the IDE's own pushes is under way (`view.ownState` and the draw wrapper count theirs in `End.ide_pushes`), then resets. Opening another project has done the stop and the reset already, and Ctrl+R stops before it calls the seam, so each happens once. With nothing live, the seam also clears three slots every environment shares, which a new environment does not: `compy.before_exit` (removed, not called), the hooks and shortcuts of `compy.input`, and the program's serial handlers, as `reset()` does (round 21); a question `compy.ask` armed belongs to its widget, so none asked before reaches a later run's field (round 22). Known limit: the `compy` tables are shared by the console's lines and every run, so what a typed line overwrites in them (`compy.serial.send`, a field of its own in `compy.input.hooks`) stays until the IDE restarts; the console's own environment, Beads `compy-ide-resident-programs-in-the-console-context`, removes this. Known limit: a program that calls `compy.input.show` or `set_text` inside its own `love.graphics.stencil(function() … end)` has that stencil write cancelled by the IDE's reset as the field renders, and the `pop()` does not resume it. The modules forgotten are the project's own and those a program loaded first (`program_loaded`, through its `require`); one the IDE had loaded itself stays shared. What a run that ends by itself leaves stays in the environment, for the console's lines to inspect, until the next run or a stop; `continue()` and `dofile()` run in it as it stands.
+
+| | natural end | pause / handler error | `continue()` | stop, Ctrl+Q, close, first-lines error | run seam |
+| --- | --- | --- | --- | --- | --- |
+| Globals, `love` handlers | kept | kept | kept | cleared (environment made anew) | made anew |
+| Hooks, shortcuts, `before_exit`, serial handlers, input field | kept | kept | kept | cleared (`before_exit` called first on a stop) | cleared if a run was live |
+| Modules | kept | kept | kept | cleared | cleared |
+| Graphics state, key repeat and text input | kept | kept | kept | reset | graphics reset |
+| Sounds playing | kept | kept | kept | play to their end, a loop no longer repeats (`reset()`: stopped) | as the stop |
+| The program's picture | kept | kept | kept | cleared | cleared |
+| Output, kept rows, history, editor files | kept | kept | kept | kept | kept | A pause is the debugger's: `pause("text")`'s text and Ctrl+Pause's "BREAK into program" show in the band as an orange notice when the program pauses, and the program's screen is not touched (`ConsoleController:suspend`). `run("name")` opens and runs a project that exists and makes none: a name no project has is refused (`messages.no_such_project`), and `project("name")` makes one.
+
+During `inspect` state too the REPL runs code in `project_env`, the paused project's, which `continue()` resumes as it stands.
+
+---
+
+## The Output and Its Kept Rows
+
+The output is the terminal's grid (`src/lib/terminal.lua`), 64 by
+16 cells, sized in `src/model/canvasModel.lua`. When a row scrolls
+off its top, `terminal_roll_up` hands it, still whole, to
+`terminal.on_row_leaving`; `CanvasModel` keeps it in a `KeptRows`
+store (`src/model/keptRows.lua`): its text with a style (color, back
+color, reversal) for each run of characters, the newest
+`output_kept` rows (1,000, `src/main.lua`). Nothing else enters
+the kept rows: `CanvasModel:reset` (a clear from code,
+`compy.terminal.clear()`, and the play mode's quit) erases the 16
+rows alone, and `CanvasModel:erase` (Ctrl+L) also drops what still
+waits to be written and forgets the kept rows. Closing or opening
+a project leaves both as they are.
+
+The console's text is one sequence: the kept rows, numbered from
+`kept.first` to `kept.last`, then the screen's rows down to the
+last that holds text. At rest the screen is drawn as it is. A
+scrolled view (`CanvasModel.view_top`, its first row's number) is
+a window of 16 consecutive rows of the sequence, drawn by
+`TerminalView` from the kept rows and the grid without changing
+either; a number names the same row while new rows arrive, so new
+output leaves the view where it is. `scroll_row`, `scroll_page`,
+`to_oldest` and `to_rest` move it (the keys in
+`src/model/input/consoleKeys.lua`). Every other key brings the
+screen back first, except a modifier or a lock key on its own and
+F1 (`ConsoleController:_back_to_screen`). A key or a text that a
+running program takes brings it back too, except a lone modifier
+or lock (`takes_screen` in `src/controller/controller.lua`), and
+so does a running program's input field when it comes up
+(`ConsoleController:pass_time`); a paused program's field leaves
+the keys to the console.
+`CanvasView:draw_cues` draws the editor's continuation cue
+(`src/view/continuationCue.lua`) at a cut edge of a scrolled view.
+
+A key reaches these only when it reaches the console: a program's
+shown input field, its own `love.keypressed` or its own `love.draw`
+keeps every key (`fall_through` in `src/controller/controller.lua`).
 
 ---
 
@@ -80,15 +128,24 @@ The custom loader is stored in `self.loaders[name]` so it can be removed on clos
 
 ### Running a project
 
-`run_project(name)` (line 230):
-- Calls `ProjectService:run()` which loads `main.lua` via the project's filesystem mount
+`run_project(name, stopped, entry)`:
+- With `entry` (`run(nil, "second.lua")`, `run("name", "second.lua")`; Option 2 of the multi-entry-point proposal, its two-argument form only), checks the file name as file names are checked (`Project.writable_name`) and that the project holds it as a file (`FS.exists(path, 'file')`: a folder is refused), before anything changes; a missing file is refused "There is no second.lua in this project." It records `self.entry`, the file, when the file loads, and the run's end forgets it in the flush, by any way the run ends: the entry point lives with the run (the maintainer's ruling of November 16, 2026). Ctrl+R (`restart()`) restarts a live program from it, and does nothing with none live, in the console and the editor alike (`reserved_restart`, asking `program_live`, as Ctrl+Q's stop does); Ctrl+T from the editor runs `main.lua`. Known limit: a project with a second entry point has no key that runs it from the editor (Beads `compy-ide-run-key-for-a-second-entry-point`)
+- Calls `ProjectService:run()` which loads `main.lua`, or `entry`, via the project's filesystem mount
 - Sets state to `running`
 - Calls `run_user_code(f, cc, path)` which: executes the chunk in `use_canvas`, then calls `set_user_handlers(env['love'], cc)` to detect and register any `love.*` event handlers the project defined
-- If the project defines no blocking handlers (`love.draw`, `love.update`), state immediately returns to `ready`; with no input widget shown and no pointer handler either, nothing of the program answers the pointer while the console is on screen, so `flush_program_state` puts the mouse back, even if keys or serial handlers still reach the program
+- If the project defines no blocking handlers (`love.draw`, `love.update`), state immediately returns to `ready`; with no input widget shown and no pointer handler either, nothing of the program answers the pointer while the console is on screen, so `restore_console_mouse` puts the mouse back, even if keys or serial handlers still reach the program
 
 ### Stopping vs suspending vs quitting
 
-**`stop_project_run()`**: Clears user handlers, calls `evacuate_required()` to remove project modules from `package.loaded`, restores default draw, resets widget input, and puts the mouse back as the console needs it (`flush_program_state`, which `run_project` also calls before a run starts and on a top-level raise). State → `ready`. The project's global state persists in `project_env` (can be inspected at the REPL).
+**`stop_project_run()`**: The one flush, `flush_program_state` (Beads `compy-ide-terminate-flush`): a stop, Ctrl+Q, the close of a project (through `_close_project`), an error in a program's first lines (which removes `compy.before_exit` without calling it) and the run seam's stop all end there. It drops what the program queued for the board, calls `compy.before_exit`, forgets the modules, puts the console's mouse, handlers and draw back, destroys the input field, clears the program's canvas, pops what the program pushed and never popped and resets the graphics state (no program code is on the stack at a stop, and the IDE's own push around a program's draw is never popped), puts the master volume back to LÖVE's 1 (the IDE sets none), ends looping on what plays and lets it play out (`love.audio.pause()` returns every playing source, LÖVE 11; each is set not to loop and played again from where it was; a source the program paused or stopped is left; `compy.audio`'s sounds are one-shots), puts key repeat and text input back as `main.lua` set them, clears the program's handlers, hooks, shortcuts and serial handlers, makes the environment anew, so the program's globals go, and collects garbage twice when a run ended there. State → `ready`. A program's natural end and a pause flush nothing. The flush has two halves. Ending what a program left (what was queued for the board, `before_exit`, the environment made anew, the garbage collected) happens once for each end, by construction: there is something to end while a run is live, a program holds the screen or waits paused (`app_state` other than `ready` and `editor`), or a typed line has run since the last flush (`state_left`), and the flush clears all three and returns whether it ended something. A second path to the same end (play mode's quit, whose close stops again; a program's first lines can no longer call `stop()` and then raise, since the call ends them) finds nothing to end, so a line `before_exit` queued for the board stays queued. Putting the IDE's baseline back (handlers, mouse, input field, modules, picture, graphics, looping, volume, keyboard) is idempotent and happens every time. A close whose stop made the environment anew tells the open that follows, which does not make it again. The console's `reset()` (`ConsoleController:reset`) is the flush too, a program live or not (a running one is stopped, its `before_exit` called; with nothing live a `before_exit` a typed line set is removed, not called), then `love.audio.stop()`, the explicit silence, then the output and kept rows erased as Ctrl+L erases them, then `Runtime reset for <project>. All files kept.` in the output, the one line on the screen, and `ConsoleController:reset` returns `{ scope = "runtime", project = <name>, snapshot = nil }` (the reset specification's IS4.1 and API4.1); called from code, `reset()` ends that code and returns nothing (design B, below); with an argument it is refused, since the reset specification's scoped resets are later work.
+
+### A program that takes keys owns the keyboard
+
+The maintainer's ruling of November 16, 2026: a live program that has any way of taking keys or text (its own `love.keypressed`, `love.keyreleased` or `love.textinput`, a key or text hook, a key or text shortcut, its own shown field) owns the keyboard, and nothing of a key or its text that its chain leaves reaches the console (`takes_keys` in `controller.lua`, one predicate for the key and the text paths, asked as each event comes). Behind a program that takes keys and draws nothing, the console's field and its cursor are hidden while the program owns the keys (`Controller.program_owns_keys`, which `ConsoleView:draw` asks each frame; `UserInputView.field_hidden` renders the status line alone, the field's rows background, and the notice band is not drawn): the output and the status line stay where they are, and the field comes back by itself at a pause, a stop, or when the program takes keys no more. A program that wants typing shows its own field, which is drawn over the console's as before. A draft of several lines typed before the program took the keys keeps the status line where that draft put it, with as many blank rows below it, until the field comes back. A program that takes no keys and draws nothing leaves the keyboard to the console, and a program that draws keeps every unconsumed event from it, as before (`user_draw`). The reserved chords are the gate's, untouched. A key whose press reached the console before the program took keys keeps the console as its receiver (`fell_through`). The console's key card comes up only while F1 reaches the console, so not behind a program that takes keys.
+
+### A lifecycle call ends the code that made it
+
+The maintainer's ruling of November 16, 2026 (design B): `stop()`, `reset()`, `run(...)`, `project(...)`, `close_project()`, `reset_scratchpad()`, and `edit(...)` when it must stop a program idle behind the console, called from a program or a typed line, end the code that made the call at once and are made once that code has returned to the IDE (`src/util/program_end.lua`). Each records one request and raises a private value, `ENDED`, which unwinds the calling code, the functions it was called from included. Every place the IDE calls into a program or a typed line counts the call and takes `ENDED` as no error, saying nothing: `wrap` in `controller.lua` (every handler, hook, shortcut and owed release, `love.update`, `love.draw`), `run_user_code` (a program's first lines, a typed line), `framework_before_exit`, the serial dispatcher, a field's parser and highlighter as the field renders (`End.counted`, in `UserInputModel:highlight`), and `eval`, which passes it on. Every place the IDE enters from LÖVE or starts a run holds the request (`End.held`: the route's handler wrapper, the update wrapper, both draws, the console's and a program's, `evaluate_input`, `run_project`), and the outermost of them makes it at its end, once, off the canvas and after the draw wrapper's `pop()`. So nothing after `stop()` in the same handler runs, and nothing a program does can undo the stop's flush. A typed `stop(); print(1)` prints nothing after the stop, and `r = reset()` assigns nothing: `reset()` called from code does not return, so the reset specification's API4.1 table reaches only the IDE's own call. A refusal is said at the call and ends nothing, the code going on: "Nothing is running." for `stop()`, an argument to `reset()`, a project name that cannot be one, every refusal of an `edit()` that would stop a program (`_edit_admit`), and every refusal of a run (`_run_accepted`, the file to run read as `ProjectService:run` reads it), each asked again when the call is made. A typed `run()` while a program runs or is paused is refused, "A project is already running"; a program's own `run()` replaces it, the stop and then the run as Ctrl+R makes them (a run is the program's when it is made deeper than the typed line's own code, `ConsoleController.typing`). The first request wins: the code after it never ran, and only the program's own `pcall` or `coroutine.resume`, which swallow `ENDED`, reach a second, which is dropped. A request made while a stop is under way, in `compy.before_exit`, ends the hook and is dropped: the stop goes on. A key or a click whose handler made a request goes no further: the console does not get it before the run ends. `pause()` is no such call: it pauses the program at the end of its frame, its code going on (`suspend_run`). Code the IDE calls from inside a program's own call, such as a field's callback during `compy.input.show`, ends at the request; the program's call it came from goes on to its end, and the request is made after it. Limit: a program's own `pcall(stop)`, a `pcall` around code that makes such a call, or a `coroutine.resume` of a coroutine that makes one, swallows `ENDED`, and its code runs on; the request stays and is made when that code returns to the IDE.
 
 **`suspend_run(msg)`**: Requests a snapshot. State → `snapshot` → `inspect` on next tick. Handlers saved; default handlers restored temporarily. The console gets its mouse back and the program's is saved. User can inspect and continue.
 
@@ -140,7 +197,7 @@ Projects receive a `compy` table with:
 | Field | Contents |
 |---|---|
 | `compy.audio` | Sound effects (`sfx.beep()`, `sfx.gameover()`, etc.) — `src/util/audio.lua` |
-| `compy.terminal` | VT-100 terminal control (`gotoxy`, `clear`, `show_cursor`, `hide_cursor`) |
+| `compy.terminal` | VT-100 terminal control (`gotoxy`, `clear`); a `gotoxy` position outside the screen is taken to the nearest edge |
 | `compy.graphics` | Extended graphics (`shape2d`) — `src/util/graphics/shape2d.lua` |
 | `compy.fonts` | Font path constants (`mono`, `sans`, `serif`, etc.) — `src/util/namespace/fonts.lua` |
 | `compy.input` | Text input widget surface (`show`/`hide`/`configure`/`clear`/`set_text`) — see [`user_input.md`](user_input.md) |
@@ -155,6 +212,8 @@ Projects receive a `compy` table with:
 |---|---|
 | `src/controller/consoleController.lua` | Everything: env setup, project lifecycle, REPL eval, widget input API |
 | `src/model/consoleModel.lua` | Model aggregate (input, editor, output canvas, project service) |
+| `src/model/canvasModel.lua` | The output: the terminal grid, its kept rows, the scrolled view, the echo |
+| `src/model/keptRows.lua` | The rows scrolled off the output's top |
 | `src/model/project/project.lua` | `ProjectService` and `Project` — open/run/close, file I/O, filesystem mount |
 | `src/model/io/redirect.lua` | Redirects `print()` output to the terminal |
 | `src/view/consoleView.lua` | Top-level view compositor |

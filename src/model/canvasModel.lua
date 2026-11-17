@@ -3,11 +3,14 @@ require("util.string.string")
 require("util.view")
 local class = require('util.class')
 local Terminal = require("lib.terminal")
+require("model.keptRows")
 
 local gfx = love.graphics
 
 --- @class CanvasModel
 --- @field terminal table
+--- @field kept KeptRows --- the rows scrolled off its top
+--- @field view_top integer? --- the scrolled view's first row
 --- @field canvas love.Canvas
 --- @field term_canvas love.Canvas
 --- @field cfg table
@@ -32,7 +35,7 @@ function CanvasModel.new(cfg)
     h = cfg.view.h
   end
   local canvas = gfx.newCanvas(w, h)
-  local custom_height = cfg.view.fh * cfg.view.lh
+  local custom_height = cfg.view.fh
   -- The terminal spans only the visible console region: the full
   -- view height minus the statusline and input line. Sizing it to
   -- the full height gives it rows that render under the input line,
@@ -53,8 +56,13 @@ function CanvasModel.new(cfg)
   term:set_cursor_backcolor(unpack(color.bg))
   term:clear()
   local t_canvas = term.canvas
+  local kept = KeptRows(cfg.output_kept)
+  term.on_row_leaving = function(chars, states)
+    kept:keep(chars, states)
+  end
   local self = setmetatable({
     terminal = term,
+    kept = kept,
     canvas = canvas,
     term_canvas = t_canvas,
     cfg = cfg,
@@ -63,8 +71,11 @@ function CanvasModel.new(cfg)
   return self
 end
 
+--- Text that is only spaces and line ends is written as any
+--- other: an empty print() makes a blank row.
+--- @param text string
 function CanvasModel:write(text)
-  if string.is_non_empty_string(text) then
+  if type(text) == 'string' and text ~= '' then
     self.terminal:print(text)
     self.terminal.dirty = true
   end
@@ -79,10 +90,213 @@ function CanvasModel:push(newResult)
   end
 end
 
+--- An accepted console line, written to the output before it
+--- runs: on a row of its own, each of its lines on a row, in
+--- the echo's color (the maintainer's ruling "Console
+--- scrollback, first version")
+--- @param lines string[]
+function CanvasModel:echo(lines)
+  local t = self.terminal
+  local colors = self.cfg.view.colors.terminal
+  t:fresh_row()
+  t:set_cursor_color(colors.echo)
+  t:print(string.unlines(lines) .. '\n')
+  t:set_cursor_color(colors.fg)
+  t.dirty = true
+end
+
+--- `msg` on a row of its own after what was printed, in
+--- `color`, the output's own color after it
+--- @param model CanvasModel
+--- @param msg any
+--- @param color number[]
+local function say(model, msg, color)
+  local t = model.terminal
+  t:fresh_row()
+  t:set_cursor_color(color)
+  --- a byte that is not UTF-8 shows as U+FFFD, as in the band
+  t:print(string.scrub(tostring(msg)) .. '\n')
+  t:set_cursor_color(model.cfg.view.colors.terminal.fg)
+  t.dirty = true
+end
+
+--- A run's error, a typed line's or a program's, in the
+--- output's error color, the theme's red, which is for errors
+--- alone (the maintainer's rulings of November 15, 2026)
+--- @param msg string
+function CanvasModel:write_error(msg)
+  say(self, msg, self.cfg.view.colors.terminal.error)
+end
+
+--- A command's refusal, which is no error, in the output's
+--- refusal color
+--- @param msg string
+function CanvasModel:write_refusal(msg)
+  say(self, msg, self.cfg.view.colors.terminal.refusal)
+end
+
+--- Clear the 16 rows, as a clear from code does: what was on
+--- them is gone, and the kept rows stay
 function CanvasModel:reset()
   self.terminal:clear()
   self.terminal:move_to(1, 1)
   self.terminal.dirty = true
+end
+
+--- The user's own clear (Ctrl+L): the screen and the kept rows,
+--- and what still waited to be written when it was pressed, so
+--- that none of it appears afterwards
+function CanvasModel:erase()
+  self.terminal:discard()
+  self:reset()
+  self.kept:forget()
+  self:to_rest()
+end
+
+-------------------------
+--- the scrolled view ---
+-------------------------
+--- The console's text is one sequence: the kept rows, numbered
+--- `kept.first` to `kept.last`, then the rows on screen down
+--- to the last one that holds text, numbered on from
+--- `kept.last + 1`. At rest the console shows the screen as it
+--- is; scrolled, it shows a window of as many rows as the
+--- screen has, `view_top` its first, drawn from the kept rows
+--- and the screen without changing either. A number names the
+--- same row while newer rows arrive, so new output leaves a
+--- scrolled view on the rows it shows.
+
+--- The last row on screen that holds text, 0 when none does
+--- @return integer
+function CanvasModel:last_text_row()
+  local buffer = self.terminal.buffer
+  for y = #buffer, 1, -1 do
+    for _, c in ipairs(buffer[y]) do
+      if c ~= ' ' then return y end
+    end
+  end
+  return 0
+end
+
+--- The sequence's last row, and the top of the view that the
+--- first step from rest shows: the last row that holds text at
+--- its bottom and history above it, or the oldest kept row at
+--- its top when there is too little history to fill it
+--- @return integer last, integer filled
+function CanvasModel:view_bounds()
+  local k, h = self.kept, self.terminal.height
+  local last = k.last + self:last_text_row()
+  local bottom = math.min(k.last + h - 1, last)
+  return last, math.max(k.first, bottom - h + 1)
+end
+
+--- @return boolean
+function CanvasModel:is_scrolled()
+  return self:top() ~= nil
+end
+
+--- The view's one rule: a scrolled view's top lies between the
+--- oldest kept row and the filled view's top, so that it is a
+--- full window whenever enough rows exist, however the
+--- sequence's end moved under it (a clear from code, a short
+--- screen, rows dropped at the limit). Rest is a state of its
+--- own, and so is having no kept row: nothing to scroll to.
+--- Every move of the view goes through here.
+--- @param top integer? --- nil for rest
+function CanvasModel:show(top)
+  if top and self.kept:count() == 0 then top = nil end
+  if top then
+    local _, filled = self:view_bounds()
+    top = math.min(math.max(top, self.kept.first), filled)
+  end
+  if top ~= self.view_top then
+    self.view_top = top
+    self.terminal.dirty = true
+  end
+end
+
+function CanvasModel:to_rest()
+  self:show(nil)
+end
+
+--- The view's top as the rule holds it now
+--- @return integer?
+function CanvasModel:top()
+  self:show(self.view_top)
+  return self.view_top
+end
+
+--- One row toward older output (`-1`) or newer (`1`). From rest
+--- the first step shows the filled view; from it a step toward
+--- newer output returns to rest.
+--- @param dir integer
+function CanvasModel:scroll_row(dir)
+  local _, filled = self:view_bounds()
+  local t = self:top()
+  if not t then
+    if dir < 0 then self:show(filled) end
+  elseif dir < 0 then
+    self:show(t - 1)
+  elseif filled < t + 1 then
+    self:to_rest()
+  else
+    self:show(t + 1)
+  end
+end
+
+--- A page of one row fewer than the screen: toward older
+--- output the row at the top of the view goes to its bottom,
+--- toward newer the bottom row goes to its top, never past the
+--- filled view, so that no row is skipped; from the filled view
+--- a page down returns to rest. At rest the view is the
+--- screen's rows.
+--- @param dir integer
+function CanvasModel:scroll_page(dir)
+  local h = self.terminal.height
+  local _, filled = self:view_bounds()
+  local t = self:top()
+  if dir < 0 then
+    self:show((t or self.kept.last + 1) - (h - 1))
+  elseif t then
+    if filled <= t then
+      self:to_rest()
+    else
+      self:show(t + (h - 1))
+    end
+  end
+end
+
+--- The oldest kept row at the top of the view
+function CanvasModel:to_oldest()
+  self:show(self.kept.first)
+end
+
+--- @class ViewRow
+--- @field n integer --- its number in the sequence
+--- @field kept KeptRow? --- a kept row
+--- @field y integer? --- or a row on screen
+
+--- The scrolled view's rows, top to bottom (a row past the
+--- sequence's end is an empty table), and whether older rows
+--- lie above it and newer ones below; nil at rest
+--- @return ViewRow[]? rows, boolean above, boolean below
+function CanvasModel:window()
+  local t = self:top()
+  if not t then return nil, false, false end
+  local k, h = self.kept, self.terminal.height
+  local last = self:view_bounds()
+  local rows = { }
+  for i = 0, h - 1 do
+    local n = t + i
+    if n <= k.last then
+      rows[#rows + 1] = { n = n, kept = k:get(n) }
+    elseif n - k.last <= h then
+      rows[#rows + 1] = { n = n, y = n - k.last }
+    else
+      rows[#rows + 1] = { n = n }
+    end
+  end
+  return rows, k.first < t, t + h - 1 < last
 end
 
 function CanvasModel:invalidate_terminal()

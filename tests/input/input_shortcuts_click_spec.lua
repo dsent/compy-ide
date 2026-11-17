@@ -18,15 +18,14 @@ describe('input surface: inbound events — shortcuts and clicks'
   teardown(function() F.teardown() end)
   before_each(function() F.reset() end)
 
-  -- Global shortcuts are non-consuming
-  -- (doc/development/internals/user_input.md, "Dispatch chain":
-  -- "None of these consume the key: it still reaches the active
-  -- route afterward"): a framework shortcut fires its effect
-  -- and the key still reaches its route.
-  describe('global shortcuts do not consume the key (#disputable)',
-    function()
+  -- Global shortcuts consume their key: a reserved chord's key
+  -- is the IDE's for its whole press, and the route sees
+  -- neither its press, its repeats nor its release (the
+  -- maintainer's ruling of November 16, 2026, which reverses
+  -- D-RESERVE-TABLE's "a reservation never consumes").
+  describe('global shortcuts consume their key', function()
 
-      it('a shortcut fires but does not consume', function()
+      it('a shortcut fires and the route sees nothing', function()
         love.state.app_state = 'running'
         local n = 0
         local orig = love.keypressed
@@ -34,14 +33,14 @@ describe('input surface: inbound events — shortcuts and clicks'
         mock.keystroke('C-pause', F.session.press, false)
         love.keypressed = orig
         assert.equal('snapshot', love.state.app_state)
-        assert.equal(1, n)
+        assert.equal(0, n)
       end)
 
       -- cfg.mode is a global framework state: 'play' means the
       -- framework runs on an end device for a player, 'dev'
       -- that a developer runs it to work on it. 'play' narrows
       -- the shortcut set so a player cannot manage projects:
-      -- restart/profile stay live, quit/stop/quickswitch do not
+      -- restart/profile stay live, stop/quickswitch do not
       -- (doc/development/decisions/input.md, D-ROUTE-OWNS;
       -- doc/development/internals/user_input.md, "Dispatch
       -- chain"). The shared fixture is built in dev mode, so
@@ -52,9 +51,11 @@ describe('input surface: inbound events — shortcuts and clicks'
           local stub = {
             cfg = { mode = 'play' },
             restart = function() calls.restart = true end,
-            quit_project = function() calls.quit = true end,
-            stop_project_run = function() end,
+            stop_project_run = function() calls.stop = true end,
+            finish_edit = function() calls.leave = true end,
             keypressed = function() end,
+            card_shows = function() return false end,
+            key_released = function() end,
           }
           local saved    = table.clone(love.handlers)
           local saved_kp = love.keypressed
@@ -62,12 +63,13 @@ describe('input surface: inbound events — shortcuts and clicks'
           love.state.app_state = 'running'
           Controller.setup_callback_handlers(stub)
           local kp = love.handlers.keypressed
-          mock.keystroke('C-M-r', kp, false)
+          mock.keystroke('C-r', kp, false)
           mock.keystroke('C-q', kp, false)
           for k, v in pairs(saved) do love.handlers[k] = v end
           love.keypressed = saved_kp
           assert.is_true(calls.restart)
-          assert.is_nil(calls.quit)
+          assert.is_nil(calls.stop)
+          assert.is_nil(calls.leave)
         end)
     end)
 

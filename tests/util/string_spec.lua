@@ -404,5 +404,47 @@ describe("StringUtils #string", function()
       assert.same({ '' }, string.wrap_words('', 10))
       assert.same({ 'é é', 'é' }, string.wrap_words('é é é', 3))
     end)
+
+    local R = string.REPLACEMENT
+
+    it('shows bytes that are not UTF-8 as U+FFFD', function()
+      -- the first byte of é alone, as a lexer may quote it
+      assert.same({ 'a `' .. R .. "'", 'b' },
+        string.wrap_words("a `\195' b", 5))
+      assert.same({ R .. R .. ' x' },
+        string.wrap_words('\255\128 x', 10))
+      assert.same({ 'é' .. R }, string.wrap_words('é\195', 4))
+    end)
+  end)
+
+  describe('scrub', function()
+    local R = string.REPLACEMENT
+
+    it('leaves UTF-8 as it is', function()
+      for _, s in ipairs({ '', 'abc', 'é', 'п = 1', 'x = "ж"',
+        '😀', '\239\191\189' }) do
+        assert.equal(s, string.scrub(s))
+      end
+    end)
+
+    it('replaces each byte that forms no character', function()
+      assert.equal('x = ' .. R, string.scrub('x = \255'))
+      assert.equal(R .. 'a', string.scrub('\195a'))
+      -- a continuation byte with no lead
+      assert.equal('a' .. R .. 'b', string.scrub('a\128b'))
+      -- a character cut short at the end
+      assert.equal('ok' .. R .. R, string.scrub('ok\240\159'))
+    end)
+
+    it('refuses overlong forms, surrogates and what is ' ..
+      'past U+10FFFF', function()
+      -- "/" overlong in two bytes
+      assert.equal(R .. R, string.scrub('\192\175'))
+      -- U+D800
+      assert.equal(R .. R .. R, string.scrub('\237\160\128'))
+      -- U+110000
+      assert.equal(R .. R .. R .. R,
+        string.scrub('\244\144\128\128'))
+    end)
   end)
 end)

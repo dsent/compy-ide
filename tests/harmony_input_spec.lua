@@ -66,6 +66,8 @@ local function gateway()
     cfg = { mode = 'dev' },
     edit = function() calls.edit = true end,
     stop_project_run = function() calls.stop = true end,
+    card_shows = function() return false end,
+    key_released = function() end,
   }
   Controller.setup_callback_handlers(cc)
   return calls

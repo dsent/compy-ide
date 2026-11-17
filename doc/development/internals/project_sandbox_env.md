@@ -48,7 +48,7 @@ lives in a global subsystem nobody snapshots.
 |---|---|---|
 | **T1 — handlers** (LÖVE calls these "callbacks"; here the word is the widget's — see `../decisions/input.md`, *"Vocabulary — hook, callback, handler"*) | `love.draw`, `love.update`, `love.keypressed`, `love.textinput`, `love.mouse*`… defined by the project | **Yes — framework-managed.** Set on the project's cloned `love`; harvested by `save_user_handlers(runner_env['love'])` (`consoleController.lua:824`) and wired into the real dispatch; reset to defaults on stop (`set_default_handlers` / `restore_user_handlers`, `controller.lua:826`). No leak. |
 | **T2 — `compy.*`** | `compy.terminal`, `compy.audio`, `compy.graphics`, `compy.input` **(supported since 1.0.0-rc20260712)**… injected into the env (`get_compy_namespace`, `consoleController.lua:360`) | **Yes — framework wrappers.** The project calls a controlled surface; the framework owns the underlying object. No leak. |
-| **T3 — raw `love.*` imperative calls** | `love.keyboard.setKeyRepeat`/`setTextInput`, `love.mouse.setRelativeMode`/`setVisible`, raw `love.audio.newSource`/`play`, cursor… called (not defined) by the project | **The mouse only.** These invoke the shared C functions → mutate **real global SDL/LÖVE subsystem state**. The framework puts the mouse back (relative mode, grab, visibility, cursor) whenever a run ends and before one starts (`flush_program_state`). Keyboard modes and audio are not restored across run boundaries. **They leak into the IDE/console after the project exits.** |
+| **T3 — raw `love.*` imperative calls** | `love.keyboard.setKeyRepeat`/`setTextInput`, `love.mouse.setRelativeMode`/`setVisible`, raw `love.audio.newSource`/`play`, cursor… called (not defined) by the project | **Mouse, key repeat, text input, audio.** These invoke the shared C functions → mutate **real global SDL/LÖVE subsystem state**. The framework puts the mouse back (relative mode, grab, visibility, cursor) whenever a run ends and before one starts (`restore_console_mouse`); the terminate flush (`flush_program_state`: a stop, Ctrl+Q, a project's close, a first-lines error, `reset()`) also ends looping on what plays, letting it play out (`reset()` stops it), and puts key repeat and text input back as `main.lua` set them. A program that ends by itself, or pauses, keeps them as it set them. |
 
 ### Font at project startup
 
@@ -84,10 +84,11 @@ slot is then reset to the default in the same function, so the next project star
 inherit the previous one's teardown.
 
 Every stop path that runs a project reaches `stop_project_run`, so the hook fires on all of them:
-`Ctrl+Q`, `Ctrl+S` and `Ctrl+T` into the editor (the gate's `RESERVED` table, `controller.lua`), and
-the `Ctrl+Esc` / `love.quit` path (`Controller.set_love_quit`, which stops the project instead of
-quitting whenever one is running or the console is still interactive). The only exit that runs no project code
-is quitting with **no** project running, where there is nothing to tear down.
+`Ctrl+Q`, `Ctrl+R` and `Ctrl+T` into the editor (the gate's `RESERVED` table, `controller.lua`), and
+the `love.quit` path (`Controller.set_love_quit`, which stops the project instead of
+quitting whenever one is running or the console is still interactive). Two exits run no project code:
+quitting with **no** project running, where there is nothing to tear down, and `Ctrl+Esc`, which exits
+the whole IDE at once without a stop (`Application.request_application_exit`).
 
 What it is for: **project-internal** teardown — save a score, flush a memo, stop a timer. It is not a
 restore mechanism for T3 global state, which the project cannot restore reliably in any case

@@ -68,9 +68,13 @@ local config_view = function(flags)
   local font_cjk = gfx.newFont(fonts.cjk, font_size * (2 / 3))
   font_main:setFallbacks(font_icon, font_cjk)
 
-  local lh = tf.size and 1 or 1.0468
+  --- a row's height, the same for every row of the screen
+  --- (conf/display.lua); text printed in several lines takes
+  --- it too
+  local fh = tf.size and font_main:getHeight()
+      or display.row_height
+  local lh = fh / font_main:getHeight()
   font_main:setLineHeight(lh)
-  local fh = font_main:getHeight()
   -- we use a monospace font, so the width should be the same for any input
   local fw = font_main:getWidth('█') -- 16x32
 
@@ -105,7 +109,6 @@ local config_view = function(flags)
   return {
     font = font_main,
     iconfont = font_icon,
-    statusline_border = 4,
     fh = fh,
     fw = fw,
     lh = lh,
@@ -120,9 +123,11 @@ local config_view = function(flags)
     h = h,
     colors = colors,
 
+    --- 0.6 s shown, 0.6 s hidden, as xterm's and VTE's cursor
+    --- (the user's ruling of November 16, 2026)
     blink = {
       enable = true,
-      period = 0.666666,
+      period = 1.2,
       duty = 0.5,
     },
 
@@ -365,8 +370,9 @@ function love.load()
   end
 
   local editorconf = {
-    --- TODO
-    mouse_enabled = false,
+    --- a click places the cursor in the editor's field, and
+    --- does nothing on the file (the ruling of 2026-11-14)
+    mouse_enabled = true,
     touch_enabled = false,
   }
 
@@ -376,6 +382,8 @@ function love.load()
     editor = editorconf,
     --- console history entries kept; 0 for unlimited
     input_history = 1000,
+    --- rows the console's output keeps once they scroll off
+    output_kept = 1000,
     autotest = autotest,
     mode = mode,
   }
@@ -410,7 +418,7 @@ function love.load()
   -- Ctrl+Esc restarts the IDE in the same process without
   -- stopping the program, so the mouse may still be as the
   -- program left it; the console starts from its own.
-  CC:flush_program_state()
+  CC:restore_console_mouse()
   local CV = ConsoleView(baseconf, CC)
 
   ctrl.setup_callback_handlers(CC)

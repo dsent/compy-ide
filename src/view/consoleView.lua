@@ -4,6 +4,7 @@ require("view.canvas.canvasView")
 require("view.input.userInputView")
 
 local class = require("util.class")
+local Layout = require("view.layout")
 require("util.color")
 require("util.view")
 require("util.debug")
@@ -46,13 +47,32 @@ function ConsoleView:draw(terminal, canvas, snapshot)
   end
 
   local function drawConsole()
+    --- the key card over the output and the field alike,
+    --- the status line beneath it (IS3.16)
+    if self.controller:key_card() then
+      local c = self.controller
+      return self.editor.key_card:draw_console(
+        self.input.statusline, c.input:get_status(), c.run_live,
+        c.input:is_empty())
+    end
     local tc = self.controller.model.output.term_canvas
     self.canvas:draw(
       terminal, canvas, tc,
-      self.drawable_height, snapshot)
+      self.drawable_height, snapshot,
+      self.controller.model.output)
 
     if ViewUtils.conditional_draw('show_input') then
+      --- behind a live program that owns the keyboard the field
+      --- and its cursor are hidden, its status line stays (the
+      --- maintainer's question of November 16, 2026, the lead's
+      --- option B): the field takes no typing there
+      local hidden = self.controller.main_ctrl.program_owns_keys()
+      self.input.field_hidden = hidden
       self.input:draw()
+      --- the notice band over the output's last rows, on
+      --- the output's row grid (IS3.14)
+      local v = self.cfg.view
+      if not hidden then self.input:draw_notice(v.fh, Layout(v).top) end
     end
   end
 

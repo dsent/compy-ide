@@ -53,8 +53,7 @@ describe('VisibleStructuredContent #visible', function()
         view_config = TU.mock_view_cfg
       },
       buffer:get_content(),
-      buffer.highlighter,
-      buffer.truncer
+      buffer:get_highlight()
     )
   end)
 

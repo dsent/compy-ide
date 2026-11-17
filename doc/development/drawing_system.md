@@ -31,13 +31,13 @@ Project sets `love.draw` directly. The framework detects this on the next `updat
 The canvas belongs to the run that drew on it, and to the console between runs:
 
 - A run starts on a blank canvas. A project that fails to load clears it too, so its error shows on a blank console.
-- Every stop clears it: Ctrl+S, Ctrl+T, `stop()`, restart (Ctrl+Alt+R), Ctrl+Q, the program's own quit, and a top-level error. `_stop_project_run` clears it after the project's `before_exit` hook, so what the hook draws goes too.
+- Every stop clears it: Ctrl+Q, Ctrl+T, `stop()`, restart (Ctrl+R), the program's own quit, and a top-level error. `_stop_project_run` clears it after the project's `before_exit` hook, so what the hook draws goes too.
 - The clear covers the whole canvas whatever scissor or color mask the program left; `CanvasModel:clear_canvas` puts the caller's graphics state back.
 - A program's call that stops its own run and goes on drawing is cleared again when its `use_canvas` call unwinds: the run was live when the call began and is stopped now (`run_live`), so the clear holds whatever run replaced it, unless that replacement is live (restart), which keeps its canvas. A top-level error clears only its own run's canvas (`run_id`), never a rerun it started.
 - Console code passes `console = true` and owns no run. A console line that stops and then draws keeps its drawing, in every state: when no run is live afterwards its `use_canvas` call moves `canvas_handed` on, and the program call that encloses the submitting keypress leaves the canvas alone. The exception is a line that starts a run with `run()` before it draws: the nested run ends by unbinding the canvas, so what the line draws next misses it (a known limit of nested execution).
 - Drawing typed at the console shares the canvas: it lasts until the next stop, run or close, and a stop clears it too, with no program running.
 - A paused run (Ctrl+Pause, an error in a handler) has not stopped: its canvas stays, and `continue()` draws on it again.
-- A run that finishes its top-level code is in `ready`, not stopped, and keeps its picture until it stops or the project closes. That covers a run with nothing live (no handlers, no widget), as the sine example is, and a run with live handlers but no `update` or `draw`. Ctrl+S stops a `running` program only, so it leaves a `ready` one alone; `stop()`, Ctrl+T, restart and Ctrl+Q end it.
+- A run that finishes its top-level code is in `ready`, not stopped, and keeps its picture until it stops or the project closes. That covers a run with nothing live (no handlers, no widget), as the sine example is, and a run with live handlers but no `update` or `draw`. Ctrl+Q, `stop()`, Ctrl+T and restart end it: Ctrl+Q stops a run that is not stopped (`run_live`), whether it is `running`, paused or idle in `ready`.
 
 ### `use_canvas(f)` — `ConsoleController:use_canvas` in `src/controller/consoleController.lua`
 

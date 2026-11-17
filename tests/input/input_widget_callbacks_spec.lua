@@ -623,11 +623,12 @@ describe('input surface: widget callbacks #input', function()
       assert.is_true(F.is_widget_visible())
     end)
 
-    -- The clear is model:cancel() — remember, THEN clear — so
-    -- the submitted line reaches the input history rather than
-    -- being dropped (statement 4). It is not
+    -- A submitted line is stored when it is accepted
+    -- (submit_flow), then the clear, model:cancel(), empties
+    -- the field and stores nothing. The clear is not
     -- compy.input.clear(), which touches no history.
-    it('the clear remembers before it empties', function()
+    it('a submitted line is remembered, then the field emptied',
+      function()
       local input = F.activate_project()
       input.show({ text = 'remembered' })
       F.session.press('return')
@@ -635,6 +636,38 @@ describe('input surface: widget callbacks #input', function()
       F.widget:history_back()
       assert.same({ 'remembered' }, F.widget:get_text())
     end)
+
+    -- A line enters the history when it is accepted, the
+    -- clear flag or not, and a refused one does not (the
+    -- classic shell's history, which holds only lines that
+    -- ran)
+    it('a refused line is no entry, an accepted one is',
+      function()
+        local input = F.activate_project()
+        input.show({
+          text = 'bad',
+          validator = function(lines)
+            if lines[1] == 'bad' then
+              return false, { Error('no', 1, 1) }
+            end
+            return true
+          end,
+        })
+        F.session.press('return')
+        assert.same({ 'bad' }, F.widget:get_text())
+        assert.same(0, F.widget.model.history:length())
+        input.set_text('good')
+        -- the first Enter closes the refusal's error
+        F.session.press('return')
+        F.session.press('return')
+        assert.same({ { 'good' } },
+          F.widget.model.history:_get_entries())
+        -- the same line again is no second entry
+        input.set_text('good')
+        F.session.press('return')
+        assert.same({ { 'good' } },
+          F.widget.model.history:_get_entries())
+      end)
 
     -- And the cancel side, which seats NOTHING: Escape neither
     -- empties the widget nor takes it down, so cancelling is
@@ -667,6 +700,47 @@ describe('input surface: widget callbacks #input', function()
         input.show({ text = 'a', clear_on_submit = false })
         F.session.press('return')
         assert.same({ 'a' }, F.widget:get_text())
+      end)
+
+    -- editor spec API2.2: "Key-repeat events from holding
+    -- Enter do not trigger another submission"
+    it('a held Enter submits once, before_submit included',
+      function()
+        local input = F.activate_project()
+        local before, sent = 0, 0
+        input.callbacks.before_submit = function()
+          before = before + 1
+        end
+        input.callbacks.on_text_entered = function()
+          sent = sent + 1
+        end
+        input.show({ text = 'a', clear_on_submit = false })
+        F.session.press('return')
+        F.session.repeat_press('return')
+        F.session.repeat_press('return')
+        F.session.release('return')
+        assert.same(1, before)
+        assert.same(1, sent)
+        F.session.press('return')
+        F.session.release('return')
+        assert.same(2, sent)
+      end)
+
+    -- the rule is the field's: a program that reads the key
+    -- itself still gets every repeat
+    it("a held Enter's repeats still reach the program's hook",
+      function()
+        local input = F.activate_project()
+        local seen = { }
+        input.hooks.keypressed = function(k, _, isr)
+          if k == 'return' then seen[#seen + 1] = isr end
+        end
+        input.show({ text = 'a', clear_on_submit = false })
+        F.session.press('return')
+        F.session.repeat_press('return')
+        F.session.repeat_press('return')
+        F.session.release('return')
+        assert.same({ false, true, true }, seen)
       end)
 
     -- The pair of the case above, and the one that keeps the
@@ -1105,8 +1179,7 @@ describe('input surface: widget callbacks #input', function()
   -- alike, and no instance reads the screen mode to decide what
   -- a key does (doc/development/decisions/input.md,
   -- D-EDIT-LIFECYCLE). A surface that needs to differ says so
-  -- locally: the editor consumes Enter/Escape upstream, Ctrl+D
-  -- is the per-instance `allow_duplicate_line` flag.
+  -- locally: the editor consumes Enter/Escape upstream.
   --
   -- The repetition below IS the claim — same two keys, same
   -- lifecycle, three surfaces — and it guards against that
@@ -1119,7 +1192,7 @@ describe('input surface: widget callbacks #input', function()
     -- construction, like user_input_view_spec.lua.
     local function bare_uic()
       local m = UserInputModel(F.cfg, InputEvalText)
-      local c = UserInputController(m, true)
+      local c = UserInputController(m)
       c:init_view({
         render = function() end,
         draw   = function() end,
@@ -1208,23 +1281,12 @@ describe('input surface: widget callbacks #input', function()
     -- registered: technical_debt/input.md, "Bare Escape in the
     -- editor's navigation mode now runs the widget's cancel".
     --
-    -- FLIPPED as D-LIFECYCLE-FLAGS said it would be: the key
-    -- still falls through, and the cancel it starts is now
-    -- INERT, because the editor's widget seats no lifecycle
-    -- flags (doc/development/decisions/input.md,
-    -- D-LIFECYCLE-FLAGS, statement 3). That satisfies
-    -- D-EDITOR-KEYS row 2 — bare Escape does nothing in
-    -- navigation and in editing — without the editor claiming
-    -- a key it does not want, and it is what pays
-    -- T-NO-CALLBACKS-IS-NOT-A-NOOP and T-NAV-ESCAPE.
-    -- The case therefore asserts BOTH halves: the flow is
-    -- reached (so the fall-through is still what D-CHAIN-OF-3
-    -- describes) and the content is untouched. The editing
-    -- half of the same one code path, and the rest of the net,
-    -- are in input_editor_keys_spec.lua.
-    describe('editor Escape falls through to the widget',
+    -- The editor spec gives bare Escape to the editor: it
+    -- aborts the edit at once (IS5.7), so the key no longer
+    -- falls through to the widget's cancel flow.
+    describe('editor Escape is the editor\'s own (IS5.7)',
       function()
-      it('is not claimed by the editor in navigation',
+      it('is claimed by the editor and aborts the edit',
         function()
         local doc = { 'first line', 'second line', '' }
         local ed  = open_doc(doc)
@@ -1244,19 +1306,18 @@ describe('input surface: widget callbacks #input', function()
         mock.keystroke('up', driver(ed))
         mock.keystroke('escape', driver(ed))
 
-        --- the key was NOT consumed upstream: the flow ran
-        assert.is_true(reached)
-        --- and it destroyed nothing on the way through
+        --- the editor claims bare Escape: it aborts the edit
+        --- (IS5.7), and the widget's cancel flow never runs
+        assert.is_false(reached)
         assert.is_false(canceled)
-        assert.same({ 'typed' }, ed.input:get_text())
+        assert.is_true(ed.input:is_empty())
         model.cancel = orig_cancel
         ed.input.callbacks.after_cancel = nil
       end)
 
-      -- The other half of the same seam, and the one that
-      -- would hurt if it broke: SHIFT+Escape IS claimed —
-      -- the rework's discard/leave — so it must not reach
-      -- the widget as a cancel.
+      -- The other half of the same seam: Shift+Escape has no
+      -- meaning in the editor, and the editor consumes it, so
+      -- it must not reach the widget as a cancel.
       it('but Shift+Escape is claimed and does not', function()
         local doc = { 'first line', 'second line', '' }
         local ed  = open_doc(doc)
@@ -1316,37 +1377,30 @@ describe('input surface: widget callbacks #input', function()
           end)
       end)
 
-    -- ---- 4. an Enter variant the editor does not claim -----
+    -- ---- 4. Alt+Enter breaks a line in the editor ----------
 
-    -- Alt+Enter is not one of the editor's submit variants, so
-    -- the editor lets it through and the widget's ordinary
-    -- submit runs. Nothing happens, and nothing is supposed to:
-    -- the editor assigns no on_text_entered or after_submit, so
-    -- a submit with no callbacks delivers to nobody and leaves
-    -- the loaded text alone — the same harmless no-op the
-    -- console relies on. The case exists so an unclaimed
-    -- variant can never grow into a real, unintended editor
-    -- submit.
-    describe('editor Alt+Enter, an unclaimed variant',
-      function()
-      it('submits to nobody and leaves the text alone',
-        function()
-          local doc = { 'first line', 'second line', '' }
-          local ed  = open_doc(doc)
-          --- Enter opens the selected block in navigation
-          --- (the editor rework's spec 2.2); this was Escape
-          --- before that landed, and the selection now starts
-          --- at the FIRST block, so no navigation is needed to
-          --- reach one. The two Escape cases above still press
-          --- 'up' first; it moves nothing there either.
-          mock.keystroke('return', driver(ed))
-          local loaded = ed.input:get_text():items()
-          assert.same({ 'first line' }, loaded)
+    -- The editor principles' IS3.15: Alt+Enter, like
+    -- Shift+Enter, breaks the line at the cursor and submits
+    -- nothing: the file and the widget's submit callbacks are
+    -- left alone.
+    describe('editor Alt+Enter', function()
+      it('breaks the line and submits nothing', function()
+        local doc = { 'first line', 'second line', '' }
+        local ed  = open_doc(doc)
+        local entered = false
+        ed.input.callbacks.on_text_entered = function()
+          entered = true
+        end
+        ed:textinput('a')
+        ed:textinput('b')
+        mock.keystroke('left', driver(ed))
 
-          mock.keystroke('M-return', driver(ed))
+        mock.keystroke('M-return', driver(ed))
 
-          assert.same(loaded, ed.input:get_text():items())
-        end)
+        assert.same({ 'a', 'b' }, ed.input:get_text():items())
+        assert.is_false(entered)
+        ed.input.callbacks.on_text_entered = nil
+      end)
     end)
 
     -- ---- 5. Shift+Enter is a newline everywhere ------------
@@ -1425,52 +1479,14 @@ describe('input surface: widget callbacks #input', function()
       end)
     end)
 
-    -- ---- 7. `modify` per-instance flag ---------------------
-
-    -- Line-duplication is the one behaviour that genuinely
-    -- differs between surfaces, and it is carried by a
-    -- constructor flag on the instance that wants it —
-    -- `allow_duplicate_line`, alongside `disable_selection` —
-    -- not by the screen mode. Each case still sets app_state,
-    -- to the value the real caller would have, precisely to
-    -- show the flag and not the mode is what decides
-    -- (doc/development/decisions/input.md, D-EDIT-LIFECYCLE).
-    describe('the modify flag alone gates Ctrl+D', function()
-      it('with the flag: Ctrl+D duplicates the line', function()
-        local c = bare_uic()
-        c.allow_duplicate_line = true
-        love.state.app_state = 'editor'
-        c:show({ text = 'abc' })
-
-        mock.keystroke('C-d', driver(c))
-
-        assert.same({ 'abc', 'abc' }, c:get_text():items())
-      end)
-
-      it('without it: Ctrl+D does nothing', function()
-        local c = bare_uic()
-        c.allow_duplicate_line = false
-        love.state.app_state = 'ready'
-        c:show({ text = 'abc' })
-
-        mock.keystroke('C-d', driver(c))
-
-        assert.same({ 'abc' }, c:get_text():items())
-      end)
-    end)
-
     -- ---- 8. how wide "Enter" is -----------------------------
 
-    -- Submit triggers on any Enter that is not Shift+Enter, so
-    -- Ctrl+Enter and Alt+Enter submit as well; only the newline
-    -- is carved out (doc/development/decisions/input.md,
-    -- D-EDIT-LIFECYCLE and D-DEFACTO-KEPT; mechanism in
-    -- doc/development/internals/user_input.md). It is
-    -- longstanding behaviour the input API kept, pinned here so
-    -- the breadth is not narrowed to bare Enter by accident —
-    -- narrowing it is a deliberate spec change, not a tidy-up.
-    describe('every non-Shift Enter submits', function()
-        it('input widget: Ctrl+Enter submits', function()
+    -- Only a bare Enter submits: every chord is its own key,
+    -- and nothing binds Ctrl+Enter (the maintainer's ruling of
+    -- November 14, 2026, which narrowed D-DEFACTO-KEPT's
+    -- breadth on purpose; doc/development/decisions/input.md)
+    describe('only a bare Enter submits', function()
+        it('input widget: Ctrl+Enter does nothing', function()
           local input = F.activate_project()
           local got
           input.show({
@@ -1478,10 +1494,13 @@ describe('input surface: widget callbacks #input', function()
             on_text_entered = function(t) got = t end,
           })
           mock.keystroke('C-return', F.session.press)
-          assert.equal('hi', got)
+          assert.is_nil(got)
+          assert.equal('hi', input.get_text())
         end)
 
-        it('input widget: Alt+Enter submits', function()
+        -- the editor principles' IS3.15 took Alt+Enter out of
+        -- the breadth: it breaks the line, as Shift+Enter does
+        it('input widget: Alt+Enter breaks the line', function()
           local input = F.activate_project()
           local got
           input.show({
@@ -1489,10 +1508,11 @@ describe('input surface: widget callbacks #input', function()
             on_text_entered = function(t) got = t end,
           })
           mock.keystroke('M-return', F.session.press)
-          assert.equal('hi', got)
+          assert.is_nil(got)
+          assert.equal('hi\n', input.get_text())
         end)
 
-        it('console: Ctrl+Enter evaluates', function()
+        it('console: Ctrl+Enter does not evaluate', function()
           local calls = 0
           local orig = F.cc.evaluate_input
           F.cc.evaluate_input = function(self, ...)
@@ -1503,7 +1523,7 @@ describe('input surface: widget callbacks #input', function()
           F.console:add_text('x')
           mock.keystroke('C-return', F.session.press)
 
-          assert.equal(1, calls)
+          assert.equal(0, calls)
           F.cc.evaluate_input = orig
         end)
       end)

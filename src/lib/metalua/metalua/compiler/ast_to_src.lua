@@ -561,6 +561,23 @@ local function wrap_comment(lines, w)
   return res
 end
 
+--- The long brackets that enclose `text` as written: the
+--- lowest level whose closing bracket neither appears in the
+--- text nor completes at its end. A comment that held `]]` and
+--- was printed with `--[[ ... ]]` would close early, and the
+--- code after it would change.
+--- @param text string
+--- @return string open, string close
+local function long_brackets(text)
+  local eq = ''
+  while text:find(']' .. eq .. ']', 1, true)
+      or (text .. ']'):find(']' .. eq .. ']$')
+  do
+    eq = eq .. '='
+  end
+  return '[' .. eq .. '[', ']' .. eq .. ']'
+end
+
 ----------------------------------------------------------------
 --- Accumulate the source representation of AST `node' in
 --- the synthetizer. Most of the work is done by delegating to
@@ -572,6 +589,7 @@ end
 --- own.
 --- @param node token
 --- @param stmt boolean? --- an item of a statement list
+
 ----------------------------------------------------------------
 function M:node(node, stmt)
   assert(self ~= M and self._acc)
@@ -599,10 +617,13 @@ function M:node(node, stmt)
         self._callee_paren = true
       end
       if before_paren and inline then
-        self:acc(' --[[' .. co.text .. ']] ', true)
+        local open, close = long_brackets(co.text)
+        self:acc(' --' .. open .. co.text .. close .. ' ', true)
         self:emptyline_gap_reset(co.last)
       elseif before_paren and co.multiline then
-        local lines = string.lines('--[[' .. co.text .. ']]')
+        local open, close = long_brackets(co.text)
+        local lines =
+            string.lines('--' .. open .. co.text .. close)
         for i, l in ipairs(lines) do
           self:acc(l, true)
           if i ~= #lines then self:nl() end
@@ -622,13 +643,14 @@ function M:node(node, stmt)
           if co.prepend_newline then
             table.insert(lines, 1, '')
           end
+          local open, close = long_brackets(co.text)
           local l1 = lines[1] or ''
           if #lines == 1 then
-            lines[1] = '--[[' .. l1 .. ']]'
+            lines[1] = '--' .. open .. l1 .. close
           else
             local llast = lines[#lines] or ''
-            lines[1] = '--[[' .. l1
-            lines[#lines] = llast .. ']]'
+            lines[1] = '--' .. open .. l1
+            lines[#lines] = llast .. close
           end
           local wrapped = string.wrap_array(lines, self.wrap)
           for i, l in ipairs(wrapped) do
@@ -1191,11 +1213,23 @@ local function string_pieces(line, w, nl)
   return pieces
 end
 
+--- A string literal on one line fits where the printer stands
+--- @param str string
+--- @return boolean
+function M:string_fits(str)
+  if string.find(str, "\n") then return false end
+  local literal = '"' .. escape_string(str) .. '"'
+  local l = string.ulen(literal) or string.len(literal)
+  return self._line_len + l <= self.wrap
+end
+
 function M:String(_, str)
   local fl        = string.len('"" ..' .. self.indent_step)
   local wl        = self.wrap - fl
-  --- bytes that are not UTF-8 have no length in characters
-  local multiline = (string.ulen(str) or string.len(str)) > wl
+  --- bytes that are not UTF-8 have no length in characters;
+  --- a literal that fits its line is never cut
+  local multiline = not self:string_fits(str)
+      and (string.ulen(str) or string.len(str)) > wl
   local rendered  = ''
   if multiline then
     --- a piece per line of the text, cut to the width
@@ -1490,4 +1524,7 @@ M.oneshot = function(x, ...)
   local a2s = M.new(...)
   return a2s:run(x)
 end
+--- for the chunker, which prints a comment-only block itself
+M.long_brackets = long_brackets
+
 return M

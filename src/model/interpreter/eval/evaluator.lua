@@ -106,7 +106,10 @@ end
 
 TextEval = Evaluator.plain('text')
 
-local luaParser = require("model.lang.lua.parser")()
+--- the language layer's parser, with the file editor's
+--- account of where a parse fails (IS3.4) beside it
+local luaSyntax = require('model.syntax.lua')
+local luaParser = luaSyntax.parser()
 local luaTools = {
   parser = luaParser,
   highlighter = luaParser.highlighter
@@ -174,5 +177,10 @@ LuaEditorEval = (function()
     line_validators = check.line_validators,
     astValidators = check.ast_validators,
   }
-  return LuaEval(nil, ft)
+  --- a draft is read as the editor's submission reads it
+  local tools = {
+    parser = luaParser,
+    highlighter = luaParser.highlighter,
+  }
+  return Evaluator('lua', tools, ft)
 end)()

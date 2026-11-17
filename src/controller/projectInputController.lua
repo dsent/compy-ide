@@ -178,6 +178,20 @@ function ProjectInputController:_dispatch(event, trigger, ...)
     love.state.user_input_controller, event, trigger, ...)
 end
 
+--- A modifier chord's own glyph (Key.chord_text) is offered to
+--- the tiers above the text field and to nothing below them.
+--- The project's shortcuts and hook are promised every text
+--- event with its modifiers (`shortcuts.textinput['ctrl+j']`,
+--- `'alt+*'`), so they still get it; the widget is a text
+--- field, and a chord's glyph is no text.
+--- @param t string
+--- @return boolean consumed
+function ProjectInputController:chord_text(t)
+  if not self.compy_input then return false end
+  return dispatch(self.compy_input.shortcuts,
+    self.compy_input.hooks, nil, 'textinput', t, t)
+end
+
 --- Take the keyboard route for a project run. `handlers` holds
 --- the project's own error-wrapped love.* keyboard handlers
 --- (from the caller); they seed the hooks table once here

@@ -29,73 +29,98 @@ a project must be selected first.
 
 | Command                                                           | Combination                                   |
 | :---------------------------------------------------------------- | :-------------------------------------------- |
-| Clear terminal                                                    | <kbd>Ctrl</kbd>+<kbd>L</kbd>                  |
-| Stop project                                                      | <kbd>Ctrl</kbd>+<kbd>S</kbd>                  |
-| Quit project (stop and close)                                     | <kbd>Ctrl</kbd>+<kbd>Q</kbd>                  |
-| Reset application to initial state                                | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> |
-| Restart project                                                   | <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>R</kbd>   |
+| Clear the console's screen and the output it keeps                | <kbd>Ctrl</kbd>+<kbd>L</kbd>                  |
+| Stop the program and return to the console (the project stays open) | <kbd>Ctrl</kbd>+<kbd>Q</kbd>                  |
+| Restart project                                                   | <kbd>Ctrl</kbd>+<kbd>R</kbd>               |
 | Exit application                                                  | <kbd>Ctrl</kbd>+<kbd>Esc</kbd>                |
 | Pause project                                                     | <kbd>Ctrl</kbd>+<kbd>Pause</kbd>              |
 | Toggle edit/run                                                   | <kbd>Ctrl</kbd>+<kbd>T</kbd>                  |
+| **Console output**                                                |                                               |
+| Scroll the output a row (the field keeps its text)                | <kbd>Ctrl</kbd>+<kbd>⇧</kbd>/<kbd>Ctrl</kbd>+<kbd>⇩</kbd> |
+| Scroll the output a page of 15 rows                               | <kbd>PageUp</kbd>/<kbd>PageDown</kbd>         |
+| To the oldest / newest row of the output (empty field)            | <kbd>Home</kbd>/<kbd>End</kbd>                |
 | **Input**                                                         |                                               |
 | Move cursor horizontally                                          | <kbd>⇦</kbd>/<kbd>⇨</kbd>                     |
 | Move cursor vertically                                            | <kbd>⇧</kbd>/<kbd>⇩</kbd>                     |
-| Go back in command history                                        | <kbd>PageUp</kbd>                             |
-| Go forward in command history                                     | <kbd>PageDown</kbd>                           |
 | Move in history (if in first/last line)                           | <kbd>⇧</kbd>/<kbd>⇩</kbd>                     |
 | Jump to start                                                     | <kbd>Ctrl</kbd>+<kbd>Home</kbd>               |
 | Jump to end                                                       | <kbd>Ctrl</kbd>+<kbd>End</kbd>                |
-| Jump to line start                                                | <kbd>Home</kbd>                               |
-| Jump to line end                                                  | <kbd>End</kbd>                                |
+| Jump to the start of the row (a long line takes several rows)     | <kbd>Home</kbd>                               |
+| Jump to the end of the row                                        | <kbd>End</kbd>                                |
 | Insert newline                                                    | <kbd>Shift</kbd>+<kbd>Enter ⏎</kbd>           |
-| Delete current line                                               | <kbd>Ctrl</kbd>+<kbd>Y</kbd>                  |
-| Duplicate current line                                            | <kbd>Ctrl</kbd>+<kbd>D</kbd>                  |
-| Copy                                                              | <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>Insert</kbd> |
-| Cut                                                               | <kbd>Ctrl</kbd>+<kbd>X</kbd> / <kbd>Shift</kbd>+<kbd>Delete</kbd> |
-| Paste                                                             | <kbd>Ctrl</kbd>+<kbd>V</kbd> / <kbd>Shift</kbd>+<kbd>Insert</kbd> |
-| Select text                                                       | <kbd>Shift</kbd>+<kbd>⇦</kbd>/<kbd>⇨</kbd>/<kbd>⇧</kbd>/<kbd>⇩</kbd> |
+| Undo / redo the typing                                            | <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> |
+| Delete the previous word                                          | <kbd>Ctrl</kbd>+<kbd>Backspace</kbd> / <kbd>Ctrl</kbd>+<kbd>W</kbd> |
+| Delete to the end of the line                                     | <kbd>Ctrl</kbd>+<kbd>K</kbd>                  |
+| Move the cursor's line up / down                                  | <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>⇧</kbd>/<kbd>⇩</kbd> |
+| Place the cursor                                                  | click in the field                            |
 | Evaluate input                                                    | <kbd>Enter ⏎</kbd>                            |
 | **Editor**                                                        |                                               |
-| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; _same as Input, except for:_ |                                               |
-| Move the active line by one line (nav)                            | <kbd>⇧</kbd>/<kbd>⇩</kbd>                     |
-| Move the active line by a page (nav)                              | <kbd>PageUp</kbd>/<kbd>PageDown</kbd>         |
-| First / last line of the file (nav)                               | <kbd>Home</kbd> / <kbd>End</kbd>              |
-| Move the cursor through the block (editing)                       | <kbd>⇧</kbd>/<kbd>⇩</kbd>                     |
-| Jump block-wise (nav) / accept and jump (editing)                 | <kbd>Ctrl</kbd>+<kbd>⇧</kbd>/<kbd>Ctrl</kbd>+<kbd>⇩</kbd> |
-| Accept the block, write it to the file (editing)                  | <kbd>Enter ⏎</kbd>                            |
-| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; _additionally_               |                                               |
-| Open the selected block for editing (nav)                         | <kbd>Enter ⏎</kbd> / typing                   |
-| New empty block below / above, opened (nav)                       | <kbd>Ctrl</kbd>+<kbd>Enter ⏎</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Enter ⏎</kbd> |
-| Accept and return to navigation (editing)                         | <kbd>Ctrl</kbd>+<kbd>Enter ⏎</kbd>            |
-| Discard the edit, asks when changed (editing) / leave (nav)       | <kbd>Shift</kbd>+<kbd>Esc</kbd>               |
-| Confirm / cancel a dialog                                         | <kbd>Enter ⏎</kbd> or <kbd>Space</kbd> / <kbd>Esc</kbd> |
-| Delete the previous word (editing)                                | <kbd>Ctrl</kbd>+<kbd>Backspace</kbd> / <kbd>Ctrl</kbd>+<kbd>W</kbd> |
-| Undo / redo: text (editing), file operations (nav)                | <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> |
-| Peek-scroll one line, the selection stays                         | <kbd>Alt</kbd>+<kbd>⇧</kbd>/<kbd>Alt</kbd>+<kbd>⇩</kbd> |
-| Peek-scroll one page                                              | <kbd>Alt</kbd>+<kbd>PageUp</kbd>/<kbd>Alt</kbd>+<kbd>PageDown</kbd> or <kbd>Alt</kbd>+<kbd>⇦</kbd>/<kbd>Alt</kbd>+<kbd>⇨</kbd> |
-| Peek to the start / end of the file                               | <kbd>Alt</kbd>+<kbd>Home</kbd> / <kbd>Alt</kbd>+<kbd>End</kbd> |
-| Copy block                                                        | <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>Insert</kbd> |
-| Cut block                                                         | <kbd>Ctrl</kbd>+<kbd>X</kbd> / <kbd>Shift</kbd>+<kbd>Delete</kbd> |
-| Paste                                                             | <kbd>Ctrl</kbd>+<kbd>V</kbd> / <kbd>Shift</kbd>+<kbd>Insert</kbd> |
-| Delete the selected block (nav)                                   | <kbd>Delete</kbd> / <kbd>Ctrl</kbd>+<kbd>Delete</kbd> |
-| Checkpoint the file (asks when one exists)                        | <kbd>Ctrl</kbd>+<kbd>K</kbd>                  |
-| Restore from the checkpoint (asks)                                | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> |
-| Follow the require under selection                                | <kbd>Ctrl</kbd>+<kbd>J</kbd>                  |
-| Block reorder mode                                                | <kbd>Ctrl</kbd>+<kbd>M</kbd>                  |
-| Search definitions                                                | <kbd>Ctrl</kbd>+<kbd>F</kbd>                  |
-| Scroll to start / end                                             | <kbd>Ctrl</kbd>+<kbd>PageUp</kbd> / <kbd>Ctrl</kbd>+<kbd>PageDown</kbd> |
-| Scroll up / down by one line                                      | <kbd>Shift</kbd>+<kbd>PageUp</kbd> / <kbd>Shift</kbd>+<kbd>PageDown</kbd> |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; _same as Input in the field, except for:_ |                                               |
+| Browse the file block by block                                    | <kbd>Ctrl</kbd>+<kbd>⇧</kbd>/<kbd>Ctrl</kbd>+<kbd>⇩</kbd> |
+| Browse block by block (empty field) / move the cursor a row (text in the field) | <kbd>⇧</kbd>/<kbd>⇩</kbd>                     |
+| Page down / up: the next block hidden below comes to the top, the one above to the bottom | <kbd>PageDown</kbd>/<kbd>PageUp</kbd>        |
+| To the first block / the end of the file (empty field)            | <kbd>Home</kbd>/<kbd>End</kbd>                |
+| Back to the block being replaced (while replacing)                | <kbd>Ctrl</kbd>+<kbd>G</kbd>                  |
+| Insert the field's text before the highlighted block, or at the end of the file | <kbd>Enter ⏎</kbd>                            |
+| Insert an empty line (empty field)                                | <kbd>Enter ⏎</kbd>                            |
+| Load the highlighted block into the field, to replace it          | <kbd>F2</kbd>                                 |
+| Replace the loaded block with the field's text                    | <kbd>Enter ⏎</kbd>                            |
+| Insert or replace, and keep the text in the field                 | <kbd>Shift</kbd>+<kbd>Insert</kbd>            |
+| Break a line in the field                                         | <kbd>Shift</kbd>+<kbd>Enter ⏎</kbd> / <kbd>Alt</kbd>+<kbd>Enter ⏎</kbd> |
+| Drop the field's text or the replacement; step back from the file (empty field) | <kbd>Esc</kbd>                                |
+| Leave the editor for the console, every open file with it (empty field) | <kbd>Ctrl</kbd>+<kbd>Q</kbd>                  |
+| Copy the highlighted block into the field                         | <kbd>Ctrl</kbd>+<kbd>Insert</kbd>             |
+| Cut the highlighted block into the field (empty field)            | <kbd>Ctrl</kbd>+<kbd>Delete</kbd>             |
+| Move the highlighted block up / down                              | <kbd>Alt</kbd>+<kbd>⇧</kbd>/<kbd>Alt</kbd>+<kbd>⇩</kbd> |
+| Undo / redo                                                       | <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> |
+| Follow the require or dofile of the highlighted block (empty field) | <kbd>Ctrl</kbd>+<kbd>J</kbd>                  |
+| Format the whole file (empty field)                               | <kbd>Alt</kbd>+<kbd>F</kbd>                   |
+| Show the keys of the current state                                | hold <kbd>F1</kbd>                            |
+
+The console keeps the last 1,000 rows that scroll off the top of
+its output, and the keys above scroll over them. A scrolled view
+fills the screen and is marked at its edges where more lies
+beyond; new output leaves it where it is, and any other key but
+a modifier, a lock key or <kbd>F1</kbd> brings the screen back,
+as do a program's start, stop or pause and a key the program
+takes. Each line the console runs is
+written to the output in blue before it runs, and its error
+after it, in red. A command that refuses says why in the output,
+in orange. The band above the status line belongs to the line
+being typed: it says why a line did not run because it does not
+parse, and, in orange, that a statement is not finished yet,
+when <kbd>Enter</kbd> begins its next line instead of running it.
+<kbd>Ctrl</kbd>+<kbd>L</kbd> empties the console: the
+screen, the kept rows and output still waiting to be written;
+`compy.terminal.clear()` from a program clears the screen alone.
+While a program's input field shows, or the program takes the
+keys itself, the scrolling keys are the program's.
+
+Each combination is a key of its own: a key pressed with a modifier the
+table does not name does nothing. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> is not
+<kbd>Enter</kbd>, and <kbd>Ctrl</kbd>+<kbd>⇧</kbd> in the console is not
+<kbd>⇧</kbd>.
 
 ## Projects
 
 A _project_ is a folder in the application's storage which
 contains at least a `main.lua` file. Projects can be loaded and
-ran. At any time, pressing <kbd>Ctrl-Q</kbd> quits and
-returns to the console
+ran. At any time, pressing <kbd>Ctrl-Q</kbd> stops the program and
+returns to the console. The project stays open: no key closes it,
+and `close_project()` does.
 
 There is always a project open: the application starts on the
 default `scratchpad` project, which can be used to persist files.
 Closing a project returns to `scratchpad`.
+
+`stop()`, `reset()`, `run()`, `project()`, `close_project()` and
+`reset_scratchpad()`, called from a program or from a line typed
+in the console, end that code at once: nothing after the call
+runs, and the IDE does what it asks once the code has returned.
+A call that is refused, such as `stop()` with nothing running,
+says why and ends nothing. A program's own `pcall` around such a
+call lets its code run on, and the call is done when that code
+returns.
 
 - `list_projects()`
 
@@ -114,7 +139,32 @@ Closing a project returns to `scratchpad`.
 - `run_project(proj?)` / `run(proj?)`
 
   Run either _proj_ or the currently open project if no
-  arguments are passed.
+  arguments are passed. `run(nil, "second.lua")` runs another
+  file of the open project as the program, from a clean start
+  as `run()` does, and `run("proj", "second.lua")` opens _proj_
+  first; a file the project does not hold is refused. Ctrl+R
+  restarts a program that runs, is paused or idles behind the
+  console, from the file it runs from, and does nothing when
+  none does; Ctrl+T from the editor runs `main.lua`. _proj_
+  must exist: `run` makes no
+  project, and a name no project has is refused with a hint to
+  make it with `project()` first. While a program runs or is
+  paused, a typed `run()` is refused, and Ctrl+R stops it and
+  runs it again; a program's own `run()` replaces it, as Ctrl+R
+  does, once its code has returned. Each run starts afresh: a program idle behind the
+  console ends first, as `stop()` ends it, and its handlers,
+  input hooks and shortcuts go with it; then no variable,
+  `love` handler or module of an earlier run, or of a line
+  typed before it, is there, and the graphics settings are
+  reset. A program that ends by itself leaves its variables
+  for the console to look at until the next run. Stopping a
+  program, by `stop()`, Ctrl+Q, an error in its first lines or
+  closing its project, clears them too and puts the keyboard
+  and the volume back as the IDE set them; a sound it started
+  plays to its end,
+  and one set to repeat plays once more and stops. A pause keeps
+  everything for `continue()`. `dofile()` runs in the
+  environment as it stands.
 
 - `example_projects()`
 
@@ -124,6 +174,17 @@ Closing a project returns to `scratchpad`.
 
   Close currently opened project and return to the default
   `scratchpad` project.
+
+- `reset()`
+
+  Stop the program if one runs, clear what it and the lines
+  typed before left (variables, handlers, settings), silence
+  every sound, and empty the console as
+  <kbd>Ctrl</kbd>+<kbd>L</kbd> does; then it says
+  `Runtime reset for <project>. All files kept.`; like `stop()`,
+  it ends the code that called it and returns nothing. The history
+  and the editor's files stay. Only `reset()` with
+  nothing between the brackets exists yet.
 
 - `reset_scratchpad()`
 
@@ -177,40 +238,59 @@ default, and entered input will be appended to the end.
 
 ![hello](./doc/interface/hello.apng)
 
+The editor is always in one of three states, which the status
+line names. With an empty field you are _browsing_: the
+highlight shows the block you are on, or no block at the end of
+the file. Once you type, you are _inserting_: <kbd>Enter ⏎</kbd>
+puts the text before the highlighted block, or at the end of the
+file. Hold <kbd>F1</kbd> to see the keys of the current state.
+
 To modify an existing block, navigate there with
-<kbd>⇧</kbd>/<kbd>⇩</kbd>. Open it for editing by pressing
-<kbd>Enter ⏎</kbd>, make the desired changes, then send it back
-with <kbd>Enter ⏎</kbd>
+<kbd>⇧</kbd>/<kbd>⇩</kbd>. Load it into the field by pressing
+<kbd>F2</kbd>: you are now _replacing_ it. Make the desired
+changes, then send it back with <kbd>Enter ⏎</kbd>.
+<kbd>Esc</kbd> drops the change and leaves the block as it was.
 
 ![capitalized](./doc/interface/hello_cap.apng)
 
+In a Lua file a block is a statement, a comment or an empty
+line, and a text that is not valid Lua is not accepted. In a text or
+Markdown file every line is a block, and a line is accepted as
+written.
+
+When the highlighted block, or the block you are replacing, goes
+on beyond the top or the bottom of the screen, the row at that
+edge fades toward it and shows a faint `^` or `v` in its last
+column. Other blocks the screen cuts off get no mark. The field
+does the same when its text has more rows than it shows. A line
+too long for one row goes on in the next: a tiny orange corner
+at the top right of a row says it goes on, and one at the bottom
+left of the next row says it continues.
+
+When the editor cannot do what a key asks, it shows a notice
+just above the status line that says why and what would work.
+The next key dismisses it and does its usual work. The editor
+asks no questions.
+
 Happy with the modifications now, we can leave the editor by
-pressing <kbd>Shift-Esc</kbd>. <kbd>Ctrl-Shift-S</kbd> also
-leaves, but it is **deprecated** and will be removed. If a
-block you have changed is still open, either one asks before
-it discards your change.
+pressing <kbd>Esc</kbd> with an empty field, which steps back one
+file at a time, or <kbd>Ctrl-Q</kbd>, which returns to the console
+from any file.
+While there is text in the field or a block is being replaced,
+leaving is refused with a notice: submit the text with
+<kbd>Enter ⏎</kbd> or drop it with <kbd>Esc</kbd> first.
 
 ![quit](./doc/interface/quit_editor.apng)
 
 #### Moving
 
-Select the block you want to move and press <kbd>Ctrl-M</kbd>.
-Move the highlight with <kbd>⇧</kbd>/<kbd>⇩</kbd> and hit
-<kbd>Enter ⏎</kbd> when you found it's new home.
+Browse to the block you want to move and press
+<kbd>Alt</kbd>+<kbd>⇧</kbd> or <kbd>Alt</kbd>+<kbd>⇩</kbd>: each
+press moves it one block up or down, and the file is saved with
+it. <kbd>Ctrl-Z</kbd> takes a move back.
 
 ![move1](./doc/interface/move_line.apng)
 ![move2](./doc/interface/move_block.apng)
-
-#### Searching
-
-Definitions can be searched with <kbd>Ctrl-F</kbd>. Pressing
-this combination switches to search mode, in which the
-definitions are listed, and there's a highlight, which can be
-moved as usual. Hitting <kbd>Enter ⏎</kbd> returns to editing,
-highlighting the selected definition. To exit search mode
-without moving, press <kbd>Esc</kbd>.
-
-![search](./doc/interface/search.apng)
 
 
 # Usage (playback mode)
@@ -234,7 +314,7 @@ Paths will be searched in the following order:
 
 | Command          | Combination                                 |
 | :--------------- | :------------------------------------------ |
-| Restart project  | <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>R</kbd> |
+| Restart project  | <kbd>Ctrl</kbd>+<kbd>R</kbd>             |
 | Exit application | <kbd>Ctrl</kbd>+<kbd>Esc</kbd>              |
 
 #

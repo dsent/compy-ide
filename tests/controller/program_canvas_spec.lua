@@ -128,11 +128,12 @@ describe('a program\'s canvas after it stops #canvas', function()
     end
   end)
 
-  it('Ctrl+S clears it', function()
+  -- no reserved key since 2026-11-14: the program runs on
+  it('Ctrl+S leaves it', function()
     run_drawing()
     press({ 'lctrl', 's' })
-    assert.equal('ready', love.state.app_state)
-    assert.is_false(shown())
+    assert.equal('running', love.state.app_state)
+    assert.is_true(shown())
   end)
 
   it('Ctrl+T clears it', function()
@@ -142,25 +143,28 @@ describe('a program\'s canvas after it stops #canvas', function()
     assert.is_false(shown())
   end)
 
-  -- Ctrl+Q closes the open project, then opens the default
-  -- one; the fixture has none open, so one is set here, with
-  -- the close and the open stood in for.
-  it('Ctrl+Q clears it', function()
+  -- Ctrl+Q stops the program and keeps its project open; the
+  -- fixture has none open, so one is set here, and a close
+  -- would show.
+  it('Ctrl+Q clears it, the project still open', function()
     local undo = project(function() end)
     local P = F.cc.model.projects
+    local open = P.current
     local close = P.close
-    local open_project = F.cc.open_project
-    P.close = function() P.current = nil return true end
-    F.cc.open_project = function() return true end
+    local closed = false
+    P.close = function() closed = true return true end
     local ok, err = pcall(function()
       run_drawing()
       press({ 'lctrl', 'q' })
     end)
+    local still_open = P.current == open
     P.close = close
-    F.cc.open_project = open_project
     undo()
     assert(ok, err)
+    assert.equal('ready', love.state.app_state)
     assert.is_false(shown())
+    assert.is_false(closed)
+    assert.is_true(still_open)
   end)
 
   it('the program\'s stop() clears it', function()
@@ -176,13 +180,13 @@ describe('a program\'s canvas after it stops #canvas', function()
     assert.is_false(shown())
   end)
 
-  it('Ctrl+Alt+R starts the program again on a blank canvas',
+  it('Ctrl+R starts the program again on a blank canvas',
     function()
       local seen
       local undo = project(function() seen = shown() end)
       local ok, err = pcall(function()
         run_drawing()
-        press({ 'lctrl', 'lalt', 'r' })
+        press({ 'lctrl', 'r' })
       end)
       undo()
       assert(ok, err)
@@ -222,7 +226,7 @@ describe('a program\'s canvas after it stops #canvas', function()
   it('what a before_exit hook draws is cleared too', function()
     run_drawing()
     F.cc:get_project_env().compy.before_exit = paint
-    press({ 'lctrl', 's' })
+    press({ 'lctrl', 'q' })
     assert.is_false(shown())
   end)
 
@@ -231,7 +235,7 @@ describe('a program\'s canvas after it stops #canvas', function()
       function()
         run_drawing()
         F.cc:get_project_env().compy.before_exit = restrict
-        press({ 'lctrl', 's' })
+        press({ 'lctrl', 'q' })
         assert.is_false(shown())
       end)
 
@@ -346,8 +350,9 @@ describe('a program\'s canvas after it stops #canvas', function()
     end)
   end)
 
-  -- One console line that stops and then draws: the console
-  -- owns no run, so its drawing after the stop stays.
+  -- One console line that stops and then would draw: the stop
+  -- ends the line (design B), so nothing after it draws, and
+  -- the stop's clear is the last word on the canvas.
   --- The line is submitted with Enter, which runs inside the
   --- program's own call while a run exists, idle or not.
   local function submit_stop_and_draw()
@@ -356,25 +361,27 @@ describe('a program\'s canvas after it stops #canvas', function()
     press({ 'return' })
   end
 
-  it('a console line that stops and then draws keeps what it'
-    .. ' drew', function()
+  it('a console line whose stop is refused, nothing running,'
+    .. ' draws on', function()
       paint('old')
       submit_stop_and_draw()
       assert.equal('typed', who())
     end)
 
-  it('the same line after a run that finished keeps what it'
-    .. ' drew', function()
+  it('the same line after a run that finished: the stop clears'
+    .. ' its picture, and nothing after it draws', function()
       F.run_project(function() draw('prog') end)
       assert.equal('prog', who())
       submit_stop_and_draw()
-      assert.equal('typed', who())
+      assert.is_false(shown())
     end)
 
-  -- Enter reaches the console through the program's input hook,
-  -- which here stops the run and lets the key fall through.
-  it('a console line keeps what it drew when the program\'s input'
-    .. ' hook stopped the run on Enter', function()
+  -- Enter reaches the program's input hook, which here stops the
+  -- run: the key is the stop's (design B). Typed while the
+  -- program ran, the line went nowhere, the program owning the
+  -- keyboard (November 16); typed after the stop, it runs.
+  it('a key whose input hook stopped the run is the stop\'s; the'
+    .. ' console takes typing after it', function()
       F.run_project(function()
         local env = F.cc:get_project_env()
         draw('prog')
@@ -385,12 +392,20 @@ describe('a program\'s canvas after it stops #canvas', function()
         end
       end)
       local env = F.cc:get_project_env()
-      env.mark = function() draw('typed') end
+      -- the stop on Enter makes the environment anew from the
+      -- base (the terminate flush): the line's helper is there
+      local base = F.cc:get_base_env()
+      base.mark = function() draw('typed') end
+      finally(function() base.mark = nil end)
       F.session.type('mark()')
+      assert.same({ '' }, F.console:get_text())
       press({ 'return' })
       env.love.update = nil
       env.compy.input.hooks.keypressed = nil
       assert.equal('ready', love.state.app_state)
+      assert.is_false(shown())
+      F.session.type('mark()')
+      press({ 'return' })
       assert.equal('typed', who())
     end)
 
@@ -404,7 +419,7 @@ describe('a program\'s canvas after it stops #canvas', function()
       submit_stop_and_draw()
       F.cc:get_project_env().love.update = nil
       assert.equal('ready', love.state.app_state)
-      assert.equal('typed', who())
+      assert.is_false(shown())
     end)
 
   it('the same line over a run with a live handler keeps what'
@@ -414,7 +429,7 @@ describe('a program\'s canvas after it stops #canvas', function()
         F.cc:get_project_env().love.mousepressed = function() end
       end)
       submit_stop_and_draw()
-      assert.equal('typed', who())
+      assert.is_false(shown())
     end)
 
   it('console code run over a live program keeps what it draws'
@@ -427,27 +442,21 @@ describe('a program\'s canvas after it stops #canvas', function()
       assert.equal('typed', who())
     end)
 
-  -- Top-level code that stops its run, starts it again, and
-  -- then fails: the failed call is the old run's, the canvas
-  -- the new one's.
-  it('a top-level error after a rerun leaves the rerun\'s'
-    .. ' picture', function()
-      local calls = 0
+  -- Top-level code that stops its run and would then fail: the
+  -- stop ends it (design B), so no error comes, and the stop
+  -- clears what it drew.
+  it('top-level code that stops draws and fails no more', function()
       local undo = project(function()
-        calls = calls + 1
-        if calls == 1 then
-          F.cc:get_project_env().stop()
-          F.cc:run_project()
-          error('outgoing')
-        else
-          draw('new')
-        end
+        draw('old')
+        F.cc:get_project_env().stop()
+        draw('after')
+        error('outgoing')
       end)
       local ok, err = pcall(F.cc.run_project, F.cc)
       undo()
       assert(ok, err)
-      assert.equal(2, calls)
-      assert.equal('new', who())
+      assert.equal('ready', love.state.app_state)
+      assert.is_false(shown())
     end)
 
   it('a paused program keeps it, and continue() gives it its'
@@ -481,10 +490,11 @@ describe('a program\'s canvas after it stops #canvas', function()
     assert.is_true(shown())
   end)
 
-  -- Ready with a handler live: Ctrl+S stops a running program
-  -- only, so this one keeps its picture until it stops.
+  -- Ready with a handler live: the program idles behind the
+  -- console, not stopped. Ctrl+S is no reserved key, so its
+  -- picture stays; Ctrl+Q stops it as it stops a running one.
   it('a run in ready with a live handler keeps it through'
-    .. ' Ctrl+S', function()
+    .. ' Ctrl+S, until Ctrl+Q stops it', function()
       F.run_project(function()
         draw()
         F.cc:get_project_env().love.mousepressed = function() end
@@ -492,7 +502,16 @@ describe('a program\'s canvas after it stops #canvas', function()
       assert.equal('ready', love.state.app_state)
       press({ 'lctrl', 's' })
       assert.is_true(shown())
-      F.cc:get_project_env().stop()
+      press({ 'lctrl', 'q' })
+      assert.equal('ready', love.state.app_state)
+      assert.is_false(shown())
+    end)
+
+  it('a run that finished with nothing live keeps its picture'
+    .. ' until Ctrl+Q stops it', function()
+      F.run_project(draw)
+      assert.is_true(shown())
+      press({ 'lctrl', 'q' })
       assert.is_false(shown())
     end)
 end)

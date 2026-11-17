@@ -286,6 +286,36 @@ describe('ProjectService #project', function()
       end)
   end)
 
+  describe('a read', function()
+    it('gives the text of a file that is there #project',
+      function()
+        PS:opreate('reads')
+        local p = PS.current
+        assert.is_true(p:writefile('main.lua', 'x = 2\n'))
+        assert.same({ true, 'x = 2\n' }, { p:readfile('main.lua') })
+      end)
+
+    --- the device's read gives nil, not a reason: a file that
+    --- reads as nil must not pass for an empty one
+    it('fails for a file that is there and gives no text #project',
+      function()
+        PS:opreate('reads')
+        local p = PS.current
+        assert.is_true(p:writefile('main.lua', 'x = 2\n'))
+        local read = love.filesystem.read
+        love.filesystem.read = function() return nil end
+        local ok, err = p:readfile('main.lua')
+        love.filesystem.read = read
+        assert.is_false(ok)
+        assert.truthy(tostring(err):find('main.lua', 1, true))
+      end)
+
+    it('fails for a missing file #project', function()
+      PS:opreate('reads')
+      assert.is_false(PS.current:readfile('none.lua'))
+    end)
+  end)
+
   describe('a save', function()
     local function read(path)
       local f = assert(io.open(path, 'rb'))

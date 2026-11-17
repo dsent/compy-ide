@@ -1,4 +1,5 @@
 require("util.string.string")
+local End = require('util.program_end')
 
 --- @param err string
 --- @return integer?
@@ -37,6 +38,9 @@ local function eval(s)
   if not expr then return end
   local ok, res = pcall(expr)
   if ok then return res end
+  --- a lifecycle call in the expression ends the code that
+  --- asked for the eval too (util.program_end)
+  if End.is(res) then error(res, 0) end
 end
 
 --- @param s string

@@ -6,6 +6,8 @@ require("model.lang.lua.error")
 require("view.editor.visibleContent")
 
 local class = require('util.class')
+local End = require('util.program_end')
+local cursor_map = require('model.input.cursorMap')
 require("util.wrapped_text")
 require("util.dequeue")
 require("util.string.string")
@@ -19,6 +21,8 @@ require("util.lua")
 --- @field evaluator Evaluator
 --- @field cursor Cursor
 --- @field error string[]?
+--- @field message_band boolean --- its messages show as
+--- notices in a band above the status line (IS3.14)
 --- @field visible VisibleContent
 --- @field selection InputSelection
 --- @field cfg Config
@@ -44,16 +48,18 @@ UserInputModel = class.create()
 --- @param cfg Config
 --- @param eval Evaluator
 --- @param custom_label PromptLabel?
---- @param editing boolean? --- the editor's rich input:
---- word deletion (2.7) and the text-level undo (1.1).
---- Off everywhere else — the console, project inputs and
---- search keep the plain widget.
+--- @param editing boolean? --- the file editor's field: its
+--- height (half the rows it shares with the document view),
+--- Up on its first row and Down on its last going to the
+--- draft's ends (IS3.8), and its messages in the notice band.
+--- The keys are every field's (fieldKeys.lua).
 function UserInputModel.new(cfg, eval, custom_label, editing)
   local self = setmetatable({
     editing = editing or false,
+    message_band = editing or false,
     entered = InputText(),
     history = History(cfg.input_history),
-    edit_history = EditHistory(32),
+    edit_history = EditHistory(),
     evaluator = eval,
     cursor = Cursor(),
     selection = InputSelection(),
@@ -83,6 +89,11 @@ end
 function UserInputModel:init_visible(text)
   local w = self.cfg.view.drawableChars
   local s = self.cfg.view.input_max
+  if self.editing then
+    --- the editor field takes at most half the rows it
+    --- shares with the document view (IS3.13)
+    s = math.floor((self.cfg.view.lines + 1) / 2)
+  end
   self.visible = VisibleContent(w, text, 1, s)
   self.visible:set_default_range()
 end
@@ -98,6 +109,16 @@ local function sanitize_utf8(s)
     n, pos = utf8.len(r)
   end
   return r
+end
+
+--- Text as it enters a field: valid UTF-8, its line breaks
+--- each a newline, whichever spelling it came with (CRLF, or
+--- a lone CR, as a program may pass), so that no line of a
+--- draft holds a carriage return
+--- @param s string
+--- @return string
+local function entered_text(s)
+  return (sanitize_utf8(s):gsub('\r\n?', '\n'))
 end
 
 ----------------
@@ -120,7 +141,6 @@ end
 --- @param kind string
 --- @param boundary boolean?
 function UserInputModel:_record_edit(kind, boundary)
-  if not self.editing then return end
   self.edit_history:record(
     self:_edit_snapshot(), kind, boundary or false)
 end
@@ -128,7 +148,6 @@ end
 --- @private
 --- Remember where the mutation left the cursor
 function UserInputModel:_note_edit()
-  if not self.editing then return end
   local cl, cc = self:get_cursor_pos()
   self.edit_history:note_cursor(cl, cc)
 end
@@ -162,7 +181,9 @@ end
 
 function UserInputModel:add_text(text)
   if type(text) == 'string' then
-    text = sanitize_utf8(text)
+    text = entered_text(text)
+    --- nothing to add: no step (IS6.6)
+    if text == '' then return end
     local single = string.ulen(text) == 1
     if single then
       --- a whitespace starts a new step, so undo eats
@@ -170,7 +191,7 @@ function UserInputModel:add_text(text)
       self:_record_edit('insert',
         string.match(text, '^%s$') ~= nil)
     else
-      self:_record_edit('paste', true)
+      self:_record_edit('text', true)
     end
     self:pop_selected_text()
     local sl, cc    = self:get_cursor_pos()
@@ -209,22 +230,76 @@ end
 
 --- Normalise either spelling of the content shape -- a string,
 --- or a list of line strings -- to one list of lines, so the
---- caller has a single path. Sanitise for UTF-8, then split on
---- newlines; string.lines takes either spelling, and over a
+--- caller has a single path. Sanitise for UTF-8 and the line
+--- breaks (entered_text), then split on newlines;
+--- string.lines takes either spelling, and over a
 --- list it keeps empty elements, so a blank line survives.
 --- Anything else yields nil, which leaves content standing.
 --- @param text str
 --- @return string[]?
 local function normalized_lines(text)
   if type(text) == 'string' then
-    return string.lines(sanitize_utf8(text))
+    return string.lines(entered_text(text))
   end
   if type(text) ~= 'table' then return end
   local clean = {}
   for i, l in ipairs(text) do
-    clean[i] = sanitize_utf8(l)
+    clean[i] = entered_text(l)
   end
   return string.lines(clean)
+end
+
+--- @param a string[]
+--- @param b string[]
+--- @return boolean --- the same lines
+local function same_lines(a, b)
+  if #a ~= #b then return false end
+  for i = 1, #a do
+    if a[i] ~= b[i] then return false end
+  end
+  return true
+end
+
+--- The draft as a syntax returns it, as one change to it:
+--- what was typed before stays undoable. The cursor goes to
+--- `at` when it is given, else it follows the text element
+--- it stood at (IS3.9).
+--- @param text str
+--- @param at {l: integer, c: integer}?
+function UserInputModel:reformat(text, at)
+  local lines = normalized_lines(text)
+  if not lines then return end
+  --- the same text is no change, and no step (IS6.6)
+  if same_lines(lines, self:get_text()) then
+    if at then self:move_cursor(at.l, at.c) end
+    return
+  end
+  self:_record_edit('format', true)
+  local cl, cc = self:get_cursor_pos()
+  local nl, nc = cursor_map.cursor(self:get_text(), lines, cl, cc)
+  if at then
+    self:clear_selection()
+    nl, nc = at.l, at.c
+  end
+  self.entered = InputText(lines)
+  self:set_cursor(Cursor(nl, nc))
+  self:text_change()
+  self:_clamp_cursor_pos()
+  self:_follow_cursor()
+  self:_note_edit()
+end
+
+--- Remove the text from the cursor to the end of its line,
+--- the line break excluded (IS3.12, Ctrl+K).
+function UserInputModel:kill_to_line_end()
+  local cl, cc = self:get_cursor_pos()
+  local line = self:get_text_line(cl)
+  if cc > string.ulen(line) then return end
+  self:_record_edit('remove_line', true)
+  self:clear_selection()
+  self:_set_text_line(string.usub(line, 1, cc - 1), cl, true)
+  self:text_change()
+  self:_note_edit()
 end
 
 --- Both spellings normalise identically, so the cursor's
@@ -279,19 +354,6 @@ function UserInputModel:_drop_text_line(ln)
   self:text_change()
 end
 
---- @param ln integer?
-function UserInputModel:delete_line(ln)
-  self:_record_edit('remove_line', true)
-  local n = self:get_n_text_lines()
-  if n == 1 then
-    self:clear_input()
-  else
-    local l = ln or self:get_cursor_y()
-    self:_drop_text_line(l)
-  end
-  self:_note_edit()
-end
-
 --- @param text string
 --- @param li integer?
 function UserInputModel:insert_text_line(text, li)
@@ -299,6 +361,19 @@ function UserInputModel:insert_text_line(text, li)
   self.cursor.l = l + 1
   self:get_text():insert(text, l)
   self:text_change()
+end
+
+--- The cursor's line swaps with the one above or below it,
+--- the cursor going with it at its column (Alt+Up,
+--- Alt+Down): one change to the draft, whose step holds the
+--- field as the key found it. At the first or the last line
+--- nothing moves.
+--- @param dir VerticalDir
+function UserInputModel:move_line(dir)
+  local cl = self:get_cursor_y()
+  local to = dir == 'up' and cl - 1 or cl + 1
+  if to < 1 or to > self:get_n_text_lines() then return end
+  self:swap_lines(to, cl)
 end
 
 --- Swap to lines of text, second param defaults to cursor line
@@ -321,11 +396,14 @@ function UserInputModel:swap_lines(ln_that, ln_this)
         ln_this < 1 or ln_that < 1 then
       return false
     end
+    --- one change to the draft, unless the lines are the same
+    if this ~= that then self:_record_edit('swap', true) end
 
     self:_set_text_line(that, ln_this, true)
     self:_set_text_line(this, ln_that, true)
     self:set_cursor(Cursor(ln_that, self:get_cursor_x()))
     self:text_change()
+    self:_note_edit()
     return true
   end
 end
@@ -377,23 +455,13 @@ function UserInputModel:get_current_line()
   return self:get_text():get(cl)
 end
 
---- @param text string
-function UserInputModel:paste(text)
-  local sel = self:get_selection()
-  local start = sel.start
-  local fin = sel.fin
-  if start and start.l and fin and fin.l and fin.c then
-    local from, to = self:diff_cursors(start, fin)
-    self:get_text():traverse(from, to, { delete = true })
-    if from and to then
-      self:move_cursor(from.l, from.c)
-    end
-  end
-  self:add_text(text)
-  self:clear_selection()
-end
-
 function UserInputModel:backspace()
+  --- nothing before the cursor and nothing selected: no
+  --- change, and no step (IS6.6)
+  local l0, c0 = self:get_cursor_pos()
+  if l0 == 1 and c0 == 1 and not self:has_selection() then
+    return
+  end
   self:_record_edit('remove')
   self:pop_selected_text()
   local line = self:get_current_line()
@@ -425,44 +493,39 @@ function UserInputModel:backspace()
   self:_note_edit()
 end
 
---- Start of the word ending at column cc (spec 2.7:
---- Ctrl+Backspace / Ctrl+W). Whitespace before the
---- cursor is eaten with the word, as readline does.
---- @param line string
---- @param cc integer --- cursor column
---- @return integer --- the column the word starts at
-local function word_start(line, cc)
-  local i = cc - 1
-  while i > 1 and string.usub(line, i - 1, i - 1) == ' ' do
-    i = i - 1
-  end
-  while i > 1 do
-    local ch = string.usub(line, i - 1, i - 1)
-    if ch == ' ' then break end
-    i = i - 1
-  end
-  return i
-end
-
---- Delete the word before the cursor; at the line's
---- start it falls back to joining lines
+--- Ctrl+Backspace and Ctrl+W: delete exactly
+--- what Ctrl+Left moves over (IS3.8), as one change: one word
+--- splitting for both (the maintainer's ruling of November
+--- 14, 2026). At a line's start that is the line break and the
+--- previous line's last word; at the draft's start, nothing.
 function UserInputModel:backspace_word()
+  local l, c = self:get_cursor_pos()
+  local tl, tc = self:_word_left_of(l, c)
+  if tl == l and tc == c then return end
   self:_record_edit('remove_word', true)
-  self:pop_selected_text()
-  local line = self:get_current_line()
-  local cl, cc = self:get_cursor_pos()
-  if cc == 1 then return self:backspace() end
-
-  local ws = word_start(line, cc)
-  local pre = string.usub(line, 1, ws - 1)
-  local post = string.usub(line, cc)
-  self:_set_text_line(pre .. post, cl, true)
-  self:move_cursor(cl, ws)
+  self:clear_selection()
+  local lines = { }
+  for i = 1, tl - 1 do lines[i] = self:get_text_line(i) end
+  lines[tl] = string.usub(self:get_text_line(tl), 1, tc - 1)
+      .. string.usub(self:get_text_line(l), c)
+  for i = l + 1, self:get_n_text_lines() do
+    lines[#lines + 1] = self:get_text_line(i)
+  end
+  self.entered = InputText(lines)
   self:text_change()
+  self:move_cursor(tl, tc)
   self:_note_edit()
 end
 
 function UserInputModel:delete()
+  --- nothing after the cursor and nothing selected: no
+  --- change, and no step (IS6.6)
+  local l0, c0 = self:get_cursor_pos()
+  local last = string.ulen(self:get_current_line() or '') + 1
+  if l0 == self:get_n_text_lines() and c0 == last
+      and not self:has_selection() then
+    return
+  end
   self:_record_edit('remove')
   self:pop_selected_text()
   local line = self:get_current_line()
@@ -527,16 +590,26 @@ function UserInputModel:highlight()
   if not ev then return end
   local text = self:get_text()
 
+  --- a program's parser or highlighter is program code, which
+  --- the IDE calls here as it renders the field: a stop it asks
+  --- for ends it and is made later (util.program_end)
   local p = ev.parser
   if p then
-    local ok, p_err = p.parse(text)
+    local ok, p_err = End.counted(p.parse, text)
+    --- a parser that ended gave no answer: nothing is marked
+    if ok == nil and p_err == nil then ok = true end
     local parse_err
     if not ok then
+      --- red starts at the failing character (IS3.4), where
+      --- the parser's syntax places a failure, if it has one
       parse_err = p_err
+      if p.unparsed then
+        parse_err = p.unparsed(text, p_err).failure
+      end
     end
     local hl
     if ev.highlighter then
-      hl = ev.highlighter(text)
+      hl = End.counted(ev.highlighter, text)
     end
 
     -- hl stays indexable even with no highlighter (parser but
@@ -548,7 +621,8 @@ function UserInputModel:highlight()
       -- same invariant as the parser branch above: a
       -- highlighter that returns nil must not leave `.hl` nil
       -- for the view to index
-      self._memo.highlight = { hl = ev.highlighter(text) or {} }
+      self._memo.highlight = {
+        hl = End.counted(ev.highlighter, text) or {} }
     else
       self._memo.highlight = ev:validation_hl(text)
     end
@@ -578,8 +652,10 @@ function UserInputModel:keep_history()
   return true
 end
 
---- @private
-function UserInputModel:_remember()
+--- Store the field's line in the history: called when the
+--- line is accepted, before it runs. A line refused or gone
+--- on with is not stored, and the walk stays as it was.
+function UserInputModel:remember()
   if self:keep_history() then
     local ent = self.entered
     if string.is_non_empty_string_array(ent) then
@@ -588,11 +664,11 @@ function UserInputModel:_remember()
   end
 end
 
+--- A recalled line shows with the cursor at its end (FR1.5)
 function UserInputModel:history_back()
   if self:keep_history() then
     local t = self:get_text()
     local ok, hist = self.history:history_back(t)
-    -- TODO: remember cursor pos?
     if ok then
       self:set_text(hist)
       self:jump_end()
@@ -600,16 +676,15 @@ function UserInputModel:history_back()
   end
 end
 
+--- Past the newest entry is the line typed, and Down on it
+--- does nothing
 function UserInputModel:history_fwd()
   if self:keep_history() then
     local t = self:get_text()
     local ok, hist = self.history:history_fwd(t)
-    -- TODO: remember cursor pos?
     if ok then
       self:set_text(hist)
       self:jump_end()
-    else
-      self:clear_input()
     end
   end
 end
@@ -623,7 +698,10 @@ end
 function UserInputModel:_follow_cursor()
   local cl, cc = self:get_cursor_pos()
   local w = self.cfg.view.drawableChars
-  local acl = cl + math.intdiv(cc, w)
+  --- the cursor's row among the wrapped rows (IS3.10)
+  local rows = self.visible.wrap_forward[cl] or { cl }
+  local nth = math.intdiv(math.max(cc - 1, 0), w) + 1
+  local acl = rows[math.min(nth, #rows)]
   local vrange = self.visible:get_range()
   local diff = vrange:outside(acl)
   if diff ~= 0 then
@@ -777,93 +855,91 @@ function UserInputModel:get_input()
   }
 end
 
---- @param dir VerticalDir
---- @return boolean? limit
-function UserInputModel:cursor_vertical_move(dir)
-  local cl, cc = self:get_cursor_pos()
+--- @private
+--- A line's rows, as the field wraps it (IS3.13). A line that
+--- fills its last row does not wrap further: its end shows on
+--- that row, as in Luditor.
+--- @param l integer
+--- @return integer last --- the last row, counted from 0
+--- @return integer len --- the line's length in characters
+function UserInputModel:_line_rows(l)
   local w = self.visible.wrap_w
-  local n = self:get_n_text_lines()
-  local llen = string.ulen(self:get_text_line(cl))
-  local full_lines = math.floor(llen / w)
+  local len = string.ulen(self:get_text_line(l))
+  return math.max(math.ceil(len / w) - 1, 0), len
+end
 
-  --- @param is_inline function
-  --- @param is_not_last_line function
-  --- @return boolean? limit
-  local function move(is_inline, is_not_last_line)
-    local keep = (function()
-      if self.selection:is_held() then
-        return 'keep'
-      end
-    end)()
-    local function sgn(back, fwd)
-      if dir == 'up' then
-        return back()
-      elseif dir == 'down' then
-        return fwd()
-      end
-    end
-    if llen > w and is_inline() then
-      local newc = sgn(
-        function() return math.max(cc - w, 0) end,
-        function() return math.min(cc + w, llen + 1) end
-      )
-      self:move_cursor(cl, newc, keep)
-      if keep then self:end_selection() end
-      return
-    end
-    if is_not_last_line() then
-      local nl = sgn(
-        function() return cl - 1 end,
-        function() return cl + 1 end
-      )
-      local target_line = self:get_text_line(nl)
-      local target_len = string.ulen(target_line)
-      local offset = math.fmod(cc, w)
-      local newc
-      if target_len > w then
-        local base = sgn(
-          function() return math.floor(target_len / w) * w end,
-          function() return 0 end
-        )
-        local t_offset = sgn(
-          function() return math.fmod(target_len, w) + 1 end,
-          function() return math.fmod(w, target_len) end
-        )
+--- @private
+--- @param l integer
+--- @param c integer
+--- @return integer row --- the row of position l:c, from 0
+function UserInputModel:_row_of(l, c)
+  local w = self.visible.wrap_w
+  return math.min(math.floor((c - 1) / w), (self:_line_rows(l)))
+end
 
-        local new_off = math.min(offset, t_offset)
-        newc = base + new_off
-      else
-        newc = math.min(offset, 1 + string.ulen(target_line))
-      end
-      self:move_cursor(nl, newc, keep)
-      if keep then self:end_selection() end
-    else
-      if self:is_selection_held() then
-        sgn(
-          function() self:jump_home() end,
-          function() self:jump_end() end
-        )
-      end
-      return true
-    end
-  end
+--- @private
+--- The first and the last cursor position a row shows. The
+--- position after a row's last character shows on the row
+--- below, the line's end on its last row.
+--- @param l integer
+--- @param row integer
+--- @return integer first
+--- @return integer last
+function UserInputModel:_row_bounds(l, row)
+  local w = self.visible.wrap_w
+  local last_row, len = self:_line_rows(l)
+  local first = row * w + 1
+  if row >= last_row then return first, len + 1 end
+  return first, first + w - 1
+end
 
-  local limit
+--- @private
+--- The row above or below the cursor's, a wrapped line's rows
+--- included (IS3.8, IS3.13)
+--- @param dir VerticalDir
+--- @return integer? line --- nil at the draft's first or last row
+--- @return integer? row --- counted from 0 within the line
+function UserInputModel:_neighbor_row(dir)
+  local cl, cc = self:get_cursor_pos()
+  local row = self:_row_of(cl, cc)
   if dir == 'up' then
-    limit = move(
-      function() return cc - w > 0 end,
-      function() return cl > 1 end
-    )
-  elseif dir == 'down' then
-    limit = move(
-      function() return cc <= full_lines * w end,
-      function() return cl < n end
-    )
-  else
-    return
+    if row > 0 then return cl, row - 1 end
+    if cl == 1 then return nil end
+    return cl - 1, (self:_line_rows(cl - 1))
   end
-  if not limit then self:_follow_cursor() end
-  return limit
+  if row < self:_line_rows(cl) then return cl, row + 1 end
+  if cl < self:get_n_text_lines() then return cl + 1, 0 end
+  return nil
+end
+
+--- Up and Down move the cursor by row, keeping its offset
+--- from the row's first position where the target row is long
+--- enough, at the row's last position otherwise (IS3.8).
+--- @param dir VerticalDir
+--- @return boolean? limit --- no row lies that way
+function UserInputModel:cursor_vertical_move(dir)
+  if dir ~= 'up' and dir ~= 'down' then return end
+  local nl, nrow = self:_neighbor_row(dir)
+  if not nl then
+    --- IS3.8: in the editor's field, Up on the first row
+    --- goes to the draft's start and Down on the last row to
+    --- its end
+    if self.editing or self:is_selection_held() then
+      if dir == 'up' then
+        self:jump_home()
+      else
+        self:jump_end()
+      end
+    end
+    return true
+  end
+  local cl, cc = self:get_cursor_pos()
+  local offset = cc - self:_row_bounds(cl, self:_row_of(cl, cc))
+  local first, last = self:_row_bounds(nl, nrow)
+  local keep = self.selection:is_held() and 'keep' or nil
+  self:move_cursor(nl, math.min(first + offset, last), keep)
+  if keep then self:end_selection() end
+  self:_follow_cursor()
 end
 
 function UserInputModel:cursor_left()
@@ -936,40 +1012,181 @@ function UserInputModel:jump_end()
   self.visible:check_range()
 end
 
+--- Whether Caps Lock is on: it changes the case of typed
+--- letters, so the status line shows it (H-NFR4.4).
+--- @return boolean
+local function caps_lock()
+  local active = love.keyboard.isModifierActive
+  return active ~= nil and active('capslock') == true
+end
+
+--- A host that sets status_source (the file editor) has its
+--- custom status read afresh each time; one that sets
+--- project_source (the console) names the open project.
 --- @return Status
 function UserInputModel:get_status()
+  local src = self.status_source
+  local project = self.project_source
   return {
     label = self:get_label(),
     cursor = self.cursor,
     n_lines = self:get_n_text_lines(),
-    custom = self.custom_status,
+    custom = src and src() or self.custom_status,
     input_more = self.visible:get_more(),
+    caps = caps_lock() and 'CAPS' or nil,
+    project = project and project() or nil,
   }
 end
 
-function UserInputModel:jump_line_start()
-  local keep = (function()
-    if self.selection:is_held() then
-      return 'keep'
-    end
-  end)()
-  local l = self.cursor.l
-  local nc = 1
-  self:end_selection(l, nc)
-  self:move_cursor(l, nc, keep)
+--- The cursor's row within its wrapped line (IS3.13): the
+--- columns of the first and the last cursor position the row
+--- shows.
+--- @return integer first
+--- @return integer last
+function UserInputModel:get_row_span()
+  local cl, cc = self:get_cursor_pos()
+  return self:_row_bounds(cl, self:_row_of(cl, cc))
 end
 
-function UserInputModel:jump_line_end()
-  local ent = self:get_text()
-  local line = self.cursor.l
-  local char = string.ulen(ent[line]) + 1
+--- @private
+--- @param l integer
+--- @param c integer
+function UserInputModel:_jump_to(l, c)
   local keep = (function()
     if self.selection:is_held() then
       return 'keep'
     end
   end)()
-  self:end_selection(line, char)
-  self:move_cursor(line, char, keep)
+  self:end_selection(l, c)
+  self:move_cursor(l, c, keep)
+end
+
+--- Home: the first cursor position shown on the cursor's row
+--- (IS3.8), the line's start unless the line wraps
+function UserInputModel:jump_line_start()
+  local first = self:get_row_span()
+  self:_jump_to(self.cursor.l, first)
+end
+
+--- End: the last cursor position shown on the cursor's row
+function UserInputModel:jump_line_end()
+  local _, last = self:get_row_span()
+  self:_jump_to(self.cursor.l, last)
+end
+
+--- Past ASCII, the punctuation, signs and symbols that
+--- separate words, as code point ranges. LÖVE's utf8 module,
+--- which the IDE runs on, has no character classes.
+--- A number is a word's, as a letter is (², ½, ①).
+--- In order, by script: Latin-1, Greek, Cyrillic, Armenian,
+--- Hebrew, Arabic, Devanagari, then the shared blocks of
+--- punctuation and symbols, fullwidth forms and pictographs.
+local NON_WORD = {
+  { 0xA0, 0xA9 }, { 0xAB, 0xB1 }, { 0xB4, 0xB4 },
+  { 0xB6, 0xB8 }, { 0xBB, 0xBB }, { 0xBF, 0xBF },
+  { 0xD7, 0xD7 }, { 0xF7, 0xF7 },
+  { 0x37E, 0x37E }, { 0x387, 0x387 },
+  { 0x482, 0x482 },
+  { 0x55A, 0x55F }, { 0x589, 0x58A },
+  { 0x5BE, 0x5BE }, { 0x5C0, 0x5C0 }, { 0x5C3, 0x5C3 },
+  { 0x5C6, 0x5C6 }, { 0x5F3, 0x5F4 },
+  { 0x600, 0x60F }, { 0x61B, 0x61F }, { 0x66A, 0x66D },
+  { 0x6D4, 0x6D4 }, { 0x6DD, 0x6DE }, { 0x6E9, 0x6E9 },
+  { 0x964, 0x965 },
+  --- from U+2000 to U+2BFF, the letters and numbers among
+  --- the signs are a word's: superscripts and subscripts,
+  --- letterlike symbols (ℝ), number forms (Ⅻ) and circled
+  --- numbers (①)
+  { 0x2000, 0x206F }, { 0x207A, 0x207E }, { 0x208A, 0x208E },
+  { 0x20A0, 0x2101 }, { 0x2103, 0x2106 }, { 0x2108, 0x2109 },
+  { 0x2114, 0x2114 }, { 0x2116, 0x2118 }, { 0x211E, 0x2123 },
+  { 0x2125, 0x2125 }, { 0x2127, 0x2127 }, { 0x2129, 0x2129 },
+  { 0x212E, 0x212E }, { 0x213A, 0x213B }, { 0x2140, 0x2144 },
+  { 0x214A, 0x214D }, { 0x214F, 0x214F }, { 0x218A, 0x245F },
+  { 0x249C, 0x24E9 }, { 0x2500, 0x2775 }, { 0x2794, 0x2BFF },
+  { 0x2E00, 0x2E7F }, { 0x3000, 0x303F },
+  { 0xFE10, 0xFE1F }, { 0xFE30, 0xFE6F }, { 0xFF01, 0xFF0F },
+  { 0xFF1A, 0xFF20 }, { 0xFF3B, 0xFF3E }, { 0xFF40, 0xFF40 },
+  { 0xFF5B, 0xFF65 },
+  { 0x1F000, 0x1FAFF },
+}
+
+--- @param ch string?
+--- @return boolean --- a letter, a digit or an underscore
+local function is_word_char(ch)
+  if not ch or ch == '' then return false end
+  if string.byte(ch) < 128 then
+    return string.match(ch, '^[%w_]') ~= nil
+  end
+  local ok, cp = pcall(utf8.codepoint, ch)
+  if not ok then return false end
+  for _, r in ipairs(NON_WORD) do
+    if cp < r[1] then return true end
+    if cp <= r[2] then return false end
+  end
+  return true
+end
+
+--- Where Ctrl+Left lands from (l, c): the start of the word
+--- under or before it (IS3.8); everything that is no letter,
+--- digit or underscore separates words, line breaks included
+--- @param l integer
+--- @param c integer
+--- @return integer l
+--- @return integer c
+function UserInputModel:_word_left_of(l, c)
+  while true do
+    local ch
+    if c > 1 then
+      ch = string.usub(self:get_text_line(l), c - 1, c - 1)
+    end
+    if ch and is_word_char(ch) then break end
+    if ch then
+      c = c - 1
+    elseif l > 1 then
+      l = l - 1
+      c = string.ulen(self:get_text_line(l)) + 1
+    else
+      break
+    end
+  end
+  local line = self:get_text_line(l)
+  while c > 1 and is_word_char(string.usub(line, c - 1, c - 1)) do
+    c = c - 1
+  end
+  return l, c
+end
+
+--- Ctrl+Left: to the start of the word under or before the
+--- cursor (IS3.8)
+function UserInputModel:cursor_word_left()
+  self:_jump_to(self:_word_left_of(self:get_cursor_pos()))
+end
+
+--- Ctrl+Right: to the end of the word under or after the
+--- cursor (IS3.8)
+function UserInputModel:cursor_word_right()
+  local l, c = self:get_cursor_pos()
+  local n = self:get_n_text_lines()
+  while true do
+    local line = self:get_text_line(l)
+    local len = string.ulen(line)
+    local ch = c <= len and string.usub(line, c, c) or nil
+    if ch and is_word_char(ch) then break end
+    if ch then
+      c = c + 1
+    elseif l < n then
+      l, c = l + 1, 1
+    else
+      break
+    end
+  end
+  local line = self:get_text_line(l)
+  local len = string.ulen(line)
+  while c <= len and is_word_char(string.usub(line, c, c)) do
+    c = c + 1
+  end
+  self:_jump_to(l, c)
 end
 
 --- @param cs CustomStatus
@@ -989,8 +1206,8 @@ function UserInputModel:evaluate()
   return self:handle(true)
 end
 
+--- Clear the field; the history keeps nothing of it
 function UserInputModel:cancel()
-  self:handle(false)
   self:reset()
 end
 
@@ -1017,6 +1234,18 @@ local function char_col(line, byte_c)
 end
 
 --- @private
+--- @param ent InputText
+--- @return Unparsed? --- what the text that fails to parse
+--- comes to, when the evaluator's parser can say
+function UserInputModel:_unparsed(ent)
+  local p = self.evaluator.parser
+  if not p or not p.unparsed then return nil end
+  local parses, err = p.parse(ent)
+  if parses then return nil end
+  return p.unparsed(ent, err)
+end
+
+--- @private
 --- On a reject, seat the cursor on the error position.
 --- @param ent InputText
 --- @return boolean ok
@@ -1024,9 +1253,22 @@ end
 function UserInputModel:_apply_eval(ent)
   local ok, result = self.evaluator:apply(ent)
   if ok then return ok, result end
-  --- @TODO check line len and move to next if at end
   local perr = result[1]
   if not perr or not perr.c then return ok, result end
+  --- the parser's syntax says what the draft comes to: a
+  --- failure seats the cursor before the failing character
+  --- (IS3.4); any other answer is shown as it is, with no
+  --- error (IS3.5)
+  local said = self:_unparsed(ent)
+  local failure = said and said.failure
+  if failure then
+    self:move_cursor(failure.l, failure.c)
+    return ok, { failure }
+  end
+  if said then
+    self:reformat(said.lines, said.cursor)
+    return false, nil
+  end
   local c = char_col(self:get_text_line(perr.l), perr.c)
   if c > 1 then c = c + 1 end
   self:move_cursor(perr.l, c)
@@ -1044,7 +1286,6 @@ function UserInputModel:handle(eval)
   local ent = self:get_text()
   local ok, result
   if ent:non_empty() then
-    self:_remember()
     if eval then
       ok, result = self:_apply_eval(ent)
       if not ok then return false, result end
@@ -1065,14 +1306,14 @@ end
 
 --- One entry per screen row: a message's own line breaks
 --- (\n, \r\n or \r) split it before wrapping (a failed
---- require lists a path per line), and a tab becomes two
---- spaces.
+--- require lists a path per line), a tab becomes two
+--- spaces, and bytes that are not UTF-8 show as U+FFFD.
 --- @return string[]?
 function UserInputModel:get_wrapped_error()
   if self.error then
     local e = { }
     for _, er in ipairs(self.error) do
-      local s = tostring(er)
+      local s = string.scrub(tostring(er))
         :gsub('\r\n?', '\n')
         :gsub('\t', '  ')
       for _, l in ipairs(string.lines(s)) do
@@ -1082,25 +1323,93 @@ function UserInputModel:get_wrapped_error()
     local we = string.wrap_array(
       e,
       self.visible.wrap_w)
-    table.insert(we, 1, 'Errors:')
+    --- a notice (IS3.14) is its own one line
+    if not self.error.notice then
+      table.insert(we, 1, 'Errors:')
+    end
     return we
   end
+end
+
+--- An error as the text it shows. A project's validator may
+--- give a plain { msg = ... } table, which has no __tostring
+--- of its own: it shows its message, with its line (and
+--- column) when it has them.
+--- @param e Error|string|{ msg: string }
+--- @return string
+local function position(e)
+  if not e.l then return "" end
+  return "L" .. e.l .. ":" .. (e.c and e.c .. ":" or "")
+end
+
+local function error_text(e)
+  local mt = type(e) == "table" and getmetatable(e)
+  local plain = type(e) == "table" and not (mt and mt.__tostring)
+  if not (plain and e.msg ~= nil) then return tostring(e) end
+  return position(e) .. tostring(e.msg)
 end
 
 --- @TODO support error[] and string[]
 --- @param errors Error[]?
 function UserInputModel:set_error(errors)
   self.error = nil
-  if type(errors) == "table" then
-    if type(errors[1]) == "string" then
-      self.error = errors
-    else
-      self.error = {}
-      for _, e in ipairs(errors) do
-        table.insert(self.error, tostring(e))
+  if errors == nil then return end
+  --- one error alone, not in a list, is a list of one
+  local one = type(errors) ~= "table" or errors.msg ~= nil
+  if one then errors = { errors } end
+  self.error = {}
+  for _, e in ipairs(errors) do
+    table.insert(self.error, error_text(e))
+  end
+end
+
+--- What a message is in the notice band: a notice says why an
+--- action was refused and what would work; an error is a
+--- parser's or a run's message. The band draws each in its
+--- own colour.
+--- @alias MessageKind 'notice'|'error'
+
+--- Show a message in the notice band (IS3.14): a notice,
+--- unless `kind` says it is an error. Each line of it breaks
+--- between words at the field's width (the ruling "A notice
+--- too long for one row wraps between words"). It changes no
+--- state; the next key dismisses it.
+--- @param msg any|any[] --- a text, an error, or a list
+--- @param kind MessageKind?
+function UserInputModel:set_notice(msg, kind)
+  local w = self.visible and self.visible.wrap_w or 64
+  local parts = msg
+  if type(msg) ~= 'table' or msg.msg ~= nil then
+    parts = { msg }
+  end
+  local rows = { }
+  for _, part in ipairs(parts) do
+    local s = error_text(part):gsub('\r\n?', '\n')
+    local lines = string.lines(s)
+    --- a message that ends in a line break has no row after it
+    if #lines > 1 and lines[#lines] == '' then
+      lines[#lines] = nil
+    end
+    for _, line in ipairs(lines) do
+      --- a word wider than a row is left to the field's wrap
+      for _, row in ipairs(string.wrap_words(line, w)) do
+        rows[#rows + 1] = row
       end
     end
   end
+  self.error = rows
+  rows.notice = true
+  rows.kind = kind or 'notice'
+end
+
+--- The kind of the message shown, nil when none shows. A
+--- message shown another way than through `set_notice` is an
+--- error.
+--- @return MessageKind?
+function UserInputModel:message_kind()
+  local e = self.error
+  if type(e) ~= 'table' or #e == 0 then return nil end
+  return e.kind or 'error'
 end
 
 --- @return boolean
@@ -1120,17 +1429,21 @@ end
 ----------------
 -- selection  --
 ----------------
+--- The draft's line and column of a cell on its wrapped row
+--- `l`, column `c`: the row's place in its own line counts,
+--- not the rows the lines before it wrap to
 --- @param l integer
 --- @param c integer
+--- @return integer li
+--- @return integer ci
 function UserInputModel:translate_grid_to_cursor(l, c)
-  local wt       = self.visible.wrap_reverse
-  local li       = wt[l] or wt[#wt]
-  local line     = self:get_wrapped_text_line(l)
-  local llen     = string.ulen(line)
-  local c_offset = math.min(llen + 1, c)
-  local c_base   = l - li
-  local ci       = c_base * self.visible.wrap_w + c_offset
-  return li, ci
+  local vis = self.visible
+  local wt = vis.wrap_reverse
+  if not wt[l] then l = #wt end
+  local li = wt[l]
+  local rank = vis.wrap_rank[l] or 0
+  local len = string.ulen(self:get_wrapped_text_line(l))
+  return li, rank * vis.wrap_w + math.min(len + 1, c)
 end
 
 --- @param c1 Cursor?
@@ -1231,11 +1544,6 @@ function UserInputModel:get_ordered_selection()
   ret.text = sel.text
   ret.held = sel.held
   return ret
-end
-
---- @return string[]
-function UserInputModel:get_selected_text()
-  return self.selection.text
 end
 
 --- @return string[]?

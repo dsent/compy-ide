@@ -1,8 +1,8 @@
 -- Availability: predates the Compy input API (introduced in
 -- 1.0.0-rc20260712).
 
--- The mode x channel routing grid — console, editor, editor
--- search, project run — against the rule that each event
+-- The mode x channel routing grid — console, editor, project
+-- run — against the rule that each event
 -- reaches exactly ONE route
 -- (doc/development/decisions/input.md, D-ROUTE-OWNS).
 
@@ -62,18 +62,15 @@ describe('input surface: inbound events — routing #input',
     -- so the cell is visible, not silent.
     pending('routes the key release to the console')
 
-    -- The production widget disables selection, so an
-    -- observable selection on the console route witnesses
-    -- active-route pointer delivery. The precondition assert
-    -- pins causality: no selection existed before the pointer
-    -- events. (doc/development/internals/user_input.md, "Input
-    -- widget mouse").
+    -- A click places the console's cursor, which witnesses
+    -- active-route pointer delivery: the text was set with the
+    -- cursor at its end (doc/development/internals/
+    -- user_input.md, "Input widget mouse").
     it('routes the pointer to the console', function()
       F.console:set_text({ 'aa', 'bb', 'cc' })
-      assert.is_false(F.console.model:has_selection())
+      local before = { F.console:get_cursor_pos() }
       F.session.mousepressed(10, 540, 1, false, 1)
-      F.session.mousereleased(40, 508, 1, false, 1)
-      assert.is_true(F.console.model:has_selection())
+      assert.are_not.same(before, { F.console:get_cursor_pos() })
     end)
   end)
 
@@ -144,10 +141,6 @@ describe('input surface: inbound events — routing #input',
     pending('routes the pointer to the editor')
   end)
 
-  -- Editor Search is characterized with real key/text entry in
-  -- tests/editor/editor_spec.lua. It remains editor-owned
-  -- behaviour, not a project-facing input-API contract.
-
   describe('routing: project run', function()
 
     -- The project's sandboxed love.* handler witnesses
@@ -187,6 +180,7 @@ describe('input surface: inbound events — routing #input',
       F.activate_project({ keyreleased = function()
         got = got + 1
       end })
+      F.session.press('a')
       F.session.release('a')
       assert.equal(1, got)
     end)
@@ -209,9 +203,9 @@ describe('input surface: inbound events — routing #input',
     end)
 
     -- SURFACED GAP (doc/development/internals/user_input.md,
-    -- "Touch"): touch has no gateway entry today and both the
-    -- widget and route touch handlers are no-ops, so delivery
-    -- is not black-box observable. Greens when a touch consumer
+    -- "Touch"): the gateway's touch entries reach the route,
+    -- but the widget's and the console's touch handlers do
+    -- nothing yet, so delivery is not black-box observable. Greens when a touch consumer
     -- lands.
     pending('touch reaches the active route')
   end)

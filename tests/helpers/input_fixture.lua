@@ -86,11 +86,8 @@ local function mock_runtime()
     -- The console prepares serial support at build time and asks
     -- love.system.getOS() to pick a backend; the mock love has no
     -- `system`, so stub it (a desktop OS -> the null backend).
-    -- Leaving the editor saves the clipboard with its state.
     system     = {
       getOS            = function() return 'Linux' end,
-      getClipboardText = function() return '' end,
-      setClipboardText = function() end,
     },
   })
 end
@@ -115,6 +112,10 @@ local function enrich_gfx()
   gfx.setColorMask = function() end
   gfx.push      = function() end
   gfx.pop       = function() end
+  -- what a run's start puts back (consoleController.lua,
+  -- reset_graphics)
+  gfx.reset = gfx.reset or function() end
+  gfx.getStackDepth = gfx.getStackDepth or function() return 0 end
   -- love.update walks into the snapshot branch as soon as a
   -- project raise sets 'snapshot', so this has to exist. It is
   -- a no-op that never invokes its callback, modelling "the
@@ -174,14 +175,14 @@ local function build_widget(cfg)
   -- sharing one would resolve every widget's highlighter to
   -- whichever bound it last.
   local m = UserInputModel(cfg, Evaluator.plain('text input'))
-  local c = UserInputController(m, true)
+  local c = UserInputController(m)
   -- The project widget's shipped lifecycle seating, mirroring
   -- build_input_widget: a fixture widget without it would let
   -- a spec assert the class defaults while a project meets
   -- something else (doc/development/decisions/input.md,
   -- D-LIFECYCLE-FLAGS, statement 3).
   c:seat_lifecycle({ clear_on_submit = true })
-  c:init_view({ render = function() end, draw = function() end })
+  c:init_view(UserInputView(cfg.view, c))
   -- The same call production makes, not a fixture-local
   -- equivalent: a widget built here must be wired the way
   -- build_input_widget wires one.
@@ -230,6 +231,10 @@ function F.setup()
   -- uses F.run_project.
   widget = build_widget(cfg)
   CC = build_console(cfg)
+  -- A stop collects garbage twice (the terminate flush); over
+  -- a suite's thousands of runs and its large heap that is
+  -- minutes: a case that checks the collection counts it itself
+  CC.collect_garbage = function() end
   Controller.set_default_handlers(CC, CC.view)
   -- set_love_update (above) wires love.update, which drives the
   -- click-timer distinguishing single- from double-click
@@ -376,16 +381,14 @@ function F.activate_simple(handlers)
   return F.compy()
 end
 
--- A selection-enabled widget seeded with multi-line text, so a
--- pointer event lands an OBSERVABLE selection (the production
--- the widget disables selection, making pointer delivery a
--- no-op — doc/development/internals/user_input.md, "Input
--- widget mouse"). Witnesses pointer delivery to the widget
--- half.
-function F.show_selectable_widget(lines)
+-- A widget seeded with multi-line text, the cursor at its end,
+-- so that a click lands an OBSERVABLE cursor move
+-- (doc/development/internals/user_input.md, "Input widget
+-- mouse"). Witnesses pointer delivery to the widget half.
+function F.show_multiline_widget(lines)
   local m = UserInputModel(cfg, InputEvalText)
-  local w = UserInputController(m, false)
-  w:init_view({ render = function() end, draw = function() end })
+  local w = UserInputController(m)
+  w:init_view(UserInputView(cfg.view, w))
   w.model:set_text(lines or { 'aa', 'bb', 'cc' })
   love.state.user_input = { M = m, C = w, V = w.view }
   -- The dispatch chain resolves its terminal consumer from
@@ -431,7 +434,9 @@ end
 -- state production never creates, or content production keeps
 -- on purpose between runs.
 function F.reset()
-  -- Undo a show_selectable_widget swap before teardown runs, so
+  -- no request or count of an earlier case is left
+  require('util.program_end').reset()
+  -- Undo a show_multiline_widget swap before teardown runs, so
   -- stop_project_run tears down the fixture's widget rather
   -- than a case-local one.
   love.state.user_input_controller = widget
@@ -451,13 +456,16 @@ function F.reset()
   mock.release_keys()
   love.state.app_state          = 'ready'
   love.state.prev_state         = nil
-  love.state.editor             = nil
   -- Otherwise leaks into the next test's suspend(): a
   -- stale message from an earlier suspend_run() would set
   -- an unrelated console error (discovered via the route-
   -- lifecycle inspect case, m5c chunk 4).
   love.state.suspend_msg        = nil
   love.update(1.0)
+  -- no earlier case's lines in the console's history, nor
+  -- its rows in the output's kept rows
+  CC.input:reset(true)
+  CC.model.output:erase()
   CC.input:clear()
   CC.editor.input:clear()
   -- Only the widget's CONTENT: production teardown hides the

@@ -41,7 +41,8 @@ ConsoleModel → ConsoleController → ConsoleView
 |---|---|
 | `consoleModel.lua` | Top-level aggregate: input, editor, output (canvas), projects |
 | `input/` | `UserInputModel`, `InputText`, `Cursor`, `History`, `InputSelection` |
-| `editor/` | `EditorModel`, `BufferModel`, `SearchModel`, `VisibleContent`, `SemanticInfo` |
+| `editor/` | `EditorModel`, `BufferModel`, `BufferSemanticInfo` |
+| `syntax/` | The syntax processors: what differs between Lua, Markdown and text files |
 | `interpreter/eval/` | `Evaluator` — validate → parse → transform pipeline for user input |
 | `lang/lua/` | Lua parser (via metalua), semantic analyzer, highlighter, error types |
 | `lang/md/` | Markdown parser |
@@ -56,7 +57,6 @@ ConsoleModel → ConsoleController → ConsoleView
 | `consoleController.lua` | Main controller; project lifecycle; canvas routing |
 | `editorController.lua` | Editor state machine |
 | `userInputController.lua` | Input widget logic |
-| `searchController.lua` | Search mode |
 
 ### View (`src/view/`)
 
@@ -64,7 +64,7 @@ ConsoleModel → ConsoleController → ConsoleView
 |---|---|
 | `consoleView.lua` | Top-level view compositor |
 | `canvas/` | `CanvasView` (composites background + terminal + user canvas), `TerminalView` |
-| `editor/` | `EditorView`, `BufferView`, `VisibleBlock`, search views |
+| `editor/` | `EditorView`, `BufferView`, `VisibleBlock`, the key card |
 | `input/` | `UserInputView`, statusline, custom status |
 
 ---

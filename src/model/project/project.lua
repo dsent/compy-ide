@@ -43,9 +43,13 @@ local messages = {
     local n = name or ''
     return n .. ' does not exist'
   end,
-  no_open_project     = 'No project is open',
-  no_microbit_board   = 'No micro:bit is plugged in',
-  flash_no_data       = 'No firmware data to flash',
+  --- a file the open project does not hold, in one sentence
+  --- wherever it is asked for
+  not_in_project      = function(name)
+    return 'There is no ' .. tostring(name) .. ' in this project.'
+  end,
+  no_microbit_board   = 'No micro:bit is plugged in.',
+  flash_no_data       = 'No firmware data to flash.',
   kept_as             = function(name, kept)
     return 'Your old ' .. name .. ' is kept as the project '
         .. kept .. '.'
@@ -72,6 +76,9 @@ local messages = {
 local function validate_filename(name)
   if not string.is_non_empty_string(name) then
     return false, messages.invalid_filename('Empty')
+  end
+  if not string.ulen(name) then
+    return false, messages.invalid_filename('Not UTF-8 text')
   end
   if string.ulen(name) > 60 then
     return false, messages.invalid_filename('Too long')
@@ -135,10 +142,18 @@ function Project:readfile(name)
   end
 
   if not FS.exists(fp, "file", self.play) then
-    return false, messages.file_does_not_exist(name)
-  else
-    return true, FS.combined_read(fp)
+    return false, messages.not_in_project(name)
   end
+  --- the device's read gives the text or nil; the desktop's a
+  --- flag, then the text or the reason
+  local got, desk = FS.combined_read(fp)
+  if got == true then got = desk end
+  if type(got) ~= 'string' then
+    --- a file that is there and gives no text is no empty file
+    return false, type(desk) == 'string' and desk
+        or FS.messages.unreadable(name)
+  end
+  return true, got
 end
 
 --- @return function? chunk
@@ -190,6 +205,15 @@ end
 --- @return string? path
 function Project:get_path(name)
   return FS.join_path(self.path, name)
+end
+
+--- Whether writefile takes this name: a file of the project's
+--- own folder, not one in a folder of its own
+--- @param name string
+--- @return boolean valid
+--- @return string? error
+function Project.writable_name(name)
+  return validate_filename(name)
 end
 
 --- Flash a .hex firmware to the micro:bit through its drive,
@@ -265,6 +289,9 @@ ProjectService.DEFAULT = 'scratchpad'
 --- what the default project was called before it was renamed
 ProjectService.FORMER_DEFAULT = 'scratch'
 ProjectService.messages = messages
+--- whether `name` can be a project's, and why not; asked before
+--- anything is closed, so that a refused name changes nothing
+ProjectService.valid_name = validate_filename
 
 --- @param name string
 --- @return string? path
@@ -526,25 +553,25 @@ end
 --- @return function?
 --- @return string? error
 --- @return string? path
-function ProjectService:run(name, env)
+--- @return boolean? refused --- the error is no error of the
+---   code's: there is no such project, or no file to read
+--- @param entry string? --- the file to run: main.lua when nil
+function ProjectService:run(name, env, entry)
   local p_path, err
   if not name then
-    if self.current then
-      p_path = self.current.path
-    else
-      return nil, messages.no_open_project
-    end
+    p_path = self.current.path
   else
     p_path, err = self.is_project(ProjectService.path, name)
   end
   if p_path then
-    local ok, code = self.current:readfile(ProjectService.MAIN)
-    if not ok then return nil, code, p_path end
+    local file = entry or ProjectService.MAIN
+    local ok, code = self.current:readfile(file)
+    if not ok then return nil, code, p_path, true end
     if type(code) ~= 'string' then
-      return nil, FS.messages.unreadable(ProjectService.MAIN), p_path
+      return nil, FS.messages.unreadable(file), p_path, true
     end
-    local content, c_err = codeload(code, env, ProjectService.MAIN)
+    local content, c_err = codeload(code, env, file)
     return content, c_err, p_path
   end
-  return nil, err
+  return nil, err, nil, true
 end

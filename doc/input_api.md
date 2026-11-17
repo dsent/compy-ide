@@ -409,8 +409,8 @@ widget is hidden. The blanket one belongs on everything else.
 A blanket guard switches your own hotkeys off for as long as the widget is
 shown. That is usually what you want, and it does not strand anyone: the
 combos the platform keeps are answered before your project sees the event, so
-`ctrl+escape` still ends the run no matter what your handler does — see
-"Combos the framework keeps".
+`ctrl+escape` still exits the IDE, and `ctrl+q` still stops the run, no matter
+what your handler does — see "Combos the framework keeps".
 
 `compy.input.set_text(text [, keep_cursor])` replaces content. `clear()`
 empties it. `get_text()` reads it back. `get_cursor()` returns `line, col`;
@@ -433,7 +433,9 @@ ranges from `1`, before the first character, to one past the last, at the
 end of the line. So on `"lemon"`, `set_cursor(1, 3)` puts the caret between
 `e` and `m` — typing inserts there (`"leXmon"`) and Backspace deletes the
 character before it (`"lmon"`). Out-of-range values clamp to that range
-rather than failing.
+rather than failing. On the screen the caret is a block on the character
+it stands before, here on `m`, and on the empty cell after the last
+character at the end of a line.
 
 **Characters, not bytes.** The line `"привет"` is six characters, so its
 caret positions are `1 .. 7` — not `1 .. 13`, which is what its length in
@@ -464,8 +466,22 @@ Everything the widget calls back about: a submission, a cancel, a boundary, a va
 
 ### Submit lifecycle
 
-Enter submits; Shift+Enter inserts a newline. On a non-empty submission the
-order is:
+Enter submits, once however long it is held: its repeats run no callback,
+though a hook or shortcut of yours still sees them. Only a bare Enter submits,
+and only a bare Escape cancels: each chord is a key of its own, and a chord the
+widget does not name does nothing in it (Ctrl+Enter, Shift+Escape, Ctrl+Up).
+Shift+Enter and Alt+Enter insert a newline. Ctrl+Z and Ctrl+Y undo and redo
+the user's typing; setting or clearing the text forgets what there was to
+undo. The widget's keys are the console's and the file editor's: Ctrl+Backspace
+and Ctrl+W delete what Ctrl+Left moves over (a word is a run of
+letters, digits and underscores; at a line's start, the line break and the word
+before it), Ctrl+K the rest of its line, and Alt+Shift+Up and Alt+Shift+Down
+move its line; Home and End go to
+the ends of the cursor's row, Ctrl+Home and Ctrl+End to the ends of the text. A
+click places the cursor. The widget has no selection (Shift with an arrow does
+nothing, and a drag selects nothing) and no clipboard: Ctrl+C, Ctrl+X, Ctrl+V,
+Ctrl+Insert and Shift+Insert change nothing in it. On a non-empty submission
+the order is:
 
 1. `before_submit(text)`, if assigned. A truthy return vetoes the
    submit: steps 2-4 do not run and the text stays.
@@ -647,9 +663,12 @@ Vocabulary section above.
 
 When LÖVE fires an input event (a keypress, a mouse click, a touch), the
 framework first checks whether the platform has a reserved combo for it (see
-"Combos the framework keeps" below — these are things like Ctrl+Escape to
-stop the project). Platform reservations act **and pass the event on** — they
-never consume.
+"Combos the framework keeps" below — these are things like Ctrl+Q to stop
+the project and Ctrl+Escape to exit the IDE). A platform reservation acts and
+**keeps the key**: your project sees neither its press, nor its repeats, nor its
+release. Every other key's repeats and release go to whoever received its press,
+and to no one once that has gone; a release your paused project is owed comes when
+it continues.
 
 Then, while your project is running, every event walks the dispatch chain:
 
@@ -688,6 +707,19 @@ A hook you assign yourself is the other case: you have met the truthy
 convention by writing it, so `compy.input.hooks.keypressed` falls
 through on falsey like everything else in the chain.
 
+**A program that takes keys owns the keyboard.** While your program has
+any way of taking keys or text, its own `love.keypressed`,
+`love.keyreleased` or `love.textinput`, a key or text hook, a key or text
+shortcut, or its own shown field, a key or text that nothing of yours
+takes goes nowhere: it does not fall through to the console's prompt.
+Behind a program that takes keys and draws nothing, the console's field
+and its cursor are hidden while it runs, the output and the status line
+staying on show; the field comes back when the program stops (Ctrl+Q),
+pauses, or takes keys no more. A program that wants typing shows its
+own field. A program that takes no
+keys and draws nothing leaves the keyboard to the console. Pointer and
+touch events are not part of this.
+
 **What this means in practice:** if your project shows the input widget
 *and* handles keys, write `compy.input.hooks.keypressed = function(k)`
 rather than `function love.keypressed(k)`, and **return a meaningful
@@ -696,6 +728,23 @@ widget should have. Keep the legacy spelling and your handler eats every
 key before the widget sees it, and the user cannot type — not even Enter
 to submit. A project with no widget is unaffected: nothing sits below the
 hook for it to shield, which is why plain LÖVE code keeps working.
+
+**A chord's own character is not typed.** With Ctrl or Alt held, a key
+makes a chord, and on a Compy its character still arrives on the
+`textinput` channel, before or after the key press. That character walks
+tiers ① and ② like any other text event, so `shortcuts.textinput['ctrl+j']`,
+`'alt+*'` and your `textinput` hook all see it with its modifiers. It stops
+there: the widget never types it, and it reaches no console's prompt
+either. The character of a reserved combo (the table below),
+such as Ctrl+R's `r`, reaches nothing at all. Shift alone composes text. On a Compy the right Alt
+key is an Alt like the left one, so what it sends is a chord's character
+too, whatever the character. On a computer running the IDE, the right Alt
+key is AltGr and composes text in the keyboard layout set there: whatever
+it types reaches the widget, `@`, `ł`, `€` or a digit alike, since a
+computer sends no text for a chord. AltGr is no Ctrl and no Alt, so a key
+pressed under it makes no chord: no combo fires from it, and `Key.ctrl()` and
+`Key.alt()` answer false while it is held, even on Windows, which reports
+AltGr as left Ctrl plus right Alt.
 
 ### Why the widget sits at tier 3
 
@@ -791,9 +840,10 @@ sees every event on its channel; "Choosing the mechanism" below covers what to
 do when a binding and a held key have to work together.
 
 **Hooks** are the fallback after shortcuts. `compy.input.hooks.keypressed`,
-`.keyreleased`, and `.textinput` each hold one function per channel. At
-activation, an existing project `love.*` handler seeds the matching hook when
-no explicit hook was supplied, so a project that already defines
+`.keyreleased`, and `.textinput` each hold one function per channel. When
+the run begins, an existing project `love.*` handler seeds the matching hook
+when no explicit hook was supplied (once: `continue()` after a pause gives
+the hooks back as the pause left them, a hook you cleared staying clear), so a project that already defines
 `love.keypressed` keeps working without changes — and consumes its channel,
 as it did under plain LÖVE ("How events reach your project").
 
@@ -820,48 +870,49 @@ yourself.
 
 | Combo | What the platform does | When |
 |---|---|---|
-| `ctrl+escape` (on **release**) | stops the run; quits when there is nothing to go back to | always |
-| `ctrl+alt+r` | restarts the project | always |
+| `ctrl+escape` (on **release**) | exits the whole IDE at once: the run is not stopped first, and `compy.before_exit` does not run | always |
+| `ctrl+r` | restarts a program that runs, is paused or idles behind the console, from the file it runs from; does nothing when none does (a packaged build restarts always) | always |
 | `ctrl+t` | switches between running and the editor | development only |
-| `ctrl+s` | stops a running project | development only |
-| `ctrl+q` | quits the project | development only |
+| `ctrl+q` | stops the run and returns to the console; the project stays open. From the editor, leaves it for the console | development only |
 | `ctrl+pause` | suspends the run | development only |
-| `ctrl+shift+r` | resets: quits and wipes the console | development only |
 | `ctrl+alt+p` / `ctrl+alt+shift+p` | starts / stops the profiler | profiling builds |
 | `f10` | cycles the FPS overlay corner | profiling builds |
 
 "Development only" means the combo is inert in a packaged build, where the
-console it returns you to is not there to return to. Note `f10` is the one
+console it returns you to is not there to return to.
+
+`ctrl+s` and `ctrl+shift+r` were reserved until 2026-11-14 and are yours now:
+a project receives them like any other chord, so `ctrl+s` can save. No key
+closes the project; the console's `close_project()` does. Note `f10` is the one
 reservation with no modifier at all: bare F10 is the platform's in a profiling
 build, and F10 with any modifier is yours.
 
-It is also the only F-key worth binding at all. On the current hardware the
-function row is the keyboard's Fn layer — Insert is Fn+F12, Scroll Lock is
-Fn+F10, mute and the media keys are Fn+F5 through Fn+F8 — so **F1 to F9 never
-reach your project**; the firmware answers them. F10 does arrive, which is why
-the platform could take it; F11 and F12 are untested. Bind help, pause and debug
-gestures to letter chords instead: an example that wants a held help overlay
-uses Alt+H (`doc/development/keyboard.md` is the per-key availability table).
+It is also the only F-key that arrives on every Compy. The function row shares
+its keys with the keyboard's Fn layer — Insert is Fn+F12, Scroll Lock is
+Fn+F10, mute and the media keys are Fn+F5 through Fn+F8 — and on a stock,
+unrooted Compy **F1 to F9 never reach your project**; the system answers them.
+The rooted system image maps the keyboard's browser key to F1 and releases F1
+to F12 from Android's shortcuts, and the IDE's own editor uses F1 and F2 there.
+Which of the other function keys a physical press delivers on the rooted image
+is not recorded here; several of them share a key with a volume or brightness
+control. F10 arrives on both, which is why the platform could take it. Until a
+key is known to arrive on the Compies your project runs on, bind help, pause
+and debug gestures to letter chords instead: an example that wants a held help
+overlay uses Alt+H (`doc/development/keyboard.md` is the per-key availability
+table, measured on a stock Compy).
 
-Ctrl+Shift+S also does something in the **editor** — it leaves the edit — but
-that is the editor's own handling, not a reservation: it applies when you are
-editing, not while your project runs. Bare Ctrl+S does nothing there; the
-editor keeps it for itself.
+Ctrl+Q leaves the editor for the console, with every file you had opened in
+it, and the project stays open. Ctrl+T while you browse the file leaves it to run
+`main.lua`. Ctrl+R and Ctrl+Shift+R do nothing in the editor. None of the exits asks a
+question. While there is text in the editor's field, or a block is
+loaded to be replaced, each is refused with a notice: submit the text with
+Enter or drop it with Escape first, and the exit works. A text whose save
+failed stays in the field, so it holds the exit back the same way. Ctrl+Esc
+exits the IDE from anywhere and does not ask.
 
-Ctrl+Shift+S, Ctrl+Q, Ctrl+Shift+R and Ctrl+Alt+R leave the editor too, and so
-does Ctrl+T while you navigate or edit a block; in search or while moving a
-block, Ctrl+T does nothing. Each first asks the question Shift+Esc asks when
-you would lose a change: a block you have changed and left open, one you left
-open in another file with Ctrl+J, or a file whose last save failed, which the
-question names. The question brings you to the file it asks about. Enter or
-Space discards that change and goes on to the next one, and leaves once none is
-left. Anything else keeps the change: you stay on that file, and the files you
-had opened from it with Ctrl+J are closed. Ctrl+Esc exits the IDE from anywhere
-and does not ask. The contract is `doc/development/decisions/input.md`,
-`D-EDITOR-KEYS`, statement 6.
-
-Ctrl+J while you edit a block opens the file it requires and keeps your edit
-with the first file: Shift+Esc back to it shows the edit again, still open.
+Ctrl+J opens the file the highlighted block names with `require` or `dofile`,
+and Escape steps back to the file you came from, at the place you left it.
+While there is text in the field, Ctrl+J is refused with a notice.
 
 ### Pointer and click hooks
 
@@ -938,7 +989,8 @@ call site. When a binding and a held key have to work together, see
 
 **2. Ask `Key` — allowed, and worth a second look.** `Key` is available to
 every project, like `compy`. `Key.shift()`, `Key.ctrl()` and `Key.alt()`
-answer whether that modifier is held right now, either side:
+answer whether that modifier is held right now, either side (on a computer,
+AltGr counts as neither Ctrl nor Alt):
 
 ```lua
 function love.draw()
@@ -1096,36 +1148,58 @@ cannot be registered.
 ## Stop hook — `compy.before_exit`
 
 A settable slot on `compy` itself, not on `compy.input`: it is a
-project-*run* lifecycle hook, not an input-channel callback. It exists so a
-project can put back global device state it changed imperatively — the
-sandbox clones the `love` table but shares the underlying C functions, so
-calls like `love.keyboard.setKeyRepeat(false)` change real state that
-outlives the run.
+project-*run* lifecycle hook, not an input-channel callback. It is your
+program's last word when it is stopped: for what only your program knows to
+do, such as keeping a score in a file or telling a board on the serial line
+to stop what it is doing. Putting the IDE back is not its job: the stop
+itself ends sounds looping, sets the master volume, key repeat, text input,
+the mouse and the graphics state back as the IDE had them, clears your
+handlers, hooks, shortcuts, serial handlers, input field and modules, and
+makes the environment anew, your variables with it.
 
 ```lua
-love.keyboard.setKeyRepeat(false)
-
 compy.before_exit = function()
-  love.keyboard.setKeyRepeat(true)
+  writefile('best.txt', tostring(best))
+  -- a word the program on the board knows: it stops the motors
+  compy.serial.send('halt')
 end
 ```
 
 - **Signature:** no arguments — the project knows its own state.
 - **Return value:** ignored. It cannot suppress or defer the stop.
-- **Timing:** runs *before* the framework's own teardown, so `love.*` calls
-  inside it are still safe.
-- **Fires on:** every framework-invoked stop of a running project —
-  `Ctrl+Esc`, quitting the project, switching away to the editor, and app
-  shutdown in play mode.
-- **Does NOT fire when the project's own code raises.** A raise in top-level
-  code ends the run without a stop, and a raise inside a handler suspends it
-  instead; neither is a stop path. Do not rely on this hook to undo something
-  a crash could leave behind — see
+- **Timing:** runs at the start of the stop, before the IDE's own teardown,
+  so your variables, `love.*` calls and the input field are still there.
+  What your program queued for the board and had not sent is dropped just
+  before the hook runs, so a line the hook sends is the last one. That line
+  is queued, and anything that ends a program or the IDE before it is
+  written drops it (the IDE quitting, or the next program stopping,
+  resetting or failing to start at once); otherwise it goes out.
+- **Fires on:** every stop of a live program, that is one that runs, is
+  paused, or has ended its code with its handlers or picture still there:
+  `stop()`, `Ctrl+Q`, `Ctrl+R` (before the run starts again), `Ctrl+T` from
+  the program to the editor, `edit()` from a program idle behind the console,
+  `reset()`, `run()` (your program's own, which replaces it, or a typed one
+  after your program ended its code), closing the project (`close_project()`,
+  `project("other")`, `run("other")`, `reset_scratchpad()`), a quit asked
+  while the program runs, and quitting the IDE in play mode. `Ctrl+Esc` exits
+  the IDE without a stop, and the hook does not run.
+- **Does NOT fire when the program's first lines raise.** That run ends
+  without a stop: the hook is removed, not called. A raise inside a handler
+  pauses the program instead, which is no stop either; the hook runs when the
+  paused program is then stopped. Do not rely on this hook to undo something a
+  crash could leave behind — see
   [technical debt](development/technical_debt/input.md), "A project that
   raises leaves global device state dirty".
+- **A stop or a run asked for inside the hook:** `stop()`, `reset()`,
+  `run()`, `project()`, `close_project()` and `reset_scratchpad()` end the
+  hook at once, and what they asked for is dropped: the stop under way goes
+  on. `edit()` opens nothing there, and the hook goes on. A call that is
+  refused says why, and the hook goes on.
 - **Reset:** back to the default no-op once the run ends, by whichever path
   it ended — so one project's hook never fires for the next one. Like every
   other project participant, it does not survive the run that installed it.
+  One a line typed in the console set, with no program live, is removed by
+  `reset()` or a run, not called, and never reaches the run.
 - **Default:** a no-op that logs in debug mode.
 
 ## Migration from the legacy globals

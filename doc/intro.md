@@ -32,8 +32,8 @@ Projects can be selected or, in the absence of one, created by entering
 `project("...")` in the console, with the project's name between the double 
 quotes. Running the project means executing a file called "`main.lua`" in its 
 directory. It can be done by entering `run()` in the console for the currently 
-selected project or `run("...")` for a different project, with the name of the 
-project between the double quotes.
+selected project or `run("...")` for a different project that exists, with the 
+name of the project between the double quotes; `run` creates no project.
 
 Text files, including Lua sources can be edited using the built-in text editor 
 that can be started by entering `edit("...")` in the console, with the name of 

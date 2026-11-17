@@ -71,14 +71,17 @@ describe('a program\'s mouse after it stops #input', function()
   it('Ctrl+Q gives the console its mouse', function()
     run_capturing()
     press({ 'lctrl', 'q' })
+    assert.equal('ready', love.state.app_state)
     assert.same(CONSOLE, mouse())
   end)
 
-  it('Ctrl+S gives the console its mouse', function()
+  -- no reserved key since 2026-11-14: the program keeps
+  -- running, with the mouse as it set it
+  it('Ctrl+S leaves the program its mouse', function()
     run_capturing()
     press({ 'lctrl', 's' })
-    assert.equal('ready', love.state.app_state)
-    assert.same(CONSOLE, mouse())
+    assert.equal('running', love.state.app_state)
+    assert.same(CAPTURED, mouse())
   end)
 
   it('Ctrl+T gives the editor the mouse', function()
@@ -206,7 +209,7 @@ describe('a program\'s mouse after it stops #input', function()
     .. ' it from the console', function()
       run_capturing()
       F.cc:get_project_env().compy.before_exit = capture
-      press({ 'lctrl', 's' })
+      press({ 'lctrl', 'q' })
       assert.same(CONSOLE, mouse())
     end)
 
@@ -221,12 +224,12 @@ describe('a program\'s mouse after it stops #input', function()
       assert.same(CONSOLE, mouse())
     end)
 
-  it('Ctrl+Alt+R starts the program again on the console\'s'
+  it('Ctrl+R starts the program again on the console\'s'
     .. ' mouse', function()
       local seen
       local undo = project(function() seen = mouse() end)
       run_capturing()
-      press({ 'lctrl', 'lalt', 'r' })
+      press({ 'lctrl', 'r' })
       undo()
       assert.same(CONSOLE, seen)
     end)

@@ -22,6 +22,14 @@ local debug_print = function(...)
   -- Log.debug(...)
 end
 
+--- The run's report goes to standard output: print reaches
+--- the IDE's console, on the screen the scenarios capture
+--- @param s string
+local function report(s)
+  io.stdout:write('harmony: ' .. s .. '\n')
+  io.stdout:flush()
+end
+
 Harmony = {
   --- @private
   pre = '',
@@ -253,6 +261,10 @@ local function utils()
   --- @field love_text function
   --- @field screenshot function
   --- @field release_keys function
+  --- @field release_mods function
+  --- @field hold function
+  --- @field key_repeat function
+  --- @field let_go function
   --- @field shortcuts table
   return {
     patch_isDown = function()
@@ -311,6 +323,31 @@ local function utils()
     end,
 
     release_keys = release_keys,
+    --- let go of the modifiers alone: a key held with hold
+    --- stays held
+    release_mods = function()
+      for _, m in pairs(mods) do held[m] = false end
+    end,
+
+    --- press `key` and keep it held: isDown answers true for
+    --- it until let_go, and no release is sent, as a hand that
+    --- holds F1
+    --- @param key string
+    hold = function(key)
+      held[key] = true
+      love_event('keypressed', key, key, false)
+    end,
+    --- a held key's repeat, as LÖVE sends it while the key
+    --- stays down: the key, its scancode, and isrepeat true
+    --- @param key string
+    key_repeat = function(key)
+      love_event('keypressed', key, key, true)
+    end,
+    --- @param key string
+    let_go = function(key)
+      held[key] = false
+      love_event('keyreleased', key, key)
+    end,
 
     shortcuts = shortcuts,
 
@@ -362,6 +399,8 @@ local function runner()
   return {
     load_scenarios = function()
       local ls = FS.dir("src/harmony/scenarios")
+      --- in name order, whatever order the directory lists
+      table.sort(ls, function(a, b) return a.name < b.name end)
       for _, d in ipairs(ls) do
         if d.type == 'file' then
           local module_name = string.sub(d.name, 1, -5)
@@ -389,7 +428,8 @@ local function runner()
         for _, v in ipairs(scenarios) do
           local tag = v.id
           local sc = v.sc
-          debug_print('---- ' .. tag .. ' ----')
+          Harmony.current = tag
+          report(tag)
           done = false
           timer:script(function(wait)
             _G.context = v.context
@@ -399,6 +439,8 @@ local function runner()
           coroutine.yield()
         end
 
+        Harmony.current = nil
+        report(string.format('%d scenarios passed', #scenarios))
         if Harmony.lock then
           Harmony.exit()
         end
@@ -431,6 +473,19 @@ function Harmony.load()
   love.window.setTitle(love.window.getTitle())
 
   Harmony.runner = runner()
+
+  --- A failed check or an error ends the run at once, the
+  --- scenario named and the exit status 1, rather than at an
+  --- error screen that waits for a key no one presses
+  if lock then
+    love.errorhandler = function(msg)
+      report('FAILED in ' .. tostring(Harmony.current))
+      io.stdout:write(debug.traceback(tostring(msg), 2), '\n')
+      io.stdout:flush()
+      return function() return 1 end
+    end
+    love.errhand = love.errorhandler
+  end
 end
 
 function Harmony.screenshot(tag)
@@ -439,6 +494,9 @@ function Harmony.screenshot(tag)
 end
 
 function Harmony.run()
+  --- the run's storage and screenshots, so that a caller
+  --- finds its own run's among others under /tmp
+  report('storage ' .. tostring(Harmony.tmpdir))
   timer:after(.1, function()
     Harmony.runner.load_scenarios()
     Harmony.runner.run_scenarios()

@@ -535,7 +535,14 @@ function lexer:extract_symbol()
    local k = self.src:sub(self.i, self.i)
    local symk = self.sym[k] -- symbols starting with `k`
    if not symk then
-      self.i = self.i + 1
+      -- a letter outside ASCII is one token, all its bytes
+      local ch = self.src:match("^[\194-\244][\128-\191]*", self.i)
+      local b = k:byte()
+      local n = b >= 240 and 4 or b >= 224 and 3 or 2
+      if ch and #ch >= n then
+         k = ch:sub(1, n)
+      end
+      self.i = self.i + #k
       return "Keyword", k
    end
    for _, sym in pairs(symk) do
@@ -706,11 +713,12 @@ function lexer:newstream(src_or_stream, name)
       }
       setmetatable(stream, self)
 
-      -- Skip initial sharp-bang for Unix scripts
-      -- FIXME: redundant with mlp.chunk()
+      -- Skip initial sharp-bang for Unix scripts, the line
+      -- whole, as LuaJIT does (Compy: mlp.chunk() no longer
+      -- skips a `#` line of its own)
       if src and src:match("^#!") then
          local endofline = src:find("\n")
-         stream.i = endofline and (endofline + 1) or #src
+         stream.i = endofline and (endofline + 1) or (#src + 1)
       end
       return stream
    else

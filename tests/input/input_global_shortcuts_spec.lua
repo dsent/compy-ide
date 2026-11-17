@@ -20,22 +20,27 @@
 local F    = require('tests.helpers.input_fixture')
 local mock = require('tests.mock')
 
--- restart/reset reach real project execution (run_project) or
--- console history teardown -- machinery this file's fixture
--- does not stand up. A minimal stub records which of the two
--- the raw gate invoked, isolating the modifier-exactness
--- question from project loading (doc/development/decisions/
--- input.md, D-BEHAVIOUR-TEST's named-seam exception; same
--- technique as input_shortcuts_click_spec.lua's play-mode
--- case).
--- @param combo string  mock.keystroke syntax, e.g. 'C-M-r'
+-- restart reaches real project execution (run_project) --
+-- machinery this file's fixture does not stand up. A minimal
+-- stub records what the raw gate invoked, isolating the
+-- modifier-exactness question from project loading
+-- (doc/development/decisions/input.md, D-BEHAVIOUR-TEST's
+-- named-seam exception; same technique as
+-- input_shortcuts_click_spec.lua's play-mode case). `reset`
+-- is the method Ctrl+Shift+R called until the key was dropped
+-- (2026-11-14): the stub keeps it to show nothing calls it.
+-- @param combo string  mock.keystroke syntax, e.g. 'C-r'
 -- @return table  {restart = true?, reset = true?}
-local function drive_stub(combo)
+--- @param live boolean? --- a program is live behind the stub
+local function drive_stub(combo, live)
   local calls = { }
   local stub  = {
     cfg     = { mode = 'dev' },
+    run_live = live,
     restart = function() calls.restart = true end,
     reset   = function() calls.reset = true end,
+    card_shows = function() return false end,
+    key_released = function() end,
   }
   local saved    = table.clone(love.handlers)
   local saved_kp = love.keypressed
@@ -57,9 +62,9 @@ describe('input surface: inbound events — global platform'
     function()
 
       -- Route-preserving: suspend only flips app_state, so the
-      -- project route is still installed afterward — BOTH the
-      -- platform effect and the project's own binding run for
-      -- the same event.
+      -- project route is still installed afterward; the key is
+      -- the IDE's, and the project's own binding does not run
+      -- (the ruling of November 16, 2026: a reservation consumes)
       it('ctrl+pause suspends despite a project claiming it',
         function()
           local project_ran = false
@@ -72,16 +77,16 @@ describe('input surface: inbound events — global platform'
           F.session.press('lctrl')
           F.session.press('pause')
           assert.equal('snapshot', love.state.app_state)
-          assert.is_true(project_ran)
+          assert.is_false(project_ran)
         end)
 
-      -- Route-destroying: quit tears the project route down
+      -- Route-destroying: the stop tears the project route down
       -- (stop_project_run reinstalls the console's handlers)
       -- BEFORE the gateway forwards the event, so the project's
       -- own binding never runs. That is the route disappearing,
       -- not the platform suppressing it — the project could
-      -- not have blocked the quit either way.
-      it('ctrl+q quits despite a project claiming it',
+      -- not have blocked the stop either way.
+      it('ctrl+q stops the run despite a project claiming it',
         function()
           local project_ran = false
           local input = F.activate_project()
@@ -95,6 +100,140 @@ describe('input surface: inbound events — global platform'
           assert.is_false(project_ran)
         end)
     end)
+
+  -- The reserved map of 2026-11-14 (doc/development/decisions/
+  -- input.md, D-RESERVE-TABLE's note of that date): Ctrl+Q
+  -- returns to the console and the project stays open; no key
+  -- closes the project; Ctrl+S and Ctrl+Shift+R are reserved
+  -- no longer. Ctrl+Q in the file editor is covered where the
+  -- editor's other exits are, tests/editor/spec/
+  -- is1_files_spec.lua and input_editor_keys_spec.lua.
+  describe('ctrl+q returns to the console', function()
+    local P, closed, stops, orig_close, orig_stop
+
+    before_each(function()
+      P = F.cc.model.projects
+      closed, stops = 0, 0
+      orig_close = F.cc._close_project
+      orig_stop = F.cc.stop_project_run
+      F.cc._close_project = function(...)
+        closed = closed + 1
+        return orig_close(...)
+      end
+      F.cc.stop_project_run = function(...)
+        stops = stops + 1
+        return orig_stop(...)
+      end
+    end)
+
+    after_each(function()
+      F.cc._close_project = orig_close
+      F.cc.stop_project_run = orig_stop
+    end)
+
+    local function ctrl_q()
+      F.session.press('lctrl')
+      F.session.press('q')
+      F.session.release('q')
+      F.session.release('lctrl')
+    end
+
+    it('stops a running program and keeps the project open',
+      function()
+        F.activate_project()
+        local open = { name = 'p' }
+        P.current = open
+        finally(function() P.current = nil end)
+        ctrl_q()
+        assert.equal('ready', love.state.app_state)
+        assert.equal(1, stops)
+        assert.equal(0, closed)
+        assert.equal(open, P.current)
+      end)
+
+    it('stops a paused program and keeps the project open',
+      function()
+        F.activate_project()
+        local open = { name = 'p' }
+        P.current = open
+        finally(function() P.current = nil end)
+        love.state.app_state = 'inspect'
+        ctrl_q()
+        assert.equal('ready', love.state.app_state)
+        assert.equal(1, stops)
+        assert.equal(0, closed)
+        assert.equal(open, P.current)
+      end)
+
+    -- A program that finished its top-level code is idle, not
+    -- stopped: its picture and its handlers are still there
+    -- behind the console (ConsoleController.run_live).
+    it('stops a program that idles behind the console',
+      function()
+        F.run_project(function() end)
+        assert.equal('ready', love.state.app_state)
+        assert.is_true(F.cc.run_live)
+        local open = P.current
+        ctrl_q()
+        assert.equal('ready', love.state.app_state)
+        assert.equal(1, stops)
+        assert.is_false(F.cc.run_live)
+        assert.equal(0, closed)
+        assert.equal(open, P.current)
+      end)
+
+    it('does nothing in the console with no program running',
+      function()
+        local open = P.current
+        assert.is_falsy(F.cc.run_live)
+        F.session.type('x = 1')
+        ctrl_q()
+        assert.equal('ready', love.state.app_state)
+        assert.equal(0, stops)
+        assert.equal(0, closed)
+        assert.equal(open, P.current)
+        assert.same('x = 1',
+          string.unlines(F.cc.input:get_text()))
+      end)
+  end)
+
+  describe('keys the map no longer reserves', function()
+    for _, c in ipairs({
+      { 'ctrl+s', { 'lctrl' }, 's' },
+      { 'ctrl+shift+r', { 'lctrl', 'lshift' }, 'r' },
+    }) do
+      it(c[1] .. ' reaches a running program, which goes on',
+        function()
+          local bound, seen = false, nil
+          local input = F.activate_project({
+            keypressed = function(k) seen = k end,
+          })
+          input.shortcuts.keypressed[c[1]] = function()
+            bound = true
+          end
+          for _, m in ipairs(c[2]) do F.session.press(m) end
+          F.session.press(c[3])
+          assert.equal('running', love.state.app_state)
+          assert.is_true(bound)
+          assert.equal(c[3], seen)
+        end)
+
+      it(c[1] .. ' does nothing in the console', function()
+        local stops, orig = 0, F.cc.stop_project_run
+        F.cc.stop_project_run = function(...)
+          stops = stops + 1
+          return orig(...)
+        end
+        finally(function() F.cc.stop_project_run = orig end)
+        local open = F.cc.model.projects.current
+        for _, m in ipairs(c[2]) do F.session.press(m) end
+        F.session.press(c[3])
+        assert.equal('ready', love.state.app_state)
+        assert.equal(0, stops)
+        assert.equal(open, F.cc.model.projects.current)
+      end)
+    end
+  end)
 
   -- A reservation matches its modifier set exactly
   -- (doc/development/decisions/input.md, D-EXACT-RESERVE): the
@@ -110,6 +249,7 @@ describe('input surface: inbound events — global platform'
           local orig  = love.event.quit
           love.event.quit = function() quits = quits + 1 end
           F.session.press('lctrl')
+          F.session.press('escape')
           F.session.release('escape')
           love.event.quit = orig
           assert.equal(1, quits)
@@ -125,6 +265,9 @@ describe('input surface: inbound events — global platform'
               function() project_ran = true; return true end
           F.session.press('lctrl')
           F.session.press('lshift')
+          -- a release reaches the program only after its press
+          -- did (the key card's gate)
+          F.session.press('escape')
           F.session.release('escape')
           love.event.quit = orig
           assert.equal(0, quits)
@@ -167,7 +310,7 @@ describe('input surface: inbound events — global platform'
           assert.is_true(project_ran)
         end)
 
-      it('ctrl+shift+q no longer quits; the project'
+      it('ctrl+shift+q does not stop the run; the project'
         .. ' binding runs instead', function()
           local project_ran = false
           local input = F.activate_project()
@@ -180,52 +323,22 @@ describe('input surface: inbound events — global platform'
           assert.is_true(project_ran)
         end)
 
-      -- The gate's run-stop reservation is exact; the editor's
-      -- own Ctrl+S pair lives in EditorController and is
-      -- exercised by the two editor cases below.
-      it('ctrl+s still stops a running project', function()
-        F.activate_project()
-        love.state.app_state = 'running'
-        F.session.press('lctrl')
-        F.session.press('s')
-        assert.equal('ready', love.state.app_state)
-      end)
-
-      it('ctrl+alt+s no longer stops the run; the project'
+      it('ctrl+alt+q does not stop the run; the project'
         .. ' binding runs instead', function()
           local project_ran = false
           local input = F.activate_project()
-          input.shortcuts.keypressed['ctrl+alt+s'] =
+          input.shortcuts.keypressed['ctrl+alt+q'] =
               function() project_ran = true; return true end
-          love.state.app_state = 'running'
           F.session.press('lctrl')
           F.session.press('lalt')
-          F.session.press('s')
+          F.session.press('q')
           assert.equal('running', love.state.app_state)
           assert.is_true(project_ran)
         end)
 
-      -- The one behaviour P-23-02 changes: the run-stop
-      -- reservation becomes exact (only_mods), so Shift now
-      -- takes this combo out of it. Was 'still stops', like
-      -- ctrl+s above, before the move.
-      it('ctrl+shift+s no longer stops the run; the'
-        .. ' project binding runs instead', function()
-          local project_ran = false
-          local input = F.activate_project()
-          input.shortcuts.keypressed['ctrl+shift+s'] =
-              function() project_ran = true; return true end
-          love.state.app_state = 'running'
-          F.session.press('lctrl')
-          F.session.press('lshift')
-          F.session.press('s')
-          assert.equal('running', love.state.app_state)
-          assert.is_true(project_ran)
-        end)
-
-      -- Shift stays meaningful in the editor branch, and it is
-      -- the ONLY thing that is: ctrl+shift+s leaves the editor,
-      -- bare ctrl+s does nothing there. The upstream editor
+      -- Neither ctrl+shift+s nor bare ctrl+s does anything in
+      -- the editor (ctrl+shift+s left it until it was dropped
+      -- on 2026-11-14). The upstream editor
       -- rework deleted our close and made leaving Shift+Esc,
       -- and it holds the product authority on that key (owner,
       -- 2026-09-04). It does NOT claim the key — its
@@ -238,9 +351,8 @@ describe('input surface: inbound events — global platform'
       -- the branch taken is observable without
       -- EditorController's real machinery — the same
       -- avoidance the running-state pair above takes.
-      it('ctrl+shift+s finishes the edit in the editor'
-        .. ' branch', function()
-          local called
+      it('ctrl+shift+s leaves the editor alone', function()
+          local called = false
           love.state.app_state = 'editor'
           F.cc.editor:open('t.lua', '', function()
             return true
@@ -251,7 +363,7 @@ describe('input surface: inbound events — global platform'
           F.session.press('lshift')
           F.session.press('s')
           F.cc.finish_edit = orig
-          assert.is_true(called)
+          assert.is_false(called)
         end)
 
       it('bare ctrl+s leaves the editor alone',
@@ -273,38 +385,93 @@ describe('input surface: inbound events — global platform'
           assert.is_nil(finished)
         end)
 
-      -- love.PROFILE is restored to false BEFORE asserting: the
-      -- module-load-time guard in controller.profiler.lua
-      -- captures love.PROFILE once, so leaving it truthy past a
-      -- failed assertion here breaks Controller.report() in
-      -- every later test's F.reset().
-      it('f10 still cycles the FPS overlay unmodified',
+      -- The profiling keys are reserved in a profiling build
+      -- alone: the gate is built anew here with love.PROFILE set,
+      -- as conf.lua sets it before love.load, and the shared
+      -- handlers go back after. love.PROFILE is restored to false
+      -- BEFORE asserting: the module-load-time guard in
+      -- controller.profiler.lua captures love.PROFILE once, so
+      -- leaving it truthy past a failed assertion breaks
+      -- Controller.report() in every later test's F.reset().
+      local function profiling(case)
+        local saved = table.clone(love.handlers)
+        love.PROFILE = { fpsc = 'off' }
+        Controller.setup_callback_handlers(F.cc)
+        local ok, err = pcall(case)
+        local fpsc = love.PROFILE.fpsc
+        love.PROFILE = false
+        for k, v in pairs(saved) do love.handlers[k] = v end
+        assert(ok, err)
+        return fpsc
+      end
+
+      --- a program that records F10's events in `log`
+      local function f10_program(log)
+        local input = F.activate_project()
+        input.hooks.keypressed = function(k, _, isr)
+          if k == 'f10' then
+            log[#log + 1] = isr and 'repeat' or 'press'
+          end
+        end
+        input.hooks.keyreleased = function(k)
+          if k == 'f10' then log[#log + 1] = 'release' end
+        end
+      end
+
+      local function hold_f10()
+        F.session.press('f10')
+        F.session.repeat_press('f10')
+        F.session.release('f10')
+      end
+
+      it('f10 cycles the FPS overlay in a profiling build, and '
+        .. 'its press, repeat and release stay the IDE\'s',
         function()
-          love.PROFILE = { fpsc = 'off' }
-          F.session.press('f10')
-          local fpsc = love.PROFILE.fpsc
-          love.PROFILE = false
+          local log = { }
+          local fpsc = profiling(function()
+            f10_program(log)
+            hold_f10()
+          end)
           assert.equal('T_L_B', fpsc)
+          assert.same({ }, log)
+        end)
+
+      it('f10 reaches a program in an ordinary build: press, '
+        .. 'repeat and release', function()
+          local log = { }
+          f10_program(log)
+          hold_f10()
+          assert.same({ 'press', 'repeat', 'release' }, log)
         end)
 
       it('ctrl+f10 no longer cycles; the project binding'
         .. ' runs instead', function()
-          love.PROFILE = { fpsc = 'off' }
           local project_ran = false
-          local input = F.activate_project()
-          input.shortcuts.keypressed['ctrl+f10'] =
-              function() project_ran = true; return true end
-          F.session.press('lctrl')
-          F.session.press('f10')
-          local fpsc = love.PROFILE.fpsc
-          love.PROFILE = false
+          local fpsc = profiling(function()
+            local input = F.activate_project()
+            input.shortcuts.keypressed['ctrl+f10'] =
+                function() project_ran = true; return true end
+            F.session.press('lctrl')
+            F.session.press('f10')
+          end)
           assert.equal('off', fpsc)
           assert.is_true(project_ran)
         end)
 
-      it('ctrl+alt+r still restarts', function()
+      -- run anew is Ctrl+R since the ruling of November 14,
+      -- late; Ctrl+Alt+R, the teacher's family, is nobody's
+      --- and only a live program (November 16)
+      it('ctrl+r restarts a live program', function()
+        local st = love.state.app_state
+        love.state.app_state = 'ready'
+        finally(function() love.state.app_state = st end)
+        assert.is_true(drive_stub('C-r', true).restart)
+        assert.is_nil(drive_stub('C-r').restart)
+      end)
+
+      it('ctrl+alt+r no longer restarts', function()
         local calls = drive_stub('C-M-r')
-        assert.is_true(calls.restart)
+        assert.is_nil(calls.restart)
       end)
 
       it('ctrl+alt+shift+r no longer restarts', function()
@@ -312,21 +479,14 @@ describe('input surface: inbound events — global platform'
         assert.is_nil(calls.restart)
       end)
 
-      it('ctrl+shift+r still resets', function()
+      -- Ctrl+Shift+R was the reset until 2026-11-14; the key
+      -- is dropped, and its extension stays nobody's.
+      it('ctrl+shift+r no longer resets', function()
         local calls = drive_stub('C-S-r')
-        assert.is_true(calls.reset)
-      end)
-
-      it('ctrl+alt+shift+r no longer resets', function()
-        local calls = drive_stub('C-M-S-r')
         assert.is_nil(calls.reset)
+        assert.is_nil(calls.restart)
       end)
 
-      -- The defect this closes (blast-radius review, rows 5/6):
-      -- pre-fix, ctrl+alt+shift+r satisfied both the tolerant
-      -- reset gate (ctrl+shift) and the tolerant restart gate
-      -- (ctrl+alt), so ONE event ran BOTH. Exactness makes the
-      -- two gates mutually exclusive by construction.
       it('ctrl+alt+shift+r fires neither restart nor reset',
         function()
           local calls = drive_stub('C-M-S-r')
@@ -345,11 +505,17 @@ describe('input surface: inbound events — global platform'
   -- once both its arms were covered: the running one above
   -- ("still quickswitches while running"), the editor one in
   -- input_editor_keys_spec.lua ("Ctrl+T leaves and runs").
-  -- reserved_quickswitch has no third arm.
+  -- reserved_quickswitch has no third arm. ctrl+r left it on
+  -- 2026-11-14, when it replaced ctrl+alt+r, for the same
+  -- reason: input_run_anew_spec.lua runs the project with it
+  -- from the console, the editor and over a running program,
+  -- and holds it back under the editor's card; the refusal
+  -- during an edit is in is1_files_spec.lua and
+  -- input_editor_files_spec.lua, and program_canvas_spec.lua
+  -- sees the program start again.
   describe('reserved combos, own effect not yet asserted',
     function()
 
-      pending('ctrl+alt+r restarts the current project')
       pending('ctrl+alt+p / ctrl+alt+shift+p start/stop the'
         .. ' oneshot profiler (love.PROFILE gated)')
       -- Disagreement with the enumeration read off the source
@@ -359,15 +525,6 @@ describe('input surface: inbound events — global platform'
       -- only "with no modifier".
       pending('f10 cycles the FPS-corner overlay'
         .. ' (love.PROFILE gated)')
-      -- The description said "or saves/closes an editor
-      -- buffer, depending on app_state" until 2026-09-09.
-      -- That half is behaviour the contract denies and
-      -- T-CTRL-S-UNCLAIMED retired: bare Ctrl+S is unclaimed
-      -- in the editor, and the two cases above pin it. Only
-      -- the run-stop half is a real gap, and only there.
-      pending('ctrl+s stops a run; nothing else claims it')
-      pending('ctrl+shift+r resets: quits and wipes console'
-        .. ' history')
       pending('ctrl+escape (release) asks love to quit')
     end)
 end)

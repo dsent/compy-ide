@@ -1,4 +1,5 @@
 local class = require('util.class')
+local FieldKeys = require('model.input.fieldKeys')
 require("util.key")
 require("util.view")
 require("util.string.string")
@@ -24,14 +25,9 @@ local function default_callbacks()
 end
 
 --- @param model UserInputModel
---- @param disable_selection boolean?
---- @param allow_duplicate_line boolean?  editor-only today
-local new = function(model, disable_selection,
-                     allow_duplicate_line)
+local new = function(model)
   return {
     model = model,
-    disable_selection = disable_selection,
-    allow_duplicate_line = allow_duplicate_line,
     -- is_shown() reads this, never love.state (owner ruling
     -- 2026-07-20).
     shown = false,
@@ -46,7 +42,6 @@ end
 --- @class UserInputController
 --- @field model UserInputModel
 --- @field view UserInputView?
---- @field disable_selection boolean
 UserInputController = class.create(new)
 
 --- @param v UserInputView
@@ -148,6 +143,13 @@ function UserInputController:clear()
   self:clear_error()
 end
 
+--- Empty the field and keep its message: one the line that
+--- just ran set, such as a refusal, is news (IS3.14). Any
+--- message shown before the line's Enter went with that key.
+function UserInputController:clear_text()
+  self.model:clear_input()
+end
+
 --- @param cs CustomStatus
 function UserInputController:set_custom_status(cs)
   self.model:set_custom_status(cs)
@@ -212,9 +214,29 @@ function UserInputController:clear_error()
   self.model:clear_error()
 end
 
+--- An error to show: in the notice band where this field has
+--- one (the file editor's and the console's, IS3.14), else in
+--- the field's place
 --- @param error string[]|Error[]?
 function UserInputController:set_error(error)
-  self.model:set_error(error)
+  if error ~= nil and self.model.message_band then
+    self.model:set_notice(error, 'error')
+  else
+    self.model:set_error(error)
+  end
+end
+
+--- A message in the notice band: a notice unless `kind` says
+--- it is an error (UserInputModel:set_notice)
+--- @param msg any|any[]
+--- @param kind MessageKind?
+function UserInputController:notice(msg, kind)
+  self.model:set_notice(msg, kind)
+end
+
+--- @return MessageKind?
+function UserInputController:message_kind()
+  return self.model:message_kind()
 end
 
 --- @return string[]?
@@ -249,6 +271,11 @@ end
 --- @param history boolean?
 function UserInputController:reset(history)
   self.model:reset(history)
+end
+
+--- Store the line, which the owner has accepted
+function UserInputController:remember()
+  self.model:remember()
 end
 
 function UserInputController:history_back()
@@ -462,10 +489,9 @@ end
 --- Dispose of the content a verb finished with, then take the
 --- widget down — both only if this instance seats the cell
 --- (doc/development/decisions/input.md, D-LIFECYCLE-FLAGS).
---- The clear is model:cancel(): remember, THEN clear, so an
---- abandoned line reaches the input history before it is
---- emptied (statement 4). It is not compy.input.clear(), which
---- touches no history.
+--- The clear is model:cancel(), which stores nothing: a
+--- submission was stored when it was accepted (submit_flow),
+--- and a cancelled line never ran.
 --- @param self UserInputController
 --- @param clear boolean?
 --- @param hide boolean?
@@ -508,6 +534,9 @@ function UserInputController:submit_flow()
     return
   end
   local text = string.unlines(lines)
+  --- accepted: the line enters the history (the classic
+  --- shell's, which holds only lines that ran)
+  self.model:remember()
   dispose(self, self.clear_on_submit, self.hide_on_submit)
   run_callback(self, 'on_text_entered', text)
   run_callback(self, 'after_submit', text)
@@ -548,7 +577,7 @@ function UserInputController:is_shown()
 end
 
 --- Mark this widget as its host's permanent input surface —
---- the console line, the editor's input and search strips —
+--- the console line and the editor's input strip —
 --- and return self, for inline construction. A project's widget
 --- leaves shown=false and toggles it with show()/hide().
 ---
@@ -564,6 +593,16 @@ end
 function UserInputController:always_shown()
   self.shown = true
   self.always = true
+  return self
+end
+
+--- Show this field's messages in the notice band above its
+--- status line, as the file editor does (IS3.14): the field
+--- stays as it is, and the next key dismisses the message
+--- and still acts
+--- @return UserInputController
+function UserInputController:messages_above()
+  self.model.message_band = true
   return self
 end
 
@@ -589,18 +628,118 @@ end
 --  keyboard  --
 ----------------
 
+--- The field's keys are one table for every owner, the
+--- console, the file editor and a program's input
+--- (model/input/fieldKeys.lua), each chord by its full name
+--- (Key.combo): a chord the table does not name does nothing in
+--- the field. These are its actions, each taking the
+--- controller, its model, the key and whether it repeats.
+
+--- Navigation-boundary output (doc/development/decisions/
+--- input.md, D-EDIT-CALLBACKS): a hit limit is signalled only
+--- through on_limit_reached
+--- @param self UserInputController
+local function emit_limit(self, dir, scope)
+  local cb = self.callbacks.on_limit_reached
+  if cb then cb(dir, scope) end
+end
+
+--- @param input UserInputModel
+local function horizontal_limit_scope(input, dir)
+  if input:get_n_text_lines() == 1 then return 'input' end
+  if input:is_at_limit(dir, 'input') then return 'input' end
+  return 'line'
+end
+
+--- Left or Right, a character or (`word`) a word
+local function horizontal(word)
+  return function(self, input, k)
+    if input:is_at_limit(k, 'line') then
+      emit_limit(self, k, horizontal_limit_scope(input, k))
+    end
+    if k == 'left' then
+      if word then input:cursor_word_left()
+      else input:cursor_left() end
+    else
+      if word then input:cursor_word_right()
+      else input:cursor_right() end
+    end
+  end
+end
+
+--- Home and End are line-scoped; with Ctrl (`whole`) they
+--- jump over the whole text (spec 2.7)
+local function edge(whole)
+  return function(_, input, k)
+    if k == 'home' then
+      if whole then input:jump_home()
+      else input:jump_line_start() end
+    else
+      if whole then input:jump_end()
+      else input:jump_line_end() end
+    end
+  end
+end
+
+local function vertical(self, input, k)
+  if input:cursor_vertical_move(k) then
+    emit_limit(self, k, 'input')
+  end
+end
+
+local ACT = {
+  char = horizontal(false),
+  word = horizontal(true),
+  edge = edge(false),
+  whole = edge(true),
+  vertical = vertical,
+  --- the cursor's line moves past its neighbor
+  move_line = function(_, input, k) input:move_line(k) end,
+  backspace = function(_, input) input:backspace() end,
+  delete = function(_, input) input:delete() end,
+  --- word-wise deletion, Ctrl+W as in readline (spec 2.7)
+  backspace_word = function(_, im) im:backspace_word() end,
+  --- IS3.12: to the end of the line, the break kept
+  kill = function(_, input) input:kill_to_line_end() end,
+  --- IS3.15: Shift+Enter and Alt+Enter each break the line
+  line_feed = function(_, input) input:line_feed() end,
+  --- the widget's own submit and cancel (D-EDIT-LIFECYCLE),
+  --- out through callbacks. A held Enter submits once: its
+  --- repeats reach no callback (API2.2).
+  submit = function(self, _, _, isr)
+    if not isr then self:submit_flow() end
+  end,
+  cancel = function(self) self:cancel_flow() end,
+  --- the draft's own undo and redo (D-UNDO-KEYS)
+  undo = function(_, input) input:undo_edit() end,
+  redo = function(_, input) input:redo_edit() end,
+}
+
+--- Whether the field acts on a chord (Key.combo's name), and
+--- its entry (fieldKeys.lua)
+--- @param chord string
+--- @return table? entry
+function UserInputController:names(chord)
+  return FieldKeys:lookup('field', chord)
+end
+
+--- The keys an error unlocks the field with
+--- (doc/development/internals/user_input.md, "Error state")
+local UNLOCKS = {
+  ['return'] = true, kpenter = true, up = true, down = true,
+  left = true, right = true, space = true,
+}
+
 --- LÖVE's own argument list, like every other consumer on the
---- chain (doc/development/decisions/input.md, D-LOVE-ARGS). The
---- tail is unread here and named anyway: this widget is where a
---- repeat-aware edit would land, and the position has to be the
---- right one when it does.
+--- chain (doc/development/decisions/input.md, D-LOVE-ARGS).
+--- The scancode is unread; a repeat edits as its press does,
+--- and submits nothing (API2.2).
 --- @param k string
 --- @param sc string?    scancode
 --- @param isr boolean?  key repeat
 -- No return value: the old limit-flag return channel is
 -- retired (D-EDIT-CALLBACKS) — on_limit_reached is the sole
--- notification path now (see "emit_limit" below).
--- Its editing logic reads modifiers via Key.* (love.keyboard).
+-- notification path now.
 function UserInputController:keypressed(k, sc, isr)
   if not self.shown then
     if love.DEBUG then Log.debug('input: hidden no-op') end
@@ -608,226 +747,34 @@ function UserInputController:keypressed(k, sc, isr)
   end
   -- Defensive render-on-entry: guarantees the view catches up
   -- to the model even if a prior branch returned without
-  -- re-rendering. Mutating branches below re-render at their
-  -- end, so this is belt-and-suspenders, not the primary
-  -- update.
+  -- re-rendering.
   self:update_view()
   -- _G.web: web/love.js build flag. On web, space may not emit
   -- textinput, so synthesise it here.
-  if _G.web and k == 'space' then
+  -- This text does not pass the event gate, so a chord's
+  -- space is held back here (Key.chord_text).
+  if _G.web and k == 'space' and not Key.chord_text(' ') then
     self:textinput(' ')
   end
   local input = self.model
+  local chord = Key.combo(k)
 
-  -- Navigation-boundary output
-  -- (doc/development/decisions/input.md,
-  -- D-EDIT-CALLBACKS): the widget signals a hit limit ONLY
-  -- through on_limit_reached —
-  -- the keypressed return value no longer carries a limit flag
-  -- (retired; console reads history via its own
-  -- on_limit_reached callback).
-  local function emit_limit(dir, scope)
-    local cb = self.callbacks.on_limit_reached
-    if cb then cb(dir, scope) end
-  end
-
-  local function horizontal_limit_scope(dir)
-    if input:get_n_text_lines() == 1 then return 'input' end
-    if input:is_at_limit(dir, 'input') then return 'input' end
-    return 'line'
-  end
-
-  -- (combo serialisation lives in controller.lua; this handler
-  -- only sees the raw key.)
   -- doc/development/internals/user_input.md, "Error state":
   -- locked-on-reject unlocks on Enter/Space/arrows.
-  if input:has_error() then
-    if Key.is_enter(k)
-        or k == "up" or k == "down"
-        or k == "left" or k == "right"
-        or k == "space"
-    then
-      input:clear_error()
-    end
+  -- A field with a notice band blocks no input: the next key
+  -- dismisses its message and does its work (IS3.14). A
+  -- modifier or a lock on its own leaves it showing.
+  if input:has_error() and input.message_band then
+    if not Key.is_lone(k) then input:clear_error() end
+  elseif input:has_error() then
+    if UNLOCKS[chord] then input:clear_error() end
     return
   end
 
-  -- utility functions
-  local function paste()
-    input:paste(love.system.getClipboardText())
-    input:clear_selection()
+  local entry = self:names(chord)
+  if entry then
+    ACT[entry.act](self, input, k, isr)
   end
-  local function copy()
-    local t = string.unlines(input:get_selected_text())
-    if string.is_non_empty_string(t) then
-      love.system.setClipboardText(t)
-    end
-  end
-  local function cut()
-    local t = string.unlines(
-      input:pop_selected_text() or { '' }
-    )
-    if string.is_non_empty_string(t) then
-      love.system.setClipboardText(t)
-    end
-  end
-  --- @param dir VerticalDir
-  local function swap_line(dir)
-    local cl = input:get_cursor_y()
-    --- this looks reversed because the cursor is already moved
-    --- by the time we are here, so we are swapping the previous
-    --- line with the current, not the current with the next
-    local pl = (function()
-      if dir == 'up' then return cl + 1 end
-      if dir == 'down' then return cl - 1 end
-    end)()
-    if pl then input:swap_lines(cl, pl) end
-  end
-
-  -- action categories
-  local function removers()
-    local editing = input.editing
-    if k == "backspace" then
-      --- word-wise deletion is the editor's 2.7; the
-      --- plain widget keeps the plain backspace
-      if Key.ctrl() and editing then
-        input:backspace_word()
-      else
-        input:backspace()
-      end
-    end
-    if k == "delete" then
-      input:delete()
-    end
-    if Key.ctrl() then
-      if k == "y" then
-        --- unreachable in the editor: its controller
-        --- takes Ctrl+Y for redo before the widget
-        input:delete_line()
-      end
-      if k == "w" and editing then
-        --- readline's synonym, per the editor spec 2.7
-        input:backspace_word()
-      end
-    end
-  end
-  local function vertical()
-    if k == "up" then
-      if input:cursor_vertical_move('up') then
-        emit_limit('up', 'input')
-      end
-    end
-    if k == "down" then
-      if input:cursor_vertical_move('down') then
-        emit_limit('down', 'input')
-      end
-    end
-    if Key.alt() then
-      if k == "up" then
-        swap_line('up')
-      end
-      if k == "down" then
-        swap_line('down')
-      end
-    end
-  end
-  local function horizontal()
-    if k == "left" and input:is_at_limit('left', 'line') then
-      emit_limit('left', horizontal_limit_scope('left'))
-    end
-    if k == "right" and input:is_at_limit('right', 'line') then
-      emit_limit('right', horizontal_limit_scope('right'))
-    end
-    if k == "left" then
-      input:cursor_left()
-    end
-    if k == "right" then
-      input:cursor_right()
-    end
-
-    --- spec 2.7: bare Home/End are line-scoped; the
-    --- jump over the whole block is Ctrl+Home/End
-    if k == "home" then
-      if Key.ctrl() then
-        input:jump_home()
-      else
-        input:jump_line_start()
-      end
-    end
-    if k == "end" then
-      if Key.ctrl() then
-        input:jump_end()
-      else
-        input:jump_line_end()
-      end
-    end
-  end
-  local function newline()
-    if Key.shift() then
-      if Key.is_enter(k) then
-        input:line_feed()
-      end
-    end
-  end
-  local function modify()
-    if Key.ctrl() then
-      if k == 'd' then
-        local line = input:get_current_line()
-        input:insert_text_line(line)
-      end
-    end
-  end
-  local function copypaste()
-    if Key.ctrl() then
-      if k == "v" then
-        paste()
-      end
-      if k == "c" or k == "insert" then
-        copy()
-      end
-      if k == "x" then
-        cut()
-      end
-    end
-    if Key.shift() then
-      if k == "insert" then
-        paste()
-      end
-      if k == "delete" then
-        cut()
-      end
-    end
-  end
-  local function selection()
-    local en = not self.disable_selection
-    if en and Key.shift() then
-      input:hold_selection(false)
-    end
-    if not Key.shift() then
-      input:release_selection()
-    end
-  end
-
-  removers()
-  vertical()
-  horizontal()
-  newline()
-  if self.allow_duplicate_line then modify() end
-  copypaste()
-  selection()
-
-  -- The widget's own submit/cancel flow (D-EDIT-LIFECYCLE): plain
-  -- Enter submits, plain Escape cancels — ordinary widget
-  -- behaviour, out through callbacks. Shift+Enter is a newline
-  -- (newline() above); Ctrl+Escape is not a cancel.
-  -- Editor/console callers that must not run these consume the
-  -- key upstream (editor) or set no callbacks (console no-op).
-  if Key.is_enter(k) and not Key.shift() then
-    self:submit_flow()
-  elseif k == 'escape' and not Key.ctrl() then
-    self:cancel_flow()
-  end
-
   self:update_view()
 end
 
@@ -842,7 +789,9 @@ function UserInputController:textinput(t)
   end
   self:update_view()
   if self.model:has_error() then
-    return
+    if not self.model.message_band then return end
+    --- a notice blocks no input (IS3.14)
+    self.model:clear_error()
   end
   self.model:add_text(t)
   self:update_view()
@@ -859,20 +808,9 @@ function UserInputController:keyreleased(k, sc)
   local input = self.model
   self:update_view()
 
-  if input:has_error() then
-    if k == 'space' then
-      input:clear_error()
-    end
-    return
+  if input:has_error() and k == 'space' then
+    input:clear_error()
   end
-
-  local function selection()
-    if Key.is_shift(k) then
-      input:release_selection()
-    end
-  end
-
-  selection()
   self:update_view()
 end
 
@@ -880,52 +818,21 @@ end
 --   mouse   --
 ---------------
 
---- @private
---- @param x integer
---- @param y integer
---- @return integer c
---- @return integer l
-function UserInputController:_translate_to_input_grid(x, y)
-  local cfg = self.model.cfg
-  local h = cfg.view.h
-  local fh = cfg.view.fh
-  local fw = cfg.view.fw
-  local line = math.floor((h - y) / fh)
-  local a, b = math.modf((x / fw))
-  local char = a + 1
-  if b > .5 then char = char + 1 end
-  return char, line
-end
-
---- @private
+--- A click in the draft places the text cursor on the cell
+--- it points at, in every field; it selects nothing (the
+--- ruling of November 14, 2026). A click outside the rows the
+--- field shows leaves the cursor where it is.
 --- @param x integer
 --- @param y integer
 --- @param btn integer
---- @param handler function
-function UserInputController:_handle_mouse(x, y, btn, handler)
-  if self.disable_selection then return end
-  if btn == 1 then
-    local im = self.model
-    local n_lines = im:get_wrapped_text():get_content_length()
-    local c, l = self:_translate_to_input_grid(x, y)
-    if l < n_lines then
-      handler(n_lines - l, c)
-    end
-  end
-end
-
---- @param x integer
---- @param y integer
---- @param btn integer
---- @param touch boolean
---- @param presses number
-function UserInputController:mousepressed(
-    x, y, btn, touch, presses)
-  if self.disable_selection then return end
+function UserInputController:mousepressed(x, y, btn)
+  local v = self.view
+  if btn ~= 1 or not (v and v.cell_at) then return end
   local im = self.model
-  self:_handle_mouse(x, y, btn, function(l, c)
-    im:mouse_click(l, c)
-  end)
+  local row, col = v:cell_at(x, y, im:get_input())
+  if not row then return end
+  im:move_cursor(im:translate_grid_to_cursor(row, col))
+  self:update_view()
 end
 
 --- @param x integer
@@ -935,12 +842,6 @@ end
 --- @param presses number
 function UserInputController:mousereleased(
     x, y, btn, touch, presses)
-  if self.disable_selection then return end
-  local im = self.model
-  self:_handle_mouse(x, y, btn, function(l, c)
-    im:mouse_release(l, c)
-  end)
-  im:release_selection()
 end
 
 --- @param x number
@@ -948,12 +849,8 @@ end
 --- @param dx number
 --- @param dy number
 --- @param touch boolean
+--- A drag selects nothing
 function UserInputController:mousemoved(x, y, dx, dy, touch)
-  if self.disable_selection then return end
-  local im = self.model
-  self:_handle_mouse(x, y, 1, function(l, c)
-    im:mouse_drag(l, c)
-  end)
 end
 
 --- @param x integer

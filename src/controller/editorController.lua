@@ -1,12 +1,18 @@
 require("model.interpreter.eval.evaluator")
 require("controller.userInputController")
-require("controller.searchController")
 require("view.input.customStatus")
 require("model.input.cursor")
 
 local class = require('util.class')
-local check = require('model.lang.lua.check')
-local format = require('model.lang.lua.format')
+local Syntax = require('model.syntax')
+local KeyCard = require('model.editor.keyCard')
+local EditorKeys = require('model.editor.editorKeys')
+
+--- A write refused because the file changed outside the
+--- editor (_refuse_stale), and a file that changed while
+--- hidden to text the editor does not take
+local OUTSIDE_NOTICE =
+    'The file changed outside the editor, so nothing is saved.'
 
 --- @param M EditorModel
 --- @oaram CC ConsoleController
@@ -14,79 +20,68 @@ local function new(M, CC)
   return {
     -- Host chrome, not a transient widget: always_shown makes
     -- hide() refuse rather than leave the editor without an
-    -- input line. Selection is disabled on both surfaces.
-    input = UserInputController(M.input, true, true)
+    -- input line.
+    input = UserInputController(M.input)
         :always_shown(),
     model = M,
-    search = SearchController(
-      M.search,
-      UserInputController(M.search.input, true):always_shown()
-    ),
     console = CC,
     view = nil,
-    mode = 'nav',
-    pos_memory = {},
-    pending_confirm = nil,
-    accepted_n = 1,
+    --- the keys whose press reached the editor since it came
+    --- to the front, until their release
+    pressed = {},
   }
 end
-
---- @alias EditorMode
---- | 'edit' --- default
---- | 'nav' --- navigating between blocks
---- | 'reorder'
---- | 'search'
 
 --- @class EditorController
 --- @field model EditorModel
 --- @field input UserInputController
---- @field search SearchController
 --- @field console ConsoleController
 --- @field view EditorView?
---- @field state EditorState?
---- @field mode EditorMode
---- @field pos_memory table<string, {sel:integer, off:integer}>
---- @field pending_confirm string? --- 'overwrite'|'restore'
---- @field accepted_n integer --- blocks the last
---- acceptance produced; the leave gate steps past them
+--- @field pressed table<string, boolean>
 EditorController = class.create(new)
 
---- Shift+Esc's question, which every way out of a change
---- asks
-local DISCARD_QUESTION =
-    'discard the changes? Confirm [Enter] / Cancel [Esc]'
+--- A whole-editor exit (Ctrl+T, Ctrl+Q and Ctrl+R at the
+--- gate) is taken from the browsing state. During an edit it
+--- is refused with a notice, and no question is asked
+--- (H-NFR4.6): the field may hold a cut block's only copy
+--- (IS6.2), so the edit is submitted or aborted first
+--- (FR1.2). The chord's own key reaches the editor after the
+--- gate, and must not dismiss the notice (_held_back).
+--- @return boolean refused
+function EditorController:refuse_to_leave()
+  if not self:get_active_buffer() then return false end
+  if self:state_name() == 'browsing' then return false end
+  self:refuse({
+    'Finish the text first: Enter keeps it, Esc drops it.'
+  })
+  self._gate_key = true
+  return true
+end
 
---- @private
---- DEPRECATED (owner ruling, 2026-09-06). Ctrl+Shift+S
---- leaves the editor and stays bound, but Shift+Esc is the
---- supported way out and this chord is on its way to
---- removal. Its author calls it inherited, absent from the
---- editor spec, and it is undocumented in the editor's own
---- keymap. It is kept only because our shipped guide, the
---- README walkthrough and a spec of ours all carry it.
---- With a changed block open it asks Shift+Esc's question
---- first, as the gate's exits do (ask_to_leave).
---- Route-level and not a gate reservation, because the gate
---- binds only what competes with a running project
---- (D-EXACT-RESERVE, "Scope"), and nothing runs while the
---- editor owns the route.
+--- A key press comes in at the gate
+function EditorController:key_begins()
+  self._in_key = true
+end
+
+--- The editor comes to the front. During a key press, that
+--- key is not the editor's: the gate's Ctrl+T, or the key a
+--- program's hook opened a file on. It does nothing there,
+--- and leaves the notice the editor came with (IS3.14).
+function EditorController:came_forward()
+  if self._in_key then self._gate_key = true end
+  self.pressed = {}
+end
+
+--- The gate has passed its chord's key on: whether or not
+--- the key reached the editor, no later key is the chord's
+function EditorController:gate_key_done()
+  self._gate_key = nil
+  self._in_key = nil
+end
+
 --- @param k string
---- @return boolean handled --- the editor is closed, or a
---- question is open, so the key must reach no mode handler
---- after it
-function EditorController:_leave_keys(k)
-  if k == "s" and Key.shift() and not Key.alt() then
-    --- each change asked about in turn, as the gate's
-    --- exits ask
-    local function leave()
-      if not self:ask_to_leave(leave, true) then
-        self.console:finish_edit()
-      end
-    end
-    leave()
-    return true
-  end
-  return false
+function EditorController:key_released(k)
+  self.pressed[k] = nil
 end
 
 --- @param v EditorView
@@ -95,162 +90,94 @@ function EditorController:init_view(v)
   self.input:init_view(self.view.input)
 end
 
+--- @private
+--- The field shows and edits the front file's own draft
+--- @param b BufferModel
+function EditorController:_front(b)
+  self.input.model = b.input
+end
+
 --- @param name string
 --- @param content str?
 --- @param save function
 --- @param key string? --- the file's identity, project and
---- name: a file open already comes back as its own buffer
---- @param fresh boolean? --- a new buffer even so
-function EditorController:open(name, content, save, key, fresh)
-  local w = self.model.cfg.view.drawableChars
-  local is_lua = string.match(name, '.lua$')
-  local is_md = string.match(name, '.md$')
-  local ch, hl, pp, tr
-
-  if is_lua then
-    self.input:set_eval(LuaEditorEval)
-    local luaEval = LuaEval()
-    local parser = luaEval.parser
-    if not parser then return end
-    hl = luaEval.highlighter
-    --- @param t string
-    --- @param single boolean
-    ch = function(t, single)
-      return parser.chunker(t, w, single)
-    end
-    pp = function(t)
-      local out, formatted = format.format(t, w)
-      if formatted then return out end
-    end
-    tr = function(code)
-      return parser.trunc(code, self.model.cfg.view.fold_lines)
-    end
-  elseif is_md then
-    local mdEval = MdEval()
-    hl = mdEval.highlighter
-    self.input:set_eval(mdEval)
+--- name (_find_buffer)
+function EditorController:open(name, content, save, key)
+  --- the file's syntax, by its name (model.syntax), is all
+  --- that knows its language
+  local syntax = Syntax.for_name(name)
+  local b = BufferModel(name, content, save, syntax)
+  b.key = key
+  --- what the file held when it was read, missing included:
+  --- a later change from outside is told from it (_baseline)
+  if type(content) == 'table' then
+    --- lines given, no text read: the card says what it holds
+    b.disk_seen = self:_disk_text(b)
   else
-    self.input:set_eval(TextEval)
+    self:_note_read(b, content)
   end
-
-  --- one buffer per file: a second copy would save a
-  --- stale snapshot over the first one's changes
-  local b = not fresh and key and self:_find_buffer(key)
-  local created = not b
-  if created then
-    b = BufferModel(name, content, save, ch, hl, pp, tr)
-    b.key = key
-  end
-  self:_drop_dialog()
-  --- the file comes in with an input of its own: nothing
-  --- typed, no message, no search of another file's
-  self.input:clear()
-  self.search:clear()
+  --- the file's own field: its draft and the draft's changes
+  --- stay with it while another file is in front (IS1.5,
+  --- IS6.6)
+  b.input = UserInputModel(self.model.cfg, syntax.evaluator(),
+    nil, true)
   self.model.buffers:push_front(b)
+  self:_front(b)
   self.view:open(b)
-  self:set_mode('nav')
-  --- a buffer open already keeps where it is
-  if not (created and self:_restore_position(b)) then
-    self.view:get_current_buffer():follow_selection()
-  end
-  self:_unpark(b)
+  --- a file opens ready to append, at its end position
+  --- (IS1.1)
+  b:set_selection(b:get_content_length() + 1)
+  self.view:get_current_buffer():follow_selection()
   self:update_status()
-  self:set_state()
   self.input:update_view()
 end
 
---- @private
---- The draft Ctrl+J left on a buffer comes back with it
---- @param b BufferModel
-function EditorController:_unpark(b)
-  local parked = b.parked
-  b.parked = nil
-  if parked then
-    --- an edit returns to the block it was made in
-    if parked.mode == 'edit' then b:select_loaded() end
-    self.input:set_text(parked.text)
-    self:set_mode(parked.mode)
-  end
-end
-
---- @private
-function EditorController:_print_bufferlist()
-  for i, v in ipairs(self.model.buffers) do
-    Log.debug(i, v.name)
-  end
-  orig_print()
-end
-
+--- Ctrl+J follows the file the viewed block names with
+--- require or dofile (IS1.5). A refusal leaves the file and
+--- the state as they are, and says why.
 function EditorController:follow_require()
   local buf = self:get_active_buffer()
-  if not buf.semantic then return end
+  --- an edit in progress is resolved first (FR1.2)
+  if self:state_name() ~= 'browsing' then
+    return self:refuse({
+      'Finish the text first: Enter keeps it, Esc drops it.'
+    })
+  end
   local bn = buf:get_selection()
-  local reqs = buf.semantic.requires
+  if bn > buf:get_content_length() then
+    return self:refuse({
+      'End of file. Move onto a line with require or dofile.'
+    })
+  end
+  local reqs = buf.semantic and buf.semantic.requires or {}
   local reqsel = table.find_by_v(reqs, function(r)
     return r.block == bn
   end)
-
-  if reqsel then
-    local name = reqsel.name
-    --- the draft stays with its own file, and Shift+Esc
-    --- back to it brings the draft back
-    if self.mode == 'edit' or not self.input:is_empty() then
-      buf.parked = {
-        text = self.input:get_text():items(),
-        mode = self.mode,
-      }
-    end
-    self.console:edit(name .. '.lua')
-    if self:get_active_buffer() == buf then buf.parked = nil end
-  else
-    self:refuse()
+  if not reqsel then
+    return self:refuse({
+      'No file named here. Ctrl+J needs require or dofile.'
+    })
   end
+  self.console:edit(reqsel.file, true)
 end
 
 function EditorController:pop_buffer()
   local bs = self.model.buffers
   local n_buffers = bs:length()
   if n_buffers < 2 then return end
-  self:_drop_dialog()
-  self:_remember_position()
   local out = bs:pop_front()
   self:_let_go(out)
   local b = bs:first()
+  self:_front(b)
   local bv = self.view:get_current_buffer()
-  bv:open(b)
-  --- the buffer keeps its position; the view must
-  --- follow it, exactly as opening a file does —
+  --- the caller comes back as it was left: the buffer
+  --- keeps its position, and the view its rows (IS1.6) —
   --- open() alone parks the view at the end
-  bv:follow_line()
-  self.input:clear()
-  self:_unpark(b)
+  local off = bv:get_offset()
+  bv:open(b)
+  bv:scroll_to(off)
+  self:_take_outside_change()
   self:update_status()
-end
-
---- store the active buffer's position by the file's
---- identity, project and name, or by its name when it has
---- none
-function EditorController:_remember_position()
-  local buf = self:get_active_buffer()
-  local bv = self.view:get_current_buffer()
-  self.pos_memory[buf.key or buf.name] = {
-    sel = buf:get_selection(),
-    off = bv:get_offset(),
-  }
-end
-
---- restore a remembered position if it is still in range
---- @param buf BufferModel
-function EditorController:_restore_position(buf)
-  local saved = self.pos_memory[buf.key or buf.name]
-  if saved
-      and saved.sel >= 1
-      and saved.sel <= buf:get_content_length() then
-    buf:set_selection(saved.sel)
-    self.view:get_current_buffer():scroll_to(saved.off)
-    return true
-  end
-  return false
 end
 
 --- @private
@@ -260,21 +187,6 @@ function EditorController:_find_buffer(key)
   for _, b in ipairs(self.model.buffers) do
     if b.key == key then return b end
   end
-end
-
---- Replace the active buffer with fresh file content,
---- wherever it stands in the buffer stack
---- @param text string
-function EditorController:reload_active(text)
-  local old = self:get_active_buffer()
-  self.model.buffers:pop_front()
-  self:open(old.name, text, old.save_file, old.key, true)
-  local new = self:get_active_buffer()
-  local bs = self.model.buffers
-  for i, b in ipairs(bs) do
-    if b == old then bs:update(new, i) end
-  end
-  self:_let_go(old)
 end
 
 --- @private
@@ -287,8 +199,9 @@ function EditorController:_let_go(b)
   self.view.buffers[b:get_id()] = nil
 end
 
+--- Step back from the file (IS1.6): to its caller, or from
+--- the last file to the console
 function EditorController:close_buffer()
-  self:_remember_position()
   local bs = self.model.buffers
   local n_buffers = bs:length()
   if n_buffers < 2 then
@@ -298,153 +211,171 @@ function EditorController:close_buffer()
   end
 end
 
---- @param m EditorMode
---- @return boolean
-local function is_normal(m)
-  return m == 'nav' or m == 'edit'
-end
-
---- legal mode transitions; anything absent is rejected
-local TRANSITIONS = {
-  nav = { edit = true, reorder = true, search = true },
-  edit = { nav = true },
-  reorder = { nav = true },
-  search = { nav = true },
-}
-
---- @param mode EditorMode
-function EditorController:set_mode(mode)
-  local buf = self:get_active_buffer()
-  local set_reorg = function()
-    self:save_state()
-  end
-  local init_search = function()
-    local db = buf.semantic
-    self:save_state()
-    self.search:load(db and db.definitions or {})
-  end
-
-  local current = self.mode
-  if current ~= mode and TRANSITIONS[current][mode] then
-    if mode == 'reorder' then
-      set_reorg()
-    end
-    if mode == 'search' then
-      init_search()
-    end
-    self.mode = mode
-    Log.info('-- ' .. string.upper(mode) .. ' --')
-    self:update_status()
-  end
-end
-
---- @return EditorMode
-function EditorController:get_mode()
-  return self.mode
-end
-
---- @return boolean
-function EditorController:is_normal_mode()
-  return is_normal(self.mode)
-end
-
 --- One sound for every refused action (spec 2.4.3):
---- a knock means "no further this way"
---- @param msg string[]? --- also shown when given
-function EditorController:refuse(msg)
+--- a knock means "no further this way". With words, a
+--- notice too (IS3.14): it names what was refused and the
+--- action that would work.
+--- @param msg (string|string[])? --- the notice's words
+--- @param kind MessageKind? --- 'error': the parser's message
+function EditorController:refuse(msg, kind)
   --- required here, not at the top: util.audio builds
   --- its sources on load and needs love.audio ready
   require("util.audio").knock()
-  if msg then self.input:set_error(msg) end
+  if msg then self:notice(msg, kind) end
 end
 
---- drop the loaded block and the input, return to nav
-function EditorController:leave_edit()
-  local buf = self:get_active_buffer()
-  buf:clear_loaded()
-  self.input:clear()
-  self:set_mode('nav')
+--- Show a message in the message band (IS3.14): a notice,
+--- unless `kind` says it is an error. It blocks no input and
+--- changes no state; the next key press dismisses it
+--- (_held_back). The band is the field's
+--- (UserInputModel:set_notice), the console's too.
+--- @param msg string|string[]
+--- @param kind MessageKind?
+function EditorController:notice(msg, kind)
+  self.input:notice(msg, kind)
 end
 
---- @param clipboard string
-function EditorController:set_clipboard(clipboard)
-  self.state.clipboard = clipboard
+--- The kind of the message the band shows, nil when none
+--- shows
+--- @return MessageKind?
+function EditorController:message_kind()
+  return self.input:message_kind()
 end
 
---- @return string
-function EditorController:get_clipboard()
-  return self.state.clipboard
+--- A key that does nothing on its own: a modifier, a lock,
+--- a system key or the help key. It dismisses no notice
+--- (IS3.14).
+--- @param k string
+--- @return boolean
+local function lone_key(k)
+  return Key.is_lone(k) or k == KeyCard.KEY
 end
 
---- @param clipboard string?
-function EditorController:set_state(clipboard)
-  --- TODO: multibuffer support
-  local buf = self:get_active_buffer()
-  local bid = buf:get_id()
-  local buf_view_state = self.view:get_buffer(bid):get_state()
-  if self.state then
-    self.state.buffer = buf_view_state
-    self.state.moved = buf:get_selection()
-    if clipboard then self:set_clipboard(clipboard) end
-  else
-    self.state = {
-      buffer = buf_view_state,
-      clipboard = clipboard,
-      moved = buf:get_selection()
-    }
+--- Whether a key press is held back from the editor's keys:
+--- every key while the key card shows (IS3.16), and a gate
+--- chord's own key. Ctrl+Escape is the gate's on its release,
+--- and exits whether or not the card shows. A message is a hint that blocks nothing
+--- (IS3.14): any other key dismisses it here and then does
+--- its ordinary work, Escape included, which aborts the edit
+--- or steps back from the file in the same press.
+--- @param k string? --- nil for typed text
+--- @return boolean
+function EditorController:_held_back(k)
+  if KeyCard.shows(self.pressed) then return true end
+  --- a gate chord's own key reaches the editor after the
+  --- gate refused the exit, or the key the editor came to
+  --- the front on (came_forward): it must not dismiss the
+  --- notice
+  if self._gate_key and k and not Key.is_mod(k) then
+    self._gate_key = nil
+    return true
   end
-end
-
---- @return EditorState
-function EditorController:get_state()
-  return self.state
-end
-
-function EditorController:save_state()
-  --- TODO: multibuffer support
-  self:set_state(love.system.getClipboardText())
-end
-
---- @param state EditorState?
-function EditorController:restore_state(state)
-  --- TODO: multibuffer support
-  if state then
-    local buf = self:get_active_buffer()
-    local sel = state.buffer.selection
-    local off = state.buffer.offset
-    buf:set_selection(sel)
-    self.view:get_current_buffer():scroll_to(off)
-    local clip = state.clipboard
-    if string.is_non_empty_string(clip) then
-      love.system.setClipboardText(clip or '')
-    end
+  --- a modifier or a lock on its own leaves it showing. The
+  --- glyph a modifier chord leaks on the device leaves it
+  --- showing too, because it never comes here: the event gate
+  --- stops it (Key.chord_text)
+  local lone = k and lone_key(k)
+  if self.input:has_error() and not lone then
+    self.input:clear_error()
   end
+  return false
 end
 
---- @return {name: string, content: string[]}[]
+--- The editor's state: a loaded block is replaced, a draft
+--- alone is inserted, an empty field browses. A draft of
+--- spaces or of empty lines is a draft. Every guard that
+--- depends on the state asks here.
+--- @return EditorStateName
+function EditorController:state_name()
+  local buf = self:get_active_buffer()
+  if buf and buf.loaded then return 'replacing' end
+  if self:_draft_is_empty() then return 'browsing' end
+  return 'inserting'
+end
+
+--- @private
+--- @return boolean
+function EditorController:_draft_is_empty()
+  local t = self.input:get_text()
+  if type(t) == 'table' then t = table.concat(t, '\n') end
+  return t == nil or t == ''
+end
+
+--- Whether the editor is in front and its key card shows:
+--- every key is suspended then, the reserved chords too
+--- (IS3.16)
+--- @return boolean
+function EditorController:card_shows()
+  return love.state.app_state == 'editor'
+      and KeyCard.shows(self.pressed)
+end
+
+--- The key card's lines while the help key is held (FR4.9),
+--- nil otherwise.
+--- @return string[]?
+function EditorController:key_card()
+  if not self:card_shows() then return nil end
+  local card = self.view.key_card
+  return card:lines(self:state_name(), self:_draft_is_empty())
+end
+
+--- A run of the project hides the editor (IS1.4): its
+--- files stay as they are. The key that hides it acts, so it
+--- dismisses the message (IS3.14).
+function EditorController:hide()
+  self.input:clear_error()
+end
+
+--- The editor as a run left it, its front file as storage
+--- holds it (IS1.4)
+function EditorController:show()
+  self:_take_outside_change()
+  self:update_status()
+  self.input:update_view()
+end
+
+--- @private
+--- The front file, come to the front (shown after a run, or
+--- stepped back to with Escape), shows the text storage holds
+--- (_baseline): changed, it is read anew and its timeline
+--- starts afresh; the browsing position keeps its block
+--- number while the file has that block, else it goes to the
+--- end position. A file is left only in the browsing state,
+--- so no edit is in progress here. Text that is not UTF-8 is
+--- not taken (IS1.2), and one that cannot be read is left as
+--- it is: the guard refuses the next write (_refuse_stale).
+function EditorController:_take_outside_change()
+  local buf = self:get_active_buffer()
+  if not buf then return end
+  --- the text the change is told by is the text taken
+  local seen, text = self:_baseline(buf)
+  if seen ~= 'changed' then return end
+  if type(text) == 'string' and not utf8.len(text) then
+    self:notice({ OUTSIDE_NOTICE })
+    return
+  end
+  local last = buf:get_content_length()
+  local sel = buf:get_selection()
+  buf:reload(text or nil)
+  self:_note_read(buf, text or nil)
+  self:timeline_forget(buf)
+  self.input.model.edit_history:reset()
+  if sel > last then sel = buf:get_content_length() + 1 end
+  buf:set_selection(sel)
+  self:_reuse_show()
+end
+
+--- Leave the editor: every file goes, and its timeline
+--- (IS6.6)
 function EditorController:close()
-  self:_drop_dialog()
-  self.input:clear()
-  --- the gate's shortcuts close the editor in any mode,
-  --- search included; the next file starts in navigation
-  self.search:clear()
-  self.mode = 'nav'
-  local bfs = self.model:get_buffers_content()
+  self.input.model = self.model.input
   self.model.buffers = Dequeue()
   self.view.buffers = {}
-  --- TODO is this needed?
-  return bfs
 end
 
 --- @return BufferModel
 function EditorController:get_active_buffer()
   return self.model.buffers:first()
-end
-
---- @return Id
-function EditorController:get_active_buffer_id()
-  local buf = self:get_active_buffer()
-  return buf:get_id()
 end
 
 --- @private
@@ -455,59 +386,53 @@ function EditorController:_generate_status(sel)
   local buffer = self:get_active_buffer()
   local len = buffer:get_content_length() + 1
   local bufview = self.view:get_buffer(buffer:get_id())
-  local more = bufview.content:get_more()
-  local cs
-  local m = self.mode
-  local ct = bufview.content_type
-  if ct == 'lua' then
-    local range = bufview.content:get_block_app_pos(sel)
-    cs = CustomStatus(buffer.name, ct, len, more, sel, m, range)
-  else
-    cs = CustomStatus(buffer.name, ct, len, more, sel, m)
-  end
+  --- a block's rows are named where a block may span lines
+  local spans = buffer.syntax.spans_lines
+  local range = spans and bufview.content:get_block_app_pos(sel)
+  local cs = CustomStatus(buffer.name, spans, len, sel,
+    range or nil)
+  --- the state and the open project, always shown (FR4.6)
+  cs.state = self:state_name()
+  local projects = self.console and self.console.model
+      and self.console.model.projects
+  local project = projects and projects.current
+  cs.project = project and project.name
 
   return cs
+end
+
+--- The status as it is now, for a status line that follows
+--- the draft and the browsing position between updates.
+--- @private
+--- @return CustomStatus?
+function EditorController:_live_status()
+  local buffer = self:get_active_buffer()
+  if not (buffer and self.view) then return nil end
+  local bufview = self.view:get_buffer(buffer:get_id())
+  if not (bufview and bufview.content) then return nil end
+  return self:_generate_status(buffer:get_selection())
 end
 
 function EditorController:update_status()
   local sel = self:get_active_buffer():get_selection()
   local cs = self:_generate_status(sel)
   self.input:set_custom_status(cs)
+  local model = self.input.model
+  if not model.status_source then
+    model.status_source = function()
+      return self:_live_status()
+    end
+  end
 end
 
 --- @param t string
 function EditorController:textinput(t)
+  if self:_held_back() then return end
   self.view:update_input()
-  if self:_dialog_textinput(t) then return end
-  if is_normal(self.mode) then
-    local input = self.model.input
-    if input:has_error() then
-      input:clear_error()
-    else
-      if Key.ctrl() or Key.alt() then
-        --- modifier chords leak glyphs on the device
-        --- (compy-input-quirks, quirk 3); only Shift
-        --- composes real input
-        return
-      end
-      --- typing after a peek returns the view (2.2)
-      local bv = self.view:get_current_buffer()
-      if self.mode == 'nav' then
-        bv:follow_line()
-      else
-        bv:follow_selection()
-      end
-      --- NB: on device, textinput precedes keypressed
-      --- (see dev/docs/compy-input-quirks.md), so this
-      --- transition lands before the same key's press
-      if self.mode == 'nav' then
-        self:start_typing()
-      end
-      self.input:textinput(t)
-    end
-  elseif self.mode == 'search' then
-    self.search:textinput(t)
-  end
+  --- typing prepares a draft in the field and opens no
+  --- block (IS3.1). A chord's own glyph never comes here:
+  --- the event gate stops it (Key.chord_text)
+  self.input:textinput(t)
 end
 
 --- @return InputDTO
@@ -521,19 +446,28 @@ end
 function EditorController:save(buf)
   local ok, err = buf:save()
   if not ok then Log.error("can't save: ", err) end
-  --- a buffer whose last write failed holds what the file
-  --- does not; leaving it asks first (ask_to_leave)
-  buf.unsaved = not ok or nil
+  --- the undo timeline notes what the file now holds
+  if ok and self._note_saved then self:_note_saved(buf) end
+  --- what the notice names (IS1.7)
+  self.save_failure = not ok and {
+    name = buf.name,
+    reason = err,
+  } or nil
   return ok, err
 end
 
 --- @private
---- Say the write failed, in the words the person can act on
+--- Say the write failed (IS1.7): the file, the reason the
+--- storage gave, and that the text is still in the field
 function EditorController:_refuse_unsaved()
-  self:refuse({
-    'Could not save the file.'
-    .. ' Check the storage and try again.'
-  })
+  local f = self.save_failure or {}
+  local name = f.name or self:get_active_buffer().name
+  local reason = type(f.reason) == 'string' and f.reason ~= ''
+      and string.format(' (%s)', f.reason) or ''
+  self:refuse({ string.format(
+    'Could not save %s%s. Your text is kept: try Enter again.',
+    name, reason
+  ) })
 end
 
 ---------------------------
@@ -541,594 +475,138 @@ end
 ---------------------------
 
 --- @private
---- The gate (model.lang.lua.check) gives the verdict; the
---- input shows the text as it will be written, and a line
---- or parse refusal lands the cursor on the error. A block
---- too large is go's to refuse, after its own checks.
---- @param go fun(newtext: Block[]|string[], verdict: GateVerdict?): boolean
+--- The file's syntax gives the verdict (model.syntax). An
+--- accepted draft goes to go as the syntax's blocks. One that
+--- fails gets the cursor before the failing character (IS3.4).
+--- Any other is shown as the syntax returns it, as one
+--- undoable change, the cursor where the syntax puts it or
+--- where it stood, under the syntax's notice if it gives one
+--- (IS3.2, IS3.3, IS3.5, IS3.9).
+--- @param go fun(newtext: Block[]): boolean
 --- @return boolean accepted --- go's verdict, or false
---- when the input does not evaluate
+--- when the draft is not taken
 function EditorController:_handle_submit(go)
   local inter = self.input
   local raw = inter:get_text()
-
   local buf = self:get_active_buffer()
-  local ct = buf.content_type
-  if ct == 'lua' then
-    if not string.is_non_empty_string_array(raw) then
-      local sel = buf:get_selection()
-      local block = buf:get_content():get(sel)
-      if not block then return true end
-    else
-      local verdict = check.gate(raw,
-        self.model.cfg.view.drawableChars, self:_size_limit())
-      if verdict.formatted then
-        inter:set_text(verdict.lines)
-      end
-      if #verdict.errors == 0 then
-        return go(verdict.blocks, verdict)
-      end
-      local eval_err = verdict.errors
-      self:refuse()
-      inter:set_error(eval_err)
-      --- spec 2.4.3: the cursor moves to the error
-      local first = Error.get_first(eval_err) or eval_err
-      if type(first) == 'table' and first.l then
-        inter.model:move_cursor(first.l, first.c or 1)
-        inter:update_view()
-      end
-      return false
-    end
-  else
-    return go(raw)
+  local verdict = buf.syntax.submit(raw,
+    self.model.cfg.view.drawableChars, self:_size_limit())
+  --- an accepted draft goes as the syntax's blocks; one that
+  --- fails to land (a write refused) stays as typed
+  if verdict.blocks then return go(verdict.blocks) end
+  local failure = verdict.failure
+  if failure then
+    --- IS3.4: the cursor goes before the failing character,
+    --- where the red text starts, and the parser's message
+    --- shows (NFR4.3)
+    self:refuse({ tostring(failure) }, 'error')
+    inter.model:move_cursor(failure.l, failure.c or 1)
+    inter:update_view()
+    return false
   end
-  return true
+  if verdict.formatted or verdict.cursor then
+    inter.model:reformat(verdict.lines, verdict.cursor)
+  end
+  if verdict.refusal then self:refuse({ verdict.refusal }) end
+  inter:update_view()
+  return false
 end
 
---- Click semantics (spec 2.9): in nav, select the
---- clicked line's block; while editing, a click inside
---- the open block places the cursor, a click outside
---- it leaves when the block is untouched
---- @param ln integer --- source line
-function EditorController:mouse_select(ln)
-  local buf = self:get_active_buffer()
-  local bi = buf:block_at_line(ln)
-  if not bi then return end
-
-  if self.mode == 'edit' then
-    local span = buf:get_selection_lines()
-    if span:inc(ln) then
-      self.input:set_cursor(Cursor(ln - span.start + 1, 1))
-      return
-    end
-    --- leaving for another block goes through the gate
-    --- (2.4): untouched leaves, changed is accepted and
-    --- written, invalid refuses and keeps the block
-    local clean = string.unlines(self.input:get_text())
-        == string.unlines(buf:get_selected_text())
-    if clean then
-      self:leave_edit()
-    elseif not self:accept_block() then
-      return
-    end
-  end
-
-  buf:set_selection(bi)
-  buf:set_active_line(ln)
-  self.view:get_current_buffer():follow_line()
-  self:update_status()
-end
-
+--- A click goes to the field alone: a click on a block no
+--- longer browses to it (PR #28, D-MOUSE-BROWSE: the mouse
+--- needs a design of its own)
 --- @param x number
 --- @param y number
 --- @param btn integer
 --- @param touch boolean?
 --- @param presses integer? --- 2 on a double click
 function EditorController:mousepressed(x, y, btn, touch, presses)
-  if btn == 1 then
-    local ln = self.view:get_current_buffer():line_at(y)
-    if ln then
-      self:mouse_select(ln)
-      --- spec 2.9: a double click opens the block the
-      --- first click selected
-      if presses and presses > 1
-          and self.mode == 'nav' then
-        self:open_block()
-      end
-      return
-    end
-  end
   self.input:mousepressed(x, y, btn, touch, presses)
 end
 
---- Shift+Esc out of an open block (1.1). A changed
---- block asks for confirmation through the shared
---- dialog scheme (Enter or Space confirms, anything
---- else cancels). A parseable draft leaves a
---- recoverable pair in the block history: one Ctrl+Z
---- puts the discarded text into the file, another
---- takes it back out.
-function EditorController:discard_edit()
-  if not self:_block_changed() then
-    return self:leave_edit()
-  end
-
-  self.pending_confirm = 'discard'
-  self.input:set_error({ DISCARD_QUESTION })
-end
-
---- @private
---- @return boolean --- an open block holds text it did not
---- have when it was opened
-function EditorController:_block_changed()
-  if self.mode ~= 'edit' then return false end
-  local draft = self.input:get_text():items()
-  local orig = self:get_active_buffer():get_selected_text()
-  return string.unlines(draft) ~= string.unlines(orig)
-end
-
---- The whole-editor exits of the gate (Ctrl+T, and the
---- project's Ctrl+Q, Ctrl+Shift+R, Ctrl+Alt+R) ask
---- Shift+Esc's question before they drop a changed open
---- block. Confirming discards the change as Shift+Esc does
---- and then carries the exit on; cancelling keeps the block
---- open and the exit untaken.
---- @param exit function --- the exit, taken on confirmation
---- @param own_key boolean? --- the editor is handling the
---- chord's key itself (Ctrl+Shift+S), so no later key is it
---- @return boolean asked
-function EditorController:ask_to_leave(exit, own_key)
-  --- search draws its own input: a question must be asked
-  --- where it can be seen
-  if self.mode == 'search' then self:_back_to_nav() end
-  --- a draft Ctrl+J parked further down the stack, or a
-  --- file whose write failed, is asked about too: its
-  --- buffer comes to the front, draft and all, so the
-  --- question names what is on screen
-  while not (self:_block_changed()
-        or self:get_active_buffer().unsaved) do
-    local i = self:_nearest_change()
-    if not i then return false end
-    --- search and a block move end first, as Escape ends
-    --- them, so the draft comes back open for editing
-    self:_back_to_nav()
-    for _ = 2, i do self:pop_buffer() end
-  end
-  if self:_block_changed() then
-    self:discard_edit()
-  else
-    self:_ask_unsaved()
-  end
-  self.pending_then = exit
-  --- a gate chord's own key reaches the editor next; it
-  --- must not answer the question it asked
-  self._asked_by_gate = not own_key
-  return true
-end
-
---- @private
---- @return integer? --- where in the buffer stack the
---- nearest draft Ctrl+J parked while editing, or file
---- whose write failed, waits
-function EditorController:_nearest_change()
-  local bs = self.model.buffers
-  for i = 2, bs:length() do
-    local b = bs:get(i)
-    local parked = b.parked
-    if b.unsaved or parked and parked.mode == 'edit' then
-      return i
-    end
-  end
-end
-
---- @private
-function EditorController:_back_to_nav()
-  if self.mode == 'search' then
-    self.search:clear()
-  elseif self.mode == 'reorder' then
-    self:_reorg(false)
-  end
-  self:set_mode('nav')
-end
-
---- @private
---- The file on screen holds what its failed write could not
---- put on the card: the question says so, with Shift+Esc's
---- keys, and confirming lets it go
-function EditorController:_ask_unsaved()
-  self.pending_confirm = 'leave'
-  self.input:set_error({ string.format(
-    '%s could not be saved. Discard your change?'
-    .. ' Confirm [Enter] / Cancel [Esc]',
-    self:get_active_buffer().name
-  ) })
-end
-
---- @private
---- Answer the open question: confirm it, then take the
---- exit that asked it, if one did
---- @param act string
---- @param exit function?
-function EditorController:_answer(act, exit)
-  self:_confirm(act)
-  if exit then exit() end
-  --- an exit that asks again asks with no chord key still
-  --- on its way: the next key answers
-  self._asked_by_gate = nil
-end
-
---- @private
---- Write the checkpoint of the file on screen, or say it
---- could not be written
---- @return boolean written
-function EditorController:_write_checkpoint()
-  local name = self:get_active_buffer().name
-  if self.console:write_checkpoint(name) then return true end
-  self:refuse({
-    'Could not save the checkpoint.'
-    .. ' Check the storage and try again.'
-  })
-  return false
-end
-
---- Execute a confirmed dialog action (keypressed confirms on
---- a fresh Enter or Space and cancels on any other fresh
---- key; a repeat or a glyph answers nothing)
---- @param act string --- 'discard'|'overwrite'|'restore'|'leave'
-function EditorController:_confirm(act)
-  --- a file whose write failed: nothing to record; the
-  --- person lets it go, so no exit asks about it again
-  if act == 'leave' then
-    self:get_active_buffer().unsaved = nil
-    return
-  end
-  local con = self.console
-  if act == 'overwrite' then
-    return self:_write_checkpoint()
-  end
-  if act == 'restore' then
-    local name = self:get_active_buffer().name
-    if con:restore_checkpoint(name) then
-      local text = con:_readfile(name)
-      self:reload_active(text)
-    end
-    return
-  end
-  local buf = self:get_active_buffer()
-  local draft = self.input:get_text():items()
-
-  --- an unparseable draft cannot go into the file
-  --- (it would turn the buffer read-only), so only a
-  --- valid one is recoverable — as agreed
-  local parses = buf.chunker == nil
-      or (buf.chunker(draft, true))
-  if parses then
-    local span = buf:get_selection_lines()
-    local before = table.clone(buf:get_text_content())
-    local after = {}
-    local drafted = {}
-    for i, l in ipairs(before) do after[i] = l end
-    for i, l in ipairs(draft) do drafted[i] = l end
-    local head = span.start - 1
-    local removed = span:len()
-    for _ = 1, removed do
-      table.remove(after, head + 1)
-    end
-    for i = #drafted, 1, -1 do
-      table.insert(after, head + 1, drafted[i])
-    end
-    local sel = buf:get_selection()
-    --- the pair: undo #1 puts the draft in, undo #2
-    --- takes it back out (net zero, like the discard)
-    buf:push_history(before, after, sel, sel)
-    buf:push_history(after, before, sel, sel)
-  end
-  self:leave_edit()
-end
-
---- @private
---- A question belongs to the buffer it asks about: when
---- that buffer leaves the front, the question goes too,
---- so no later Enter can answer it
-function EditorController:_drop_dialog()
-  if self.pending_confirm then self.input:clear_error() end
-  self.pending_confirm = nil
-  self.pending_then = nil
-  self._asked_by_gate = nil
-end
-
---- @param t string
---- @return boolean handled --- the glyph fed a dialog
-function EditorController:_dialog_textinput(t)
-  --- a question hears key presses alone: a glyph carries
-  --- no repeat flag and may come from a key held since
-  --- before the question, so it neither answers nor cancels
-  return self.pending_confirm ~= nil
-end
-
---- Load the selected block into the input and open it
---- for editing, auto-formatted (9.4), with the cursor
---- on the active line (2.2)
-function EditorController:open_block()
-  local buf = self:get_active_buffer()
-  local input = self.input
-  local span = buf:get_selection_lines()
-  local row = buf:get_active_line() - span.start + 1
-
-  local t = buf:get_selected_text()
-  if string.is_non_empty(t) or self:_on_blank_line() then
-    buf:set_loaded()
-  else
-    buf:clear_loaded()
-  end
-  input:set_text(t)
-  input:jump_home()
-
-  if buf.content_type == 'lua' then
-    --- auto-format on opening (spec 9.4); a block the
-    --- formatter changes is dirty from birth (2.4)
-    local raw = input:get_text()
-    if string.is_non_empty_string_array(raw) then
-      local pretty = buf.printer(raw)
-      if pretty then
-        input:set_text(pretty)
-      end
-    end
-  end
-  --- the active line can sit outside the block being
-  --- opened (a deletion leaves the selection on the
-  --- trailing gap); row 0 detaches the cursor
-  local n = #input:get_text()
-  if n < 1 then n = 1 end
-  if row < 1 then row = 1 end
-  if row > n then row = n end
-  input:set_cursor(Cursor(row, 1))
-  self:set_mode('edit')
-end
-
---- Typing in navigation starts editing at the active
---- line: its block opens and a blank line appears there
---- to type into, pushing the rest down (spec 2.1). On a
---- blank line the input starts empty, and acceptance
---- turns that line into the new block.
-function EditorController:start_typing()
-  local buf = self:get_active_buffer()
-  if buf.content_type ~= 'lua' then
-    self:set_mode('edit')
-    return
-  end
-  local block = buf:_get_selected_block()
-  if not block or block:is_empty() then
-    --- an empty block -- including the gap a deletion
-    --- leaves behind -- still has to be opened. Setting
-    --- the mode alone anchors the input to no block, so
-    --- the typing goes into a detached widget and the
-    --- accept drops it on the floor
-    self:open_block()
-    return
-  end
-
-  local ln = buf:get_active_line()
-  local span = buf:get_selection_lines()
-  local row = ln - span.start + 1
-  self:open_block()
-
-  local t = self.input:get_text()
-  --- the format on opening may have reshaped the block
-  if row < 1 then row = 1 end
-  if row > #t then row = #t + 1 end
-  table.insert(t, row, '')
-  self.input:set_text(t)
-  self.input:set_cursor(Cursor(row, 1))
-end
-
---- Open a fresh empty block next to the current one
---- (spec 2.7: Ctrl+Enter below, Ctrl+Shift+Enter
---- above). The block itself appears on acceptance —
---- until then the editor simply composes at that spot.
---- @param below boolean
-function EditorController:new_block(below)
-  local buf = self:get_active_buffer()
-  if buf.readonly then return self:refuse() end
-  if below then
-    buf:set_selection(buf:get_selection() + 1)
-  end
-  buf:clear_loaded()
-  self.input:clear()
-  self:set_mode('edit')
-  self.view:get_current_buffer():follow_selection()
-  self:update_status()
-end
-
---- Run a file-writing operation and record it in the
---- block history (1.1): the file before and after, the
---- diff trimmed inside push_history
---- @param buf BufferModel
---- @param fn function --- mutates the buffer and saves
---- @return any --- fn's return
-function EditorController:record_write(buf, fn)
-  local before = table.clone(buf:get_text_content())
-  local sel_b = buf:get_selection()
-  local ret = fn()
-  buf:push_history(
-    before,
-    table.clone(buf:get_text_content()),
-    sel_b,
-    buf:get_selection())
-  return ret
-end
-
---- @private
---- Apply one block-history step (spec 1.1: navigation
---- undo). The file is written through the same save
---- path every operation uses.
---- @param redo boolean?
-function EditorController:_step_history(redo)
-  local buf = self:get_active_buffer()
-  if buf.readonly then return self:refuse() end
-  --- no and/or chain here: redo() legitimately
-  --- returns nil, which must not fall through to undo
-  local step
-  if redo then
-    step = buf:redo()
-  else
-    step = buf:undo()
-  end
-  if not step then return self:refuse() end
-  self:save(buf)
-  local sel = redo and step.sel_after or step.sel_before
-  local last = buf:get_content_length()
-  if sel > last then sel = last end
-  buf:set_selection(sel)
-  self.view:refresh()
-  self.view:get_current_buffer():follow_selection()
-  self:update_status()
-end
-
---- @return integer --- the input strip's height (2.7)
+--- @return integer --- the block size limit (IS1.3), which
+--- only a submission is held to
 function EditorController:_size_limit()
   return self.view:get_current_buffer():get_max_size()
 end
 
---- Refuse a block the gate found too large, and point
---- at it (9.6)
---- @param verdict GateVerdict?
---- @return boolean refused
-function EditorController:_reject_oversized(verdict)
-  local first = verdict and verdict.oversized[1]
-  if not first then return false end
-  local block = verdict.blocks[first]
-  --- the wording follows 1.4: say what to do, not what
-  --- the machine measured
-  self:refuse({ string.format(
-    'Too many lines in a block. Remove %d to save,'
-    .. ' or press Shift+Esc to cancel',
-    check.excess(verdict, first)
-  ) })
-  self.input.model:move_cursor(block.pos.start, 1)
-  self.input:update_view()
-  return true
+--- @param buf BufferModel
+--- @param bn integer
+--- @return integer --- how many blocks with text stand before
+--- block `bn`
+local function text_blocks_before(buf, bn)
+  local n = 0
+  for i = 1, bn - 1 do
+    if buf:block_lines(i) then n = n + 1 end
+  end
+  return n
 end
 
---- @private
---- The selection is a blank line of the file, a Lua empty
---- block, as opposed to the open place past its end
---- @return boolean
-function EditorController:_on_blank_line()
-  local buf = self:get_active_buffer()
-  if buf.content_type ~= 'lua' then return false end
-  local block = buf:get_content()[buf:get_selection()]
-  return block ~= nil and block:is_empty()
-end
-
---- Accept the open block into the file: validate, size
---- check, re-chunk, write (spec 2.4.2). Acceptance in
---- place keeps the block and scrolls back to it. Text
---- typed on a blank line becomes that line (2.1), and the
---- selection moves past it, so typing goes on below.
---- @return boolean accepted
-function EditorController:accept_block()
-  return self:_handle_submit(function(newtext, verdict)
-    local buf = self:get_active_buffer()
-    local bufv = self.view:get_current_buffer()
-    if not bufv:is_selection_visible(true) then
-      bufv:follow_selection()
-      return false
+--- @param buf BufferModel
+--- @param n integer
+--- @return integer? --- the block that has `n` blocks with
+--- text before it and text of its own
+local function nth_text_block(buf, n)
+  local seen = 0
+  for i = 1, buf:get_content_length() do
+    if buf:block_lines(i) then
+      if seen == n then return i end
+      seen = seen + 1
     end
-    if not buf:loaded_is_sel(true) then
-      buf:select_loaded()
-      bufv:follow_selection()
-      return false
-    end
-    if self:_reject_oversized(verdict) then
-      return false
-    end
-    local blank = self:_on_blank_line()
-    local saved = self:record_write(buf, function()
-      local n
-      if blank then
-        local sel = buf:get_selection()
-        n = buf:fill_empty(newtext, sel)
-        buf:set_selection(sel + n)
-      else
-        n = select(2, buf:replace_content(newtext))
-      end
-      local ok = self:save(buf)
-      self.accepted_n = n
-      return ok
-    end)
-    if not saved then
-      --- a failed write must not read as accepted (2.6);
-      --- keep the block open so the edit is not lost
-      self:_refuse_unsaved()
-      return false
-    end
-    self.view:refresh()
-    bufv:follow_selection()
-    self:leave_edit()
-    return true
-  end)
+  end
 end
 
---- The parser is built on first use
-local lua_parser
---- @return table
-local function get_lua_parser()
-  lua_parser = lua_parser or require('model.lang.lua.parser')()
-  return lua_parser
-end
-
---- @param lines string[]
---- @return table? --- the statements, when the text parses
-local function statements(lines)
-  local ok, ast = get_lua_parser().parse(lines)
-  if ok then return ast end
-end
-
---- Format the whole open file (Ctrl+Shift+F in navigation).
---- It is the one place blank lines outside a block change:
---- the user asked, and every run of them becomes one. The
---- selection stays on the statement it was on; from a blank
---- line or a comment it moves to the statement below.
+--- Format the whole open file (Alt+F, browsing) as
+--- its syntax formats it. It is the one place blank lines
+--- outside a block change: the user asked, and every run of
+--- them becomes one. The selection stays on the block with
+--- text it was on, counted among the blocks with text, or on
+--- the next one from an empty line. A refusal says why in a
+--- notice, as every refusal does: during an edit, and in a
+--- file the syntax leaves as it is.
 function EditorController:format_file()
   local buf = self:get_active_buffer()
-  if buf.content_type ~= 'lua' or buf.readonly then
-    return self:refuse()
+  local state = self:state_name()
+  if state == 'inserting' then
+    return self:refuse({ 'Finish the text first: Enter adds it,'
+      .. ' Esc drops it.' })
   end
-  local before = string.lines(
-    string.unlines(buf:get_text_content()))
-  local after, formatted = format.format(before,
+  if state == 'replacing' then
+    return self:refuse({ 'Finish editing first: Enter keeps it,'
+      .. ' Esc drops it.' })
+  end
+  --- text the editor cannot read has no tidy form: it stays
+  --- as it is, line for line
+  if buf.invalid then
+    return self:refuse({
+      'The editor cannot split this file into blocks,'
+      .. ' so it stays as it is.'
+    })
+  end
+  if self:_refuse_stale(buf) then return end
+  local snap = buf:snapshot()
+  local before = snap.lines
+  local after, formatted, why = buf.syntax.format(before,
     self.model.cfg.view.drawableChars)
   if not formatted then
-    return self:refuse({
-      'The file cannot be tidied without changing what'
-      .. ' it does, so it stays as it is'
-    })
+    return self:refuse({ 'The file ' .. why .. '.' })
   end
   if string.unlines(after) == string.unlines(before) then
     return
   end
 
-  --- which statement the active line is on, or above
-  local nth
-  local ln = buf:get_active_line()
-  for i, st in ipairs(statements(before) or {}) do
-    if st.lineinfo.last.line >= ln then
-      nth = i
-      break
-    end
-  end
+  --- which block with text the selection is on, or above
+  local nth = text_blocks_before(buf, buf:get_selection())
 
   local sel_before = buf:get_selection()
-  local was_unsaved = buf.unsaved
   buf:replace_text(after)
   if not self:save(buf) then
     --- the screen keeps showing the file, so trying again
     --- formats it again. A failed save leaves the file as it
-    --- was (FS.replace), so the buffer is as unsaved as before
-    buf:replace_text(before)
+    --- was (FS.replace), and so the buffer goes back
+    buf:restore(snap)
+    buf:set_selection(sel_before)
     buf:analyze()
-    buf.unsaved = was_unsaved
     self.view:refresh()
     return self:refuse({
       'Could not save the file.'
@@ -1136,746 +614,369 @@ function EditorController:format_file()
     })
   end
 
-  local target = nth and (statements(after) or {})[nth]
-  local sel = target
-      and buf:block_at_line(target.lineinfo.first.line)
+  local sel = nth_text_block(buf, nth)
       or buf:get_content_length()
   buf:set_selection(sel)
-  buf:push_history(before, table.clone(buf:get_text_content()),
-    sel_before, sel)
+  buf:push_history(snap, sel_before, sel)
   self.view:refresh()
   self.view:get_current_buffer():follow_selection()
   self:update_status()
 end
 
---- Block-wise movement of the active line (spec 2.2)
---- @param dir VerticalDir
-function EditorController:_jump_block(dir)
-  local buf = self:get_active_buffer()
-  if self.input:has_error() then return end
-  if buf:jump_block(dir) then
-    self.view:get_current_buffer():follow_line()
-    self:update_status()
-  else
-    self:refuse()
-  end
-end
+--- blocks a page key browses
 
---- Move the active line by a viewport page
+--- The undo timeline (controller.editorReuse) hears of each
+--- action twice: _record_action(kind) while the state it
+--- takes back is still in place, _action_done(kind) once it
+--- has landed. The kinds: 'insert', 'replace', 'empty_line',
+--- 'abort', 'begin', 'switch', 'reload'.
+
+--- @private
+--- Browse blocks (IS2.1): the draft, its cursor and the
+--- replacement target stay as they are (IS2.3)
 --- @param dir VerticalDir
-function EditorController:_move_line_page(dir)
+function EditorController:_browse(dir)
   local buf = self:get_active_buffer()
-  if self.input:has_error() then return end
+  --- a block taller than the view scrolls by a row first
+  --- (IS2.2)
   local bv = self.view:get_current_buffer()
-  local moved = 0
-  for _ = 1, bv.LINES do
-    if not buf:move_line(dir) then break end
-    moved = moved + 1
-  end
-  if moved == 0 then return self:refuse() end
-  bv:follow_line()
-  self:update_status()
-end
-
---- Move the active line, keep it in view
---- @param dir VerticalDir
-function EditorController:_move_line(dir)
-  local buf = self:get_active_buffer()
-  if self.input:has_error() then return end
-  if buf:move_line(dir) then
-    self.view:get_current_buffer():follow_line()
+  if bv:scroll_block(dir) then return end
+  if buf:move_selection(dir) then
+    bv:follow_selection()
     self:update_status()
-  else
-    --- nowhere further to go
-    self:refuse()
   end
 end
 
 --- @private
+--- PgDn and PgUp browse a page at a time (the maintainer's
+--- ruling of November 14, 2026; BufferView:page): the
+--- browsing position moves with the page and stays in view,
+--- and the draft and the target stay (IS2.3)
 --- @param dir VerticalDir
---- @param by integer?
---- @param warp boolean?
---- @param moved integer?
-function EditorController:_move_sel(dir, by, warp, moved)
-  local buf = self:get_active_buffer()
-  if self.input:has_error() then return end
-
-  --- @type boolean
-  local mv = (function()
-    if moved then return true end
-    return false
-  end)()
-  local m = buf:move_selection(dir, by, warp, mv)
-  if m then
-    if mv then self.view:refresh(moved) end
-    self.view:get_current_buffer():follow_selection()
-    self:update_status()
+function EditorController:_page(dir)
+  local bv = self.view:get_current_buffer()
+  local b, top = bv:page(dir)
+  if b then self:get_active_buffer():set_selection(b) end
+  if top then
+    bv:show_from(top)
   else
-    self:refuse()
+    bv:follow_selection()
   end
-end
-
---- @private
---- @param dir VerticalDir
---- @param warp boolean?
---- @param by integer?
-function EditorController:_scroll(dir, warp, by)
-  self.view:get_current_buffer():scroll(dir, by, warp)
   self:update_status()
 end
 
 --- @private
---- @param save boolean
-function EditorController:_reorg(save)
-  local moved = self.state.moved
-  if not moved then return end
-
+--- Load a block into the field as the draft, the cursor at
+--- its end (FR1.5), and make it the replacement target
+--- @param bn integer
+--- @param lines string[]
+function EditorController:_load_target(bn, lines)
   local buf = self:get_active_buffer()
-  if save then
-    local target = buf:get_selection()
-    self:record_write(buf, function()
-      buf:move(moved, target)
-      buf:rechunk()
-      self:save(buf)
-    end)
-  else
-    buf:set_selection(moved)
-    self:restore_state(self:get_state())
-  end
-  self.view:refresh()
-
-  self:set_mode('nav')
+  buf:set_loaded(bn)
+  self.input:set_text(lines)
+  self:update_status()
 end
 
 --- @private
---- @param k string
-function EditorController:_reorg_mode_keys(k)
-  if k == 'escape' then
-    self:_reorg(false)
-  end
-  if Key.is_enter(k) then
-    self:_reorg(true)
-  end
-
-  local function navigate()
-    -- move selection
-    if k == "up" then
-      self:_move_sel('up', nil, nil, self.state.moved)
-    end
-    if k == "down" then
-      self:_move_sel('down', nil, nil, self.state.moved)
-    end
-    if k == "home" then
-      self:_move_sel('up', nil, true, self.state.moved)
-    end
-    if k == "end" then
-      self:_move_sel('down', nil, true, self.state.moved)
-    end
-
-    -- scroll
-    if not Key.shift()
-        and k == "pageup" then
-      self:_scroll('up', Key.ctrl())
-    end
-    if not Key.shift()
-        and k == "pagedown" then
-      self:_scroll('down', Key.ctrl())
-    end
-    if Key.shift()
-        and k == "pageup" then
-      self:_scroll('up', false, 1)
-    end
-    if Key.shift()
-        and k == "pagedown" then
-      self:_scroll('down', false, 1)
-    end
-  end
-
-  navigate()
+--- A block's text as Edit loads it: formatted as its syntax
+--- formats it, as far as it can, so a line over the limit
+--- may come back within it (ruling: F2 opens a block that
+--- breaks a limit); as it stands when it does not format.
+--- Loading is no change to the draft (IS5.6).
+--- @param lines string[]
+--- @return string[]
+function EditorController:_as_loaded(lines)
+  return (self:get_active_buffer().syntax.format(lines,
+    self.model.cfg.view.drawableChars))
 end
 
-function EditorController:_search_mode_keys(k)
-  if k == 'escape' then
-    self:set_mode('nav')
-    self.search:clear()
+--- @private
+--- @return boolean --- the draft is not the text Edit loaded
+--- for the replacement target (IS5.6), whatever the draft's
+--- steps hold: text typed and deleted again is no change,
+--- and a change stays one when a change from outside has
+--- ended the steps (_timeline_ready)
+function EditorController:_draft_modified()
+  local buf = self:get_active_buffer()
+  local target = buf.loaded
+  if not target then return false end
+  local lines = buf:block_lines(target)
+  local loaded = lines and self:_as_loaded(lines) or {}
+  return table.concat(loaded, '\n')
+      ~= table.concat(self.input:get_text(), '\n')
+end
+
+--- @private
+--- @param bn integer
+--- @return string[]? lines --- the block Edit may open
+--- @return string? why --- the notice when it may not
+function EditorController:_editable_lines(bn)
+  local buf = self:get_active_buffer()
+  if bn > buf:get_content_length() then
+    return nil, 'End of file: no block to edit here.'
+        .. ' Move up onto one.'
+  end
+  local lines = buf:block_lines(bn)
+  if not lines then
+    return nil, 'An empty line has nothing to edit.'
+        .. ' Move onto a block.'
+  end
+  --- whatever the block holds, a block over the limit or a
+  --- line of a file the editor cannot split into blocks: the
+  --- language's check judges the submission (ruling of
+  --- November 14, 2026, over IS1.3)
+  return self:_as_loaded(lines)
+end
+
+--- Edit: begin a replacement (IS5.1), restore the target's
+--- text (IS5.5) or switch the target (IS5.6)
+function EditorController:edit_block()
+  local buf = self:get_active_buffer()
+  local sel = buf:get_selection()
+  local target = buf.loaded
+  if self:state_name() == 'inserting' then
+    return self:refuse({
+      'Finish the text first: Enter adds it, Esc drops it.'
+    })
+  end
+  local modified = target and self:_draft_modified()
+  if target == sel then
+    --- one change to the draft, which Ctrl+Z takes back; an
+    --- unmodified draft only gets its cursor at the end
+    if modified then
+      self:_record_action('reload')
+      self.input.model:reformat(
+        self:_as_loaded(buf:block_lines(sel)))
+    end
+    self.input.model:jump_end()
+    self.input:update_view()
+    if modified then self:_action_done('reload') end
     return
   end
-
-  self.input:update_view()
-  local jump = self.search:keypressed(k)
-  if jump then
-    local buf = self:get_active_buffer()
-    buf:set_selection(jump.block)
-    self.view:get_current_buffer():scroll_to_line(jump.line)
-    self:set_mode('nav')
-    self.search:clear()
-  elseif Key.is_enter(k) and not Key.shift() and not Key.ctrl() then
-    --- nothing found to jump to (spec 2.4.3)
-    self:refuse()
+  if modified then
+    return self:refuse({
+      'Already editing a block:'
+      .. ' Enter keeps it, Esc drops it.'
+    })
   end
+  local lines, why = self:_editable_lines(sel)
+  if not lines then return self:refuse({ why }) end
+  local kind = target and 'switch' or 'begin'
+  self:_record_action(kind)
+  self:_load_target(sel, lines)
+  self:_action_done(kind)
+end
+
+--- Abort the edit at once (IS5.7): the draft and the
+--- replacement target go, the browsing position stays
+function EditorController:cancel_edit()
+  self:_record_action('abort')
+  self:get_active_buffer():clear_loaded()
+  self.input:clear()
+  self:update_status()
+  self:_action_done('abort')
+end
+
+--- The guard every write passes: the file is written only
+--- when it can be read and holds what the editor last read
+--- or wrote there (_baseline). Otherwise the action is
+--- refused with a notice, and nothing changes (IS3.11).
+--- @param buf BufferModel
+--- @return boolean refused
+function EditorController:_refuse_stale(buf)
+  local seen = self:_baseline(buf)
+  if seen == 'same' then return false end
+  if seen == 'unknown' then
+    self:refuse({ string.format(
+      'Could not read %s, so nothing is saved.'
+      .. ' Check the SD card.', buf.name) })
+  else
+    self:refuse({ OUTSIDE_NOTICE })
+  end
+  return true
 end
 
 --- @private
---- @param k string
-function EditorController:_normal_mode_keys(k)
-  local input          = self.input
-  local inputView      = self.view.input
-  local is_empty       = input:is_empty()
-  local at_limit_start = inputView:is_at_limit('up')
-  local at_limit_end   = inputView:is_at_limit('down')
-  local passthrough    = true
-  local block_input    = function() passthrough = false end
-  --- @type BufferModel
-  local buf            = self:get_active_buffer()
-
-  --- Delete removes the block without touching the
-  --- clipboard: on the device every clipboard write
-  --- pops the system share overlay, and a deletion
-  --- clobbering the copied text surprised everyone.
-  --- Cutting is Ctrl+X alone (copy + delete).
-  local function delete_block()
-    self:record_write(buf, function()
-      buf:delete_selected_text()
-      self:save(buf)
-    end)
+--- Put accepted lines into the file: in the replacement
+--- target's place (IS5.3), else before the browsing position
+--- (IS4.1) or at the end (IS4.2). The position ends on the
+--- block after them (FR3.5, IS5.4).
+--- A Lua file stays one chunk whose blocks read as they
+--- stand (IS3.7): text that would stop the file loading, or
+--- join a neighbor into one statement, is refused.
+--- @param lines string[]
+--- @param kind string
+--- @param n integer? --- the blocks the lines make on their
+--- own
+--- @return boolean landed
+--- @return string[]? lines --- the lines landed
+function EditorController:_land(lines, kind, n)
+  local buf = self:get_active_buffer()
+  local target = buf.loaded
+  local sel = buf:get_selection()
+  local count = buf:get_content_length() - (target and 1 or 0)
+  local before = buf:snapshot()
+  if self:_refuse_stale(buf) then return false end
+  local whole = self:_reads_whole()
+  --- the buffer goes back to what the file holds, and the
+  --- edit stays open
+  local function put_back()
+    buf:restore(before)
+    buf:_text_change()
+    buf:analyze()
+    buf:set_selection(sel)
     self.view:refresh()
   end
-
-  local function paste()
-    local t = love.system.getClipboardText()
-    input:add_text(t)
-  end
-  local function copy()
-    local t = string.unlines(buf:get_selected_text())
-    love.system.setClipboardText(t)
-    self:set_clipboard(t)
-    block_input()
-  end
-  local function cut()
-    copy()
-    delete_block()
-  end
-
-  local function copycut()
-    if Key.ctrl() then
-      if k == "c" or k == "insert" then
-        copy()
-        block_input()
-      end
-      if k == "x" then
-        cut()
-        block_input()
-      end
-    end
-    if Key.shift() then
-      if k == "delete" then
-        cut()
-        block_input()
-      end
-    end
-  end
-  local function paste_k()
-    if (Key.ctrl() and k == "v")
-        or (Key.shift() and k == "insert")
-    then
-      paste()
-      block_input()
-    end
-  end
-
-  if is_empty then
-    copycut()
-  end
-  paste_k()
-
-
-
-
-
-  --- handlers
-  --- @param force_accept boolean? --- the leave gate
-  local function submit(force_accept)
-    local bufv = self.view:get_current_buffer()
-
-    --- Insert freshly composed text as new block(s)
-    --- @param newtext Block[]
-    --- @param verdict GateVerdict?
-    --- @return boolean accepted
-    local function add(newtext, verdict)
-      if not bufv:is_selection_visible() then
-        bufv:follow_selection()
-        return false
-      end
-
-      if self:_reject_oversized(verdict) then
-        return false
-      end
-
-      local before = table.clone(buf:get_text_content())
-      local sel = buf:get_selection()
-      local was_unsaved = buf.unsaved
-      local _, n = buf:insert_content(newtext, sel)
-      if not self:save(buf) then
-        --- a failed write must not read as accepted (2.6):
-        --- the buffer goes back to what the file held, so a
-        --- retry inserts the draft once. A failed save leaves
-        --- the file as it was (FS.replace), so the buffer is
-        --- as unsaved as before
-        buf:replace_text(before)
-        buf:analyze()
-        buf:set_selection(sel)
-        buf.unsaved = was_unsaved
-        self.view:refresh()
-        self:_refuse_unsaved()
-        return false
-      end
-      buf:push_history(before,
-        table.clone(buf:get_text_content()), sel, sel)
-      self.view:refresh()
-      self:_move_sel('down', n)
-      self:leave_edit()
-      return true
-    end
-
-    --- undo/redo (1.1): the mode picks the level —
-    --- editing works the text history of the open
-    --- block, navigation works the file history
-    if Key.ctrl() and not Key.alt() and not Key.shift()
-        and (k == 'z' or k == 'y') then
-      block_input()
-      if self.mode == 'edit' then
-        local im = self.input.model
-        local done
-        if k == 'z' then
-          done = im:undo_edit()
-        else
-          done = im:redo_edit()
-        end
-        if done then
-          self.input:update_view()
-        else
-          self:refuse()
-        end
-      else
-        self:_step_history(k == 'y')
-      end
-      return
-    end
-
-    --- spec 2.7: Ctrl+Enter opens a fresh block below
-    --- in navigation and accepts while editing;
-    --- Ctrl+Shift+Enter opens one above
-    if Key.ctrl() and not Key.alt() and Key.is_enter(k) then
-      block_input()
-      if self.mode == 'nav' then
-        self:new_block(not Key.shift())
-        return
-      end
-      if not Key.shift() then
-        local accepted
-        if buf.loaded then
-          accepted = self:accept_block()
-        else
-          accepted = self:_handle_submit(add)
-        end
-        if not accepted then return end
-      end
-      return
-    end
-
-    if force_accept
-        or (not Key.ctrl()
-          and not Key.shift()
-          and not Key.alt()
-          and Key.is_enter(k)) then
-      --- replace only what was deliberately opened;
-      --- fresh text composed in navigation is inserted
-      local accepted
-      if buf.loaded then
-        accepted = self:accept_block()
-      else
-        accepted = self:_handle_submit(add)
-      end
-      if not accepted then block_input() end
-    end
-  end
-  --- open the selected block for editing (spec 2.2: Enter)
-  local function open()
-    self:open_block()
-    block_input()
-  end
-  --- Leave the open block through the gate (spec 2.4):
-  --- untouched leaves freely, changed is accepted and
-  --- written, invalid refuses and stays
-  --- @param dir VerticalDir
-  local function leave(dir)
-    local orig = buf:get_selected_text()
-    local clean = string.unlines(input:get_text())
-        == string.unlines(orig)
-    local sel0 = buf:get_selection()
-
-    if clean then
-      buf:clear_loaded()
-      input:clear()
-      self:set_mode('nav')
-      --- the cursor crossed the block's edge; sync the
-      --- model's line to it so the step leaves the block
-      local span = buf:get_selection_lines()
-      buf:set_active_line(
-        dir == 'up' and span.start or span.fin)
-      if buf:move_line(dir) then
-        self.view:get_current_buffer():follow_line()
-        open()
-      else
-        self:refuse()
-      end
-      block_input()
-      return
-    end
-
-    submit(true)
-    if self.mode ~= 'nav' then
-      --- refused; the message is set, stay on the block
-      block_input()
-      return
-    end
-    --- accepted: open the neighbor, cursor on the near
-    --- line — downward its first, upward its last
-    --- (2.4.4). Acceptance may have split the block
-    --- into several, so step past all of them.
-    local target = sel0 - 1
-    if dir == 'down' then
-      target = sel0 + self.accepted_n
-    end
-    if target < 1 or target > buf:get_content_length() then
-      self:refuse()
-      block_input()
-      return
-    end
-    buf:set_selection(target)
-    local span = buf:get_selection_lines()
-    buf:set_active_line(
-      dir == 'down' and span.start or span.fin)
-    self.view:get_current_buffer():follow_line()
-    open()
-    block_input()
-  end
-
-  --- Ctrl+K checkpoints, Ctrl+Shift+K restores (2.6);
-  --- both raise a dialog when there is something to
-  --- lose — Enter or Space confirms, anything else
-  --- cancels
-  local function checkpoint_key()
-    if not Key.ctrl() or k ~= 'k' then return end
-    local con = self.console
-    if not con then return end
-    block_input()
-
-    if self.mode == 'edit' then
-      --- accept the open block first, so the
-      --- checkpoint reflects the screen
-      submit(true)
-      if self.mode ~= 'nav' then return end
-    end
-
-    local name = buf.name
-    local stamp = function(t)
-      return t and os.date('%Y-%m-%d %H:%M', t) or '?'
-    end
-    local cp_time = con:checkpoint_modtime(name)
-
-    if Key.shift() then
-      if not cp_time then
-        self:refuse({ 'no checkpoint to restore' })
-        return
-      end
-      self.pending_confirm = 'restore'
-      input:set_error({ string.format(
-        'restore from checkpoint %s over file %s?'
-        .. ' Confirm [Enter] / Cancel [Esc]',
-        stamp(cp_time), stamp(con:file_modtime(name))
-      ) })
-      return
-    end
-
-    if cp_time then
-      self.pending_confirm = 'overwrite'
-      input:set_error({ string.format(
-        'checkpoint from %s exists.'
-        .. ' Confirm [Enter] / Cancel [Esc]',
-        stamp(cp_time)
-      ) })
-      return
-    end
-    self:_write_checkpoint()
-  end
-
-  --- spec 2.3: Shift+Esc discards the edit; on an empty
-  --- input it leaves the buffer / editor
-  local function discard()
-    if not Key.ctrl() and
-        Key.shift() and
-        k == "escape" then
-      if is_empty and self.mode == 'nav' then
-        block_input()
-        if buf.unsaved then
-          self:_ask_unsaved()
-          self.pending_then = function() self:close_buffer() end
-          return
-        end
-        self:close_buffer()
-        return
-      end
-      self:discard_edit()
-      block_input()
-    end
-  end
-  --- spec 2.7: Ctrl+Delete drops the block in
-  --- navigation; while editing it is the widget's
-  --- delete-next-word
-  local function delete()
-    if self.mode ~= 'nav' then return end
-    --- bare Delete joins in with 1.1: the deletion is
-    --- undoable now, which is what gated it (2.7)
-    if k == "delete" then
-      delete_block()
-      block_input()
-    end
-  end
-  local function navigate()
-    -- peek: the view moves, the selection stays (2.2).
-    -- Alt-* in both modes; block moves live in the
-    -- reorder mode (Ctrl+M) only, and the line swap is
-    -- gone with them — Alt is scrolling, nothing else
-    if Key.alt() then
-      if k == "up" then
-        self:_scroll('up', false, 1)
-      end
-      if k == "down" then
-        self:_scroll('down', false, 1)
-      end
-      if k == "pageup" then
-        self:_scroll('up', false)
-      end
-      if k == "pagedown" then
-        self:_scroll('down', false)
-      end
-      --- left/right double the page peek: PgUp/PgDn is
-      --- a four-key chord on the device keyboard
-      if k == "left" then
-        self:_scroll('up', false)
-      end
-      if k == "right" then
-        self:_scroll('down', false)
-      end
-      if k == "home" then
-        self:_scroll('up', true)
-      end
-      if k == "end" then
-        self:_scroll('down', true)
-      end
-      block_input()
-      return
-    end
-
-    -- move selection
-    if Key.ctrl() then
-      if self.mode == 'edit' then
-        --- spec 2.7: accept + block-wise move
-        if k == "up" then
-          leave('up')
-        end
-        if k == "down" then
-          leave('down')
-        end
-      else
-        if k == "up" then
-          self:_jump_block('up')
-          block_input()
-        end
-        if k == "down" then
-          self:_jump_block('down')
-          block_input()
-        end
-      end
-    elseif self.mode == 'nav' then
-      --- spec 2.7: bare Home/End reach the file's first
-      --- and last line; Ctrl+Home/End belong to the
-      --- input widget while editing
-      if k == "home" then
-        self:_move_sel('up', nil, true)
-        block_input()
-      end
-      if k == "end" then
-        self:_move_sel('down', nil, true)
-        --- the last line, which may lie below the last
-        --- block's first
-        self.view:get_current_buffer():follow_line()
-        block_input()
-      end
-      --- spec 2.2: bare arrows move by line, bare
-      --- pages by a page, Ctrl+arrows (above) by block
-      if k == "up" then
-        self:_move_line('up')
-        block_input()
-      end
-      if k == "down" then
-        self:_move_line('down')
-        block_input()
-      end
-      if k == "pageup" then
-        self:_move_line_page('up')
-        block_input()
-      end
-      if k == "pagedown" then
-        self:_move_line_page('down')
-        block_input()
-      end
-    elseif self.mode == 'edit' then
-      --- crossing the block's edge leaves through the
-      --- gate (2.4); inside, arrows stay in the input
-      if k == "up" and at_limit_start then
-        leave('up')
-      end
-      if k == "down" and at_limit_end then
-        leave('down')
-      end
-    end
-
-    -- scroll
-    if Key.ctrl() and not Key.shift()
-        and k == "pageup" then
-      self:_scroll('up', true)
-    end
-    if Key.ctrl() and not Key.shift()
-        and k == "pagedown" then
-      self:_scroll('down', true)
-    end
-    if Key.shift()
-        and k == "pageup" then
-      self:_scroll('up', false, 1)
-    end
-    if Key.shift()
-        and k == "pagedown" then
-      self:_scroll('down', false, 1)
-    end
-
-    -- step into (spec 2.7: Ctrl+J "jump"; Ctrl+O is
-    -- left free for a conventional "open file")
-    if Key.ctrl() and not Key.alt() then
-      if k == "j" then
-        self:follow_require()
-      end
-    end
-  end
-  local plain_enter = Key.is_enter(k)
-      and not Key.ctrl()
-      and not Key.shift()
-      and not Key.alt()
-
-  if is_empty and plain_enter then
-    if self.mode == 'nav' then open() end
+  local pos
+  if target then
+    pos = buf:replace_lines(target, lines)
   else
-    submit()
+    pos = buf:insert_lines(sel, lines)
   end
-  checkpoint_key()
-  discard()
-  delete()
-  navigate()
-
-  if passthrough then
-    input:keypressed(k)
+  local why = self:_reuse_refusal(whole, n and count + n,
+    'This would merge with the block next to it'
+    .. ' into one statement.')
+  if why then
+    put_back()
+    self:refuse({ why })
+    return false
   end
+  if not self:save(buf) then
+    --- a failed write must not read as accepted
+    put_back()
+    self:_refuse_unsaved()
+    return false
+  end
+  --- the timeline hears of the action once nothing can
+  --- refuse it, and before its step is pushed
+  self:_record_action(kind)
+  local top = buf.history[#buf.history]
+  buf:push_history(before, sel, pos)
+  local step = buf.history[#buf.history]
+  if step ~= top then
+    --- undone, the position is the first restored block, or
+    --- where the removed ones stood (IS6.6)
+    step.pos_undone = target or sel
+  end
+  buf:clear_loaded()
+  buf:set_selection(pos)
+  self.input:clear()
+  self.view:refresh()
+  self.view:get_current_buffer():follow_selection()
+  self:update_status()
+  self:_action_done(kind)
+  return true, lines
 end
 
+--- Enter: submit the draft (IS4.1, IS4.2, IS5.3); an empty
+--- one is an empty line (IS4.3)
+--- @return boolean accepted
+--- @return string[]? lines --- the lines the file took
+function EditorController:submit()
+  local buf = self:get_active_buffer()
+  if self:_draft_is_empty() then
+    return self:_land({ '' },
+      buf.loaded and 'replace' or 'empty_line', 1)
+  end
+  local kind = buf.loaded and 'replace' or 'insert'
+  return self:_handle_submit(function(blocks)
+    return self:_land(BufferModel.lines_of(blocks), kind,
+      #blocks)
+  end)
+end
+
+--- What the key tables' actions do (editorKeys.lua), each
+--- called with the controller, the key and whether it is a
+--- repeat
+local ACTIONS = {
+  none = function() end,
+  submit = function(ec) ec:submit() end,
+  submit_and_retain = function(ec) ec:submit_and_retain() end,
+  edit_block = function(ec) ec:edit_block() end,
+  escape = function(ec)
+    if ec:state_name() == 'browsing' then
+      --- stepping back from a file (IS1.6)
+      ec:close_buffer()
+    else
+      ec:cancel_edit()
+    end
+  end,
+  browse = function(ec, k) ec:_browse(k) end,
+  --- browsing with an empty draft (IS2.1), a row in one
+  vertical = function(ec, k)
+    if ec:_draft_is_empty() then
+      ec:_browse(k)
+    else
+      ec.input:keypressed(k)
+    end
+  end,
+  --- with an empty field: Home to the first block, End to the
+  --- end position
+  file_edge = function(ec, k)
+    local buf = ec:get_active_buffer()
+    local to = k == 'home' and 1 or buf:get_content_length() + 1
+    buf:set_selection(to)
+    ec.view:get_current_buffer():follow_selection()
+    ec:update_status()
+  end,
+  --- while replacing: the browsing position to the target,
+  --- shown as browsing to it shows it; the draft stays
+  to_target = function(ec)
+    local buf = ec:get_active_buffer()
+    if buf:get_selection() == buf.loaded then return end
+    buf:set_selection(buf.loaded)
+    ec.view:get_current_buffer():follow_selection()
+    ec:update_status()
+  end,
+  page = function(ec, k)
+    ec:_page(k == 'pageup' and 'up' or 'down')
+  end,
+  copy_block = function(ec) ec:copy_block() end,
+  cut_block = function(ec) ec:cut_block() end,
+  move_block = function(ec, k) ec:move_block(k) end,
+  undo = function(ec, _, rep) ec:timeline_undo(rep) end,
+  redo = function(ec, _, rep) ec:timeline_redo(rep) end,
+  follow_require = function(ec) ec:follow_require() end,
+  format_file = function(ec) ec:format_file() end,
+  --- with love.debug: the view drawn anew, and with Ctrl the
+  --- file split anew
+  debug_refresh = function(ec)
+    if not love.debug then return end
+    local buf = ec:get_active_buffer()
+    local bufview = ec.view:get_buffer(buf:get_id())
+    if Key.ctrl() then buf:rechunk() end
+    bufview:refresh()
+  end,
+}
+
+--- A key is looked up by its full chord in the table of the
+--- state in front (editorKeys.lua), then in the text field's
+--- (fieldKeys.lua); a chord neither names does nothing.
 --- @param k string
 --- @param _ string? --- LÖVE's scancode, unused
 --- @param isrepeat boolean? --- the key is held
 function EditorController:keypressed(k, _, isrepeat)
+  local chord = Key.combo(k)
+  local entry = EditorKeys:lookup(self:state_name(), chord)
+  local field = not entry and self.input:names(chord)
+  local bound = entry or field
+  --- a held key repeats only if its entry says so, and only
+  --- where its press acted: one held since before the editor
+  --- came to the front, a program's, does nothing in it
+  local repeats = bound and bound.repeats and self.pressed[k]
+  if isrepeat and not repeats then return end
+  if self:_held_back(k) then return end
+  --- only a bare F1 is the help key (KeyCard.shows)
+  if k ~= KeyCard.KEY or chord == KeyCard.KEY then
+    self.pressed[k] = true
+  end
+  if not bound then return end
   self.input:update_view()
-  if self.pending_confirm then
-    --- Enter or Space confirms, a modifier on its own
-    --- waits for the key it goes with, everything else
-    --- cancels; a held key's repeats answer nothing
-    if self._asked_by_gate then
-      self._asked_by_gate = nil
-      return
-    end
-    --- a held key answers nothing: one answer's key would be
-    --- the next question's answer, before it could be read
-    if isrepeat then return end
-    --- the chord that asked, held: its repeat neither
-    --- answers nor cancels (Ctrl+Shift+S; the gate's
-    --- chords ask again on theirs)
-    if self.pending_then and k == 's'
-        and Key.ctrl() and Key.shift() then
-      return
-    end
-    if Key.is_mod(k) then
-      return
-    end
-    if Key.is_enter(k) or k == 'space' then
-      local act, exit = self.pending_confirm, self.pending_then
-      self.pending_confirm = nil
-      self.pending_then = nil
-      self.input:clear_error()
-      --- a plain Space's glyph may follow its key press:
-      --- the gate drops it, into the editor or whatever the
-      --- exit leaves the route to, until the next frame (on
-      --- the device it came first, and the wait lapses)
-      if k == 'space' and not Key.ctrl() and not Key.alt()
-          and self.console then
-        self.console.swallow_glyph = ' '
-      end
-      return self:_answer(act, exit)
-    end
-    self.pending_confirm = nil
-    self.pending_then = nil
-    self.input:clear_error()
-    return
-  end
-  --- a plain error message closes on Enter, Esc or
-  --- Shift+Esc without re-submitting or leaving; any
-  --- printable closes it via textinput and types
-  if self.input:has_error() and is_normal(self.mode) then
-    if Key.is_enter(k) or k == 'escape' then
-      self.input:clear_error()
-      return
-    end
-  end
-  local mode = self.mode
-
-  if Key.ctrl() then
-    if k == "m" then
-      self:set_mode('reorder')
-    end
-    if k == "f" and not Key.shift() then
-      self:set_mode('search')
-    end
-    --- formatting the whole file is a navigation command,
-    --- like reordering and search
-    if k == "f" and Key.shift() and mode == 'nav' then
-      self:format_file()
-      return
-    end
-    if self:_leave_keys(k) then return end
-  end
-
-  if mode == 'reorder' then
-    self:_reorg_mode_keys(k)
-  elseif mode == 'search' then
-    self:_search_mode_keys(k)
+  if entry then
+    ACTIONS[entry.act](self, k, isrepeat)
   else
-    self:_normal_mode_keys(k)
-  end
-
-  --- Shift+Esc on the last buffer has closed the editor by
-  --- now, so the buffer is asked for only on the key
-  --- that uses it
-  if love.debug and k == 'f5' then
-    local buf = self:get_active_buffer()
-    local bufview = self.view:get_buffer(buf:get_id())
-    if Key.ctrl() then buf:rechunk() end
-    bufview:refresh()
+    self.input:keypressed(k, nil, isrepeat)
   end
 end
+
+require("controller.editorReuse")

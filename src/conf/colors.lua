@@ -12,11 +12,30 @@ require("util.color")
 --- @field bg RGB
 --- @field fg RGB
 
+--- @class TerminalColors : BaseColors
+--- @field echo RGB --- an accepted line written to the output
+--- @field error RGB --- a run's error written to it
+--- @field refusal RGB --- a command's refusal written to it
+
 --- @class EditorColors : BaseColors
 --- @field highlight RGB
 --- @field highlight_loaded RGB
 --- @field highlight_special RGB
 --- @field results BaseColors
+--- @field cue CueColors
+--- @field wrap_mark WrapMarkTheme
+
+--- The continuation cue (FR4.8): the edge row's own background
+--- laid over it, `fade` opaque at the edge and clear at the
+--- row's other side, and in the row's last column the mark,
+--- `^` or `v`, `mark_alpha` opaque on a box `box_alpha` opaque
+--- (the maintainer's ruling of November 15, 2026)
+--- @class CueColors
+--- @field fade number
+--- @field mark RGB
+--- @field mark_alpha number
+--- @field box RGB
+--- @field box_alpha number
 
 --- @class InputColors
 --- @field console BaseColors
@@ -25,6 +44,16 @@ require("util.color")
 --- @field cursor RGB
 --- @field error RGB  -- TODO pair these
 --- @field error_bg RGB  -- TODO pair these
+--- @field notice NoticeColors
+
+--- The notice band above the status line, in the editor and
+--- the console: black, an error in red and a notice in orange.
+--- It is set apart from a program's own error display
+--- (`error_bg`, `error`), which has the same colours today.
+--- @class NoticeColors
+--- @field bg RGB
+--- @field error RGB --- a syntax or run error
+--- @field warning RGB --- a notice: a refusal
 
 --- @class SyntaxColors
 --- @field indices table<string, integer>
@@ -49,7 +78,7 @@ local md_i = require('conf.md')
 
 --- @class Colors
 --- @field debug RGB
---- @field terminal BaseColors
+--- @field terminal TerminalColors
 --- @field editor EditorColors
 --- @field lua_syntax SyntaxColors
 --- @field md_syntax SyntaxColors
@@ -60,6 +89,17 @@ return {
   terminal = {
     fg = Color[Color.black],
     bg = Color[Color.white],
+    --- the maintainer's ruling "Console scrollback, first
+    --- version": an echoed line reads as code
+    echo = Color[Color.blue],
+    --- the maintainer's rulings of November 15, 2026: a run's
+    --- error is said in the output in the theme's red, which
+    --- is for errors alone, and a command's refusal, which is
+    --- no error, in a burnt orange that reads on the output's
+    --- gray about as well (3.6:1 to the red's 3.5:1); the
+    --- palette has no such orange, so it is given as it is
+    error = Color[Color.red],
+    refusal = { 0x93 / 255, 0x49 / 255, 0, 1 },
   },
   editor = {
     fg = Color[Color.black],
@@ -70,6 +110,21 @@ return {
     results = {
       fg = Color[Color.black],
       bg = Color[Color.white],
+    },
+    cue = {
+      fade = .75,
+      mark = Color[Color.black],
+      mark_alpha = .5,
+      box = Color[Color.gray],
+      box_alpha = .25,
+    },
+    --- the marks of a wrapped line (view/wrapMark.lua): the
+    --- status lines' orange, a fillet of 8 pixels with a square
+    --- outer corner
+    wrap_mark = {
+      color = warning,
+      size = 8,
+      round = 0,
     },
   },
   input = {
@@ -88,6 +143,11 @@ return {
     cursor = Color[Color.white + Color.bright],
     error = Color[Color.red],
     error_bg = Color[Color.black],
+    notice = {
+      bg = Color[Color.black],
+      error = Color[Color.red],
+      warning = Color[Color.orange],
+    },
   },
   lua_syntax = {
     indices = lua_i,
@@ -110,9 +170,14 @@ return {
     end)()
   },
   statusline = {
+    --- a near-black gray, #181818, so that the black notice
+    --- band above it stands apart while '[no sd card]' keeps
+    --- the orange of the other status lines (the maintainer's
+    --- ruling of November 15, 2026); the palette has no such
+    --- gray, so it is given as it is
     console = {
       fg = Color[Color.white + Color.bright],
-      bg = Color[Color.black],
+      bg = { 24 / 255, 24 / 255, 24 / 255, 1 },
       indicator = indicator,
       special = special,
       warning = warning,

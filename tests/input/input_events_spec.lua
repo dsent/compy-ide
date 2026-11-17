@@ -88,6 +88,10 @@ describe('input surface: inbound events — dispatch #input',
           local input = F.activate_project()
           local fired = false
           input.hooks[event] = function() fired = true end
+          -- a release reaches the route after its press did
+          if event == 'keyreleased' then
+            F.session.handlers.keypressed('a', '', false)
+          end
           F.session.handlers[event](unpack(args))
           assert.is_true(fired)
         end)
@@ -252,11 +256,10 @@ describe('input surface: inbound events — dispatch #input',
     -- doc/development/decisions/input.md, D-COMBO-TABLES: each
     -- channel has its OWN combo sub-table and keys normalise on
     -- assignment ('Ctrl+J' -> 'ctrl+j'). The trigger is
-    -- deliberately NOT 's': the gateway's own power shortcuts
-    -- poll the device, and Ctrl+S stops a running project
-    -- before the route is ever reached, so a project binding on
-    -- it cannot fire. Normalisation is the subject here, not
-    -- who wins.
+    -- deliberately NOT 'q': the gateway's own reservations run
+    -- first, and Ctrl+Q stops a running project before the
+    -- route is ever reached, so a project binding on it cannot
+    -- fire. Normalisation is the subject here, not who wins.
     it('a keypressed combo fires on the normalised combo',
       function()
         local fired = false
@@ -779,6 +782,8 @@ describe('input surface: inbound events — dispatch #input',
         end
         input.shortcuts.keypressed['a'] = step('shortcut')
         input.hooks.keypressed         = step('hook')
+        -- a repeat reaches the route after its press did
+        F.session.handlers.keypressed('a', 'scan-a', false)
         F.session.handlers.keypressed('a', 'scan-a', true)
         assert.same({ 'a', 'scan-a', true }, seen.shortcut)
         assert.same({ 'a', 'scan-a', true }, seen.hook)
@@ -831,6 +836,7 @@ describe('input surface: inbound events — dispatch #input',
         F.widget.keypressed = function(_, k, sc, isr)
           seen = { k, sc, isr }
         end
+        F.session.handlers.keypressed('a', 'scan-a', false)
         F.session.handlers.keypressed('a', 'scan-a', true)
         F.widget.keypressed = nil
         assert.same({ 'a', 'scan-a', true }, seen)
@@ -848,6 +854,7 @@ describe('input surface: inbound events — dispatch #input',
         F.widget.keyreleased = function(_, k, sc)
           seen = { k, sc }
         end
+        F.session.handlers.keypressed('a', 'scan-a', false)
         F.session.handlers.keyreleased('a', 'scan-a')
         F.widget.keyreleased = nil
         assert.same({ 'a', 'scan-a' }, seen)
@@ -1260,18 +1267,18 @@ describe('input surface: inbound events — dispatch #input',
     -- Falls through on falsey, so the widget still gets it —
     -- this is the pre-unification "both receive it" behaviour,
     -- now an ordinary consequence of the chain rather than a
-    -- broadcast. The selection is the widget's observable.
+    -- broadcast. The cursor a click places is the widget's
+    -- observable.
     it('a non-consuming hook still lets the widget see it',
       function()
         local input = F.activate_project()
         local got = 0
         input.hooks.mousepressed = function() got = got + 1 end
-        local w = F.show_selectable_widget()
-        F.set_mouse_down(true)
+        local w = F.show_multiline_widget()
+        local before = { w:get_cursor_pos() }
         F.session.mousepressed(10, 540, 1, false, 1)
-        F.session.mousemoved(60, 540, 50, 0, false)
         assert.equal(1, got)
-        assert.is_true(w.model:has_selection())
+        assert.are_not.same(before, { w:get_cursor_pos() })
       end)
 
     -- The capability the broadcast could not express: a shown
@@ -1280,12 +1287,10 @@ describe('input surface: inbound events — dispatch #input',
       function()
         local input = F.activate_project()
         input.hooks.mousepressed = function() return true end
-        input.hooks.mousemoved = function() return true end
-        local w = F.show_selectable_widget()
-        F.set_mouse_down(true)
+        local w = F.show_multiline_widget()
+        local before = { w:get_cursor_pos() }
         F.session.mousepressed(10, 540, 1, false, 1)
-        F.session.mousemoved(60, 540, 50, 0, false)
-        assert.is_false(w.model:has_selection())
+        assert.same(before, { w:get_cursor_pos() })
       end)
   end)
 end)

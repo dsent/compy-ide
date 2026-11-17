@@ -194,12 +194,14 @@ per-run boundary) rather than as a phase of a lifecycle.
 - **Where:** the editor's opening path — `src/model/editor/bufferModel.lua`, which our merge took
   from upstream PR #45 whole (`git diff f4cf338c HEAD -- src/model/editor/bufferModel.lua` →
   empty, so ours is byte-identical to theirs). Observable from
-  `tests/input/input_widget_callbacks_spec.lua`, *"editor Alt+Enter, an unclaimed variant"*.
+  `tests/input/input_widget_callbacks_spec.lua`, *"editor Alt+Enter"* (it was *"an unclaimed
+  variant"* until Alt+Enter became a line break, editor principles IS3.15).
 - **What changed.** Before the import the editor opened with the **last** block selected; at HEAD it
   opens with the **first**. Measured on the document `{ 'first line', 'second line', '' }` that
   three of our cases use: at `21eb7f53^` the selection was **3** and `up` walked to `'second line'`;
   at HEAD it is **1**, `up` moves nothing, and Enter loads `'first line'`. The HEAD half is no
-  longer a probe — the Alt+Enter case asserts `{ 'first line' }` literally as of 2026-09-06.
+  longer a probe — the Alt+Enter case asserted `{ 'first line' }` literally from 2026-09-06 until
+  the spec conformance work replaced it with a line-break test.
 - **What is owed is a record, not a change.** The behaviour is upstream's, deliberate, and taken
   faithfully; nothing here proposes to reverse it. The obligation is `MERGE-01-05`'s own rule, which
   this corpus applied correctly once in the same range and missed here: **a behaviour change gets a
@@ -290,8 +292,8 @@ per-run boundary) rather than as a phase of a lifecycle.
 
 ### T-CHROME-UNRATIFIED — *"chrome"* is this feature's own word for the host surfaces, and no ledger ratifies it
 
-- **What it names:** the three permanent input surfaces a host owns — the console line, the editor's
-  input strip, the editor's search strip — as against a project's transient widget. The distinction
+- **What it names:** the two permanent input surfaces a host owns — the console line and the
+  editor's input strip — as against a project's transient widget. The distinction
   is real and ratified; the **word** is not.
 - **It is ours, and the check is the one the phase prescribes** — compare against the PR base.
   `git grep -il "chrome" $(git merge-base master HEAD) -- src/ tests/ doc/` returns exactly one
@@ -625,6 +627,10 @@ future author adding an editor branch meets the constraint at the site).
 
 ### T-EDITOR-SEAM-DEFAULT-OPEN — our widget acts on every editor key the editor does not block, and the block list is theirs
 
+- **Resolved 2026-11-14.** The editor looks each chord up in its state's table
+  (`src/model/editor/editorKeys.lua`) and hands the widget only the chords an entry gives it
+  (`act = 'field'`); a chord no entry names reaches nothing. The widget matches chords exactly too.
+  The text below is the record of the open seam.
 - **Where:** `src/controller/editorController.lua`, `_normal_mode_keys` — `passthrough` initialises
   to **`true`** and `block_input()` clears it; the tail reads `if passthrough then
   input:keypressed(k) end`. So `src/controller/userInputController.lua`'s `keypressed` runs on the
@@ -696,7 +702,7 @@ future author adding an editor branch meets the constraint at the site).
     nothing to delete, and `backspace_word()` is gated on `input.editing`, which nav is not.
 - **`always_shown` is NOT the guard for any of this, and the distinction matters because it is the
   obvious place to look** (owner's question, 2026-09-07). The editor's widget **is** `always_shown()`
-  (`editorController.lua`, with the search strip likewise), and the flag guards **`hide()` alone** —
+  (`editorController.lua`), and the flag guards **`hide()` alone** —
   `cancel_flow` does not consult `self.always`, so an Escape that reaches the widget clears whether
   or not the flag is set. **Restoring or keeping that guard would not have prevented `T-NAV-ESCAPE`**;
   what prevents it is the cancel flow ceasing to destroy unconditionally, which is `FLAGS-01` and is
@@ -1218,16 +1224,21 @@ future author adding an editor branch meets the constraint at the site).
   `reset_before_exit` only, deliberately, since a partially initialised project
   runs no teardown. Wiring the force-reset means calling the framework half on
   the crash path too, which is a decision this entry does not pre-empt.
-- **The mouse is force-reset (2026-09-30).** `flush_program_state`
-  (`consoleController.lua`), a step of its own beside `framework_before_exit`,
-  puts the mouse back — relative mode off, not grabbed, visible, the system
+- **The mouse is force-reset (2026-09-30).** `restore_console_mouse`
+  (`consoleController.lua`, named `flush_program_state` until the terminate
+  flush of 2026-11-16 took that name), a step of its own beside
+  `framework_before_exit`, puts the mouse back — relative mode off, not grabbed, visible, the system
   cursor — on every stop path after the project's hook, on the failed-run
   branch (the reset alone: the hook still does not fire there), when a
   program's code ends with no widget shown and no pointer handler left,
   before every run starts, and when the IDE starts (Ctrl+Esc restarts it in
   the same process without a stop). A pause gives the console that mouse and
-  `continue()` gives the program back its own. Keyboard modes and audio are
-  still as this entry describes.
+  `continue()` gives the program back its own.
+- **Keyboard modes and audio are reset at a terminate (2026-11-16).** The
+  terminate flush (`flush_program_state`) ends looping on what plays and lets
+  it play out (`reset()` stops it), and puts key repeat and text input back as
+  `main.lua` set them, on every stop path, the first-lines error and
+  `reset()`; a program that ends by itself keeps them.
 
 ### `compy.before_exit` is a closure slot
 
@@ -2001,13 +2012,10 @@ contracts** but were **discovered as existing behaviour with no mandate to alter
 — treated as de-facto standards per the implementation and pinned so they can't
 be silently narrowed later (any change is a separate, owner-gated decision):
 
-- **Non-shift Enter submits** — Ctrl+Enter and Alt+Enter submit, not only bare
-  Enter (guard is `is_enter and not shift`; also consistent with
+- **Non-shift Enter submits** — Ctrl+Enter submits, not only bare Enter;
+  Alt+Enter breaks the line, as Shift+Enter does (editor principles, IS3.15)
+  (guard is `is_enter and not shift and not alt`; also consistent with
   `doc/development/decisions/input.md` D-EDIT-LIFECYCLE). Pinned for widget + console.
-- **`SearchController:keypressed` returns a jump target** (`{block, line}`) up its
-  caller on Enter — the same "keypress return carries a domain result" shape the
-  shared widget's limit-flag return was retired for (D-EDIT-CALLBACKS). Left as
-  is because `SearchController` is a different class, out of scope here.
 - **The project widget's view skips the per-frame `update_view()` workaround by
   widget *identity*** (`userInputView.lua:draw`, `self.controller ~=
   love.state.user_input_controller`) — an identity check standing in for the old
@@ -2104,9 +2112,8 @@ changes.
   `false` are both falsy. It bites the moment a device read is **compared**
   rather than tested: `Key.ctrl() == false` is `false` under harmony, and
   `Key.ctrl()` spliced as a call's last argument contributes **no argument at
-  all**. The live exposure is the second, at six call sites that pass a modifier
-  read as a trailing argument (`editorController.lua:466,470,772,776`,
-  `searchController.lua:101,105`), none of which is affected today because the
+  all**. The live exposure is the second, at four call sites that pass a modifier
+  read as a trailing argument (`editorController.lua`), none of which is affected today because the
   callee only tests the value for truthiness. The comparison form was observed
   once, in the gate's `only_mods` helper, which normalised with `not not`; that
   helper no longer exists (D-RESERVE-TABLE replaced the predicate cascade with a
@@ -2124,7 +2131,7 @@ changes.
 
 ### Console and editor route handlers bind by hand-written modifier tests
 
-- **Where:** `editorController.lua` (~33 tests), `searchController.lua` (5) and
+- **Where:** `editorController.lua` (~33 tests) and
   `consoleController.lua` (4) — `if Key.ctrl() and not Key.shift() and not
   Key.alt() and Key.is_enter(k)`, and the same shape for Escape, paste, scroll
   and the debug toggles. Six further reads are **not** this debt: `_scroll('up',
@@ -2840,8 +2847,7 @@ did not.
 - **The mechanism that DOES work already exists and is ratified.** Both `before_submit`
   (`userInputController.lua`, `submit_flow`) and `before_cancel` (`cancel_flow`) **do veto** when
   set to a function returning truthy. They are simply not defaulted, and no host sets them.
-- **Reachability:** every host-owned widget — the console's, the editor's, and the editor's search
-  strip. Not projects: a project setting no callbacks *should* get the documented clear-on-Escape,
+- **Reachability:** every host-owned widget — the console's and the editor's. Not projects: a project setting no callbacks *should* get the documented clear-on-Escape,
   and does.
 - **Provenance: ours.**
 - **This is a DEFECT, not a design question** (owner ruling, 2026-09-06). *"We already decided it
@@ -3054,8 +3060,8 @@ documentation sweep with `T-CHROME-UNRATIFIED`.
   not hold: `always_shown()` sets an instance flag only, while `show()` additionally claims
   `love.state.user_input`, the **single global handle** the draw loop paints from each frame
   (`open_widget` in `src/controller/userInputController.lua`; the draw gate is
-  `src/controller/controller.lua`). Three host surfaces are constructed at boot — the console line,
-  the editor's input strip, the editor's search strip — so each calling `show()` would overwrite
+  `src/controller/controller.lua`). Two host surfaces are constructed at boot — the console line and
+  the editor's input strip — so each calling `show()` would overwrite
   that one slot, last construction winning, and a project's widget would then find it occupied.
   **Making `show()` return `self`** was carried as an independent convenience; what it cannot do is
   replace the construction-time marker. **It is not scheduled** — it left with the sprint.

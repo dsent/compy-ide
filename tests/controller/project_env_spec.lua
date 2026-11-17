@@ -98,6 +98,8 @@ describe('ConsoleController project env #project', function()
       setScissor = function() end,
       getColorMask = function() return true, true, true, true end,
       setColorMask = function() end,
+      reset = function() end,
+      getStackDepth = function() return 0 end,
       origin = function() end,
       push = function() end,
       pop = function() end,
@@ -216,14 +218,16 @@ describe('ConsoleController project env #project', function()
       CC:open_project(ProjectService.DEFAULT)
       local env = CC:get_project_env()
       local said = { }
-      local print_ = _G.print
-      _G.print = function(s) said[#said + 1] = s end
+      local out = CC.model.output
+      local write_refusal = out.write_refusal
+      out.write_refusal = function(_, s) said[#said + 1] = s end
       local loud = env.readfile('nothere.lua')
       local quiet = env.readfile('nothere.lua', true)
-      _G.print = print_
+      out.write_refusal = write_refusal
       assert.is_nil(loud)
       assert.is_nil(quiet)
-      assert.are.same({ 'nothere.lua does not exist' }, said)
+      assert.are.same({ 'There is no nothere.lua in this project.' },
+        said)
     end)
 
   it('get_effective_env is always the project env #project', function()
@@ -349,6 +353,21 @@ describe('ConsoleController project env #project', function()
     CC._reset_executor_env = orig
   end)
 
+  it('resets the env exactly once when play mode quits #project',
+    function()
+      CC:open_project('clock')
+      CC.run_live = true
+      local n = 0
+      local orig = CC._reset_executor_env
+      CC._reset_executor_env = function(self, ...)
+        n = n + 1
+        return orig(self, ...)
+      end
+      CC:quit_project()
+      CC._reset_executor_env = orig
+      assert.are.equal(1, n)
+    end)
+
   it('eval works in the merged env #project', function()
     assert.are.equal(2, CC:get_project_env().eval('1+1'))
   end)
@@ -386,11 +405,12 @@ describe('ConsoleController project env #project', function()
       love.state.app_state = 'inspect'
       CC:close_project()
       local said = { }
-      local print_ = _G.print
-      _G.print = function(s) said[#said + 1] = s end
+      local out = CC.model.output
+      local write_refusal = out.write_refusal
+      out.write_refusal = function(_, s) said[#said + 1] = s end
       CC:get_project_env().continue()
-      _G.print = print_
-      assert.are.same({ 'No project halted' }, said)
+      out.write_refusal = write_refusal
+      assert.are.same({ 'Nothing is paused.' }, said)
       assert.are.equal('ready', love.state.app_state)
     end)
 
@@ -480,6 +500,8 @@ describe('ConsoleController project env #project', function()
       CC:run_project()
       _G.print = print_
       assert.are.equal('ready', love.state.app_state)
+      -- with nothing live the run's start drops nothing: this
+      -- one is the top-level code's raise
       assert.are.equal(before + 1, fake.drops)
     end)
 

@@ -46,6 +46,14 @@ local function mock_love(t)
           if held[k] then return true end
         end
         return false
+      end,
+      -- by scancode: the mock's keys sit where a US layout
+      -- puts them, so the two answer alike
+      isScancodeDown = function(...)
+        for _, k in ipairs({ ... }) do
+          if held[k] then return true end
+        end
+        return false
       end
     },
     graphics = {

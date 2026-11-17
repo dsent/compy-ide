@@ -5,24 +5,72 @@ require("controller.projectInputController")
 
 
 local class = require('util.class')
+local Blink = require('view.input.cursorBlink')
 local LANG = require("util.eval")
 local FS = require('util.filesystem')
-local format = require('model.lang.lua.format')
+local End = require('util.program_end')
 local display = require('conf.display')
-local textfile = require('util.textfile')
 local Application = require('util.application')
 local usb = require('util.usb')
 require("util.key")
 require("util.table")
 local TerminalTest = require("util.test_terminal")
+local KeyCard = require('model.editor.keyCard')
+local ConsoleKeys = require('model.input.consoleKeys')
 
+--- What the console's commands say when they refuse: in the
+--- output, through CanvasModel:write_refusal (the maintainer's
+--- ruling of November 15, 2026)
 local messages = {
-  file_does_not_exist = function(name)
-    local n = name or ''
-    return 'cannot open ' .. n .. ': No such file or directory'
+  nothing_running = 'Nothing is running.',
+  nothing_paused  = 'Nothing is paused.',
+  already_running = 'A project is already running: Ctrl+Q stops it.',
+  needs_a_name    = 'A project needs a name: project("name").',
+  --- the reset specification's scoped resets are later work
+  --- (Beads compy-ide-reset-runtime-reset)
+  reset_alone     = 'Only reset() exists yet, with nothing between the brackets.',
+  --- the reset specification's IS4.1
+  reset_done      = function(project)
+    return 'Runtime reset for ' .. project .. '. All files kept.'
+  end,
+  --- only a card that cannot hold scratchpad leaves none open
+  no_project      = 'No project is open: the SD card cannot be used.',
+  --- run() makes no project: project() does
+  no_such_project = function(name)
+    return string.format('There is no project %s: project(%q) creates it.',
+      name, name)
   end,
 }
+--- the modules programs loaded first, by name
+local program_loaded = { }
+
+--- What a program set in the graphics state goes when its run
+--- ends for good (a stop, Ctrl+Q, an error in its first lines,
+--- a project's close) and again before the next run, never at
+--- a pause: LÖVE's own reset (colour, background colour,
+--- blending, colour mask, scissor, shader, stencil test,
+--- wireframe, lines, points, the current transform), and what
+--- it pushed and never popped, first, so that no pop('all')
+--- brings its state back: a stop, a run or a reset a program
+--- asks for is made once its code has returned
+--- (util.program_end), so no push of the program's own is still
+--- to be popped. The IDE's own pushes (view.ownState, the draw
+--- wrapper) stay: none is popped while one is under way
+--- (util.program_end's ide_pushes). The canvas is the IDE's: the
+--- one bound stays bound. The font is the IDE's too, and
+--- run_project sets it after.
+local function reset_graphics()
+  if End.ide_pushes == 0 and gfx.getStackDepth then
+    while gfx.getStackDepth() > 0 do gfx.pop() end
+  end
+  local canvas = gfx.getCanvas()
+  gfx.reset()
+  if canvas then gfx.setCanvas({ canvas, stencil = true }) end
+end
+
 --- @class ConsoleController
+--- @field typing integer? --- the depth of program code a typed line runs at
+--- @field forget_question function? --- drops compy.ask's armed question (the simple surface's)
 --- @field time number
 --- @field model Model
 --- @field main_ctrl table
@@ -35,9 +83,10 @@ local messages = {
 --- @field view ConsoleView?
 --- @field cfg Config
 --- @field paused_mouse table? the paused program's, see suspend
---- @field run_id integer? the current run's number
 --- @field run_live boolean? the run is not stopped
---- @field canvas_handed integer? moves on when console code takes the canvas from a stopped run
+--- @field collect_garbage function? --- collectgarbage, or a stand-in in tests
+--- @field state_left boolean? --- a typed line left state the flush has not ended
+--- @field entry string? --- the file the live run runs from, nil for main.lua
 --- methods
 --- @field edit function
 --- @field finish_edit function
@@ -53,17 +102,22 @@ function ConsoleController.new(M, main_ctrl)
   pre_env.font = config.view.font
   local IC = UserInputController(M.input)
     :always_shown()
-    -- Escape clears the console line and remembers it, exactly
-    -- as it always has -- now because this instance asks for
-    -- it rather than because the widget destroys
+    -- Escape clears the console line, because this instance
+    -- asks for it rather than because the widget destroys
     -- unconditionally (doc/development/decisions/input.md,
-    -- D-LIFECYCLE-FLAGS, statement 3).
+    -- D-LIFECYCLE-FLAGS, statement 3). The line never ran, so
+    -- the history does not keep it.
     :seat_lifecycle({ clear_on_cancel = true })
+    -- its errors show as the editor's do, in the notice band
+    -- above the status line (the ruling "The console shows an
+    -- error as the editor does")
+    :messages_above()
   -- Console history navigation: at the vertical boundary the
   -- widget fires on_limit_reached; the console maps up/down to
   -- history back/forward (doc/development/decisions/input.md,
   -- D-EDIT-CALLBACKS), retiring the old keypressed
-  -- return-value channel.
+  -- return-value channel. The walk is the classic shell's
+  -- (model/input/history.lua).
   IC.callbacks.on_limit_reached = function(dir)
     if dir == 'up' then IC:history_back() end
     if dir == 'down' then IC:history_fwd() end
@@ -82,6 +136,9 @@ function ConsoleController.new(M, main_ctrl)
     project_env = {},
 
     loaders     = {},
+    --- the keys whose press reached the console's own key
+    --- handler, until their release (EditorController.pressed)
+    pressed     = {},
 
     view        = nil,
 
@@ -90,6 +147,11 @@ function ConsoleController.new(M, main_ctrl)
   --- the editor has to know about us
   local EC = EditorController(M.editor, self)
   self.editor = EC
+  --- the console's status line names the open project (FR4.6)
+  M.input.project_source = function()
+    local p = M.projects and M.projects.current
+    return p and p.name
+  end
   -- initialize the user environment
   ConsoleController.prepare_project_env(self)
 
@@ -125,13 +187,15 @@ local function run_user_code(f, cc, project_path)
   local env = cc:get_base_env()
 
   local ok, call_err
-  -- console code owns no run: the unwind clear is for programs
   cc:use_canvas(function()
     if project_path then
       env = cc:get_project_env()
     end
-    ok, call_err = pcall(f)
-    if project_path and ok then -- user project exec
+    --- a stop, a run or a reset the code asked for ends it
+    --- here, no error, and is made once it has returned
+    --- (util.program_end): the run is still the one that began
+    ok, call_err = End.call(f)
+    if project_path and ok then
       if love.PROFILE then
         love.PROFILE.frame = 0
         love.PROFILE.report = {}
@@ -139,7 +203,7 @@ local function run_user_code(f, cc, project_path)
       cc.main_ctrl.set_user_handlers(env['love'], cc)
     end
     output:restore_main()
-  end, not project_path)
+  end)
   if not ok then
     local msg = LANG.get_call_error(call_err)
     return false, msg
@@ -167,8 +231,8 @@ end
 --- Single invocation point by construction, so a second stop
 --- path cannot grow its own arrangement. The framework's forced
 --- restore of global device state is flush_program_state, which
---- the stop path calls after this, and the paths that never
---- reach it call on their own. See
+--- calls this first on a stop, and only removes the hook on a
+--- crash. See
 --- doc/development/technical_debt/input.md, "A project that
 --- raises leaves global device state dirty".
 ---
@@ -178,7 +242,9 @@ end
 local function framework_before_exit(compy)
   local project_hook = compy.before_exit
   if project_hook then
-    local ok, err = pcall(project_hook)
+    --- a lifecycle call in the hook ends it and is dropped: the
+    --- stop under way goes on (util.program_end)
+    local ok, err = End.call(project_hook)
     if not ok then
       Log.error('compy.before_exit raised: '
         .. tostring(err))
@@ -205,7 +271,7 @@ end
 --- D-WIDGET-AT-BOOT as amended): a store a project leaves on it
 --- cannot reach the next project, because the object it lived
 --- on is gone.
---- The console's, editor's and search strip's widgets are
+--- The console's and the editor's widgets are
 --- unaffected: those surfaces live as long as the app does.
 --- Its own evaluator, NOT the shared `InputEvalText` instance:
 --- the evaluator resolves this widget's highlighter slot
@@ -216,7 +282,7 @@ end
 local function build_input_widget(cfg)
   local eval = Evaluator.plain('text input')
   local model = UserInputModel(cfg, eval)
-  local widget = UserInputController(model, true)
+  local widget = UserInputController(model)
   -- The project widget's one shipped default, seated on the
   -- LEAST-DESTRUCTIVE basis: submit consumes the content,
   -- because a project processes a submission through its
@@ -284,101 +350,55 @@ local function close_project(cc)
   end
 end
 
---- @private
---- @param name string
---- @return string?
---- @param name string
---- @return string
-local function checkpoint_name(name)
-  return name .. '.~save'
-end
-
---- Modification time of a project file, nil if absent
---- @param name string
---- @return integer? modtime
-function ConsoleController:file_modtime(name)
+--- The open project, or nil after saying why there is none.
+--- A project is always open (open_project); only an SD card
+--- that cannot hold scratchpad, when a project closes or the
+--- IDE starts, leaves none, and every command that needs one
+--- asks here.
+--- @return Project?
+function ConsoleController:open_or_refuse()
   local p = self.model.projects.current
-  if not p then return end
-  local info = FS.getInfo(p:get_path(name))
-  return info and info.modtime
+  if not p then
+    self.model.output:write_refusal(messages.no_project)
+  end
+  return p
 end
 
---- @param name string
---- @return integer? modtime of the checkpoint
-function ConsoleController:checkpoint_modtime(name)
-  return self:file_modtime(checkpoint_name(name))
-end
-
---- Copy the file to its checkpoint (spec 2.6)
---- @param name string
---- @return boolean ok
-function ConsoleController:write_checkpoint(name)
-  local p = self.model.projects.current
-  if not p then return false end
-  local ok = FS.cp(
-    p:get_path(name),
-    p:get_path(checkpoint_name(name)), false, true)
-  return ok and true or false
-end
-
---- Write the checkpoint back over the file (spec 2.6)
---- @param name string
---- @return boolean ok
-function ConsoleController:restore_checkpoint(name)
-  local p = self.model.projects.current
-  if not p then return false end
-  local cp = p:get_path(checkpoint_name(name))
-  if not FS.exists(cp) then return false end
-  local ok = FS.cp(cp, p:get_path(name), false, true)
-  return ok and true or false
-end
-
---- The parser is built on first use
-local parser
-local function lua_parser()
-  parser = parser or require('model.lang.lua.parser')()
-  return parser
-end
-
---- Format a project file the way the editor writes code on
---- a Compy: the REPL's `tidy(name)`. It writes only when the
---- text changes, and says why when it leaves the file alone.
+--- Format a project file the way the editor's Alt+F
+--- formats it, at a Compy's width: the REPL's `tidy(name)`.
+--- The file is written with LF line ends (BufferModel:save).
+--- It writes only when the text changes, and says why when
+--- it leaves the file alone.
 --- @param name string
 --- @return boolean tidy --- the file is formatted now
 function ConsoleController:tidy(name)
-  local p = self.model.projects.current
-  if not p then
-    print('Open a project first')
-    return false
-  end
+  local PS = self.model.projects
+  local p = self:open_or_refuse()
+  if not p then return false end
+  local said = self.model.output
   if not FS.exists(p:get_path(name)) then
-    print('There is no ' .. name .. ' in this project')
+    said:write_refusal(PS.messages.not_in_project(name))
     return false
   end
   local text = self:_readfile(name)
   if not text then return false end
-  local lines = textfile.lines(text)
-  local out, formatted = format.format(lines, display.columns)
+  local buf = BufferModel(name, text, function(out)
+    return self:_writefile(name, out)
+  end)
+  local lines = buf:snapshot().lines
+  local out, formatted, why = buf.syntax.format(lines,
+    display.columns)
   if not formatted then
-    local parsed, err = lua_parser().parse(lines)
-    if not parsed and err and err.l then
-      print(string.format(
-        '%s has an error on line %d, so it stays as it is',
-        name, err.l))
-    else
-      print(name .. ' cannot be tidied without changing'
-        .. ' what it does, so it stays as it is')
-    end
+    said:write_refusal(name .. ' ' .. why)
     return false
   end
-  --- written as the editor and compyfmt write a file
-  local tidied = textfile.text(out)
-  if tidied == text then
+  if string.unlines(out) == string.unlines(lines) then
     return true
   end
-  local ok, err = self:_writefile(name, tidied)
+  buf:replace_text(out)
+  local ok, err = buf:save()
   if not ok then
-    print(err)
+    said:write_refusal(err)
     return false
   end
   return true
@@ -394,7 +414,7 @@ function ConsoleController:_readfile(name, quiet)
   if ok then
     return text_or_err
   elseif not quiet then
-    print(text_or_err)
+    self.model.output:write_refusal(text_or_err)
   end
 end
 
@@ -435,7 +455,7 @@ function ConsoleController:writefile(name, content)
   if ok then
     print(name .. ' written')
   else
-    print(err)
+    self.model.output:write_refusal(err)
   end
 end
 
@@ -482,8 +502,7 @@ end
 --- @return boolean? success
 --- @return string? err
 function ConsoleController:flash_to_drive(content)
-  local P = self.model.projects
-  local p = P.current
+  local p = self:open_or_refuse()
   if not p then
     return false
   end
@@ -531,38 +550,150 @@ end
 -- it only by discarding the return, which nothing needed.)
 
 --- @param name string?
-function ConsoleController:run_project(name)
-  if love.state.app_state == 'inspect' or
-      love.state.app_state == 'running'
+--- @param stopped boolean? --- the caller has just stopped
+---   what was live (restart, Ctrl+R): the seam does not again
+--- @param entry string? --- a file of the project to run as the
+---   program, main.lua when nil (run(nil, "second.lua"), Option
+---   2 of the multi-entry-point proposal)
+function ConsoleController:run_project(name, stopped, entry)
+  --- what the program's first lines ask for (a stop, a run) is
+  --- made once the run has begun (util.program_end)
+  return End.held(self._run_project, self, name, stopped, entry)
+end
+
+--- Whether a run of `name`'s `entry` can start, said in the
+--- output when it cannot; nothing changes either way. Asked
+--- again when the run is made: a program's run() is refused at
+--- the call, its code going on, and made after the code ends.
+--- @param name string?
+--- @param entry string?
+--- @return boolean accepted
+--- @param replaces boolean? --- a program's own run(): it
+---   replaces the program that runs, as Ctrl+R does
+function ConsoleController:_run_accepted(name, entry, replaces)
+  if not replaces and (love.state.app_state == 'inspect' or
+      love.state.app_state == 'running')
   then
-    self.input:set_error(
-      { "There's already a project running!" })
-    return
+    self.model.output:write_refusal(messages.already_running)
+    return false
   end
   local P   = self.model.projects
   local cur = P.current
-  local ok
+  if not name and not self:open_or_refuse() then return false end
+  --- a run opens a project it names and makes none: a name
+  --- no project has is refused, and nothing changes
+  if name and not (cur and cur.name == name) then
+    local valid, invalid = ProjectService.valid_name(name)
+    if not valid then
+      self.model.output:write_refusal(invalid)
+      return false
+    end
+    if not ProjectService.is_project(ProjectService.path, name) then
+      self.model.output:write_refusal(messages.no_such_project(name))
+      return false
+    end
+  end
+  --- an entry point is a file the project holds, named as files
+  --- are, checked before anything changes
+  if entry then
+    local valid, invalid = Project.writable_name(entry)
+    if not valid then
+      self.model.output:write_refusal(invalid)
+      return false
+    end
+    local holder = (name and not (cur and cur.name == name))
+        and FS.join_path(
+          ProjectService.is_project(ProjectService.path, name), entry)
+        or cur:get_path(entry)
+    if not FS.exists(holder, 'file') then
+      self.model.output:write_refusal(P.messages.not_in_project(entry))
+      return false
+    end
+  end
+  --- the file to run must give its text, as ProjectService:run
+  --- reads it (round 17): one that cannot be read is refused
+  --- before anything ends
+  local file = entry or ProjectService.MAIN
+  local holder = (name and not (cur and cur.name == name))
+      and { path = ProjectService.is_project(ProjectService.path, name) }
+      or cur
+  --- the open project reads as it reads itself; another, by
+  --- its path, as Project:readfile reads
+  local read = holder and (holder.readfile
+    or (holder.path and Project.readfile))
+  if read then
+    local readable, why = read(holder, file)
+    if not readable then
+      self.model.output:write_refusal(why)
+      return false
+    end
+  end
+  return true
+end
+
+--- @private
+function ConsoleController:_run_project(name, stopped, entry)
+  if not self:_run_accepted(name, entry) then return end
+  --- a program takes the keys from here: the screen at rest
+  --- under it, never a scrolled view no key reaches
+  self.model.output:to_rest()
+  local P   = self.model.projects
+  local cur = P.current
+  local ok, opened
   if cur and (not name or cur.name == name) then
     ok = true
   else
     ok = self:open_project(name or '', false)
+    opened = true
   end
 
   if ok then
+    --- The run seam, one thing (the maintainer's ruling "A run
+    --- starts from a clean environment"): end a run that is
+    --- live exactly as a stop does (its handlers, input hooks
+    --- and shortcuts, before_exit, serial handlers, widget,
+    --- modules); with nothing live there is nothing to end, and
+    --- only the modules go. Then a new environment, as opening
+    --- the project makes it, then start. Opening another
+    --- project has just done both. What a run leaves stays for
+    --- inspection until the next run; continue() and dofile()
+    --- never pass here.
+    --- a stop is the flush, which makes the environment anew
+    --- and resets the graphics state; with nothing live, the
+    --- seam does those itself
+    if not opened then
+      if stopped then
+        --- the caller stopped (Ctrl+R)
+      elseif self.run_live then
+        self:stop_project_run()
+      else
+        self:evacuate_required()
+        self:_reset_executor_env()
+        reset_graphics()
+        --- the slots every environment shares, which a new one
+        --- does not clear: what typed lines set there goes, as
+        --- at reset(), an exit hook removed and not called
+        --- (round 21: a run starts clean)
+        self:get_project_env().compy.before_exit = default_before_exit
+        self.main_ctrl.clear_user_handlers(self)
+        SerialPort:programEnded()
+      end
+    end
     local runner_env = self:get_project_env()
     -- A run starts on a blank canvas, whatever the last one
     -- left there; a project that fails to load leaves the
     -- error on a blank console, not under the old picture.
     self.model.output:clear_canvas()
-    local f, load_err, path = P:run(name, runner_env)
+    --- the project to run is the open one by now: it is not
+    --- looked for again
+    local f, load_err, path, refused = P:run(nil, runner_env, entry)
     if f then
+      --- the entry point this run runs from, which Ctrl+R
+      --- restarts while it is live; the run's end forgets it
+      self.entry = entry
       local n = name or P.current.name or 'project'
       Log.info('Running \'' .. n .. '\'')
-      self:flush_program_state()
-      -- A new run, by its number: what a stopped run's calls
-      -- still in flight may clear is decided against it.
-      self.run_id = (self.run_id or 0) + 1
-      local run_id = self.run_id
+      self:restore_console_mouse()
       self.run_live = true
       love.state.app_state = 'running'
       -- Before the project's top-level code, which may show the
@@ -576,6 +707,8 @@ function ConsoleController:run_project(name)
       -- console's own listeners wait until it has stopped.
       SerialPort:programStarted()
       gfx.setFont(self.cfg.view.font)
+      --- a stop or a run the first lines ask for is made after
+      --- this one has finished starting (util.program_end)
       local rok, run_err = run_user_code(f, self, path)
       if not rok then
         -- Top-level code raised, so the route was never
@@ -586,31 +719,12 @@ function ConsoleController:run_project(name)
         -- (doc/development/decisions/input.md,
         -- D-ROUTE-LIFETIME).
         self.main_ctrl.release_keyboard_route(self)
-        destroy_input_widget()
-        -- ...and the participants it installed before raising.
-        -- Same invariant, same reason: nothing survives the
-        -- project that installed it. before_exit is uninstalled
-        -- but NOT fired: the hook is scoped to stop paths and
-        -- excludes crash, yet a slot left holding the dead
-        -- project's function would fire for the next one.
-        self.main_ctrl.clear_user_handlers(self)
-        self:get_project_env().compy.before_exit =
-            default_before_exit
-        -- Its serial handlers go the same way, by the same
-        -- invariant, and the console is heard again. What it
-        -- queued for the board and has not sent goes too.
-        SerialPort:drop()
-        SerialPort:programEnded()
-        self:flush_program_state()
-        -- The run is over: what it drew before raising goes.
-        -- Only this run's own: one it started again meanwhile
-        -- owns the canvas now.
-        if self.run_id == run_id then
-          self.model.output:clear_canvas()
-          self.run_live = false
-        end
-        love.state.app_state = 'ready'
-        print('Error: ', run_err)
+        -- ...then the one flush, as a stop's: nothing survives
+        -- the project that raised, its globals included.
+        -- before_exit is removed but NOT called: the hook is
+        -- scoped to stop paths and excludes a crash.
+        self:flush_program_state(false)
+        self.model.output:write_error('Error: ' .. tostring(run_err))
       else
         if not self.main_ctrl.user_is_blocking() then
           -- The route is NOT released here. A non-blocking run
@@ -633,13 +747,14 @@ function ConsoleController:run_project(name)
           -- screen: it needs its mouse now, even if keys or the
           -- board still reach the program.
           if not self.main_ctrl.user_is_interactive() then
-            self:flush_program_state()
+            self:restore_console_mouse()
           end
         end
       end
+    elseif refused then
+      self.model.output:write_refusal(load_err)
     else
-      --- TODO extract error message here
-      print(load_err)
+      self.model.output:write_error(load_err)
     end
   end
 end
@@ -654,9 +769,14 @@ local function project_require(name, run)
   end
   if _G.web and name == 'bit' then
     return o_require('util.luabit')
-  else
-    return o_require(name)
   end
+  --- a module no one had loaded is the program's: the next
+  --- run loads it afresh (ConsoleController:evacuate_required).
+  --- One the IDE loaded itself stays shared.
+  local first = package.loaded[name] == nil
+  local m = o_require(name)
+  if first then program_loaded[name] = true end
+  return m
 end
 
 _G.o_dofile = _G.dofile
@@ -667,16 +787,17 @@ local function project_dofile(cc, filename, env)
   local P = cc.model.projects
   local fn = filename
   local open = P.current
-  if open then
-    local chunk = open:load_file(fn)
-    if chunk then
-      if env then
-        setfenv(chunk, env)
-      end
-      return true, chunk()
-    else
-      print(messages.file_does_not_exist(filename))
+  local chunk, load_err = open:load_file(fn)
+  if chunk then
+    if env then
+      setfenv(chunk, env)
     end
+    return true, chunk()
+  elseif load_err then
+    --- the file is there and Lua does not load it
+    cc.model.output:write_error(load_err)
+  else
+    cc.model.output:write_refusal(P.messages.not_in_project(filename))
   end
 end
 
@@ -689,22 +810,24 @@ local compy_graphics = {
 -- Builds the `compy.terminal` sub-namespace — the console
 -- OUTPUT surface. These wrap the live `terminal` (the
 -- REPL/console text grid): position the grid cursor
--- (gotoxy), show/hide it, and clear the screen. This is
+-- (gotoxy) and clear the screen. The grid's cursor is not
+-- the program's to show (the maintainer's ruling "Programs
+-- lose show_cursor and hide_cursor"). This is
 -- where a project WRITES to the console; always present
 -- while the project runs. Contrast with `compy.input`
 -- below, the input solicitation surface.
 local get_compy_terminal = function(terminal)
   return {
+    --- What is not a number fails in the program's own call,
+    --- on its line; a number written as text moves, as it
+    --- always did. The grid puts any number on the grid.
     --- @param x number
     --- @param y number
     gotoxy = function(x, y)
+      if not (tonumber(x) and tonumber(y)) then
+        error('compy.terminal.gotoxy: x and y must be numbers', 2)
+      end
       return terminal:move_to(x, y)
-    end,
-    show_cursor = function()
-      return terminal:show_cursor()
-    end,
-    hide_cursor = function()
-      return terminal:hide_cursor()
     end,
     clear = function()
       terminal:move_to(1, 1)
@@ -1057,6 +1180,25 @@ local function merge_callback_keys(state, cfg)
   end
 end
 
+--- A cursor a program moves shows steadily for a while, as one
+--- a person moves does (H-NFR4.4); a call that leaves it where
+--- it was restarts nothing.
+--- @param ui UserInputController?
+--- @param l integer?
+--- @param c integer? --- where the cursor was before the call
+local function blink_if_moved(ui, l, c)
+  if not ui then return end
+  local nl, nc = ui:get_cursor_pos()
+  if nl ~= l or nc ~= c then Blink.restart() end
+end
+
+--- @param ui UserInputController?
+--- @return integer? line
+--- @return integer? col
+local function cursor_of(ui)
+  if ui then return ui:get_cursor_pos() end
+end
+
 --- The two that DO something, lifted out of the api table below
 --- so they read as functions rather than as entries. Everything
 --- still in the table is a one-line delegation to the widget.
@@ -1072,7 +1214,9 @@ local function api_show(get_widget, state, cfg)
     checked_text('compy.input.show', next_cfg.text)
   merge_callback_keys(state, next_cfg)
   local ui = get_widget()
+  local l, c = cursor_of(ui)
   if ui then ui:show(next_cfg) end
+  blink_if_moved(ui, l, c)
 end
 
 --- Lifted out for check_keys' depth rule, like api_configure.
@@ -1087,7 +1231,10 @@ local function api_set_cursor(get_widget, get_active, line, col)
   end
   local pair =
     checked_cursor('compy.input.set_cursor', { line, col })
-  get_widget():set_cursor_pos(pair[1], pair[2])
+  local ui = get_widget()
+  local l, c = cursor_of(ui)
+  ui:set_cursor_pos(pair[1], pair[2])
+  blink_if_moved(ui, l, c)
 end
 
 --- Lifted out for the same depth rule as api_set_cursor: the
@@ -1103,8 +1250,11 @@ local function api_set_text(get_widget, get_active,
     Log.warn('compy.input.set_text ignored — hidden')
     return
   end
-  get_widget():set_text(
+  local ui = get_widget()
+  local l, c = cursor_of(ui)
+  ui:set_text(
     checked_text('compy.input.set_text', text), keep_cursor)
+  blink_if_moved(ui, l, c)
 end
 
 --- Sibling of api_show, and lifted out for the same reason it
@@ -1220,7 +1370,9 @@ local function build_widget_api(get_widget, get_active_flag, state)
         return
       end
       local ui = get_widget()
+      local l, c = cursor_of(ui)
       ui:clear()
+      blink_if_moved(ui, l, c)
       ui:update_view()
     end,
   }
@@ -1305,8 +1457,11 @@ local ASK_FLAGS = {
 --- Whether this key will arrive as text, and so is textinput's
 --- rather than on_key's. A single-character key constant is a
 --- printable; `space` is the one multi-character name that
---- produces text. Ctrl/Alt suppress textinput, so a chord over
---- a printable IS reportable.
+--- produces text. With Ctrl or Alt held the key is a chord,
+--- whose text the event gate stops (Key.chord_text), so a
+--- chord over a printable IS reportable. On a computer, AltGr
+--- is no Ctrl and no Alt (Key.ctrl, Key.alt): a printable
+--- pressed under it arrives as the text the layout composes.
 --- @param k string
 --- @return boolean
 local function arrives_as_text(k)
@@ -1370,11 +1525,20 @@ local function build_simple_surface(input, get_env)
     return ns and rawget(ns, k)
   end
 
+  --- A question belongs to the widget it was asked on: one
+  --- asked at the console with nothing live, or by a run that
+  --- has ended, is forgotten, never restored over a later run's
+  --- field (round 22)
+  --- @return boolean own --- the question was this widget's
   local function disarm()
-    if not armed then return end
+    if not armed then return false end
     local saved = armed
     armed = nil
-    restore_config(input, saved)
+    if saved.widget ~= love.state.user_input_controller then
+      return false
+    end
+    restore_config(input, saved.config)
+    return true
   end
 
   --- The boilerplate `ask` installs on both conclusions
@@ -1429,7 +1593,8 @@ local function build_simple_surface(input, get_env)
     ask = function(prompt, highlighter, text, cursor)
       check_hook_free()
       if input.hooks.keypressed ~= key_stub then
-        armed = save_config(input)
+        armed = { widget = love.state.user_input_controller,
+          config = save_config(input) }
       end
       input.configure(ASK_FLAGS)
       local cb = input.callbacks
@@ -1450,9 +1615,15 @@ local function build_simple_surface(input, get_env)
     --- abandoning, and a program that withdrew its own
     --- question already knows.
     unask = function()
-      if not armed then return end
-      disarm()
-      input.hide()
+      if disarm() then input.hide() end
+    end,
+
+    --- The IDE's, never a program's: the program that asked
+    --- ends, and its question goes with it, holding neither
+    --- its widget nor what its callbacks captured (round 23:
+    --- the terminate flush releases what a program created)
+    forget = function()
+      armed = nil
     end,
   }
 end
@@ -1494,6 +1665,7 @@ local get_compy_namespace = function(terminal, with_input,
       function() return cc and cc:get_project_env() end)
     ns.ask = simple.ask
     ns.unask = simple.unask
+    if cc then cc.forget_question = simple.forget end
   end
   return setmetatable(ns, {
     __index = function(t, k)
@@ -1543,18 +1715,9 @@ function ConsoleController.prepare_project_env(cc)
   gfx                          = love.graphics
 
   --- @param f function
-  local check_open_pr          = function(f, ...)
-    if not P.current then
-      print(P.messages.no_open_project)
-    else
-      return f(...)
-    end
-  end
-
-  --- @param f function
   local check_microbit_path    = function(f, ...)
     if not love.paths.microbit_path then
-      print(P.messages.no_microbit_board)
+      cc.model.output:write_refusal(P.messages.no_microbit_board)
     else
       return f(...)
     end
@@ -1563,11 +1726,20 @@ function ConsoleController.prepare_project_env(cc)
   project_env.require          = function(name)
     return project_require(name)
   end
-  project_env.dofile           = function(name)
-    return check_open_pr(function()
-      return project_dofile(cc, name, cc:get_project_env())
-    end)
+  --- `f`, for a command that needs a project: with none open
+  --- it says why and does nothing (ConsoleController:open_or_refuse)
+  --- @param f function
+  --- @return function
+  local function needs_project(f)
+    return function(...)
+      if not cc:open_or_refuse() then return end
+      return f(...)
+    end
   end
+
+  project_env.dofile           = needs_project(function(name)
+    return project_dofile(cc, name, cc:get_project_env())
+  end)
 
   --- project management
 
@@ -1577,8 +1749,9 @@ function ConsoleController.prepare_project_env(cc)
       -- no projects, display a message about it
       print(P.messages.no_projects)
     else
-      -- list projects
-      cc.model.output:reset()
+      -- below what is on the screen, as list_contents() prints
+      -- (the maintainer's ruling "Console scrollback, first
+      -- version")
       print(P.messages.list_header)
       for _, p in ipairs(ps) do
         print('> ' .. p.name)
@@ -1586,75 +1759,94 @@ function ConsoleController.prepare_project_env(cc)
     end
   end
 
+  --- The calls that end or replace a run, made from code, end
+  --- that code and are made once it has returned
+  --- (util.program_end). A refusal is said at the call, and the
+  --- code goes on: nothing ended.
+
   --- @param name string
   project_env.project          = function(name)
-    return cc:open_project(name)
+    if not name then
+      return cc.model.output:write_refusal(messages.needs_a_name)
+    end
+    local valid, invalid = ProjectService.valid_name(name)
+    if not valid then
+      return cc.model.output:write_refusal(invalid)
+    end
+    return End.request(function() return cc:open_project(name) end)
   end
 
   project_env.close_project    = function()
-    close_project(cc)
+    End.request(function() close_project(cc) end)
   end
 
-  project_env.current_project  = function()
-    if P.current and P.current.name then
-      print('Currently open project: ' .. P.current.name)
-    else
-      print(P.messages.no_open_project)
-    end
-  end
+  project_env.current_project  = needs_project(function()
+    print('Currently open project: ' .. P.current.name)
+  end)
 
   project_env.example_projects = function()
     local ok, err = P:deploy_examples()
     if not ok then
-      print('err: ' .. err)
+      cc.model.output:write_refusal(
+        'The examples could not be copied (' .. tostring(err) .. ').')
     end
   end
 
   project_env.clone            = function(old, new)
     local ok, err = P:clone(old, new)
     if not ok then
-      print(err)
+      cc.model.output:write_refusal(err)
     end
   end
 
+  --- reset(): the flush, a program live or not, then the
+  --- console emptied as Ctrl+L empties it. A program that runs
+  --- is stopped, its before_exit called; with nothing live what
+  --- typed lines left goes, a before_exit they set removed and
+  --- not called.
+  project_env.reset            = function(...)
+    if select('#', ...) > 0 then
+      return cc.model.output:write_refusal(messages.reset_alone)
+    end
+    return End.request(function() return cc:reset() end)
+  end
+
   project_env.reset_scratchpad = function()
-    cc:reset_scratchpad()
+    End.request(function() cc:reset_scratchpad() end)
   end
 
   --- file access
 
-  project_env.list_contents    = function()
-    return check_open_pr(function()
-      local p = P.current
-      local items = p:contents()
-      print(P.messages.project_header(p.name))
-      for _, f in pairs(items) do
-        print('• ' .. f.name)
-      end
-    end)
-  end
+  project_env.list_contents    = needs_project(function()
+    local p = P.current
+    local items = p:contents()
+    print(P.messages.project_header(p.name))
+    for _, f in pairs(items) do
+      print('• ' .. f.name)
+    end
+  end)
 
   --- @param name string
   --- @param quiet boolean? says nothing when there is no such
   ---   file, for a caller that says it in its own words
   --- @return string?
-  project_env.readfile         = function(name, quiet)
+  project_env.readfile         = needs_project(function(name, quiet)
     --- @diagnostic disable-next-line: invisible
-    return check_open_pr(cc._readfile, cc, name, quiet)
-  end
+    return cc:_readfile(name, quiet)
+  end)
 
   --- @param name string
   --- @return string[]?
-  project_env.readlines        = function(name)
+  project_env.readlines        = needs_project(function(name)
     --- @diagnostic disable-next-line: invisible
-    return check_open_pr(cc._readlines, cc, name)
-  end
+    return cc:_readlines(name)
+  end)
 
   --- @param name string
   --- @param content string[]
-  project_env.writefile        = function(name, content)
-    return check_open_pr(cc.writefile, cc, name, content)
-  end
+  project_env.writefile        = needs_project(function(name, content)
+    return cc:writefile(name, content)
+  end)
 
   --- @param content string
   --- @param on table? see ConsoleController:flash_microbit
@@ -1673,23 +1865,23 @@ function ConsoleController.prepare_project_env(cc)
 
   --- @param name string
   --- @return function? chunk
-  project_env.loadfile         = function(name)
-    return check_open_pr(cc.loadfile, cc, name)
-  end
+  project_env.loadfile         = needs_project(function(name)
+    return cc:loadfile(name)
+  end)
 
+  --- An edit from a program idle behind the console stops it
+  --- first: that edit is made once the program's code returns.
+  --- During a stop (in compy.before_exit) it opens nothing and
+  --- the hook goes on, as edit() has always done there.
   --- @param name string
   project_env.edit             = function(name)
-    return check_open_pr(cc.edit, cc, name)
-  end
-
-  --- @param name string
-  --- @return string?
-  --- Restore a file from its checkpoint; no prompt
-  --- @param name string? --- default main.lua
-  --- @return boolean
-  project_env.revert          = function(name)
-    name = name or ProjectService.MAIN
-    return cc:restore_checkpoint(name)
+    if not End.ending and love.state.app_state ~= 'running'
+        and cc:_program_live() then
+      --- refused at the call, the code going on (round 17)
+      if not cc:_edit_admit(name) then return end
+      return End.request(function() return cc:edit(name) end)
+    end
+    return cc:edit(name)
   end
 
   --- Format a file the way the editor writes code
@@ -1701,23 +1893,44 @@ function ConsoleController.prepare_project_env(cc)
 
   --- execution control
 
-  --- @param name string?
-  project_env.run_project      = function(name)
-    cc:run_project(name)
+  --- @param name string? --- a project, the open one when nil
+  --- @param entry string? --- its file to run, main.lua when nil
+  --- A typed run() while a program runs or is paused is
+  --- refused; a program's own replaces it once its code has
+  --- returned: the stop, then the run, as Ctrl+R makes them.
+  project_env.run_project      = function(name, entry)
+    local replaces = End.user > 0 and End.user ~= cc.typing
+        and cc.run_live
+    if not cc:_run_accepted(name, entry, replaces) then return end
+    End.request(function()
+      if replaces then
+        cc:stop_project_run()
+        cc:run_project(name, true, entry)
+      else
+        cc:run_project(name, nil, entry)
+      end
+    end)
   end
   project_env.run              = project_env.run_project
 
   --- @param msg string?
   project_env.pause            = function(msg)
+    if not cc.run_live then
+      return cc.model.output:write_refusal(messages.nothing_running)
+    end
     cc:suspend_run(msg)
   end
   project_env.stop             = function()
-    cc:stop_project_run()
+    if not cc.run_live then
+      return cc.model.output:write_refusal(messages.nothing_running)
+    end
+    End.request(function() cc:stop_project_run() end)
   end
   project_env.continue         = function()
     if love.state.app_state == 'inspect' then
       -- resume
       love.state.app_state = 'running'
+      cc.model.output:to_rest()
       cc.main_ctrl.restore_user_handlers(cc)
       -- After the handlers: a cursor the program has released
       -- raises here, and the program runs on regardless.
@@ -1725,7 +1938,7 @@ function ConsoleController.prepare_project_env(cc)
       cc.paused_mouse = nil
       set_mouse(mouse)
     else
-      print('No project halted')
+      cc.model.output:write_refusal(messages.nothing_paused)
     end
   end
 
@@ -1808,6 +2021,20 @@ end
 ---@param dt number
 function ConsoleController:pass_time(dt)
   self.time = self.time + dt
+  --- a running program's field that comes up while the view is
+  --- scrolled brings the screen back, so that its prompt is
+  --- seen before any key; a paused program's field waits, and
+  --- the keys scroll its output
+  local w = love.state.user_input_controller
+  local st = love.state.app_state
+  local field = self.run_live and (st == 'running' or st == 'ready')
+      and w ~= nil and w:is_shown()
+  if field and not self.field_shown then
+    self.model.output:to_rest()
+  end
+  self.field_shown = field
+  --- the text cursor blinks on the frames' time
+  Blink.pass_time(dt)
   self.model.output.terminal:update(dt)
 end
 
@@ -1816,7 +2043,18 @@ function ConsoleController:get_timestamp()
   return self.time
 end
 
+--- What Enter says on a statement that is not finished, when
+--- it begins the statement's next line instead of running it
+local UNFINISHED = 'Unfinished code: type the rest, then press Enter.'
+
 function ConsoleController:evaluate_input()
+  --- what the line asks for (a stop, a run, a reset) is made
+  --- once the line and its echo are done (util.program_end)
+  return End.held(self._evaluate_input, self)
+end
+
+--- @private
+function ConsoleController:_evaluate_input()
   local inter = self.input
 
   local text = inter:get_text()
@@ -1835,12 +2073,27 @@ function ConsoleController:evaluate_input()
       local run_env = self:get_project_env()
       local f, load_err = codeload(code, run_env)
       if f then
+        --- the line is taken: it enters the history and the
+        --- output before it runs, and leaves the field however
+        --- it ends; Up brings it back. Its error is written to
+        --- the output after what it printed, and nowhere else:
+        --- the band is the field's, for a line not taken (the
+        --- maintainer's rulings of November 15 and 16, 2026)
+        inter:remember()
+        self.model.output:echo(text)
+        --- a typed line leaves state for a flush to end, as a
+        --- live run does
+        self.state_left = true
+        --- the typed line's own depth of program code: a run()
+        --- there is the console's, one deeper the program's
+        local was = self.typing
+        self.typing = End.user + 1
         local _, err = run_user_code(f, self)
+        self.typing = was
         if err then
-          inter:set_error({ err })
-        else
-          inter:clear()
+          self.model.output:write_error(err)
         end
+        inter:clear_text()
       else
         Log.error('Load error:', LANG.get_call_error(load_err))
         inter:set_error(load_err)
@@ -1849,6 +2102,10 @@ function ConsoleController:evaluate_input()
       local eval_err = res
       if eval_err then
         inter:set_error(eval_err)
+      else
+        --- the statement goes on: Enter has begun its next
+        --- line, and says why it ran nothing
+        inter:notice({ UNFINISHED })
       end
     end
   end
@@ -1858,14 +2115,36 @@ function ConsoleController:_reset_executor_env()
   self:_set_project_env(table.clone(self.base_env))
 end
 
+--- The console's reset(): the one flush, then the console's
+--- output and kept rows erased, as Ctrl+L erases them; the
+--- history and the editor's files stay
 function ConsoleController:reset()
-  self:quit_project()
-  self.input:reset(true) -- clear history
+  if self.run_live then
+    self:stop_project_run()
+  else
+    self:flush_program_state(false)
+  end
+  --- a reset is the explicit silence: what a stop lets play out
+  --- stops here (the reset specification: a runtime reset stops
+  --- audio)
+  if love.audio and love.audio.stop then love.audio.stop() end
+  self.model.output:erase()
+  local P = self.model.projects
+  local name = P.current and P.current.name or ProjectService.DEFAULT
+  print(messages.reset_done(name))
+  --- the reset specification's API4.1; a typed line's value is
+  --- not printed, so the console shows only the line above
+  return { scope = 'runtime', project = name, snapshot = nil }
 end
 
+--- Ctrl+R on a live program: the stop the run seam would make,
+--- made first, so that a run that is going or paused ends even
+--- when no run can start after it, then a run from the entry
+--- point the program was running from (the stop forgets it)
 function ConsoleController:restart()
+  local entry = self.entry
   self:stop_project_run()
-  self:run_project()
+  self:run_project(nil, true, entry)
 end
 
 ---@return LuaEnv
@@ -1906,9 +2185,13 @@ function ConsoleController:suspend()
   local runner_env = self:get_project_env()
   Log.info('Suspending project run')
   love.state.app_state = 'inspect'
+  self.model.output:to_rest()
+  --- a pause is the debugger's: what it says shows in the
+  --- band as a notice, and the program's screen is not touched
+  --- (the maintainer's ruling of November 16, 2026)
   local msg = love.state.suspend_msg
   if msg then
-    self.input:set_error({ tostring(msg) })
+    self.input:notice({ tostring(msg) })
     love.state.suspend_msg = nil
   end
 
@@ -1934,17 +2217,32 @@ end
 --- @param name string
 --- @param play boolean?
 --- @return boolean success
-function ConsoleController:open_project(name, play)
+--- @param fresh boolean? --- the environment was just made anew
+---   (close_project's flush): it is not made again
+function ConsoleController:open_project(name, play, fresh)
+  self.model.output:to_rest()
   local P = self.model.projects
   if not name then
-    print('No project name provided!')
+    self.model.output:write_refusal(messages.needs_a_name)
     return false
   end
+  --- a refused command changes nothing: a name that cannot be
+  --- a project's is refused before the open project closes,
+  --- its run stopped and its files with it
+  if not play then
+    local valid, invalid = ProjectService.valid_name(name)
+    if not valid then
+      self.model.output:write_refusal(invalid)
+      return false
+    end
+  end
   local cur = P.current
+  local closed_fresh = false
   if cur then
     --- close directly: no redirect to the default project here,
     --- otherwise its loader would be inserted and leak
-    self:_close_project()
+    local _, made = self:_close_project()
+    closed_fresh = made and not self.stopping
   end
 
   local open, create, err = P:opreate(name, play)
@@ -1960,15 +2258,27 @@ function ConsoleController:open_project(name, play)
     then
       table.insert(package.loaders, 1, project_loader)
     end
-    --- env resets on every project switch
-    self:_reset_executor_env()
+    --- env resets on every project switch, once: when closing
+    --- the one that was open made it anew, not again
+    if not fresh and not closed_fresh then
+      self:_reset_executor_env()
+    end
+  elseif cur then
+    --- a project is always open: one that cannot be opened or
+    --- made on the card leaves the one that was open, its
+    --- loader back in place
+    P.current = cur
+    local lf = self:get_loader(cur.name)
+    if lf and not table.is_member(package.loaders, lf) then
+      table.insert(package.loaders, 1, lf)
+    end
   end
   if open then
     print('Project ' .. name .. ' opened')
   elseif create then
     print('Project ' .. name .. ' created')
   else
-    print(err)
+    self.model.output:write_refusal(err)
   end
   return ok
 end
@@ -1989,43 +2299,57 @@ end
 --- The widget ends with the project too (D-WIDGET-AT-BOOT as
 --- amended): unconditional, ahead of the has-a-project check,
 --- since with no project there is no widget either.
+--- @return boolean success
+--- @return boolean? fresh --- the stop made the environment anew
 function ConsoleController:_close_project()
   local P = self.model.projects
+  local fresh
   if P.current then
-    self:stop_project_run()
+    fresh = self:stop_project_run()
   end
-  --- Ctrl+T's way back into the editor names a file of
-  --- this project; after the stop, which keeps it for a
-  --- restart, and after the exit hook the stop runs
-  love.state.editor = nil
+  --- the editor's files are this project's: they go with it,
+  --- after the exit hook the stop runs
+  if love.state.app_state == 'editor' then
+    self:finish_edit()
+  elseif self.editor:get_active_buffer() then
+    self.editor:close()
+  end
   destroy_input_widget()
   local open = P.current
   if open then
     local name = P.current.name
-    --- the project's modules go with it: the next project, or
-    --- this one reopened, starts from a new env, and require
-    --- must run its files again to fill it
-    self:evacuate_required()
+    --- the project's modules went with the stop above: the
+    --- next project, or this one reopened, starts from a new
+    --- env, and require runs its files again to fill it
     local ok = P:close()
     local lf = self:get_loader(name)
     if lf then
       table.delete_by_value(package.loaders, lf)
     end
     View.clear_snapshot()
-    return ok
+    return ok, fresh
   end
-  return true
+  return true, fresh
 end
 
 --- Close the current project and return to the default project.
 --- @param closed function? called once the project is closed,
 ---   before the default one opens
+--- @param stopped boolean? --- the caller's stop made the
+---   environment anew, so the close's own stop ended nothing
 --- @return boolean success
-function ConsoleController:close_project(closed)
-  local ok = self:_close_project()
+function ConsoleController:close_project(closed, stopped)
+  self.model.output:to_rest()
+  --- a project that was open was stopped as it closed; when
+  --- that stop's flush made the environment anew (not inside
+  --- an outer stop, whose flush goes on after) the open does not
+  --- make it again
+  local reentrant = self.stopping
+  local ok, fresh = self:_close_project()
+  local flushed = (fresh or stopped) and not reentrant
   if ok then
     if closed then closed() end
-    return self:open_project(ProjectService.DEFAULT)
+    return self:open_project(ProjectService.DEFAULT, nil, flushed)
   end
   return ok
 end
@@ -2040,6 +2364,12 @@ end
 --- only those: a module of the IDE's that shares a project
 --- file's name stays, and one from a subfolder goes
 function ConsoleController:evacuate_required()
+  --- a bundled library a program loaded first, so that the
+  --- next run gets its own copy, its timers and state gone
+  for modname in pairs(program_loaded) do
+    package.loaded[modname] = nil
+  end
+  program_loaded = { }
   local open = self:get_current_project()
   if not open then return end
   for modname in pairs(open.required or {}) do
@@ -2050,83 +2380,177 @@ end
 
 --- Once at a time: a before_exit hook that closes or switches
 --- the project reaches here again, and returns at once.
---- The editor closes first: the gate's project shortcuts
---- (Ctrl+Q, Ctrl+Shift+R, Ctrl+Alt+R) reach here before the
---- editor sees their key, and its buffers belong to the
---- project they were opened in. Ctrl+T keeps its way back,
---- which closing the project then forgets.
+--- The editor steps aside first, its files kept for Ctrl+T:
+--- the gate's restart (Ctrl+R) reaches here from it.
 function ConsoleController:stop_project_run()
+  self.model.output:to_rest()
   if self.stopping then return end
-  if love.state.app_state == 'editor'
-      and self.editor:get_active_buffer() then
-    love.state.editor = self:finish_edit()
+  if love.state.app_state == 'editor' then
+    self:hide_editor()
   end
   self.stopping = true
-  local ok, err = pcall(self._stop_project_run, self)
+  local ok, res = pcall(self._stop_project_run, self)
   self.stopping = false
   if not ok then
+    End.ending = false
     -- A step ahead of the reset raised: the console still
     -- gets its mouse.
-    self:flush_program_state()
-    error(err, 0)
+    self:restore_console_mouse()
+    error(res, 0)
+  end
+  return res
+end
+
+--- Whatever plays goes on to its end, and no longer repeats.
+--- LÖVE 11's love.audio.pause() pauses every playing source and
+--- returns them, which lists them without a registry; each is
+--- made a one-shot and played again from where it was. A source
+--- the program paused or stopped is not playing, and stays as it
+--- is. One that cannot loop (a queueable one) plays on.
+--- the master volume as LÖVE starts it, which the IDE keeps
+local IDE_VOLUME = 1
+
+local function end_looping()
+  local audio = love.audio
+  if not (audio and audio.pause) then return end
+  for _, source in ipairs(audio.pause() or { }) do
+    pcall(source.setLooping, source, false)
+    source:play()
   end
 end
 
---- Put back what a program changed and the console needs,
---- whatever the program did and however it ended: the mouse,
---- to CONSOLE_MOUSE. The IDE's own teardown, never the
---- program's: a program that crashed, or never cleans up,
---- leaves the same console as one that does. Every path that
---- ends a run calls it, and run_project again before a run
---- starts, for a path that ended one without it, and main.lua
---- once when the IDE starts.
-function ConsoleController:flush_program_state()
+--- The mouse as the console needs it (CONSOLE_MOUSE): the
+--- flush puts it back, and so do a run's start and a program
+--- that idles with nothing that answers the pointer, and
+--- main.lua once when the IDE starts.
+function ConsoleController:restore_console_mouse()
   self.paused_mouse = nil
   set_mouse(CONSOLE_MOUSE)
 end
 
-function ConsoleController:_stop_project_run()
-  -- What the run queued for the board and has not sent goes
-  -- first: its before_exit hook may send the board a last
-  -- line on purpose, and that one stays.
-  SerialPort:drop()
+--- The one flush (Beads compy-ide-terminate-flush; the
+--- maintainer's invariant of 2026-06-12): terminating a program
+--- returns the IDE to its own baseline, however the program
+--- behaved. stop(), Ctrl+Q, a project's close, an error in a
+--- program's first lines, the run seam's stop and reset() all
+--- end here; a program's natural end and a pause do not.
+--- What a program left, globals included, goes; the console's
+--- output, kept rows and history and the editor's files stay.
+--- Idempotent: safe with nothing run, and twice.
+--- @param call_exit boolean? --- a stop calls the program's
+---   compy.before_exit before it goes; a crash only removes it
+--- @return boolean ended --- there was state to end, and the
+---   environment was made anew
+function ConsoleController:flush_program_state(call_exit)
+  --- Two halves. Ending what a program left happens once for
+  --- each end, by construction, as the run seam knows it: there
+  --- is something to end while a run is live, a program holds
+  --- the screen or waits paused, or a typed line has run since
+  --- the last flush, and this flush clears all three; a second
+  --- path to the same end (a stop in first lines that then
+  --- raise, play mode's quit and its close) finds nothing to
+  --- end. Putting the IDE's baseline back is idempotent and
+  --- happens every time.
+  local was_ending = End.ending
+  End.ending = true
+  local ended = self.run_live
+  local st = love.state.app_state
+  --- a program is live: it runs, is paused, or idles with its
+  --- handlers or picture
+  local live = ended or (st ~= 'ready' and st ~= 'editor')
+  local to_end = live or self.state_left
+  self.state_left = false
+  if to_end then
+    -- What the run queued for the board and has not sent goes
+    -- first: its before_exit hook may send the board a last
+    -- line on purpose, and that one stays.
+    SerialPort:drop()
+    local compy = self:get_project_env().compy
+    --- the hook is a live run's: with none, one a typed line set
+    --- is removed and not called (round 22)
+    if call_exit and live then
+      framework_before_exit(compy)
+    else
+      compy.before_exit = default_before_exit
+    end
+  end
+  --- after the exit hook, which may itself require a module
   self:evacuate_required()
-  local compy = self:get_project_env().compy
-  framework_before_exit(compy)
   -- After the project's own hook, which may still use the
   -- mouse as it left it.
-  self:flush_program_state()
+  self:restore_console_mouse()
   self.main_ctrl.set_default_handlers(self, self.view)
   self.main_ctrl.set_love_update(self)
-  -- After framework_before_exit above: the project's own
-  -- before_exit hook may still drive compy.input, and it must
-  -- find a widget there when it does.
+  -- After the exit hook: it may still drive compy.input, and
+  -- it must find a widget there when it does.
   destroy_input_widget()
+  --- a question the program left unanswered goes with its
+  --- widget
+  if self.forget_question then self.forget_question() end
   -- What the run drew on the console's canvas goes with it,
-  -- after the project's own hook, which may still draw. A
-  -- paused run (Ctrl+Pause, an error in a handler) has not
-  -- reached here: its canvas stays until it stops. Nor has one
-  -- that finished its top-level code with nothing live (the
-  -- sine example): it is idle, not stopped, and its picture
-  -- stays.
+  -- after the project's own hook, which may still draw.
   self.model.output:clear_canvas()
+  --- the IDE draws on from here: under the program's scissor,
+  --- colour or wireframe its key card and editor came out
+  --- clipped and outlined (the device night of November 16)
+  reset_graphics()
+  --- what the program set playing plays out, and a loop stops
+  --- repeating (the maintainer's ruling of November 16, 2026:
+  --- "clear the repeat, but what is there, still there");
+  --- reset() is the explicit silence
+  end_looping()
+  --- and at the volume the IDE starts with, LÖVE's own: the IDE
+  --- sets none
+  if love.audio and love.audio.setVolume then
+    love.audio.setVolume(IDE_VOLUME)
+  end
+  --- the keyboard as the IDE set it at its start (main.lua)
+  local kb = love.keyboard
+  if kb and kb.setKeyRepeat then kb.setKeyRepeat(true) end
+  if kb and kb.setTextInput then kb.setTextInput(true) end
   self.run_live = false
+  --- the entry point lives with the run (the maintainer's
+  --- ruling of November 16, 2026)
+  self.entry = nil
   View.clear_snapshot()
   self.main_ctrl.set_love_draw(self, self.view)
   self.main_ctrl.clear_user_handlers(self)
   -- The program's serial handlers go with its other handlers:
   -- a stopped project must not keep hearing the board.
   SerialPort:programEnded()
+  --- the program's globals go with it (the maintainer's ruling
+  --- of November 16, 2026: "a stop clears the globals too");
+  --- what a run that ended here held is freed now, twice for
+  --- finalizers (with nothing run there is nothing to free)
+  if to_end then
+    self:_reset_executor_env()
+    if ended then
+      local collect = self.collect_garbage or collectgarbage
+      collect('collect')
+      collect('collect')
+    end
+  end
   self.main_ctrl.report()
   love.state.app_state = 'ready'
+  End.ending = was_ending
+  return to_end
+end
+
+--- A stop is the flush, the program's exit hook called. A
+--- paused run (Ctrl+Pause, an error in a handler) has not
+--- reached here, nor has one that finished its first lines
+--- with nothing live (the sine example): it is idle, not
+--- stopped, and its picture and globals stay.
+function ConsoleController:_stop_project_run()
+  return self:flush_program_state(true)
 end
 
 function ConsoleController:quit_project()
-  self:stop_project_run()
+  local stopped = self:stop_project_run()
   --- a clean console first, so what closing says stays on it
   self.model.output:reset()
   self.input:reset()
-  self:close_project()
+  self:close_project(nil, stopped)
 end
 
 --- Set the default project aside under a backup name and start
@@ -2146,38 +2570,120 @@ function ConsoleController:reset_scratchpad()
   if kept then
     print(P.messages.kept_as(name, kept))
   else
-    print(P.messages.not_kept(name))
+    self.model.output:write_refusal(P.messages.not_kept(name))
   end
   return self:open_project(name)
 end
 
---- @param name string
---- @param state EditorState
-function ConsoleController:edit(name, state)
-  if love.state.app_state == 'running' then return end
-  --- a program's exit hook runs while its project closes:
-  --- a file it opened then would outlive the project
-  if self.stopping then return end
-
+--- Whether edit() can open `name`, said where the person is
+--- when it cannot (the editor's field or the console), nothing
+--- changing either way. Asked at a program's edit() before it
+--- ends the program's code (util.program_end), and again by the
+--- edit itself.
+--- @param name string?
+--- @param must_exist boolean?
+--- @return table? admitted --- p, filename, fpath, text, from_console
+function ConsoleController:_edit_admit(name, must_exist)
   local PS = self.model.projects
-  local p  = PS.current
+  local p  = self:open_or_refuse()
   if not p then return end
-  local filename
-  -- if state and state.buffer then
-  --   filename = state.buffer.filename
-  -- else
-  filename    = name or ProjectService.MAIN
-  -- end
+  local filename = name or ProjectService.MAIN
   local fpath = p:get_path(filename)
   local ex    = FS.exists(fpath)
+  --- a refusal is said where the person is: over the
+  --- editor's field, or in the console
+  local function refuse(msg)
+    if love.state.app_state == 'editor' then
+      self.editor:refuse({ msg })
+    else
+      self.model.output:write_refusal(msg)
+    end
+  end
+  --- an edit in progress is resolved first (FR1.2): opening
+  --- a file empties the field, and a cut block may be held
+  --- nowhere else
+  if love.state.app_state == 'editor'
+      and self.editor:state_name() ~= 'browsing' then
+    refuse('Finish the text first: Enter keeps it, Esc drops it.')
+    return
+  end
+  local from_console = love.state.app_state ~= 'editor'
+  --- a file is on the editor's stack once
+  if not from_console and self.editor:_find_buffer(fpath) then
+    self.editor:refuse({ filename .. ' is already open.' })
+    return
+  end
+  --- a file the editor could never save stays shut: every
+  --- submission to it would be refused
+  local writable, invalid = Project.writable_name(filename)
+  if not writable then
+    refuse(string.format(
+      '%s cannot be saved (%s), so it cannot be opened.',
+      filename, invalid))
+    return
+  end
   local text
   if ex then
-    text = self:_readfile(filename)
+    --- a file that is there and cannot be read stays shut
+    --- (IS1.2): opened empty, its first submission would
+    --- write over it
+    local ok, got = p:readfile(filename)
+    if not ok or type(got) ~= 'string' then
+      local why = type(got) == 'string' and got ~= ''
+          and string.format(' (%s)', got) or ''
+      refuse(string.format(
+        '%s could not be read%s, so it cannot be opened.',
+        filename, why))
+      return
+    end
+    text = got
+  end
+  if must_exist and not ex then
+    self.editor:refuse({ PS.messages.not_in_project(filename) })
+    return
+  end
+  --- admission (IS1.2): text that is not UTF-8 stays shut,
+  --- and the caller keeps its file and state (IS1.5)
+  if type(text) == 'string' and not utf8.len(text) then
+    refuse(filename
+      .. ' is not UTF-8 text, so it cannot be opened.')
+    return
   end
 
-  if love.state.app_state ~= 'editor' then
-    love.state.prev_state = love.state.app_state
-    love.state.app_state = 'editor'
+  return { p = p, filename = filename, fpath = fpath, text = text,
+    from_console = from_console }
+end
+
+--- Open a file. From the console (edit("name"), or Ctrl+T
+--- with no file to go back to) it starts the editor anew,
+--- the file alone on its stack (IS1.1): the files a run came
+--- from go, as leaving the editor takes them (IS1.6), and
+--- Ctrl+T alone goes back to them (IS1.4). From the editor
+--- (Ctrl+J) it opens in front of its caller (IS1.5).
+--- @param name string?
+--- @param must_exist boolean? --- a file followed to (IS1.5)
+--- is one the project holds; edit("name") creates its own
+function ConsoleController:edit(name, must_exist)
+  if love.state.app_state == 'running' then return end
+  --- a program's exit hook runs while it stops: showing the
+  --- editor stops a live program first (_enter_editor), and
+  --- this stop, already under way, returns at once, so a
+  --- file asked for then would be asked for without end
+  if self.stopping then return end
+
+  local admitted = self:_edit_admit(name, must_exist)
+  if not admitted then return end
+  local p, filename, fpath = admitted.p, admitted.filename,
+      admitted.fpath
+  local text, from_console = admitted.text, admitted.from_console
+
+  if not self:_enter_editor() then
+    return self:edit(name, must_exist)
+  end
+  --- a hidden editor holds no edit in progress: a run is
+  --- refused during one (refuse_to_leave)
+  if from_console then
+    self.editor:close()
   end
   --- Editor accept path: a save is durable before the
   --- editor reports acceptance (spec 2.6), so a force-stop
@@ -2190,33 +2696,99 @@ function ConsoleController:edit(name, state)
   local save = function(newcontent)
     return self:_writefile(filename, newcontent, p, true)
   end
-
   self.editor:open(filename, text, save, fpath)
-  self.editor:restore_state(state)
 end
 
---- @return EditorState?
 function ConsoleController:close_buffer()
   self.editor:close_buffer()
 end
 
---- @return EditorState?
-function ConsoleController:finish_edit()
-  self.editor:save_state()
-  self.editor:close()
-  local ok = true
-  local errs = {}
-  if ok then
-    love.state.app_state = love.state.prev_state
-    love.state.prev_state = nil
-  else
-    print(string.unlines(errs))
+--- The editor steps aside for a run, its files kept as they
+--- are for the way back (IS1.4)
+function ConsoleController:hide_editor()
+  self.model.output:to_rest()
+  self.editor:hide()
+  love.state.app_state = love.state.prev_state
+  love.state.prev_state = nil
+end
+
+--- @private
+--- @return boolean --- a program's code can still run: it
+--- runs, it is paused, or it idles behind the console with
+--- its handlers and hooks still connected (run_live)
+function ConsoleController:_program_live()
+  local st = love.state.app_state
+  return self.run_live == true or st == 'running'
+      or st == 'inspect' or st == 'snapshot'
+end
+
+--- @private
+--- Every way the file editor comes to the screen passes here
+--- (Ctrl+T, edit() from the console or from a program):
+--- no program runs or idles behind it, so that none of its
+--- handlers or hooks takes the editor's keys, or stops,
+--- runs or closes the project during an edit (FR1.2). A live
+--- program is stopped first, as Ctrl+T stops it, and nothing
+--- is shown yet: its exit hook may have changed the project
+--- and its files, so the caller asks again.
+--- @return boolean entered --- the editor's state is on
+function ConsoleController:_enter_editor()
+  if love.state.app_state == 'editor' then return true end
+  if self:_program_live() then
+    self:stop_project_run()
+    return false
   end
-  self.buffers = {}
-  return self.editor:get_state()
+  love.state.prev_state = love.state.app_state
+  love.state.app_state = 'editor'
+  self.model.output:to_rest()
+  self.editor:came_forward()
+  return true
+end
+
+--- The editor's files again, as a run left them
+--- @return boolean shown --- false when a program had to stop
+--- first (_enter_editor)
+function ConsoleController:show_editor()
+  if not self:_enter_editor() then return false end
+  self.editor:show()
+  return true
+end
+
+--- Leave the editor: its files go (IS1.6)
+function ConsoleController:finish_edit()
+  self:hide_editor()
+  self.editor:close()
 end
 
 --- Handlers ---
+
+--- The console's key card while it shows (KeyCard.shows),
+--- nil otherwise: the console's own and the one a paused
+--- program hands over.
+--- @return string[]?
+function ConsoleController:key_card()
+  if love.state.app_state == 'editor' then return nil end
+  if not KeyCard.shows(self.pressed) then return nil end
+  return self.view.editor.key_card:console_lines(self.run_live,
+    self.input:is_empty())
+end
+
+--- Whether a key card shows, the console's or the file
+--- editor's, whichever is in front
+--- @return boolean
+function ConsoleController:card_shows()
+  if love.state.app_state == 'editor' then
+    return KeyCard.shows(self.editor.pressed)
+  end
+  return KeyCard.shows(self.pressed)
+end
+
+--- A key is released wherever its press went
+--- @param k string
+function ConsoleController:key_released(k)
+  self.pressed[k] = nil
+  self.editor:key_released(k)
+end
 
 --- @param t string
 function ConsoleController:textinput(t)
@@ -2225,101 +2797,143 @@ function ConsoleController:textinput(t)
   elseif self.cfg.mode == 'play' then
     --- console is disabled in this mode
   else
+    --- the key card suspends the console's keys (IS3.16)
+    if self:key_card() then return end
     local input = self.input
     --- a glyph typed over an error closes it and lands on
     --- the line under it; on the device it may come before
-    --- its key press
+    --- its key press. A chord's own glyph never comes here:
+    --- the event gate stops it (Key.chord_text)
     input:clear_error()
-    if Key.ctrl() and Key.shift() then
-      return
-    end
+    self.model.output:to_rest()
     input:textinput(t)
   end
 end
 
+--- The debug build's terminal test (Ctrl+Alt+T): it runs,
+--- and any key once it waits ends it
+function ConsoleController:_terminal_test()
+  local out = self.model.output
+  if love.state.app_state ~= 'ready' then
+    return
+  end
+  if not love.state.testing then
+    love.state.testing = 'running'
+    self.input:discard_draft()
+    TerminalTest.test(out.terminal)
+  elseif love.state.testing == 'waiting' then
+    TerminalTest.reset(out.terminal)
+    love.state.testing = false
+  end
+end
+
+--- What the console's key tables' actions do (consoleKeys.lua)
+local ACTIONS = {
+  none = function() end,
+  --- the console's text field's own key
+  field = function(cc, k) cc.input:keypressed(k) end,
+  run = function(cc)
+    if not cc.input:has_error() then cc:evaluate_input() end
+  end,
+  clear_terminal = function(cc) cc.model.output:erase() end,
+  scroll_row = function(cc, k)
+    cc.model.output:scroll_row(k == 'up' and -1 or 1)
+  end,
+  scroll_page = function(cc, k)
+    cc.model.output:scroll_page(k == 'pageup' and -1 or 1)
+  end,
+  --- with text in the field, the field's Home and End
+  scroll_end = function(cc, k)
+    local out = cc.model.output
+    if not cc.input:is_empty() then
+      cc.input:keypressed(k)
+    elseif k == 'home' then
+      out:to_oldest()
+    else
+      out:to_rest()
+    end
+  end,
+  terminal_test = function(cc)
+    if love.DEBUG then cc:_terminal_test() end
+  end,
+}
+
+--- The keys that move the output's view (consoleKeys.lua);
+--- Home and End only while the field is empty
+local SCROLLS = {
+  scroll_row = true, scroll_page = true, scroll_end = true,
+}
+
+--- Every key but the ones that scroll brings the screen back
+--- before it does its work, so that no one types under an
+--- output whose newest row is hidden
+--- @param k string
+--- @param entry table? --- the console's table's entry
+function ConsoleController:_back_to_screen(k, entry)
+  local scrolls = entry and SCROLLS[entry.act]
+      and (entry.act ~= 'scroll_end' or self.input:is_empty())
+  --- a modifier or a lock on its own, and the help key, leave
+  --- the view where it is
+  if scrolls or Key.is_lone(k) or k == KeyCard.KEY then
+    return
+  end
+  self.model.output:to_rest()
+end
+
+--- In the console a key is looked up by its full chord in the
+--- table of the console's state (consoleKeys.lua), then in the
+--- text field's (fieldKeys.lua); a chord neither names does
+--- nothing.
 --- @param k string
 --- @param sc string? --- LÖVE's scancode, unused
 --- @param isrepeat boolean? --- the key is held
 function ConsoleController:keypressed(k, sc, isrepeat)
   local input = self.input
+  if love.state.app_state == 'editor' then
+    --- a key that took the console to the editor, as Ctrl+T,
+    --- brings its screen back too
+    self.model.output:to_rest()
+    self.editor:keypressed(k, sc, isrepeat)
+    input:update_view()
+    return
+  end
+  local chord = Key.combo(k)
+  local state = self.run_live and 'live' or 'idle'
+  local entry = ConsoleKeys:lookup(state, chord)
+  local field = not entry and input:names(chord)
+  local bound = entry or field
+  --- a held key repeats only if its entry says so, and only
+  --- where its press acted: one held since the editor or a
+  --- program had it does nothing here
+  local repeats = bound and bound.repeats and self.pressed[k]
+  if isrepeat and not repeats then return end
+  --- a bare F1's press brings the card up; a press the card
+  --- holds back is not the console's, so neither are its
+  --- repeats (IS3.16)
+  local help = chord == KeyCard.KEY
+  if help then self.pressed[k] = true end
+  if self:key_card() then return end
+  if k ~= KeyCard.KEY or help then self.pressed[k] = true end
+  if love.state.testing == 'running' then
+    return
+  end
+  if love.state.testing == 'waiting' then
+    self:_terminal_test()
+    return
+  end
+  self:_back_to_screen(k, entry)
 
-  local function terminal_test()
-    local out = self.model.output
-    if love.state.app_state ~= 'ready' then
-      return
-    end
-    if not love.state.testing then
-      love.state.testing = 'running'
-      input:discard_draft()
-      TerminalTest.test(out.terminal)
-    elseif love.state.testing == 'waiting' then
-      TerminalTest.reset(out.terminal)
-      love.state.testing = false
-    end
+  -- A message is a hint that blocks nothing (IS3.14): the
+  -- next key dismisses it and does its usual work, Enter and
+  -- Escape included. A modifier or a lock alone leaves it.
+  if input:has_error() and not Key.is_lone(k) then
+    input:clear_error()
   end
 
-  if love.state.app_state == 'editor' then
-    self.editor:keypressed(k, sc, isrepeat)
-  else
-    if love.state.testing == 'running' then
-      return
-    end
-    if love.state.testing == 'waiting' then
-      terminal_test()
-      return
-    end
-
-    -- doc/development/internals/user_input.md, "Error state":
-    -- the line under the error is the one that failed, kept to
-    -- be corrected. Enter, Escape, Up and Down only close the
-    -- error; any other key closes it and does its usual work.
-    -- A modifier alone leaves it up; a held Shift then anchors
-    -- its selection when the next key closes it.
-    if input:has_error() then
-      if Key.is_mod(k) then
-        return
-      end
-      input:clear_error()
-      if Key.shift() then
-        input:keypressed('lshift')
-      end
-      if Key.is_enter(k) or k == 'escape'
-          or k == "up" or k == "down" then
-        return
-      end
-    end
-
-    if k == "pageup" then
-      input:history_back()
-    end
-    if k == "pagedown" then
-      input:history_fwd()
-    end
-    -- History navigation at the vertical boundary is driven by
-    -- the widget's on_limit_reached callback (set at
-    -- construction), not by keypressed's return value (retired,
-    -- doc/development/decisions/input.md, D-EDIT-CALLBACKS).
-    -- keypressed still runs for its editing side effects; its
-    -- return is unused.
-    input:keypressed(k)
-    if not Key.shift() and Key.is_enter(k) then
-      if not input:has_error() then
-        self:evaluate_input()
-      end
-    end
-
-    -- Ctrl held
-    if Key.ctrl() then
-      if k == "l" then
-        self.model.output:reset()
-      end
-      if love.DEBUG then
-        if Key.alt() and k == 't' then
-          terminal_test()
-          return
-        end
-      end
-    end
+  if entry then
+    ACTIONS[entry.act](self, k)
+  elseif field then
+    input:keypressed(k, sc, isrepeat)
   end
   input:update_view()
 end
@@ -2344,7 +2958,7 @@ function ConsoleController:mousepressed(
     if self.cfg.editor.mouse_enabled then
       self.editor:mousepressed(x, y, btn, touch, presses)
     end
-  else
+  elseif not self:key_card() then
     self.input:mousepressed(x, y, btn, touch, presses)
   end
 end
@@ -2360,7 +2974,7 @@ function ConsoleController:mousereleased(
     if self.cfg.editor.mouse_enabled then
       self.editor.input:mousereleased(x, y, btn, touch, presses)
     end
-  else
+  elseif not self:key_card() then
     self.input:mousereleased(x, y, btn, touch, presses)
   end
 end
@@ -2375,7 +2989,7 @@ function ConsoleController:mousemoved(x, y, dx, dy, touch)
     if self.cfg.editor.mouse_enabled then
       self.editor.input:mousemoved(x, y, dx, dy, touch)
     end
-  else
+  elseif not self:key_card() then
     self.input:mousemoved(x, y, dx, dy, touch)
   end
 end
@@ -2387,7 +3001,7 @@ function ConsoleController:wheelmoved(x, y)
     if self.cfg.editor.mouse_enabled then
       self.editor.input:wheelmoved(x, y)
     end
-  else
+  elseif not self:key_card() then
     self.input:wheelmoved(x, y)
   end
 end
@@ -2404,7 +3018,7 @@ function ConsoleController:touchpressed(id, x, y,
     if self.cfg.editor.touch_enabled then
       self.editor.input:touchpressed(id, x, y, dx, dy, pressure)
     end
-  else
+  elseif not self:key_card() then
     self.input:touchpressed(id, x, y, dx, dy, pressure)
   end
 end
@@ -2422,7 +3036,7 @@ function ConsoleController:touchreleased(id, x, y,
       self.editor.input:touchreleased(id, x, y,
         dx, dy, pressure)
     end
-  else
+  elseif not self:key_card() then
     self.input:touchreleased(id, x, y, dx, dy, pressure)
   end
 end
@@ -2439,7 +3053,7 @@ function ConsoleController:touchmoved(id, x, y,
     if self.cfg.editor.touch_enabled then
       self.editor.input:touchmoved(id, x, y, dx, dy, pressure)
     end
-  else
+  elseif not self:key_card() then
     self.input:touchmoved(id, x, y, dx, dy, pressure)
   end
 end
@@ -2454,35 +3068,19 @@ function ConsoleController:get_canvas()
   return self.model.output.canvas
 end
 
+--- A stop a program's call asks for is made once the call has
+--- returned, off the canvas (util.program_end): nothing the call
+--- draws comes after the stop's clear.
 --- @param f function
---- @param console boolean? console code, which owns no run
 --- @return any ... result of f
-function ConsoleController:use_canvas(f, console)
+function ConsoleController:use_canvas(f)
   local canvas = self.model.output.canvas
   gfx.setCanvas({
     canvas, -- this is actually [1] = canvas
     stencil = true
   })
-  local live, handed = self.run_live, self.canvas_handed
   local r = { pcall(f) }
   gfx.setCanvas()
-  -- A program's call that stopped its own run and went on
-  -- drawing repainted the canvas after the stop's clear: the
-  -- clear is final for that call. A run still live (restart)
-  -- owns the canvas and is left alone.
-  -- Console code owns no run: what it draws after a stop stays.
-  -- The keypress that submits it runs inside the program's own
-  -- call, so the console hands the canvas over by moving
-  -- canvas_handed on, and that call leaves it alone. It does so
-  -- whenever no run is live afterwards: a program's input hook
-  -- may have stopped the run before the console line began.
-  if not self.run_live then
-    if console then
-      self.canvas_handed = (self.canvas_handed or 0) + 1
-    elseif live and self.canvas_handed == handed then
-      self.model.output:clear_canvas()
-    end
-  end
   if not r[1] then error(r[2], 0) end
   return unpack(r, 2)
 end

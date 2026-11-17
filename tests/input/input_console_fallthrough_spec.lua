@@ -12,10 +12,14 @@
 -- to the console, so a project whose whole body is
 -- `print('help')` leaves the prompt below it typeable.
 --
--- The gate is the SCREEN, not the keyboard. A project that
--- owns love.draw is painting over the console, so nothing
--- falls through to a prompt the user cannot see — which is
--- the one thing this deliberately does not restore.
+-- Two gates. The SCREEN: a project that owns love.draw is
+-- painting over the console, so nothing falls through to a
+-- prompt the user cannot see. And the KEYBOARD (the
+-- maintainer's ruling of November 16, 2026: "'Falling through'
+-- of only unhandled keys to the console sounds quite
+-- unintuitive"): a program that takes keys owns the keyboard,
+-- so no key or text it leaves reaches the console. A program
+-- that wants typing shows its own field.
 
 local F = require('tests.helpers.input_fixture')
 
@@ -69,18 +73,117 @@ describe('input surface: inbound events — what nobody'
       assert.equal(1, seen)
     end)
 
-  -- The boundary the other cases do not touch: a hook the
-  -- project registered ITSELF, through compy.input.hooks,
-  -- and which returns falsey. Its author is presumed to know
-  -- the convention, so falling through is what they asked
-  -- for. A project's own love.* handler is a different case
-  -- and is pinned in the seeded-hook group below.
-  it('an explicit hook returning falsey falls through',
+  -- Turned around on November 16, 2026: a hook the project
+  -- registered itself and which returns falsey no longer lets
+  -- the key through. A program with a key hook takes keys, and
+  -- what its chain leaves goes nowhere.
+  it('an explicit hook returning falsey keeps the console deaf',
     function()
       local input = F.activate_project({ })
       input.hooks.keypressed = function() return false end
-      assert.same({ 'a' }, backspace_at_the_prompt())
+      assert.same({ 'ab' }, backspace_at_the_prompt())
     end)
+
+  --- one predicate for the key and the text paths, asked as each
+  --- event comes, since hooks and shortcuts come and go
+  describe('a program that takes keys owns the keyboard', function()
+    local function text_at_the_prompt()
+      F.console:clear()
+      F.console:add_text('ab')
+      F.session.type('x')
+      return F.console:get_text()
+    end
+
+    local TAKERS = {
+      { 'a keypressed hook', function(input)
+        input.hooks.keypressed = function() return false end
+      end },
+      { 'a keyreleased hook', function(input)
+        input.hooks.keyreleased = function() return false end
+      end },
+      { 'a textinput hook', function(input)
+        input.hooks.textinput = function() return false end
+      end },
+      { 'a key shortcut for another key', function(input)
+        input.shortcuts.keypressed['ctrl+k'] = function() return true end
+      end },
+      { 'a text shortcut', function(input)
+        input.shortcuts.textinput['alt+*'] = function() return true end
+      end },
+    }
+    for _, t in ipairs(TAKERS) do
+      it(t[1] .. ': neither a key nor its text falls through',
+        function()
+          t[2](F.activate_project({ }))
+          assert.same({ 'ab' }, backspace_at_the_prompt())
+          assert.same({ 'ab' }, text_at_the_prompt())
+        end)
+    end
+
+    for _, own in ipairs({ 'keypressed', 'keyreleased', 'textinput' }) do
+      it('its own love.' .. own .. ': neither a key nor its text'
+        .. ' falls through', function()
+          F.activate_project({ [own] = function() end })
+          assert.same({ 'ab' }, backspace_at_the_prompt())
+          assert.same({ 'ab' }, text_at_the_prompt())
+        end)
+    end
+
+    it('its own shown field: nothing reaches the console', function()
+      F.activate_project({ })
+      F.show_widget({ })
+      assert.same({ 'ab' }, backspace_at_the_prompt())
+    end)
+
+    --- the shortcut tables are there and empty by default
+    it('empty shortcut tables and a pointer hook take no keys',
+      function()
+        local input = F.activate_project({ })
+        assert.is_nil(next(input.shortcuts.keypressed))
+        input.hooks.mousepressed = function() end
+        assert.same({ 'a' }, backspace_at_the_prompt())
+        assert.same({ 'abx' }, text_at_the_prompt())
+      end)
+
+    --- round 19: ownership is the program's as the event comes,
+    --- not as its chain leaves it
+    it('a hook that removes itself keeps that event from the'
+      .. ' console', function()
+        local input = F.activate_project({ })
+        input.hooks.keypressed = function()
+          input.hooks.keypressed = nil
+          return false
+        end
+        assert.same({ 'ab' }, backspace_at_the_prompt())
+        input.hooks.textinput = function()
+          input.hooks.textinput = nil
+          return false
+        end
+        assert.same({ 'ab' }, text_at_the_prompt())
+      end)
+
+    --- round 19: the hook table is the one record; an own
+    --- handler whose seeded hook the program took away takes no
+    --- keys
+    it('an own handler whose hook was taken away takes no keys',
+      function()
+        local input = F.activate_project({
+          keyreleased = function() end,
+        })
+        input.hooks.keyreleased = nil
+        assert.same({ 'a' }, backspace_at_the_prompt())
+      end)
+
+    it('a hook set and taken back again leaves the keys as it found'
+      .. ' them', function()
+        local input = F.activate_project({ })
+        input.hooks.keypressed = function() return false end
+        assert.same({ 'ab' }, backspace_at_the_prompt())
+        input.hooks.keypressed = nil
+        F.console:clear()
+        assert.same({ 'a' }, backspace_at_the_prompt())
+      end)
+  end)
 
   -- The other side of the same boundary, and the reason a
   -- seeded handler is wrapped at all
