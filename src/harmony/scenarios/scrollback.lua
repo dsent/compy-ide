@@ -8,8 +8,9 @@ local D = require('harmony.drive')
 --- continuation cue at a cut edge and none at rest; the first
 --- step from a nearly empty screen, which fills it; the echo of
 --- an entered line in blue and its error after it in the
---- output's error color; the key card's rows; and a row printed
---- in one print against a print for each of its cells.
+--- output's error color; the key card's rows; the seventeenth
+--- row behind a program; and a row printed in one print against
+--- a print for each of its cells.
 
 --- @return table
 local function theme() return P.cc().cfg.view.colors end
@@ -212,6 +213,61 @@ scenario('blank-row', function(wait)
   D.eq(from_to('seven', 'eight'), 'seven||eight',
     'print(\'\') in a program')
   D.key(wait, 'C-q')
+  hm_done()
+end)
+
+--- The field's row is the output's while no input field is
+--- drawn (the maintainer's ruling of November 17, 2026): behind a
+--- program that owns the keys and shows no field the grid has
+--- 17 rows, text shows on the seventeenth, and the status line is
+--- the screen's last row, naming the project, the file and that
+--- it runs. Once the field is back the grid has 16, and what was
+--- on the seventeenth row has scrolled up.
+scenario('seventeenth-row', function(wait)
+  wait(.1)
+  D.key(wait, 'escape')
+  D.key(wait, 'C-l')
+  D.enter(wait, "project('h-rows')")
+  P.put('h-rows', 'main.lua',
+    "for i = 1, 16 do print('row ' .. i) end\n"
+    .. "compy.terminal.gotoxy(1, 17)\n"
+    .. "io.write('the seventeenth')\n"
+    .. "compy.input.hooks.keypressed = function() return true end\n"
+    .. "function love.update() end\n")
+  D.enter(wait, 'run_project()')
+  settle(wait)
+  local t, th, v = output().terminal, theme(), view()
+  local lay = require('view.layout')(v)
+
+  --- the grid's row `y`, spaces at its end left out
+  local function row(y)
+    return (table.concat(t.buffer[y]):gsub('%s+$', ''))
+  end
+
+  D.eq(t.height, 17, 'rows behind a program that owns the keys')
+  D.eq(row(17), 'the seventeenth', 'the seventeenth row')
+  local img = P.capture(wait)
+  local says = P.drawn(wait)
+  D.shot(wait, 'seventeen-rows')
+  local _, ink = P.cell(img, 1, 17, top())
+  is(ink, th.terminal.fg, 'the text on the seventeenth row')
+  local first = P.band(img, th.statusline.user.bg)
+  D.eq(first, v.h - lay.bottom - lay.status_h,
+    "the status line's first pixel row")
+  for _, word in ipairs({ 'h-rows', 'main.lua', 'running' }) do
+    assert(P.shows(says, word), 'the status line does not say ' .. word)
+  end
+  assert(not P.shows(says, 'L1'), 'the status line shows a position')
+
+  D.key(wait, 'C-q')
+  wait(.2)
+  D.eq(t.height, 16, 'rows once the field is back')
+  D.eq(row(16), 'the seventeenth', 'the seventeenth row, scrolled up')
+  img = P.capture(wait)
+  D.shot(wait, 'sixteen-rows-again')
+  first = P.band(img, th.statusline.console.bg)
+  D.eq(first, v.h - lay.bottom - v.fh - lay.status_h,
+    "the status line's first pixel row over the field")
   hm_done()
 end)
 

@@ -68,6 +68,12 @@ function ConsoleView:draw(terminal, canvas, snapshot)
       --- option B): the field takes no typing there
       local hidden = self.controller.main_ctrl.program_owns_keys()
       self.input.field_hidden = hidden
+      --- with no field drawn at all the field's row is the
+      --- output's, and the status line is the screen's last
+      --- row, saying only what runs (the maintainer's ruling of
+      --- November 17, 2026)
+      self.input.bare_status = self.controller:fieldless()
+          and self.controller:running_status() or nil
       self.input:draw()
       --- the notice band over the output's last rows, on
       --- the output's row grid (IS3.14)

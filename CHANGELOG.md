@@ -267,8 +267,11 @@ Project-author guide: `doc/input_api.md`.
 - **A program that takes keys owns the keyboard.** While a program has its own key or text
   handler, a key or text hook or shortcut, or its own field shown, no key or text it leaves
   reaches the console's prompt: behind such a program that draws nothing, the prompt and its
-  cursor are hidden, the output and the status line staying, until the program stops, pauses
-  or takes keys no more. A program that wants typing shows its own field. Before, a key or text its hook did not take was typed into the console, as was a key
+  cursor are hidden until the program stops, pauses or takes keys no more. The prompt's
+  row is the program's meanwhile: the output has 17 rows, `compy.terminal.gotoxy` reaches
+  the 17th, and the status line is the screen's last row, showing the project, the file
+  the program runs from and "running". When a field comes back, what is on the 17th row
+  scrolls up. A program that wants typing shows its own field. Before, a key or text its hook did not take was typed into the console, as was a key
   hook's text on a Compy.
 - **Ctrl+R restarts a live program only.** It restarts a program that runs, is paused or
   idles behind the console, from the file it runs from; in the console with no program, and

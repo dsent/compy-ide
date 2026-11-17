@@ -32,6 +32,7 @@ end
 --- @field statusline table
 --- @field canvas love.Canvas
 --- @field field_hidden boolean? --- the console's field behind a program that owns the keys: its status line alone
+--- @field bare_status Status? --- what the status line says while no field is drawn under it; it is then the screen's last row
 UserInputView = class.create(new)
 
 local get_colors = function(cf_colors)
@@ -236,7 +237,7 @@ function UserInputView:render_input(input, status, time)
   local wrap_forward = vc.wrap_forward
 
 
-  self.start_h = self:status_y(inLines)
+  self.start_h = self:status_y(self.bare_status and 0 or inLines)
 
   local function drawCursor()
     --- the cursor blinks (H-NFR4.4): in its hidden phase
@@ -291,7 +292,7 @@ function UserInputView:render_input(input, status, time)
   drawBackground()
 
   gfx.push('all')
-  self.statusline:draw(status, 0)
+  self.statusline:draw(self.bare_status or status, 0)
   gfx.pop()
   --- hidden behind a program that owns the keyboard: the status
   --- line alone, the field's rows background, no cursor

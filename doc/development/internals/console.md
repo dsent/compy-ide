@@ -76,8 +76,26 @@ During `inspect` state too the REPL runs code in `project_env`, the paused proje
 
 ## The Output and Its Kept Rows
 
-The output is the terminal's grid (`src/lib/terminal.lua`), 64 by
-16 cells, sized in `src/model/canvasModel.lua`. When a row scrolls
+The output is the terminal's grid (`src/lib/terminal.lua`), 64
+cells wide and 16 rows high over an input field, sized in
+`src/model/canvasModel.lua`. While no input field is drawn the
+field's own row is the grid's seventeenth (the maintainer's ruling
+of November 17, 2026: "the freed lines should be available to the
+program with no restriction"): the console's field is hidden
+behind a program that owns the keys and the program shows none of
+its own (`ConsoleController:fieldless`, asked each frame in
+`pass_time`, which tells `CanvasModel:field_drawn`). A program
+prints and moves there as on any row, `gotoxy` reaches it, and a
+scrolled view is 17 rows high. The status line is then the
+screen's last row and names only the project, the file the run
+started from and `running` (`ConsoleController:running_status`,
+`UserInputView.bare_status`). When a field comes back, at a
+pause, a stop, or when the program shows its own, the grid loses
+that row: text or the cursor on it rolls the grid up, as a line
+end on the last row does, and the top row goes to the kept rows;
+an empty row just goes (`Terminal:set_height`). The grid's canvas
+is made 17 rows high and drawn as many rows as the grid has. No
+call tells a program how many rows the grid has. When a row scrolls
 off its top, `terminal_roll_up` hands it, still whole, to
 `terminal.on_row_leaving`; `CanvasModel` keeps it in a `KeptRows`
 store (`src/model/keptRows.lua`): its text with a style (color, back
@@ -158,7 +176,7 @@ The custom loader is stored in `self.loaders[name]` so it can be removed on clos
 
 ### A program that takes keys owns the keyboard
 
-The maintainer's ruling of November 16, 2026: a live program that has any way of taking keys or text (its own `love.keypressed`, `love.keyreleased` or `love.textinput`, a key or text hook, a key or text shortcut, its own shown field) owns the keyboard, and nothing of a key or its text that its chain leaves reaches the console (`takes_keys` in `controller.lua`, one predicate for the key and the text paths, asked as each event comes). Behind a program that takes keys and draws nothing, the console's field and its cursor are hidden while the program owns the keys (`Controller.program_owns_keys`, which `ConsoleView:draw` asks each frame; `UserInputView.field_hidden` renders the status line alone, the field's rows background, and the notice band is not drawn): the output and the status line stay where they are, and the field comes back by itself at a pause, a stop, or when the program takes keys no more. A program that wants typing shows its own field, which is drawn over the console's as before. A draft of several lines typed before the program took the keys keeps the status line where that draft put it, with as many blank rows below it, until the field comes back. A program that takes no keys and draws nothing leaves the keyboard to the console, and a program that draws keeps every unconsumed event from it, as before (`user_draw`). The reserved chords are the gate's, untouched. A key whose press reached the console before the program took keys keeps the console as its receiver (`fell_through`). The console's key card comes up only while F1 reaches the console, so not behind a program that takes keys.
+The maintainer's ruling of November 16, 2026: a live program that has any way of taking keys or text (its own `love.keypressed`, `love.keyreleased` or `love.textinput`, a key or text hook, a key or text shortcut, its own shown field) owns the keyboard, and nothing of a key or its text that its chain leaves reaches the console (`takes_keys` in `controller.lua`, one predicate for the key and the text paths, asked as each event comes). Behind a program that takes keys and draws nothing, the console's field and its cursor are hidden while the program owns the keys (`Controller.program_owns_keys`, which `ConsoleView:draw` asks each frame; `UserInputView.field_hidden` renders the status line alone, the field's rows background, and the notice band is not drawn): the output takes the field's row and the status line goes to the screen's bottom (see "The Output and Its Kept Rows"), and the field comes back by itself at a pause, a stop, or when the program takes keys no more. A program that wants typing shows its own field, which is drawn over the console's as before. A draft of several lines typed before the program took the keys keeps the status line where that draft put it, with as many blank rows below it, until the field comes back. A program that takes no keys and draws nothing leaves the keyboard to the console, and a program that draws keeps every unconsumed event from it, as before (`user_draw`). The reserved chords are the gate's, untouched. A key whose press reached the console before the program took keys keeps the console as its receiver (`fell_through`). The console's key card comes up only while F1 reaches the console, so not behind a program that takes keys.
 
 ### A lifecycle call ends the code that made it
 

@@ -2040,9 +2040,33 @@ function ConsoleController:pass_time(dt)
     self.model.output:to_rest()
   end
   self.field_shown = field
+  --- with no field drawn under it the output has the field's row
+  self.model.output:field_drawn(not self:fieldless())
   --- the text cursor blinks on the frames' time
   Blink.pass_time(dt)
   self.model.output.terminal:update(dt)
+end
+
+--- Whether no input field is drawn: the console's is hidden
+--- behind a program that owns the keys (ConsoleView:draw), and
+--- the program shows none of its own.
+--- @return boolean
+function ConsoleController:fieldless()
+  if not self.main_ctrl.program_owns_keys() then return false end
+  local w = love.state.user_input_controller
+  return not (w ~= nil and w:is_shown())
+end
+
+--- What the status line says while no field is drawn: the
+--- project, the file the run started from, and that it runs.
+--- @return Status
+function ConsoleController:running_status()
+  local P = self.model.projects
+  return { custom = {
+    project = P.current and P.current.name,
+    name = self.entry or 'main.lua',
+    state = 'running',
+  } }
 end
 
 ---@return number

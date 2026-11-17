@@ -251,6 +251,10 @@ function Statusline:draw(status, start_y)
         gfx.setColor(colors.fg)
         gfx.print(pos_c, sx + lw, start_text.y)
       end
+    else
+      --- a status with no cursor names things alone: what runs
+      --- behind a hidden field
+      drawLeft()
     end
   end
 

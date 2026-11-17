@@ -1368,6 +1368,163 @@ describe("the scrolled view at a transition #console", function()
     end)
 end)
 
+--- The field's row is the output's while no input field is
+--- drawn (the maintainer's ruling of November 17, 2026: "when
+--- the console input widget is hidden (when a program runs),
+--- the freed lines should be available to the program with no
+--- restriction. when the widget is back, if there's something
+--- there, it scrolls up. The status line goes to the bottom and
+--- shows only the relevant information: project, entry point
+--- name, 'running'").
+describe("the output's rows with no field under it #console",
+  function()
+    before_each(function() reset() end)
+    after_each(cleanup)
+
+    local RUNS = "function love.update() end\n"
+    --- a program that takes the keys and shows no field
+    local OWNS = "compy.input.hooks.keypressed = function()\n"
+        .. "  return true end\n" .. RUNS
+
+    local function rows() return output().terminal.height end
+
+    local function env() return K.cc:get_project_env() end
+
+    local function owning()
+      reset({ ["main.lua"] = OWNS })
+      run("run()")
+      K.frame()
+    end
+
+    --- the program's handlers go with it: the fixture keeps its
+    --- tables for the next run in this file
+    local function forget()
+      env().love.update = nil
+      env().compy.input.hooks.keypressed = nil
+    end
+
+    --- `text` written on the grid's last row
+    local function on_last_row(text)
+      output().terminal:move_to(1, rows())
+      output():write(text)
+      K.frame(100)
+      assert.equal(text, screen()[rows()])
+    end
+
+    it("are 16 in the console", function()
+      assert.equal(16, rows())
+      print_lines(1, 40)
+      assert.equal(16, rows())
+    end)
+
+    it("are 17 behind a program that owns the keys", function()
+      owning()
+      assert.equal(17, rows())
+      assert.equal(17, #screen())
+      forget()
+    end)
+
+    it("are 16 while the program shows a field of its own, and "
+      .. "17 again once it hides it", function()
+        owning()
+        env().compy.input.show { }
+        K.frame()
+        assert.equal(16, rows())
+        env().compy.input.hide()
+        K.frame()
+        assert.equal(17, rows())
+        forget()
+      end)
+
+    it("lose the 17th at a stop, what is on it rolled up and the "
+      .. "top row kept", function()
+        owning()
+        on_last_row("last")
+        local top, kept_before = screen()[1], output().kept:count()
+        K.keys("lctrl", "q")
+        K.frame()
+        assert.equal(16, rows())
+        assert.equal("last", screen()[16])
+        assert.equal(kept_before + 1, output().kept:count())
+        local k = kept()
+        assert.equal(top, k[#k])
+      end)
+
+    it("lose an empty 17th at a stop and keep nothing", function()
+      owning()
+      local before, kept_before = screen(), output().kept:count()
+      assert.equal("", before[17])
+      K.keys("lctrl", "q")
+      K.frame()
+      assert.equal(16, rows())
+      assert.equal(before[1], screen()[1])
+      assert.equal(kept_before, output().kept:count())
+    end)
+
+    it("lose the 17th at a pause", function()
+      owning()
+      on_last_row("last")
+      K.keys("lctrl", "pause")
+      K.frame()
+      K.cc:suspend()
+      K.frame()
+      assert.same("inspect", K.app_state())
+      assert.equal(16, rows())
+      assert.equal("last", screen()[16])
+      forget()
+    end)
+
+    it("roll up for a program's field that comes up over text",
+      function()
+        owning()
+        on_last_row("last")
+        env().compy.input.show { }
+        K.frame()
+        assert.equal(16, rows())
+        assert.equal("last", screen()[16])
+        forget()
+      end)
+
+    it("let gotoxy reach the 17th row while it is there, and the "
+      .. "16th otherwise", function()
+        owning()
+        env().compy.terminal.gotoxy(1, 17)
+        output():write("deep")
+        K.frame(100)
+        assert.equal("deep", screen()[17])
+        K.keys("lctrl", "q")
+        K.frame()
+        assert.equal(16, rows())
+        env().compy.terminal.clear()
+        env().compy.terminal.gotoxy(1, 17)
+        output():write("shallow")
+        K.frame(100)
+        assert.equal("shallow", screen()[16])
+      end)
+
+    it("show a scrolled view 17 rows high", function()
+      owning()
+      for i = 1, 40 do output():push("L" .. i) end
+      K.frame(100)
+      output():to_oldest()
+      assert.equal(17, #view())
+      forget()
+    end)
+
+    it("have the status line under them, naming the project, "
+      .. "the entry point and that it runs, and nothing else",
+      function()
+        owning()
+        local s = K.screen()
+        local line = { }
+        for _, t in ipairs(s.field) do line[#line + 1] = t.text end
+        local name = K.cc.model.projects.current.name
+        assert.same({ name, "main.lua", "running" }, line)
+        assert.equal(0, s.field_rows, "rows under the status line")
+        forget()
+      end)
+  end)
+
 --- The view's one rule (CanvasModel:show): its top lies between
 --- the oldest kept row and the filled view's top, however the
 --- sequence's end moves; a page never skips a row; rest is a

@@ -713,9 +713,13 @@ any way of taking keys or text, its own `love.keypressed`,
 shortcut, or its own shown field, a key or text that nothing of yours
 takes goes nowhere: it does not fall through to the console's prompt.
 Behind a program that takes keys and draws nothing, the console's field
-and its cursor are hidden while it runs, the output and the status line
-staying on show; the field comes back when the program stops (Ctrl+Q),
-pauses, or takes keys no more. A program that wants typing shows its
+and its cursor are hidden while it runs. The field's row is then your
+program's: the output has 17 rows where it had 16, `gotoxy` reaches the
+17th, and the status line sits on the screen's last row, naming the
+project, the file it runs from and "running". The field comes back when
+the program stops (Ctrl+Q), pauses, or takes keys no more, and so does
+the 16-row output when your program shows a field of its own: what is
+on the 17th row then scrolls up. A program that wants typing shows its
 own field. A program that takes no
 keys and draws nothing leaves the keyboard to the console. Pointer and
 touch events are not part of this.
