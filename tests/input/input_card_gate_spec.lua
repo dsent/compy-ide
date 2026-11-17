@@ -14,11 +14,12 @@ local F = require("tests.helpers.input_fixture")
 local K = require("tests.helpers.editor_keys")
 
 --- A program behind the console: its hooks record every key
---- and text event. A program that takes keys owns the keyboard
---- (the maintainer's ruling of November 16, 2026), so F1 reaches
---- the console, and brings its card up, only while the program
---- takes none: the program here gains its hooks once the card
---- shows (`gain`), as one whose update sets them then would.
+--- and text event. A program that can act owns all input (the
+--- maintainer's ruling of November 17, 2026), so F1 reaches the
+--- console, and brings its card up, only while the program can
+--- do nothing: then it has ended at its last line, and the input
+--- is the console's for good. Hooks it is given after that
+--- (`gain`, as no program's code could) receive nothing.
 --- @param input table? --- the run's compy.input, when it runs
 --- @return table log --- { kind, key-or-text }
 local function attach(log, input)
@@ -91,11 +92,13 @@ describe("the key card's gate #input", function()
 
   --- round 19: a repeat changes no key's receiver: the program
   --- that got Backspace's press, then dropped and took back its
-  --- hooks between, gets its release
+  --- hooks between, gets its release; its update keeps it able
+  --- to act throughout (November 17)
   it("keeps a key's receiver across a repeat the program left",
     function()
-      local log = program_with_keys()
-      local input = F.compy_input()
+      K.reset()
+      local input = F.activate_project({ update = function() end })
+      local log = attach(nil, input)
       local hooks = { }
       press("backspace")
       for _, e in ipairs({ "keypressed", "keyreleased", "textinput" }) do
@@ -151,9 +154,9 @@ describe("the key card's gate #input", function()
   describe("a key pressed under the card", function()
     it("has no release, then or after the card (round 4)",
       function()
-        --- turned around: once the program has gained keys, F1
-        --- is its own and brings no card, so the second x is
-        --- the program's, press and release
+        --- the program ended at F1, the input the console's
+        --- for good (November 17): the second F1 brings the
+        --- card again, and the program sees neither x
         local log, gain = program()
         press("f1")
         gain()
@@ -161,11 +164,11 @@ describe("the key card's gate #input", function()
         release("x")
         release("f1")
         press("f1")
-        assert.is_false(K.cc:card_shows())
+        assert.is_true(K.cc:card_shows())
         press("x")
         release("f1")
         release("x")
-        assert.same({ "press x", "release x" }, seen(log))
+        assert.same({ }, seen(log))
       end)
 
     it("has no key event after the card: Space, its text "
@@ -196,9 +199,11 @@ describe("the key card's gate #input", function()
 
   -- the review's round 6: text is held back only while the
   -- card shows, so typing after it arrives, a key from under
-  -- the card held or not
+  -- the card held or not; at the console, the program having
+  -- ended at F1 (November 17)
   describe("text after the card", function()
-    it("arrives with Shift held from under the card", function()
+    it("arrives with Shift held from under the card, at the"
+      .. " console", function()
       local log, gain = program()
       press("f1")
       gain()
@@ -208,12 +213,12 @@ describe("the key card's gate #input", function()
       press("a")
       release("a")
       release("lshift")
-      assert.same({ "text A", "press a", "release a" },
-        seen(log))
+      assert.same({ }, seen(log))
+      assert.same({ "A" }, F.console:get_text())
     end)
 
-    it("arrives while Space pressed under the card is held",
-      function()
+    it("arrives while Space pressed under the card is held, at"
+      .. " the console", function()
         local log, gain = program()
         press("f1")
         gain()
@@ -223,8 +228,8 @@ describe("the key card's gate #input", function()
         press("a")
         release("a")
         release("space")
-        assert.same({ "text a", "press a", "release a" },
-          seen(log))
+        assert.same({ }, seen(log))
+        assert.same({ "a" }, F.console:get_text())
       end)
 
     it("is held back while the card shows", function()

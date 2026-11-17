@@ -112,9 +112,10 @@ describe("a run's environment #console", function()
     reset({ ["main.lua"] = "local m = require('mod')\n"
       .. "m.count = m.count + 1\n"
       .. "print('count ' .. m.count)\n"
-      -- a pointer hook keeps the finished run live behind the
-      -- console, and leaves the keyboard to it
-      .. "compy.input.hooks.mousepressed = function() end\n",
+      -- the finished run stays live behind the console with
+      -- its picture, and, able to do nothing more, leaves the
+      -- input to it
+      .. "",
       ["mod.lua"] = "return { count = 0 }\n" })
     -- the memory project's loader, as opening a project puts
     -- its own in front of package.loaders

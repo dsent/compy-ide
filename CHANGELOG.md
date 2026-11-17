@@ -212,15 +212,17 @@ Project-author guide: `doc/input_api.md`.
   are on it. Only a bare F1 brings it up.
 - **The console keeps its output.** The last 1,000 rows that scroll off the top of the
   console's output are kept, each with its colors, and Ctrl+Up / Ctrl+Down scroll over them
-  a row at a time, PageUp / PageDown a page of 15 rows with one carried over, and, while the
+  a row at a time, PageUp / PageDown a page of one row fewer than the view (15 rows, 16
+  while a program's 17-row output shows) with one carried over, and, while the
   field is empty, Home and End go to the oldest and the newest row. A scrolled view fills
   the screen, carries the editor's continuation cue at an edge with more beyond, and stays
-  where it is while new output arrives; any other key but a modifier, a lock key or F1
-  brings the screen back, and so do a program's start, stop or pause, a key or text a
-  running program takes, and its input field coming up. The field keeps its text and
-  cursor. PageUp and PageDown no longer recall the history, which Up and
-  Down still do. While a program's input field shows, or the program takes the keys
-  itself, the keys are the program's. The key card lists Ctrl+Up/Down and Home/End.
+  where it is while new output arrives and while you type, in the console and in a
+  program's field alike. Enter on a line that runs brings the screen back, and so do an
+  answer a program's field takes, a program's start, stop or pause, and its input field
+  coming up. The field keeps its text and cursor. PageUp and PageDown no longer recall
+  the history, which Up and Down still do. While a program's input field shows, or the
+  program takes the keys itself, the keys are the program's. The key card lists
+  Ctrl+Up/Down and Home/End.
 - **Ctrl+L empties the console**: the screen, the kept output, and output still waiting
   to be written when it is pressed. A program's `compy.terminal.clear()` clears the
   screen alone, and what was on it is gone. `list_projects()` no longer clears the screen:
@@ -273,12 +275,21 @@ Project-author guide: `doc/input_api.md`.
   program is live; Ctrl+T from the editor runs `main.lua`. A file the project does not hold,
   or a folder, is refused, "There is no second.lua in this project.", before anything
   changes.
-- **A program that takes keys owns the keyboard.** While a program has its own key or text
-  handler, a key or text hook or shortcut, or its own field shown, no key or text it leaves
-  reaches the console's prompt: behind such a program that draws nothing, the prompt and its
-  cursor are hidden, the output and the status line staying, until the program stops, pauses
-  or takes keys no more. A program that wants typing shows its own field. Before, a key or text its hook did not take was typed into the console, as was a key
-  hook's text on a Compy.
+- **A program that can act owns all input.** While a program has an update or a draw, a
+  hook or a shortcut, its own field shown, or a serial handler, every key, text, mouse and
+  touch event is the program's, and what it does not take goes nowhere; the console's field
+  and cursor are hidden. The prompt's row is the program's meanwhile: the output has 17 rows,
+  `compy.terminal.gotoxy` reaches the 17th, and the status line is the screen's last row,
+  showing the project, the file the program runs from and "running". When a field comes
+  back, what is on the 17th row scrolls up. The output keeps its own
+  scrolling keys and the wheel when the program does not take them, so a program that only
+  prints can be scrolled. A program that can do nothing more, its picture staying or not,
+  gives the console back. Before, a key or text a program left was typed into the console.
+- **The mouse wheel scrolls the console's output**, three rows a notch.
+- **Ctrl+Pause pauses any program that can act**, one with only key handlers and no update
+  or draw included: before, it did nothing there. The pause gives the console and its field
+  back, holds the program's serial handlers too (before, they went on), and `continue()`
+  resumes the program as it was, idle or running.
 - **Ctrl+R restarts a live program only.** It restarts a program that runs, is paused or
   idles behind the console, from the file it runs from; in the console with no program, and
   in the editor, it does nothing: the idle console's key card lists it among the other keys,

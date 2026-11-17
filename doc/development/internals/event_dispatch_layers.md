@@ -135,50 +135,26 @@ resolved: pointer joined the one chain (`../decisions/input.md`, D-ONE-LIFETIME)
 ---
 ## What becomes of an event nobody consumed
 
-**It goes back to the console.** `occupy_input` binds every channel to the project route, and the
-route's walk reports whether anybody consumed (`projectInputController.lua`, `dispatch`: a shortcut
-or hook returning truthy, or a shown widget). LÖVE discards a handler's return, so that verdict has
-to be spent at the binding site or not at all — `occupy_input` spends it, calling
-`Controller._defaults[event]`, the console's own handler for that channel, when the walk came back
-falsey.
+**It goes nowhere, unless the program can no longer act** (the maintainer's ruling of 2026-11-17:
+"all input is the program's while it runs"). `occupy_input` binds every channel to the project
+route, and the route's walk reports whether anybody consumed (`projectInputController.lua`,
+`dispatch`: a shortcut or hook returning truthy, or a shown widget). Before the walk, the route
+asks `can_act` (`controller.lua`): an update or a draw, a hook or a non-empty shortcut table on any
+channel, a shown field, or a serial handler. While the program can act, every event is its own and
+what its walk leaves goes nowhere, with one exception: a key press that is one of the output's
+scrolling keys, or a wheel event, scrolls the console's output (`ConsoleController:output_key`,
+`output_wheel`; ruling 1.1, "the scrollback area is visible so it takes keys and mouse events that
+normally belong to it, if the program doesn't take these keys and events"). Once the program can
+act no more it has ended at its last line: that event releases the route
+(`release_keyboard_route`) and goes to the console's own handler, `Controller._defaults[event]`;
+the two derived clicks (`singleclick`, `doubleclick`) have no console default by design and go
+nowhere, without raising. The predicate is asked as the event comes, before the walk, since hooks
+and shortcuts come and go; the hook table is the one record, a program's own handlers being seeded
+there.
 
-Three conditions hold it back, and they are the whole of the rule:
-
-- **The project must not own the screen.** The gate is `user_draw`, the flag `hook_draw` sets. A
-  project that took over `love.draw` is painting over the console, and typing into a prompt you
-  cannot see is not a service. `Controller.user_is_blocking()` cannot serve as the reader here: it
-  returns `user_update or user_draw`, so it would also shut the gate on a project that hooks only
-  `update` — exactly the class this serves.
-- **The channel must have a console handler.** The console installs ten channels; the route binds
-  twelve. The two derived clicks (`singleclick`, `doubleclick`) have no console default by design,
-  so an unconsumed one falls through to nothing, without raising.
-- **A program that takes keys owns the keyboard** (the maintainer's ruling of 2026-11-16: "'Falling
-  through' of only unhandled keys to the console sounds quite unintuitive"). While it has any way
-  of taking keys or text (its own `love.keypressed`, `love.keyreleased` or `love.textinput`; a
-  key or text hook; a key or text shortcut; its own shown field), no key press, repeat, release
-  or text falls through to the console (`takes_keys` in `controller.lua`, asked as each key or
-  text event comes and before the chain runs, since hooks and shortcuts come and go; the hook
-  table is the one record, a program's own handlers being seeded there, so one whose hook the
-  program took away takes no keys). An empty shortcut table, and a
-  pointer or touch hook or shortcut, take no keys. A key whose press fell through to the console
-  before the program took keys is the console's: its repeats and release go there
-  (`fell_through`, read by the gate). Pointer and touch events are not part of this: they fall
-  through as before, held back only by `user_draw`.
-
-**Is this exact base parity?** Per channel, no longer for the keyboard. At the PR base, binding
-was per channel: a project that defined no handler for a channel left it with the console, and one
-that did displaced the console's outright. The pointer and touch channels keep that. The keyboard
-does not since 2026-11-16: a program that takes keys on any keyboard channel owns all three, so a
-program with only `love.textinput` also keeps an otherwise unhandled key press from the console,
-where at the base it reached it.
-
-**With two deliberate narrowings, then; the first is the draw gate.** At the base there was no draw gate, so a project that took over
-`love.draw` and defined no keyboard handler left `love.keypressed` with the console — **you could
-type into a prompt you could not see**. The gate keeps that closed. It is not a regression to keep
-it closed: today the route eats the event anyway, so this is base-era behaviour the branch had
-already ended, and the repair declines to bring it back. **Measured over the shipped corpus, the
-narrowing has no member**: every example that takes over `love.draw` either hooks a keyboard channel
-or shows a widget that stays shown, and a shown widget consumes before the gate is consulted.
+**Is this base parity?** No longer. At the PR base binding was per channel: a project that defined
+no handler for a channel left it with the console. Since 2026-11-17 a program that can act on any
+channel, or that updates or draws, owns them all.
 
 The regression this pays, with the base comparison and the per-example measurement, is
 [`../technical_debt/input.md`](../technical_debt/input.md), `T-ROUTE-EATS-UNCONSUMED`.

@@ -80,10 +80,11 @@ a project must be selected first.
 The console keeps the last 1,000 rows that scroll off the top of
 its output, and the keys above scroll over them. A scrolled view
 fills the screen and is marked at its edges where more lies
-beyond; new output leaves it where it is, and any other key but
-a modifier, a lock key or <kbd>F1</kbd> brings the screen back,
-as do a program's start, stop or pause and a key the program
-takes. Each line the console runs is
+beyond. New output leaves it where it is, and so does typing:
+you can look at what scrolled away while you write the next
+line. <kbd>Enter</kbd> on a line that runs brings the screen
+back, as do a program's start, stop or pause. Each line the
+console runs is
 written to the output in blue before it runs, and its error
 after it, in red. A command that refuses says why in the output,
 in orange. The band above the status line belongs to the line
@@ -93,8 +94,12 @@ when <kbd>Enter</kbd> begins its next line instead of running it.
 <kbd>Ctrl</kbd>+<kbd>L</kbd> empties the console: the
 screen, the kept rows and output still waiting to be written;
 `compy.terminal.clear()` from a program clears the screen alone.
-While a program's input field shows, or the program takes the
-keys itself, the scrolling keys are the program's.
+The mouse wheel scrolls the output too. While a program runs and
+can still act, all input is the program's and the console's
+field is hidden, but the output keeps its scrolling keys and the
+wheel for itself whenever the program does not take them; a
+program with its own `love.keypressed` takes every key, which
+leaves the wheel.
 
 Each combination is a key of its own: a key pressed with a modifier the
 table does not name does nothing. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> is not

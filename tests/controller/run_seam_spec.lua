@@ -23,6 +23,16 @@ local function run(line)
   K.frame()
 end
 local function env() return K.cc:get_project_env() end
+--- Code run behind a live program, which owns the input, so no
+--- line can be typed there (November 17): run as the IDE's own
+--- call in the program's environment
+local function behind(code)
+  local f = assert(loadstring(code))
+  setfenv(f, env())
+  local r = f()
+  K.frame()
+  return r
+end
 local function said(s) return K.console_text():find(s, 1, true) ~= nil end
 
 describe('the run seam #console', function()
@@ -92,7 +102,9 @@ compy.serial.onLine = function(s) print('OLD_LINE:' .. s) end
 ]]})
     run('run()')
     K.write_outside('main.lua', 'fresh = true\n')
-    run('run()')
+    -- the program's serial handler can act: it owns the input,
+    -- and the rerun is the IDE's own
+    behind('run()')
     assert.is_true(env().fresh)
     SerialPort.dispatcher:push('line', 'hello')
     assert.same({}, SerialPort.dispatcher:pump())
@@ -265,7 +277,7 @@ end
   --- resumes with it
   for _, case in ipairs({
     { "Ctrl+Q", function() K.keys('lctrl', 'q') end },
-    { "stop()", function() run('stop()') end },
+    { "stop()", function() behind('stop()') end },
     -- the close itself: close_project() would reopen the
     -- default project from the real directory
     { "a project's close", function() K.cc:_close_project() end },
@@ -709,7 +721,7 @@ observed_mouse = {
   love.mouse.isVisible(), love.mouse.getCursor()
 }
 ]])
-    run('run()')
+    behind('run()')
     assert.same({false, false, true}, env().observed_mouse)
   end)
 
@@ -780,7 +792,7 @@ end
     F.session.mousepressed(10, 10, 1, false, 1)
     F.session.mousereleased(10, 10, 1, false, 1)
     assert.equal(1, env().clicks)
-    run('run()')
+    behind('run()')
     assert.equal(0, env().clicks)
     F.session.mousepressed(10, 10, 1, false, 1)
     F.session.mousereleased(10, 10, 1, false, 1)
@@ -815,14 +827,17 @@ end
     assert.same({1, 1}, {resets, clears})
   end)
 
-  it('keeps typed writes during a run, and clears them at its stop',
-    function()
+  --- turned around on November 17: the program owns the input,
+  --- so no line is typed during its run; its globals go at the
+  --- stop
+  it('takes no typed line during a run, and clears its globals at'
+    .. ' its stop', function()
       reset({['main.lua'] = 'x = 42\nfunction love.update() end\n'})
       run('run()')
       local previous = env()
       run('y = 43')
       assert.equal(previous, env())
-      assert.equal(43, env().y)
+      assert.is_nil(env().y)
       K.keys('lctrl', 'q')
       run("print('READ:' .. tostring(x) .. ':' .. tostring(y))")
       assert.is_true(said('READ:nil:nil'), K.console_text())

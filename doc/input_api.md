@@ -707,18 +707,26 @@ A hook you assign yourself is the other case: you have met the truthy
 convention by writing it, so `compy.input.hooks.keypressed` falls
 through on falsey like everything else in the chain.
 
-**A program that takes keys owns the keyboard.** While your program has
-any way of taking keys or text, its own `love.keypressed`,
-`love.keyreleased` or `love.textinput`, a key or text hook, a key or text
-shortcut, or its own shown field, a key or text that nothing of yours
-takes goes nowhere: it does not fall through to the console's prompt.
-Behind a program that takes keys and draws nothing, the console's field
-and its cursor are hidden while it runs, the output and the status line
-staying on show; the field comes back when the program stops (Ctrl+Q),
-pauses, or takes keys no more. A program that wants typing shows its
-own field. A program that takes no
-keys and draws nothing leaves the keyboard to the console. Pointer and
-touch events are not part of this.
+**A program that can act owns all input.** While your program can still
+act, that is while it has a `love.update` or `love.draw`, a hook or a
+shortcut on any channel (its own `love.*` handlers among them), its own
+shown field, or a serial handler, every key, text, mouse and touch event
+is yours, and one that nothing of yours takes goes nowhere: the console
+does not get it. The console's field and its cursor are hidden while it
+runs, and its row is then your program's: the output has 17 rows where it
+had 16, `gotoxy` reaches the 17th, and the status line sits on the
+screen's last row, naming the project, the file it runs from and
+"running". The field comes back when the program stops (Ctrl+Q), pauses
+(Ctrl+Pause), or can do nothing more, and so does the 16-row output when
+your program shows a field of its own: what is on the 17th row then
+scrolls up. A program that wants typing shows its own field. The one exception:
+the output stays in use, so a key press or a wheel event you leave that
+belongs to it scrolls it (Ctrl+Up and Ctrl+Down, PgUp and PgDn, Home and
+End, and the wheel). An event is yours when a shortcut or a hook for it
+returns true, or your shown field takes it; a `love.keypressed` of yours
+takes every key press, so behind it only the wheel scrolls the output. A
+program whose code has ended and that can do nothing more gives all input
+back to the console, its picture staying.
 
 **What this means in practice:** if your project shows the input widget
 *and* handles keys, write `compy.input.hooks.keypressed = function(k)`
@@ -874,7 +882,7 @@ yourself.
 | `ctrl+r` | restarts a program that runs, is paused or idles behind the console, from the file it runs from; does nothing when none does (a packaged build restarts always) | always |
 | `ctrl+t` | switches between running and the editor | development only |
 | `ctrl+q` | stops the run and returns to the console; the project stays open. From the editor, leaves it for the console | development only |
-| `ctrl+pause` | suspends the run | development only |
+| `ctrl+pause` | suspends the run of a program that runs or can still act, one with only key handlers included; the console and its field come back, and `continue()` resumes it as it was | development only |
 | `ctrl+alt+p` / `ctrl+alt+shift+p` | starts / stops the profiler | profiling builds |
 | `f10` | cycles the FPS overlay corner | profiling builds |
 

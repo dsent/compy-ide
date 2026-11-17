@@ -368,13 +368,13 @@ love.handlers.keypressed (k, scancode, isrepeat)
          SEEDED hook (one captured from the project's own
          love.*) consumes unconditionally, D-HOOKS-SEEDED's
          2026-09-08 amendment.
-           → nobody consumed: back to the console's own handler
-             for that channel, unless the project owns
-             love.draw (Controller._defaults[event], gated on
-             user_draw; the two derived clicks have no console
-             default and fall through to nothing), and, for a
-             key or text event, unless the program takes keys
-             (takes_keys: then it goes nowhere)
+           → nobody consumed: nowhere while the program can
+             act (can_act), but the output's scrolling keys and
+             the wheel, which scroll the console's output
+             (ruling 1.1); once it can act no more, the route
+             is released and the event is the console's
+             (Controller._defaults[event]; the two derived
+             clicks have no console default and go nowhere)
 ```
 
 **The last line is a repair, not a tier.** The walk is still three consumers; what changed is that
@@ -547,9 +547,9 @@ binding to apply, deliberately not a rule the tier enforces.
 - **Ctrl+Up/Ctrl+Down, PageUp/PageDown, and Home/End with an empty field**: scroll the output
   over its kept rows, a row, a page of 15 rows with one carried over, and to the oldest or the
   newest row; they recall nothing and leave the field's text and cursor as they are. With text
-  in the field, Home and End are the field's own keys. Every other key brings the screen back
-  before it does its work (`ConsoleController:_back_to_screen`); a modifier or a lock key on
-  its own and F1 leave the view. See `console.md`, "The Output and Its Kept Rows".
+  in the field, Home and End are the field's own keys. Typing and every other key leave a
+  scrolled view where it is; Enter on a line that runs brings the screen back. See
+  `console.md`, "The Output and Its Kept Rows", for everything that does.
 - **Up/Down at input boundary**: history navigation, through the widget's `on_limit_reached`
   (below). The walk is the classic shell's (`model/input/history.lua`): the entries are the lines
   that ran, and walking never changes one. Up from the line being typed keeps it in a slot below

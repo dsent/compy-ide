@@ -103,20 +103,23 @@ describe("round six #editor #spec", function()
         assert.is_false(K.cc.run_live)
       end)
 
+      -- turned around on November 17: a program that runs on owns
+      -- all input, whether it takes a key or not: the keys and
+      -- F1 are its own, and no console card comes up
       spec_it("IS3.16 Show the key card: over a program that "
           .. "runs on and takes no key, the keys are the "
-          .. "console's, and so is the card", function()
+          .. "program's, and no card comes up", function()
         K.reset({ ["main.lua"] = UPDATES })
         K.open()
         K.keys("lctrl", "t")
         assert.same("running", K.app_state())
         K.type("a")
-        assert.same("a", K.console_draft())
+        assert.same("", K.console_draft())
         K.hold("f1")
-        assert.is_not_nil(K.key_card())
+        assert.is_nil(K.key_card())
         K.type("y")
         K.release("f1")
-        assert.same("a", K.console_draft())
+        assert.same("", K.console_draft())
         K.keys("lctrl", "q")
         assert.is_false(K.cc.run_live)
       end)

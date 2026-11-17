@@ -128,24 +128,27 @@ describe("round seven #editor #spec", function()
         K.release("f1")
       end)
 
-      -- a guard: the record outlives the run that stops
-      spec_it("IS3.16 Show the key card: the console's card "
-          .. "stays while a run stops under it, and the keys "
-          .. "wait for F1's release", function()
+      -- a guard: the card is decided by F1's press. Pressed
+      -- while the program ran, F1 was the program's (November
+      -- 17): no card comes, not even once the run has stopped
+      -- under it, until F1 is pressed again
+      spec_it("IS3.16 Show the key card: F1 pressed while a run "
+          .. "goes on brings no card, even once the run stops under "
+          .. "it, and the next press does", function()
         K.reset({ ["main.lua"] = STOPS_SOON })
         K.open()
         K.keys("lctrl", "t")
         assert.same("running", K.app_state())
         K.hold("f1")
-        assert.is_not_nil(K.key_card())
+        assert.is_nil(K.key_card())
         for _ = 1, 4 do K.frame() end
         assert.is_false(K.cc.run_live)
         assert.same("ready", K.app_state())
-        assert.is_not_nil(K.key_card())
-        K.type("y")
-        assert.same("", K.console_draft())
-        K.release("f1")
         assert.is_nil(K.key_card())
+        K.release("f1")
+        K.hold("f1")
+        assert.is_not_nil(K.key_card())
+        K.release("f1")
         K.type("y")
         assert.same("y", K.console_draft())
       end)

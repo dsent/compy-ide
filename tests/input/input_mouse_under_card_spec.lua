@@ -57,6 +57,18 @@ local function log()
   return K.cc:get_project_env().LOG
 end
 
+--- A program that can act owns all input, F1 too (November 17):
+--- the console's card comes up behind a program only while it
+--- is paused. Run IDLES with an update, and pause it.
+local function paused(program)
+  K.reset({ ["main.lua"] = program .. "function love.update() end\n" })
+  K.start()
+  K.keys("lctrl", "pause")
+  K.frame()
+  if K.app_state() == "snapshot" then K.cc:suspend() end
+  assert.same("inspect", K.app_state())
+end
+
 describe("the mouse under the key card #input", function()
   setup(K.setup)
   teardown(K.teardown)
@@ -94,19 +106,18 @@ describe("the mouse under the key card #input", function()
     assert.same({ 1, 2 }, { K.cc.input:get_cursor_pos() })
   end)
 
-  it("reaches no program idling behind the console's card",
-    function()
+  --- turned around on November 17: a program that can act owns
+  --- all input, so no console card comes up over it
+  it("brings no card over a program that can act: F1 and the"
+    .. " mouse are its own", function()
       K.reset({ ["main.lua"] = IDLES })
       K.start()
       assert.same("ready", K.app_state())
       assert.is_true(K.cc.run_live)
       K.hold("f1")
-      assert.is_not_nil(K.key_card())
-      every_mouse_event()
-      K.release("f1")
-      assert.same({ }, log())
-      -- the card away, the program has the mouse again
+      assert.is_nil(K.key_card())
       click(3)
+      K.release("f1")
       K.frame(0.5)
       assert.same({ "mousepressed", "mousereleased",
         "singleclick" }, log())
@@ -174,38 +185,55 @@ describe("the mouse under the key card #input", function()
       return function() return n end
     end
 
-    it("reaches no program idling behind the console's card",
+    it("reaches no paused program behind the console's card",
       function()
-        K.reset({ ["main.lua"] = IDLES .. TOUCHES })
-        K.start()
-        assert.is_true(K.cc.run_live)
+        paused(IDLES .. TOUCHES)
         K.hold("f1")
         assert.is_not_nil(K.key_card())
         touch("t1")
         K.release("f1")
         assert.same({ }, touches())
-        touch("t2")
-        assert.same({ "touchpressed", "touchmoved",
-          "touchreleased" }, touches())
       end)
 
-    it("a touch begun under the card ends there, and one begun "
-        .. "before it gets its release under it", function()
-      K.reset({ ["main.lua"] = IDLES .. TOUCHES })
-      K.start()
+    --- the card comes up behind a program only while it is
+    --- paused (November 17), and a paused program gets no touch,
+    --- begun under the card or before it
+    it("a touch begun under the card or before it reaches no"
+        .. " paused program", function()
+      paused(IDLES .. TOUCHES)
       K.hold("f1")
       touch("t1", "press")
       K.release("f1")
       touch("t1", "move")
       touch("t1", "release")
-      assert.same({ }, touches())
       touch("t2", "press")
       K.hold("f1")
       touch("t2", "move")
       touch("t2", "release")
       K.release("f1")
-      assert.same({ "touchpressed", "touchreleased" }, touches())
+      assert.same({ }, touches())
     end)
+
+    --- p2: a release goes only to the receiver of its touch's
+    --- start, the console's own field included
+    it("gives the console's field the release of a touch begun"
+      .. " before the card", function()
+        K.reset()
+        local ends = 0
+        local field = K.cc.input
+        local was = field.touchreleased
+        field.touchreleased = function(...)
+          ends = ends + 1
+          return was(...)
+        end
+        finally(function() field.touchreleased = was end)
+        touch("t1", "press")
+        K.hold("f1")
+        assert.is_not_nil(K.key_card())
+        touch("t1", "release")
+        K.release("f1")
+        assert.same(1, ends)
+      end)
 
     it("reaches not the console's field under its card", function()
       K.reset()
@@ -241,32 +269,140 @@ describe("the mouse under the key card #input", function()
       end)
   end)
 
+  --- the card comes up behind a program only while it is paused
+  --- (November 17): the console is the receiver then, and what it
+  --- is handed is recorded (p1: the paused program's empty log
+  --- alone observed nothing)
   describe("leaves no half click", function()
+    --- the button events the console's field is handed
+    local function console_mouse()
+      local seen = { }
+      local field = K.cc.input
+      local press, release = field.mousepressed, field.mousereleased
+      field.mousepressed = function(...)
+        seen[#seen + 1] = "mousepressed"
+        return press(...)
+      end
+      field.mousereleased = function(...)
+        seen[#seen + 1] = "mousereleased"
+        return release(...)
+      end
+      finally(function()
+        field.mousepressed, field.mousereleased = press, release
+      end)
+      return seen
+    end
+
     it("a press under the card holds back its release after "
         .. "the card", function()
-      K.reset({ ["main.lua"] = IDLES })
-      K.start()
+      paused(IDLES)
+      local seen = console_mouse()
       local x, y = on_field(1)
       K.hold("f1")
       F.session.mousepressed(x, y, 1, false, 1)
       K.release("f1")
       F.session.mousereleased(x, y, 1, false, 1)
       K.frame(0.5)
+      assert.same({ }, seen)
       assert.same({ }, log())
     end)
 
-    it("a press before the card gets its release under it",
+    --- p2: a release goes only to the receiver of its press: a
+    --- button the program got the press of, released while the
+    --- console has the pointer, reaches neither
+    it("a press the program got gives the console no release",
       function()
-        K.reset({ ["main.lua"] = IDLES })
+        K.reset({ ["main.lua"] = IDLES .. "function love.update() end\n" })
         K.start()
+        local x, y = on_field(1)
+        F.session.mousepressed(x, y, 1, false, 1)
+        assert.same({ "mousepressed" }, log())
+        K.keys("lctrl", "pause")
+        K.frame()
+        if K.app_state() == "snapshot" then K.cc:suspend() end
+        assert.same("inspect", K.app_state())
+        local seen = console_mouse()
+        K.hold("f1")
+        F.session.mousereleased(x, y, 1, false, 1)
+        K.release("f1")
+        assert.same({ }, seen)
+        assert.same({ "mousepressed" }, log())
+      end)
+
+    it("a press before the card gets its release under it, at"
+        .. " the console, not the paused program", function()
+        paused(IDLES)
+        local seen = console_mouse()
         local x, y = on_field(1)
         F.session.mousepressed(x, y, 1, false, 1)
         K.hold("f1")
         assert.is_not_nil(K.key_card())
         F.session.mousereleased(x, y, 1, false, 1)
         K.release("f1")
-        assert.same({ "mousepressed", "mousereleased" },
-          { log()[1], log()[2] })
+        assert.same({ "mousepressed", "mousereleased" }, seen)
+        assert.same({ }, log())
       end)
   end)
 end)
+
+-- p3: a pointer's release goes where its press went when the
+-- route itself goes back to the console, the press first or the
+-- release
+describe("a pointer across the end of a program's acting #input",
+  function()
+    setup(K.setup)
+    teardown(K.teardown)
+    after_each(K.cleanup)
+
+    --- the button and touch events the console's field is handed
+    local function console_events()
+      local seen = { }
+      local field = K.cc.input
+      local saved = { }
+      for _, m in ipairs({ "mousepressed", "mousereleased",
+        "touchpressed", "touchreleased" }) do
+        saved[m] = field[m]
+        field[m] = function(...)
+          seen[#seen + 1] = m
+          return saved[m](...)
+        end
+      end
+      finally(function()
+        for m, f in pairs(saved) do field[m] = f end
+      end)
+      return seen
+    end
+
+    it("gives the console both halves of the first click and touch"
+      .. " after a program that can do nothing more", function()
+        K.reset({ ["main.lua"] = "X = 1\n" })
+        K.start()
+        assert.is_true(K.cc.run_live)
+        local seen = console_events()
+        local x, y = on_field(1)
+        F.session.mousepressed(x, y, 1, false, 1)
+        F.session.mousereleased(x, y, 1, false, 1)
+        local H = love.handlers
+        H.touchpressed("t1", x, y, 0, 0, 1)
+        H.touchreleased("t1", x, y, 0, 0, 1)
+        assert.same({ "mousepressed", "mousereleased",
+          "touchpressed", "touchreleased" }, seen)
+      end)
+
+    it("gives the console no release of a press the program got as"
+      .. " it stopped acting", function()
+        K.reset({ ["main.lua"] = "compy.input.hooks.mousepressed ="
+          .. " function() compy.input.hooks.mousepressed = nil end\n"
+          .. "compy.input.hooks.touchpressed ="
+          .. " function() compy.input.hooks.touchpressed = nil end\n" })
+        K.start()
+        local seen = console_events()
+        local x, y = on_field(1)
+        F.session.mousepressed(x, y, 1, false, 1)
+        local H = love.handlers
+        H.touchpressed("t1", x, y, 0, 0, 1)
+        F.session.mousereleased(x, y, 1, false, 1)
+        H.touchreleased("t1", x, y, 0, 0, 1)
+        assert.same({ }, seen)
+      end)
+  end)

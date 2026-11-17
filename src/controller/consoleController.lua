@@ -282,10 +282,13 @@ end
 --- widget's highlighter to whichever bound it last. The
 --- evaluator is part of what the run owns.
 --- @param cfg table
-local function build_input_widget(cfg)
+--- @param on_accepted function --- called as the field takes an
+---   answer
+local function build_input_widget(cfg, on_accepted)
   local eval = Evaluator.plain('text input')
   local model = UserInputModel(cfg, eval)
   local widget = UserInputController(model)
+  widget.on_accepted = on_accepted
   -- The project widget's one shipped default, seated on the
   -- LEAST-DESTRUCTIVE basis: submit consumes the content,
   -- because a project processes a submission through its
@@ -707,7 +710,11 @@ function ConsoleController:_run_project(name, stopped, entry)
       -- quickswitch call stop+run directly, never re-open:
       -- construct-at-open would leave every restart on the
       -- previous run's widget.
-      build_input_widget(self.cfg)
+      --- an answer the program's field takes brings the output's
+      --- screen back, as a console line that runs does
+      build_input_widget(self.cfg, function()
+        self.model.output:to_rest()
+      end)
       -- The program speaks for the board from here on; the
       -- console's own listeners wait until it has stopped.
       SerialPort:programStarted()
@@ -746,7 +753,13 @@ function ConsoleController:_run_project(name, stopped, entry)
           -- stopped, so its handlers stay, but it is no longer
           -- the one speaking and the console listens again.
           SerialPort:programIdle()
-          love.state.app_state = 'ready'
+          --- a pause the first lines asked for goes on, and
+          --- continue() resumes the program idle (p1)
+          if love.state.app_state == 'snapshot' then
+            love.state.paused_from = 'ready'
+          else
+            love.state.app_state = 'ready'
+          end
           -- Without a widget or a pointer handler nothing of the
           -- program answers the pointer, and the console is on
           -- screen: it needs its mouse now, even if keys or the
@@ -1648,7 +1661,11 @@ local function build_simple_surface(input, get_env)
         armed = { widget = love.state.user_input_controller,
           config = save_config(input) }
       end
-      input.configure(ASK_FLAGS)
+      --- a copy: configure merges the widget's callbacks into
+      --- the table it is given, and the shared flags would keep a
+      --- stopped program's callbacks and environment alive (Beads
+      --- compy-ide-ask-flags-keep-a-stopped-programs-callbacks)
+      input.configure(table.clone(ASK_FLAGS))
       local cb = input.callbacks
       cb.on_text_entered = function(t) conclude(t) end
       cb.after_cancel = function() conclude(nil) end
@@ -2043,8 +2060,10 @@ function ConsoleController.prepare_project_env(cc)
   end
   project_env.continue         = function()
     if love.state.app_state == 'inspect' then
-      -- resume
-      love.state.app_state = 'running'
+      -- resume, in the state the pause found the program in
+      love.state.app_state = love.state.paused_from or 'running'
+      love.state.paused_from = nil
+      SerialPort:programContinued()
       cc.model.output:to_rest()
       cc.model.screen:resume()
       cc.main_ctrl.restore_user_handlers(cc)
@@ -2149,9 +2168,41 @@ function ConsoleController:pass_time(dt)
     self.model.output:to_rest()
   end
   self.field_shown = field
+  self:fit_output()
   --- the text cursor blinks on the frames' time
   Blink.pass_time(dt)
   self.model.output.terminal:update(dt)
+end
+
+--- Whether no input field is drawn: the console's is hidden
+--- behind a program that owns the input (ConsoleView:draw), and
+--- the program shows none of its own.
+--- @return boolean
+function ConsoleController:fieldless()
+  if not self.main_ctrl.program_owns_input() then return false end
+  local w = love.state.user_input_controller
+  return not (w ~= nil and w:is_shown())
+end
+
+--- With no field drawn under it the output has the field's row.
+--- Asked at each frame's step and again as the screen is drawn
+--- (ConsoleView:draw): a program's update that shows or hides
+--- its field comes between the two, and the grid drawn is as
+--- high as the screen that frame shows.
+function ConsoleController:fit_output()
+  self.model.output:field_drawn(not self:fieldless())
+end
+
+--- What the status line says while no field is drawn: the
+--- project, the file the run started from, and that it runs.
+--- @return Status
+function ConsoleController:running_status()
+  local P = self.model.projects
+  return { custom = {
+    project = P.current and P.current.name,
+    name = self.entry or 'main.lua',
+    state = 'running',
+  } }
 end
 
 ---@return number
@@ -2196,6 +2247,10 @@ function ConsoleController:_evaluate_input()
         --- the band is the field's, for a line not taken (the
         --- maintainer's rulings of November 15 and 16, 2026)
         inter:remember()
+        --- a line that runs brings the output's screen back from
+        --- a scrolled view, so that its echo and what it prints
+        --- are seen; typing it did not (CanvasModel:to_rest)
+        self.model.output:to_rest()
         self.model.output:echo(text)
         --- a typed line leaves state for a flush to end, as a
         --- live run does
@@ -2324,14 +2379,23 @@ function ConsoleController:suspend()
   self.paused_mouse = get_mouse()
   set_mouse(CONSOLE_MOUSE)
   self.main_ctrl.save_user_handlers(runner_env['love'])
+  --- the program's serial handlers wait with it (p1)
+  SerialPort:programPaused()
   self.main_ctrl.set_default_handlers(self, self.view)
 end
 
 --- @param msg string?
+--- A program that runs, or one idle behind the console that
+--- can still act (its key handlers alone, say), pauses: the
+--- console and its field come back, and continue() gives the
+--- program back the state it was paused in
 function ConsoleController:suspend_run(msg)
-  if love.state.app_state ~= 'running' then
+  local st = love.state.app_state
+  if st ~= 'running' and not (st == 'ready' and self.run_live
+        and self.main_ctrl.program_owns_input()) then
     return
   end
+  love.state.paused_from = st
   love.state.app_state = 'snapshot'
   love.state.suspend_msg = msg
 end
@@ -2637,6 +2701,7 @@ function ConsoleController:flush_program_state(call_exit)
   if kb and kb.setKeyRepeat then kb.setKeyRepeat(true) end
   if kb and kb.setTextInput then kb.setTextInput(true) end
   self.run_live = false
+  love.state.paused_from = nil
   --- the entry point lives with the run (the maintainer's
   --- ruling of November 16, 2026)
   self.entry = nil
@@ -2932,7 +2997,6 @@ function ConsoleController:textinput(t)
     --- its key press. A chord's own glyph never comes here:
     --- the event gate stops it (Key.chord_text)
     input:clear_error()
-    self.model.output:to_rest()
     input:textinput(t)
   end
 end
@@ -2985,26 +3049,48 @@ local ACTIONS = {
   end,
 }
 
---- The keys that move the output's view (consoleKeys.lua);
---- Home and End only while the field is empty
+--- The output's own scrolling actions (consoleKeys.lua), which
+--- it takes behind a program that leaves them (output_key)
 local SCROLLS = {
   scroll_row = true, scroll_page = true, scroll_end = true,
 }
 
---- Every key but the ones that scroll brings the screen back
---- before it does its work, so that no one types under an
---- output whose newest row is hidden
+--- Rows a wheel's notch scrolls the output
+local WHEEL_ROWS = 3
+
+--- The output stays in use behind a program that owns the
+--- input (ruling 1.1 of November 17, 2026: "the scrollback
+--- area is visible so it takes keys and mouse events that
+--- normally belong to it, if the program doesn't take these
+--- keys and events"): a key the program's chain left that is
+--- one of the output's scrolling keys scrolls it. Home and End
+--- go to the oldest row and back to rest, the field being
+--- hidden. Nothing else of the console's keys acts.
 --- @param k string
---- @param entry table? --- the console's table's entry
-function ConsoleController:_back_to_screen(k, entry)
-  local scrolls = entry and SCROLLS[entry.act]
-      and (entry.act ~= 'scroll_end' or self.input:is_empty())
-  --- a modifier or a lock on its own, and the help key, leave
-  --- the view where it is
-  if scrolls or Key.is_lone(k) or k == KeyCard.KEY then
-    return
+--- @param isrepeat boolean?
+--- @return boolean scrolled
+function ConsoleController:output_key(k, isrepeat)
+  local entry = ConsoleKeys:lookup('live', Key.combo(k))
+  if not (entry and SCROLLS[entry.act]) then return false end
+  if isrepeat and not entry.repeats then return true end
+  local out = self.model.output
+  if entry.act == 'scroll_end' then
+    if k == 'home' then out:to_oldest() else out:to_rest() end
+  else
+    ACTIONS[entry.act](self, k)
   end
-  self.model.output:to_rest()
+  return true
+end
+
+--- The wheel scrolls the output, a notch WHEEL_ROWS rows, in
+--- the console and behind a program that left it (ruling 1.1)
+--- @param y number
+function ConsoleController:output_wheel(y)
+  if not y or y == 0 then return end
+  local dir = y > 0 and -1 or 1
+  for _ = 1, WHEEL_ROWS * math.abs(y) do
+    self.model.output:scroll_row(dir)
+  end
 end
 
 --- In the console a key is looked up by its full chord in the
@@ -3048,7 +3134,6 @@ function ConsoleController:keypressed(k, sc, isrepeat)
     self:_terminal_test()
     return
   end
-  self:_back_to_screen(k, entry)
 
   -- A message is a hint that blocks nothing (IS3.14): the
   -- next key dismisses it and does its usual work, Enter and
@@ -3101,7 +3186,10 @@ function ConsoleController:mousereleased(
     if self.cfg.editor.mouse_enabled then
       self.editor.input:mousereleased(x, y, btn, touch, presses)
     end
-  elseif not self:key_card() then
+  else
+    --- a release goes where its press went: the gate drops the
+    --- release of a press the card held back, and hands this
+    --- one the release of a press made before the card (p1)
     self.input:mousereleased(x, y, btn, touch, presses)
   end
 end
@@ -3129,7 +3217,7 @@ function ConsoleController:wheelmoved(x, y)
       self.editor.input:wheelmoved(x, y)
     end
   elseif not self:key_card() then
-    self.input:wheelmoved(x, y)
+    self:output_wheel(y)
   end
 end
 
@@ -3163,7 +3251,10 @@ function ConsoleController:touchreleased(id, x, y,
       self.editor.input:touchreleased(id, x, y,
         dx, dy, pressure)
     end
-  elseif not self:key_card() then
+  else
+    --- a release goes where its touch began: the gate drops the
+    --- release of one the card held back, and hands this one the
+    --- release of one begun before the card (p2)
     self.input:touchreleased(id, x, y, dx, dy, pressure)
   end
 end

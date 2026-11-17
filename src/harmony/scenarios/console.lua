@@ -132,6 +132,36 @@ local function console()
     hm_done()
   end)
 
+  -- What a scenario reads as the console's text holds a line
+  -- whole while the terminal is still writing it: read at every
+  -- frame of the writing, the line is there each time. A check
+  -- made a few frames after Enter met a line cut in two, its
+  -- start on the screen and its rest still waiting, and failed
+  -- by the frame's length.
+  scenario('text-while-printing', function(wait)
+    D.key(wait, 'escape')
+    -- on a cleared screen: what waits is written at the cursor,
+    -- rows above the screen's last
+    D.key(wait, 'C-l')
+    local line = 'printed-' .. ('x'):rep(40) .. '-whole'
+    D.enter(wait, 'print("' .. line .. '")')
+    local term = P.cc().model.output.terminal
+    local read, midway = 0, 0
+    repeat
+      local n = 0
+      for _ in term:waiting() do n = n + 1 end
+      local at = term.cursor_x
+      assert(string.find(P.console_text(), '\n' .. line .. '\n', 1, true),
+        'the printed line is cut with ' .. n .. ' characters waiting')
+      read = read + 1
+      if n > 0 and at > 1 then midway = midway + 1 end
+      wait(.001)
+    until n == 0
+    assert(midway > 0, 'the line was never read while being written, '
+      .. 'in ' .. read .. ' readings')
+    hm_done()
+  end)
+
   -- The walk is the classic shell's: the line being typed
   -- waits below the newest line and comes back on Down, an
   -- edit to a recalled line stays until Enter, and the history
