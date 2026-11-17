@@ -86,6 +86,38 @@ scenario('picture-then-console', function(wait)
   hm_done()
 end)
 
+--- F12 steps through the modes over a kept picture, the status
+--- line naming each but the picture's, and any key goes back
+--- from the full picture to the text, typing nothing
+scenario('f12-and-any-key', function(wait)
+  wait(.1)
+  project(wait, 'h-screen-e', DRAWS)
+  D.enter(wait, 'run()')
+  wait(.3)
+  D.eq(mode(), 'picture', 'a run that drew shows its picture')
+  D.key(wait, 'a')
+  D.eq(mode(), 'text', 'a key goes back to the text')
+  D.eq(P.console_draft(), '', 'the key typed nothing')
+  D.eq(P.cc().input:get_status().mode, 'text',
+    'the status line names the text')
+  D.shot(wait, 'text-status')
+  D.key(wait, 'f12')
+  D.eq(mode(), 'combined', 'F12, combined')
+  D.eq(P.cc().input:get_status().mode, 'combined',
+    'the status line names combined')
+  D.shot(wait, 'combined-status')
+  D.key(wait, 'f12')
+  D.eq(mode(), 'picture', 'F12 again, the picture')
+  local shown = P.capture(wait)
+  assert(P.near(at_picture(shown), YELLOW), 'the kept picture '
+    .. 'whole: ' .. P.show(at_picture(shown)))
+  D.key(wait, 'b')
+  D.eq(mode(), 'text', 'a key goes back to the text, past '
+    .. 'combined')
+  D.eq(P.console_draft(), '', 'the key typed nothing')
+  hm_done()
+end)
+
 --- a program that drew and ended by itself is stopped, and leaves
 --- its picture on show (the lead's decision 1); back() is what
 --- any key does once the key gate takes it (stage 2)
@@ -176,10 +208,23 @@ scenario('pause-shows-console', function(wait)
   D.in_state('inspect')
   assert(mode() == 'text', 'a pause shows the console, the mode '
     .. 'is ' .. mode())
+  D.eq(P.console_message(), 'look here (F12 shows the picture)',
+    'the pause\'s text, and how to see the picture')
   local paused = P.capture(wait)
   D.shot(wait, 'paused')
   assert(P.near(at_picture(paused), ground), 'the console on its '
     .. 'ground while paused: ' .. P.show(at_picture(paused)))
+  D.key(wait, 'f12')
+  D.key(wait, 'f12')
+  D.eq(mode(), 'picture', 'F12 twice while paused: the paused '
+    .. 'frame')
+  local frozen = P.capture(wait)
+  D.shot(wait, 'paused-picture')
+  assert(P.near(at_picture(frozen), YELLOW), 'the paused frame: '
+    .. P.show(at_picture(frozen)))
+  D.key(wait, 'a')
+  D.eq(mode(), 'text', 'a key goes back to the text')
+  D.eq(P.console_draft(), '', 'the key typed nothing')
   D.enter(wait, 'continue()')
   wait(.1)
   assert(mode() == 'picture', 'continue() brings back the '

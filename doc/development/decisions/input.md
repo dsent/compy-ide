@@ -1627,6 +1627,14 @@ run ends. With none live it does nothing, in the console and the file editor ali
 editor's key card no longer lists it. `ctrl+t` from the editor runs `main.lua` ("main.lua only for
 now"). A packaged build restarts as before.
 
+**Note, 2026-11-17 — `f12` cycles the screen's modes, by the maintainer's ruling ("yes and
+yes": the IDE takes F12 from programs, and the key card lists it).** Bare F12, matched exactly as
+every reservation is, shows the screen's next mode, text, combined, the picture
+(`model/screenModel.lua`), in the console, idle, running or paused; in the editor and in a
+packaged build it does nothing. It acts once a press and consumes its press, repeats and release,
+as every reservation does. F12 with a modifier is the program's. With F10 it is the second
+reservation without a modifier.
+
 **Owner ruling, 2026-08-16.** **Amends D-ASK-THE-DEVICE point 3**, which named this
 table, declined to commit to it, and required that if it were ever built it be
 "visibly a second, privileged table, structurally separate from a project's own".

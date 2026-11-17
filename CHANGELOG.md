@@ -18,6 +18,13 @@ Project-author guide: `doc/input_api.md`.
 
 ### Added
 
+- **F12 shows the screen's next mode.** In the console, whether a program runs, is
+  paused or none is, F12 steps through the text, the text over the picture and the picture;
+  the status line names `text` or `combined`, and the console's key card lists F12. On the
+  full picture, while no program that can act runs, any key or mouse button goes back to the
+  text and types or clicks nothing; a program that can act keeps its keys there,
+  and F12 is the way back. A pause with a picture says `F12 shows the picture`. A program no
+  longer gets a bare F12; F12 with a modifier is still its own.
 - **A simple way to ask a question — `compy.ask`.** `compy.ask(prompt, …)` asks,
   `compy.on_answer(text)` receives the answer (or `nil` on Escape),
   `compy.on_key(...)`'s return value decides who consumes a key, and `compy.unask()`

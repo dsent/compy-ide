@@ -1022,11 +1022,13 @@ end
 
 --- A host that sets status_source (the file editor) has its
 --- custom status read afresh each time; one that sets
---- project_source (the console) names the open project.
+--- project_source (the console) names the open project, and
+--- screen_source the screen's mode.
 --- @return Status
 function UserInputModel:get_status()
   local src = self.status_source
   local project = self.project_source
+  local screen = self.screen_source
   return {
     label = self:get_label(),
     cursor = self.cursor,
@@ -1035,6 +1037,7 @@ function UserInputModel:get_status()
     input_more = self.visible:get_more(),
     caps = caps_lock() and 'CAPS' or nil,
     project = project and project() or nil,
+    mode = screen and screen() or nil,
   }
 end
 

@@ -35,6 +35,11 @@ local messages = {
   end,
   --- only a card that cannot hold scratchpad leaves none open
   no_project      = 'No project is open: the SD card cannot be used.',
+  --- a pause shows the console; a picture the program drew
+  --- waits behind it (the lead's decision 7 of November 17,
+  --- 2026, after the maintainer's "press F12 to see the drawing
+  --- canvas")
+  picture_hint    = 'F12 shows the picture',
   --- run() makes no project: project() does
   no_such_project = function(name)
     return string.format('There is no project %s: project(%q) creates it.',
@@ -154,6 +159,10 @@ function ConsoleController.new(M, main_ctrl)
   M.input.project_source = function()
     local p = M.projects and M.projects.current
     return p and p.name
+  end
+  --- and the screen's mode, where it shows (model/screenModel.lua)
+  M.input.screen_source = function()
+    return M.screen and M.screen:get()
   end
   -- initialize the user environment
   ConsoleController.prepare_project_env(self)
@@ -2204,11 +2213,14 @@ end
 --- @return Status
 function ConsoleController:running_status()
   local P = self.model.projects
-  return { custom = {
-    project = P.current and P.current.name,
-    name = self.entry or 'main.lua',
-    state = 'running',
-  } }
+  return {
+    custom = {
+      project = P.current and P.current.name,
+      name = self.entry or 'main.lua',
+      state = 'running',
+    },
+    mode = self.model.screen:get(),
+  }
 end
 
 ---@return number
@@ -2358,6 +2370,47 @@ function ConsoleController:_set_base_env(t)
   table.protect(t)
 end
 
+--- A pause's text with how to see the picture behind it: on the
+--- pause's own row, in brackets after its text, where both fit,
+--- so that the band covers no more of the output; on a row of
+--- its own where they do not (the lead's ruling of November 17,
+--- 2026: ASCII alone in the words the screen shows), the text
+--- cut to the band's rows less the hint's, as the band cuts a
+--- message, so that the hint is always seen; alone after a
+--- pause with no text. The text is measured as the band shows
+--- it: bytes that are not UTF-8 made shown first (k1).
+--- @param text string?
+--- @param visible VisibleContent?
+--- @return string|string[]
+local function with_picture_hint(text, visible)
+  local hint = messages.picture_hint
+  if not text then return hint end
+  local w = visible and visible.wrap_w or 64
+  local plain = (string.scrub(text):gsub('\r\n?', '\n'))
+  local lines = string.lines(plain)
+  if #lines > 1 and lines[#lines] == '' then lines[#lines] = nil end
+  local rows = { }
+  for _, line in ipairs(lines) do
+    for _, row in ipairs(string.wrap_words(line, w)) do
+      rows[#rows + 1] = row
+    end
+  end
+  --- a word wider than a row is cut by characters, as the band
+  --- cuts it (k2)
+  rows = string.wrap_array(rows, w)
+  if #rows == 1
+      and string.ulen(rows[1]) + 3 + string.ulen(hint) <= w then
+    return rows[1] .. ' (' .. hint .. ')'
+  end
+  local room = UserInputView.NOTICE_ROWS - 1
+  if #rows > room then
+    for i = #rows, room + 1, -1 do rows[i] = nil end
+    rows[room] = string.usub(rows[room], 1, w - 1) .. '…'
+  end
+  rows[#rows + 1] = hint
+  return rows
+end
+
 function ConsoleController:suspend()
   if love.state.app_state ~= 'snapshot' then
     return
@@ -2373,10 +2426,12 @@ function ConsoleController:suspend()
   --- band as a notice, and the program's screen is not touched
   --- (the maintainer's ruling of November 16, 2026)
   local msg = love.state.suspend_msg
-  if msg then
-    self.input:notice({ tostring(msg) })
-    love.state.suspend_msg = nil
+  love.state.suspend_msg = nil
+  local says = msg ~= nil and tostring(msg) or nil
+  if self.model.output:is_drawn() then
+    says = with_picture_hint(says, self.input.model.visible)
   end
+  if says then self.input:notice(says) end
 
   self.model.output:invalidate_terminal()
 
@@ -2751,16 +2806,21 @@ end
 --- At the end of its first lines a program that drew leaves its
 --- picture on show until a key or a click (the lead's decision
 --- 1 of November 17, 2026); one found ended as an event comes
---- leaves the console, which that event reaches.
+--- leaves the console, which that event reaches, or the picture
+--- when it is on show as the end is made (`shown`; stage 2's k5
+--- and k6: the screen after the end is set here, by the end
+--- itself, whether it is made at once or once the frame's update
+--- returns, after the event that found it).
 --- @param at_last_line boolean
-function ConsoleController:end_naturally(at_last_line)
+--- @param shown ScreenMode? --- what shows as the end is made
+function ConsoleController:end_naturally(at_last_line, shown)
   if not self.run_live then return end
   --- a pause, asked for or made, is no end (round c5)
   local st = love.state.app_state
   if st == 'snapshot' or st == 'inspect' then return end
   local drawn = self.model.output:is_drawn()
   self:stop_project_run()
-  if at_last_line and drawn then
+  if (at_last_line and drawn) or shown == 'picture' then
     self.model.screen:ended_by_itself()
   end
 end
