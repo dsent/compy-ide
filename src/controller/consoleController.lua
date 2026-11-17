@@ -1932,8 +1932,9 @@ function ConsoleController.prepare_project_env(cc)
   end
   project_env.continue         = function()
     if love.state.app_state == 'inspect' then
-      -- resume
-      love.state.app_state = 'running'
+      -- resume, in the state the pause found the program in
+      love.state.app_state = love.state.paused_from or 'running'
+      love.state.paused_from = nil
       cc.model.output:to_rest()
       cc.main_ctrl.restore_user_handlers(cc)
       -- After the handlers: a cursor the program has released
@@ -2210,10 +2211,17 @@ function ConsoleController:suspend()
 end
 
 --- @param msg string?
+--- A program that runs, or one idle behind the console that
+--- can still act (its key handlers alone, say), pauses: the
+--- console and its field come back, and continue() gives the
+--- program back the state it was paused in
 function ConsoleController:suspend_run(msg)
-  if love.state.app_state ~= 'running' then
+  local st = love.state.app_state
+  if st ~= 'running' and not (st == 'ready' and self.run_live
+        and self.main_ctrl.program_owns_input()) then
     return
   end
+  love.state.paused_from = st
   love.state.app_state = 'snapshot'
   love.state.suspend_msg = msg
 end
@@ -2513,6 +2521,7 @@ function ConsoleController:flush_program_state(call_exit)
   if kb and kb.setKeyRepeat then kb.setKeyRepeat(true) end
   if kb and kb.setTextInput then kb.setTextInput(true) end
   self.run_live = false
+  love.state.paused_from = nil
   --- the entry point lives with the run (the maintainer's
   --- ruling of November 16, 2026)
   self.entry = nil

@@ -163,3 +163,36 @@ describe("continue() and the hook table #console", function()
       K.keys("lctrl", "q")
     end)
 end)
+
+-- Ctrl+Pause pauses any live program that can act, one with only
+-- key handlers and no update or draw included (the device run of
+-- November 17 found it did nothing there); the pause gives the
+-- console and its field back, and continue() hides them again
+describe("Ctrl+Pause on a program that can act #console", function()
+  after_each(K.cleanup)
+
+  local KEYS_ONLY = "function love.keypressed(k) last = k end\n"
+
+  it("pauses a program with only key handlers", function()
+    K.reset({ ["main.lua"] = KEYS_ONLY })
+    run("run()")
+    assert.same("ready", K.app_state())
+    assert.is_true(K.cc.main_ctrl.program_owns_input())
+    K.keys("lctrl", "pause")
+    K.frame()
+    if K.app_state() == "snapshot" then K.cc:suspend() end
+    assert.same("inspect", K.app_state())
+    assert.is_false(K.cc.main_ctrl.program_owns_input())
+    K.type("draftx")
+    local status, draft = field_texts(K.screen())
+    assert.is_true(status)
+    assert.is_true(draft)
+    K.cc.input:clear()
+    run("continue()")
+    assert.same("ready", K.app_state())
+    assert.is_true(K.cc.main_ctrl.program_owns_input())
+    K.keys("y")
+    assert.same("y", K.cc:get_project_env().last)
+    K.keys("lctrl", "q")
+  end)
+end)

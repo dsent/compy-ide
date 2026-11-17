@@ -878,7 +878,7 @@ yourself.
 | `ctrl+r` | restarts a program that runs, is paused or idles behind the console, from the file it runs from; does nothing when none does (a packaged build restarts always) | always |
 | `ctrl+t` | switches between running and the editor | development only |
 | `ctrl+q` | stops the run and returns to the console; the project stays open. From the editor, leaves it for the console | development only |
-| `ctrl+pause` | suspends the run | development only |
+| `ctrl+pause` | suspends the run of a program that runs or can still act, one with only key handlers included; the console and its field come back, and `continue()` resumes it as it was | development only |
 | `ctrl+alt+p` / `ctrl+alt+shift+p` | starts / stops the profiler | profiling builds |
 | `f10` | cycles the FPS overlay corner | profiling builds |
 
