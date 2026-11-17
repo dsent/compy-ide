@@ -248,6 +248,19 @@ describe("the screen modes' keys #canvas", function()
         assert.same("text", mode())
       end)
 
+    --- c5's finding on the canvas branch: a reserved chord goes
+    --- back as any key does, through the one path
+    it("goes to text on Ctrl+Q from a picture a program left at its"
+      .. " natural end", function()
+        K.reset({ ["main.lua"] = DRAWS_ONCE })
+        K.start()
+        assert.is_false(K.cc.run_live == true)
+        assert.same("picture", mode())
+        K.keys("lctrl", "q")
+        assert.same("text", mode())
+        assert.same("", K.console_draft())
+      end)
+
     it("leaves the picture up on a modifier alone", function()
       picture()
       K.hold("lshift")
