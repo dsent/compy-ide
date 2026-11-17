@@ -590,6 +590,8 @@ function UserInputModel:reset(history)
 end
 
 function UserInputModel:text_change()
+  --- counts the text's changes: a drag begun before one ends
+  self.text_changes = (self.text_changes or 0) + 1
   self.visible:wrap(self.entered)
   self.visible:check_range()
   self:_follow_cursor()

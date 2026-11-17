@@ -307,6 +307,23 @@ describe("selection in the draft #input", function()
       assert.same("abcde", text(f), owner)
     end)
 
+    it("the editor's redo of a block move brings back the "
+        .. "selection of the draft it left alone", function()
+      K.reset({ ["notes.txt"] = "a\nb\n" })
+      K.open("notes.txt")
+      K.browse_to(1)
+      K.type("xyz")
+      K.keys("lshift", "insert")
+      K.keys("lshift", "left")
+      assert.same("z", selected(K.ed.input))
+      K.browse_to(1)
+      K.keys("lalt", "down")
+      K.keys("lctrl", "z")
+      K.keys("lctrl", "y")
+      assert.same("xyz", K.draft())
+      assert.same("z", selected(K.ed.input))
+    end)
+
     it("the editor's redo brings back the result, and undo the "
         .. "selection, through the file's timeline too", function()
       K.reset({ ["notes.txt"] = "" })
@@ -340,6 +357,54 @@ describe("selection in the draft #input", function()
         K.frame()
         assert.is_nil(selected(f))
       end)
+  end)
+
+  -- the review's round s2
+  describe("a drag and a rewrite", function()
+    --- the point of column `col` on the field's row
+    --- `row_from_bottom` (0, its last)
+    local function at(f, row_from_bottom, col)
+      local v = f.model.cfg.view
+      local bottom = love.graphics.getHeight() - Layout(v).bottom
+      return v.fw * (col - 1 + 0.2),
+          bottom - v.fh * (row_from_bottom + 0.5)
+    end
+
+    it("a rewrite of the text during a drag ends the drag", function()
+      K.reset()
+      F.activate_project()
+      local w = F.show_widget({ text = "" })
+      w:set_text({ "abc", "def" })
+      local x, y = at(w, 0, 3)
+      F.set_mouse_down(true)
+      F.session.mousepressed(x, y, 1, false, 1)
+      F.compy_input().set_text("ok", true)
+      local x2, y2 = at(w, 0, 1)
+      F.session.mousemoved(x2, y2, x2 - x, 0, false)
+      F.session.mousereleased(x2, y2, 1, false, 1)
+      F.set_mouse_down(false)
+      K.frame()
+      assert.is_nil(selected(w))
+      K.type("X")
+      assert.is_true(table.concat(w:get_text(), "\n"):find("ok", 1, true)
+        ~= nil)
+    end)
+
+    it("a new press outside the field ends a drag whose release "
+        .. "went unseen", function()
+      local f = field_of("console", { "abcdef" }, 1, 1)
+      local x, y = at(f, 0, 2)
+      F.set_mouse_down(true)
+      F.session.mousepressed(x, y, 1, false, 1)
+      -- the release went elsewhere; a press outside the field,
+      -- then a move into it with the button down
+      F.session.mousepressed(x, 10, 1, false, 1)
+      local x2 = at(f, 0, 5)
+      F.session.mousemoved(x2, y, x2 - x, 0, false)
+      F.set_mouse_down(false)
+      K.frame()
+      assert.is_nil(selected(f))
+    end)
   end)
 
   describe("the other keys keep their meaning", function()

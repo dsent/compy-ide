@@ -446,6 +446,7 @@ function EditorController:_replay_file(step, forward)
         text = found.text,
         l = found.l,
         c = found.c,
+        selection = found.selection,
         steps = {},
       }
     end

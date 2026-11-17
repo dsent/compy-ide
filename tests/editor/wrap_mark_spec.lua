@@ -335,6 +335,27 @@ describe("a wrapped line's marks #editor", function()
       assert.same(1, cells)
     end)
 
+    it("draw the cursor beside a selection as the bar at a full "
+        .. "row's end too", function()
+      K.type(string.rep("y", W))
+      K.keys("home")
+      K.keys("lshift", "end")
+      assert.is_true(K.cc.input.model:has_selection())
+      local log = K.screen().field_log
+      local fw, fh = view_cfg().fw, view_cfg().fh
+      local cursor = view_cfg().colors.input.cursor
+      local bar = false
+      for _, e in ipairs(log) do
+        if e.fill and e.colour[1] == cursor[1]
+            and e.colour[2] == cursor[2] and e.y >= first()
+            and e.w == 2 and e.h == fh and e.x == W * fw - 2 then
+          bar = true
+        end
+        assert.is_true(e.text ~= "|", "a glyph bar")
+      end
+      assert.is_true(bar)
+    end)
+
     it("draw a selection in a program's field", function()
       local widget = F.show_widget({ text = "abcdef" })
       local view = UserInputView(view_cfg(), widget)

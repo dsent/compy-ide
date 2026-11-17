@@ -255,17 +255,19 @@ function UserInputView:render_input(input, status, time)
 
     gfx.push('all')
     gfx.setColor(cf_colors.input.cursor)
-    if x_offset >= w then
+    if input.selection and input.selection.fin then
+      --- beside a selection, a bar at the cell's left edge, so
+      --- that the selected cell it stands on stays seen; past a
+      --- full row's last column, at the field's right edge
+      gfx.rectangle('fill', math.min(x_offset * fw, w * fw - 2),
+        ch, 2, fh)
+    elseif x_offset >= w then
       --- past the last column of a full row there is no
       --- cell: a bar at the field's right edge, where half of
       --- it is cut off, and a second one inside it
       local x = (x_offset - .5) * fw
       gfx.print('|', x, ch)
       gfx.print('|', x - 4, ch)
-    elseif input.selection and input.selection.fin then
-      --- beside a selection, a bar at the cell's left edge, so
-      --- that the selected cell it stands on stays seen
-      gfx.rectangle('fill', x_offset * fw, ch, 2, fh)
     else
       --- a block on the cursor's cell, the character under
       --- it in the text's colour, so that it stays readable

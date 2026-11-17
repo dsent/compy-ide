@@ -868,10 +868,12 @@ end
 --- @param btn integer
 function UserInputController:mousepressed(x, y, btn)
   if btn ~= 1 then return end
+  --- a new press ends any drag before it, in the field or not
+  self.drag_from = nil
   local l, c = self:_point(x, y)
   if not l then return end
   self.model:move_cursor(l, c)
-  self.drag_from = { l, c }
+  self.drag_from = { l, c, self.model.text_changes }
   self:update_view()
 end
 
@@ -895,8 +897,10 @@ end
 function UserInputController:mousemoved(x, y, dx, dy, touch)
   local from = self.drag_from
   if not from then return end
-  --- a release this field did not see ends the drag too
-  if not love.mouse.isDown(1) then
+  --- a release this field did not see ends the drag too, and
+  --- so does any change to the text since the press
+  if not love.mouse.isDown(1)
+      or from[3] ~= self.model.text_changes then
     self.drag_from = nil
     return
   end
