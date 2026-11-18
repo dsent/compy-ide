@@ -83,9 +83,44 @@ local function tag_quits(event)
   end
 end
 
---- LÖVE 11.5's own love.run, with one change: love.quit is
+--- The share of the display's period a frame takes at least
+--- when it counts as a whole period: the wake-up after a
+--- present that waited for the display, and the timer's own
+--- grain, take a little of it (14.6 ms of 16.7 at 60 Hz)
+local WHOLE = 7 / 8
+
+--- The display's period in seconds, a 60 Hz one's where the
+--- window reports no refresh rate. Read once, as the loop
+--- starts: love.window.getMode takes 416 to 430 µs a call on a
+--- Compy (November 18, 2026), and called every frame it raised
+--- the IDE's CPU share by 5.5 to 7.6 points in every awake
+--- state. A window that changes display or mode later keeps the
+--- first period's cutoff: a frame shorter than it still sleeps,
+--- so the loop does not spin.
+--- @return number
+local function period()
+  local hz = 0
+  if love.window then
+    local _, _, mode = love.window.getMode()
+    hz = mode and mode.refreshrate or 0
+  end
+  return 1 / (hz > 0 and hz or 60)
+end
+
+--- LÖVE 11.5's own love.run, with two changes: love.quit is
 --- given the quit event's value, and the status the run ends
---- with is the one the quit was asked with
+--- with is the one the quit was asked with; and the loop's
+--- millisecond of sleep is left out after a frame that
+--- presented and took about the display's period or more
+--- (WHOLE), measured from the end of the frame before (its
+--- sleep included) to the end of its present, whatever made it
+--- that long: a present that waited for the display, or the
+--- frame's own work. On a frame longer than the period the
+--- sleep was lost outright (1.1 ms of every frame in an
+--- experiment on a Compy). A shorter frame sleeps, as does one
+--- that presented nothing (the window inactive, as the Android
+--- activity paused), so that a loop of short frames does not
+--- spin, whatever the vsync flag says.
 --- @return function loop
 local function run()
   if love.load then
@@ -94,6 +129,8 @@ local function run()
   -- the first frame's dt leaves out the time love.load took
   if love.timer then love.timer.step() end
   local dt = 0
+  local whole = period() * WHOLE
+  local began = love.timer and love.timer.getTime()
   return function()
     if love.event then
       love.event.pump()
@@ -109,13 +146,21 @@ local function run()
     end
     if love.timer then dt = love.timer.step() end
     if love.update then love.update(dt) end
+    local presented = false
     if love.graphics and love.graphics.isActive() then
       love.graphics.origin()
       love.graphics.clear(love.graphics.getBackgroundColor())
       if love.draw then love.draw() end
       love.graphics.present()
+      presented = true
     end
-    if love.timer then love.timer.sleep(0.001) end
+    if love.timer then
+      local took = love.timer.getTime() - began
+      if not (presented and took >= whole) then
+        love.timer.sleep(0.001)
+      end
+      began = love.timer.getTime()
+    end
   end
 end
 

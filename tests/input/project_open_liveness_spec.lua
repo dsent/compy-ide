@@ -591,6 +591,10 @@ describe('input surface: inbound events — a project stays live'
         minimized = 0
         love.window = {
           minimize = function() minimized = minimized + 1 end,
+          --- the loop reads the display's period as it starts
+          getMode = function()
+            return 1024, 600, { refreshrate = 60 }
+          end,
         }
         shown = nil
         love.errhand = function(msg)
