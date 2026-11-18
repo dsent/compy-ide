@@ -92,7 +92,8 @@ end
 --- @param y number
 --- @param input InputDTO
 --- @return integer? row --- of the draft's wrapped rows
---- @return integer? col
+--- @return integer? col --- where a click puts the cursor
+--- @return integer? cell --- the column of the cell itself
 function UserInputView:cell_at(x, y, input)
   local cfg = self.cfg
   if not self:_message_elsewhere()
@@ -109,7 +110,7 @@ function UserInputView:cell_at(x, y, input)
   local a, b = math.modf(x / cfg.fw)
   --- a click on a cell's right half lands after it
   local col = a + 1 + (b > .5 and 1 or 0)
-  return row + input.visible.offset, col
+  return row + input.visible.offset, col, a + 1
 end
 
 --- Whether a message leaves this field as it is: the file

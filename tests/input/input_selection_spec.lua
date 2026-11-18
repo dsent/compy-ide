@@ -478,6 +478,219 @@ describe("selection in the draft #input", function()
       assert.is_nil(selected(f), owner)
       assert.same({ 2, 4 }, cursor(f), owner)
     end)
+
+    --- a press and its release at (x, y), the press LÖVE's
+    --- `presses`-th quick one
+    local function click(x, y, presses)
+      F.session.mousepressed(x, y, 1, false, presses)
+      F.session.mousereleased(x, y, 1, false, presses)
+    end
+
+    --- a click with Shift held
+    local function shift_click(x, y)
+      K.hold("lshift")
+      click(x, y, 1)
+      K.release("lshift")
+    end
+
+    local function double_click(x, y)
+      click(x, y, 1)
+      click(x, y, 2)
+      K.frame()
+    end
+
+    describe("Shift+click", function()
+      in_every_field("selects from the cursor to the click",
+        function(owner)
+          local f = field_of(owner, nil, 1, 2)
+          shift_click(at(f, 0, 3))
+          assert.same("ne two\nth", selected(f), owner)
+          assert.same({ 2, 3 }, cursor(f), owner)
+        end)
+
+      in_every_field("goes on from where the selection began",
+        function(owner)
+          local f = field_of(owner, nil, 1, 7)
+          K.keys("lshift", "left")
+          K.keys("lshift", "left")
+          assert.same("tw", selected(f), owner)
+          shift_click(at(f, 0, 3))
+          assert.same("o\nth", selected(f), owner)
+          assert.same({ 2, 3 }, cursor(f), owner)
+          shift_click(at(f, 1, 2))
+          assert.same("ne tw", selected(f), owner)
+          assert.same({ 1, 2 }, cursor(f), owner)
+        end)
+
+      in_every_field("on where the selection began leaves none",
+        function(owner)
+          local f = field_of(owner, nil, 1, 2)
+          K.keys("lshift", "right")
+          shift_click(at(f, 1, 2))
+          assert.is_nil(selected(f), owner)
+          assert.same({ 1, 2 }, cursor(f), owner)
+        end)
+
+      in_every_field("and a drag go on from where the selection "
+          .. "began", function(owner)
+        local f = field_of(owner, nil, 1, 2)
+        local x, y = at(f, 1, 4)
+        local x2, y2 = at(f, 0, 3)
+        K.hold("lshift")
+        F.set_mouse_down(true)
+        F.session.mousepressed(x, y, 1, false, 1)
+        assert.same("ne", selected(f), owner)
+        F.session.mousemoved(x2, y2, x2 - x, y2 - y, false)
+        F.set_mouse_down(false)
+        F.session.mousereleased(x2, y2, 1, false, 1)
+        K.release("lshift")
+        assert.same("ne two\nth", selected(f), owner)
+        assert.same({ 2, 3 }, cursor(f), owner)
+      end)
+
+      in_every_field("selects across the rows of a wrapped line",
+        function(owner)
+          local long = string.rep("a", 70)
+          local f = field_of(owner, { long, "end" }, 1, 3)
+          --- the wrapped line's second row, its second column
+          shift_click(at(f, 1, 2))
+          assert.same(string.rep("a", 63), selected(f), owner)
+          assert.same({ 1, 66 }, cursor(f), owner)
+        end)
+
+      it("with Ctrl held only places the cursor", function()
+        local f = field_of("console", nil, 1, 2)
+        K.hold("lctrl")
+        K.hold("lshift")
+        local x, y = at(f, 0, 3)
+        click(x, y, 1)
+        K.release("lshift")
+        K.release("lctrl")
+        assert.is_nil(selected(f))
+        assert.same({ 2, 3 }, cursor(f))
+      end)
+    end)
+
+    describe("a double click", function()
+      in_every_field("selects the word under it, the cursor at its "
+          .. "end", function(owner)
+        local f = field_of(owner, { "x = hello_world2 + 1" }, 1, 1)
+        double_click(at(f, 0, 9))
+        assert.same("hello_world2", selected(f), owner)
+        assert.same({ 1, 17 }, cursor(f), owner)
+      end)
+
+      --- review r1's major: the character under the pointer, not
+      --- the cursor place a click on its right half rounds to
+      in_every_field("takes the character under the pointer, on "
+          .. "either half of its cell", function(owner)
+        local f = field_of(owner, { "one two" }, 1, 8)
+        local v = f.model.cfg.view
+        local _, y = at(f, 0, 1)
+        --- column, and the word selected (nil: none)
+        for _, case in ipairs({ { 1, "one" }, { 3, "one" },
+          { 4, nil }, { 5, "two" }, { 7, "two" } }) do
+          for _, half in ipairs({ 0.2, 0.8 }) do
+            local col, want = case[1], case[2]
+            local what = owner .. " col " .. col .. " at " .. half
+            f:set_cursor_pos(1, 8)
+            K.frame()
+            double_click(v.fw * (col - 1 + half), y)
+            assert.same(want, selected(f), what)
+            if not want then
+              assert.same({ 1, col + (half > .5 and 1 or 0) },
+                cursor(f), what)
+            end
+          end
+        end
+      end)
+
+      in_every_field("is two presses LÖVE counts as one pair: two "
+          .. "presses counted 1 each select nothing", function(owner)
+        local f = field_of(owner, { "one two" }, 1, 1)
+        local x, y = at(f, 0, 6)
+        click(x, y, 1)
+        click(x, y, 1)
+        K.frame()
+        assert.is_nil(selected(f), owner)
+        assert.same({ 1, 6 }, cursor(f), owner)
+      end)
+
+      in_every_field("keeps the word through the pointer's jitter "
+          .. "before the release", function(owner)
+        local f = field_of(owner, { "one two three" }, 1, 1)
+        local x, y = at(f, 0, 6)
+        click(x, y, 1)
+        F.set_mouse_down(true)
+        F.session.mousepressed(x, y, 1, false, 2)
+        F.session.mousemoved(x + 2, y + 1, 2, 1, false)
+        F.set_mouse_down(false)
+        F.session.mousemoved(x + 3, y, 1, -1, false)
+        F.session.mousereleased(x + 3, y, 1, false, 2)
+        K.frame()
+        assert.same("two", selected(f), owner)
+        assert.same({ 1, 8 }, cursor(f), owner)
+      end)
+
+      in_every_field("on a character of no word places the cursor",
+        function(owner)
+          local f = field_of(owner, { "a + b" }, 1, 1)
+          double_click(at(f, 0, 3))
+          assert.is_nil(selected(f), owner)
+          assert.same({ 1, 3 }, cursor(f), owner)
+        end)
+
+      in_every_field("selects a word the line wraps, and a word of "
+          .. "another line", function(owner)
+        local long = string.rep("a", 60) .. " wrapping"
+        local f = field_of(owner, { long, "next words" }, 1, 1)
+        --- the wrapped line's second row, its second column: a
+        --- letter of the word past the wrap
+        double_click(at(f, 1, 2))
+        assert.same("wrapping", selected(f), owner)
+        assert.same({ 1, 70 }, cursor(f), owner)
+        double_click(at(f, 0, 3))
+        assert.same("next", selected(f), owner)
+        assert.same({ 2, 5 }, cursor(f), owner)
+      end)
+
+      in_every_field("is typed over as a selection is", function(owner)
+        local f = field_of(owner, { "one two three" }, 1, 1)
+        double_click(at(f, 0, 6))
+        K.type("2")
+        assert.same("one 2 three", text(f), owner)
+        K.keys("lctrl", "z")
+        K.keys("lctrl", "z")
+        assert.same("one two three", text(f), owner)
+        assert.same("two", selected(f), owner)
+      end)
+
+      it("in a program's field selects the word, and the program's "
+          .. "doubleclick hook gets the double click too", function()
+        K.reset()
+        local input = F.activate_project()
+        local w = F.show_widget({ text = "" })
+        w:set_text({ "one two" })
+        local got = 0
+        input.hooks.doubleclick = function() got = got + 1 end
+        double_click(at(w, 0, 6))
+        assert.same("two", selected(w))
+        assert.same(1, got)
+      end)
+
+      it("in a program's field selects nothing when the program's "
+          .. "mousepressed hook takes the press", function()
+        K.reset()
+        local input = F.activate_project()
+        local w = F.show_widget({ text = "" })
+        w:set_text({ "one two" })
+        w:set_cursor_pos(1, 1)
+        input.hooks.mousepressed = function() return true end
+        double_click(at(w, 0, 6))
+        assert.is_nil(selected(w))
+        assert.same({ 1, 1 }, cursor(w))
+      end)
+    end)
   end)
 
   -- the review's round s1: whatever replaces or rewrites the

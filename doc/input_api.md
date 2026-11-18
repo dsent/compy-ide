@@ -481,6 +481,9 @@ the ends of the cursor's row, Ctrl+Home and Ctrl+End to the ends of the text. A
 click places the cursor. Shift with any of these movement keys selects from where
 the selection began to where the cursor lands, and so does a drag of the mouse
 from a press in the field; a click or a plain movement clears the selection.
+Shift+click selects from where the selection began, or from the cursor, to the
+click, and a drag from there goes on from the same place. A double click
+selects the word under it, a word as Ctrl+Left takes it, the cursor at its end.
 Backspace, Delete, Ctrl+Backspace, Ctrl+W and Ctrl+K remove the selected text,
 as one change Ctrl+Z takes back with the selection. Typing replaces it in two
 changes: the first Ctrl+Z takes back what was typed, the second the selection's
@@ -968,7 +971,13 @@ saved release position. Stopping a project clears its pending gestures.
 Being ordinary chain participants, pointer hooks **consume on a truthy
 return** like keyboard ones: return truthy and a shown input widget does not see
 the event. Return nothing and it carries on to the input widget, which is what
-you want while an input widget is shown for its own reasons.
+you want while an input widget is shown for its own reasons. The widget selects
+a word on the second press of a double click, so a `mousepressed` hook that
+takes the press keeps the word unselected. The widget's double click follows
+the system's timing and distance, and the `singleclick` and `doubleclick` hooks
+the framework's own (above), so near their limits the two can disagree: the
+widget may select a word while your hooks get two single clicks, or the
+reverse. What a `doubleclick` hook returns changes nothing in the widget.
 
 Pointer events take shortcuts too, and the vocabulary is the same one: the
 button is the trigger, written `mouse1` (left), `mouse2` (right), `mouse3`

@@ -174,7 +174,38 @@ The console's input view is `input_max = 14` lines high; the editor's field show
 
 ### Selection
 
-A field selects a part of its draft, without a clipboard (the maintainer's ruling of 2026-11-17, which changes "Selection is off until the clipboard is designed" in part). Shift with each movement key of the field's table (`model/input/fieldKeys.lua`, the `select` entry: Left, Right, Ctrl+Left, Ctrl+Right, Home, End, Ctrl+Home, Ctrl+End, Up, Down) runs that movement through `UserInputModel:select_by`, which holds the selection from where it began, or from the cursor, to where the cursor lands; Up on the first row and Down on the last go to the draft's ends and recall no history. A press in the field places the cursor and clears the selection; a drag from it selects (`UserInputController:mousemoved`, `select_to`) while the button is down, and its release selects to where the last move went (see "Input widget mouse" below). Backspace, Delete, Ctrl+Backspace, Ctrl+W and Ctrl+K remove the selection alone (`delete_selection`), one step on the field's undo, whose snapshot keeps the selection so that Ctrl+Z brings it back with the text. Typing (`add_text`) and a line break replace it in two steps, the removal and then the typing as a run of its own from its first letter, so that the first Ctrl+Z gives back the draft without the typing and the second the selection. Whatever replaces or rewrites the text clears it (`set_text`, `reformat`, history recall); a plain movement clears it (`move_cursor`, and `cursor_vertical_move` at the draft's edge too) and then moves as it always does, and Alt+Shift+Up/Down clears it before it moves the cursor's line; Escape and Enter keep their meaning. One key keeps one meaning with or without a selection, as the classic text-mode editors do (the rulings of 2026-11-17). The view draws a selected cell in the draft's own lines and columns (`render_input`, `is_selected`), over a wrapped line's mark; beside a selection the cursor is a bar at its cell's left edge, so that the selected cell it stands on stays seen. Nothing copies, cuts or pastes.
+A field selects a part of its draft, without a clipboard (the maintainer's
+ruling of 2026-11-17, which changes "Selection is off until the clipboard is
+designed" in part). Shift with each movement key of the field's table
+(`model/input/fieldKeys.lua`, the `select` entry: Left, Right, Ctrl+Left,
+Ctrl+Right, Home, End, Ctrl+Home, Ctrl+End, Up, Down) runs that movement through
+`UserInputModel:select_by`, which holds the selection from where it began, or
+from the cursor, to where the cursor lands; Up on the first row and Down on the
+last go to the draft's ends and recall no history. A press in the field places
+the cursor and clears the selection; a drag from it selects
+(`UserInputController:mousemoved`, `select_to`) while the button is down, and
+its release selects to where the last move went (see "Input widget mouse"
+below). Shift+click selects from where the selection began, or from the cursor,
+to the cell clicked, and a drag from that press goes on from the same place; a
+Shift+click there leaves no selection. A double click selects the word under the
+pointer, as Ctrl+Left and Ctrl+Right take words (`select_word`), the cursor at
+its end; on a character of no word it is a click. No triple click, and no drag
+by words. Backspace, Delete, Ctrl+Backspace, Ctrl+W and Ctrl+K remove the
+selection alone (`delete_selection`), one step on the field's undo, whose
+snapshot keeps the selection so that Ctrl+Z brings it back with the text. Typing
+(`add_text`) and a line break replace it in two steps, the removal and then the
+typing as a run of its own from its first letter, so that the first Ctrl+Z gives
+back the draft without the typing and the second the selection. Whatever
+replaces or rewrites the text clears it (`set_text`, `reformat`, history
+recall); a plain movement clears it (`move_cursor`, and `cursor_vertical_move`
+at the draft's edge too) and then moves as it always does, and Alt+Shift+Up/Down
+clears it before it moves the cursor's line; Escape and Enter keep their
+meaning. One key keeps one meaning with or without a selection, as the classic
+text-mode editors do (the rulings of 2026-11-17). The view draws a selected cell
+in the draft's own lines and columns (`render_input`, `is_selected`), over a
+wrapped line's mark; beside a selection the cursor is a bar at its cell's left
+edge, so that the selected cell it stands on stays seen. Nothing copies, cuts or
+pastes.
 
 A click on the input widget places the cursor, in every field: the console's, the file editor's and a project's (the project route passes `love.state.user_input_controller` as its widget, so there is no project-specific translation path). `UserInputController:_point` asks `UserInputView:cell_at` for the cell under the point: the draft's wrapped row, counted from 1 downward with the field's visible offset added, and the column, or nothing outside the rows the field shows; `UserInputModel:translate_grid_to_cursor` turns that cell into the cursor's line and column.
 
@@ -807,7 +838,31 @@ it. (`ConsoleController:wrap_handler`, which used to do this per handler, is gon
 
 `UserInputController` handles mouse events on the input widget:
 - `mousepressed`: ends any drag before it, then finds the cell under the point (`_point`, `cell_at`: the wrapped row counted from 1 downward with the visible offset added) and moves the cursor there (`translate_grid_to_cursor`, `move_cursor`), in every field; a press outside the field's rows does nothing more.
-- `mousepressed` also clears a selection and marks where a drag would start (`drag_from`).
+- `mousepressed` also clears a selection and marks where a drag would start
+  (`drag_from`). With Shift held and neither Ctrl nor Alt (`Key.combo('mouse1')`
+  is `shift+mouse1`), it selects instead from where the selection began, or from
+  the cursor, to the cell (`select_to`), and marks that place as the drag's
+  start, so that a drag goes on from it. Shift is read as held when the press is
+  handled, as every chord's modifiers are. With no modifier held, LÖVE's own
+  count of quick presses (`presses`, the fifth argument; SDL's double-click time
+  and radius) at 2 and a word's character in the cell under the point
+  (`cell_at`'s third value: the cell itself, where a click on a cell's right
+  half puts the cursor after it), it selects that word
+  (`UserInputModel:select_word`, which reuses Ctrl+Left's and Ctrl+Right's
+  `_word_left_of` and `_word_right_of`) and marks no drag: the pointer's jitter
+  before the release, a move in the same cell, would otherwise be a drag back on
+  the press and clear the word, and a drag after a double click selects nothing
+  more. The second press is counted in `love.state.presses` like any other, so a
+  drag of the first press ends at it. The derived `doubleclick` (below) plays no
+  part: it comes at the second release, after the raw one, and, on the console's
+  route, reaches no handler. In a program's field the program comes first, as
+  for every pointer event: a `mousepressed` hook or a `mouse1` or `shift+mouse1`
+  shortcut that takes the press takes the gesture from the field, and a
+  `doubleclick` hook changes nothing in the field by what it returns. The
+  field's double click follows SDL's time and radius, the derived clicks the
+  framework's 0.4 s and 2.5 pixels, so near those limits they disagree: the
+  field may select a word while the program's hooks get two `singleclick`s, or
+  the reverse.
 - `mousemoved`: while the left button is down after such a press, selects from where the press was to the cell under the pointer, while it is in the field's rows; a point back on the press selects nothing. Whether the drag goes on comes from the press and release events: it ends with the field's release, with any change to the text since the press (`text_changes`) or to the draft the field holds (the editor's field takes the front file's), and with any later press of the button, wherever it went, which the gateway counts (`love.state.presses`; a program's hook may take a press and its release from the field). The button's live state (`love.mouse.isDown`) only says whether a move selects. With the button up a move only marks where it went (`last`): LÖVE reads a button's state as of the last event taken from the system, and on Android the state changes as soon as the release reaches the system, so a move handled before its release, in the same frame or the frame before, reads the button up. With the button down again after a move that read it up, the drag's release went unseen and the drag is over.
 - `mousereleased`: ends the drag; where the last move went, it selects to there, so that a drag of one motion selects whether its release is handled in the frame of that move or a later one. A release after a later press, elsewhere than the last move, or with no move seen (under the key card the moves are held back), changes nothing.
 

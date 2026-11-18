@@ -850,36 +850,60 @@ end
 ---------------
 
 --- The draft's cursor position under a point of the screen,
---- nil outside the rows the field shows
+--- nil outside the rows the field shows, and the column of the
+--- character the point is on
 --- @private
 --- @return integer? l
 --- @return integer? c
+--- @return integer? cell
 function UserInputController:_point(x, y)
   local v = self.view
   if not (v and v.cell_at) then return end
   local im = self.model
-  local row, col = v:cell_at(x, y, im:get_input())
+  local row, col, cell = v:cell_at(x, y, im:get_input())
   if not row then return end
-  return im:translate_grid_to_cursor(row, col)
+  local l, c = im:translate_grid_to_cursor(row, col)
+  local _, cc = im:translate_grid_to_cursor(row, cell)
+  return l, c, cc
 end
 
 --- A click in the draft places the text cursor on the cell
 --- it points at, in every field, and clears a selection; a
 --- drag from there selects (the maintainer's ruling of
---- November 17, 2026). A click outside the rows the field
---- shows leaves the cursor where it is.
+--- November 17, 2026). Shift+click selects from where the
+--- selection began, or from the cursor, to there, and a drag
+--- goes on from that same place; a double click selects the
+--- word under it and starts no drag, so that the pointer's
+--- jitter before the release keeps the word. A click outside
+--- the rows the field shows leaves the cursor where it is.
 --- @param x integer
 --- @param y integer
 --- @param btn integer
-function UserInputController:mousepressed(x, y, btn)
+--- @param touch boolean
+--- @param presses number --- LÖVE's count of quick presses
+function UserInputController:mousepressed(x, y, btn, touch,
+                                          presses)
   if btn ~= 1 then return end
   --- a new press ends any drag before it, in the field or not
   self.drag_from = nil
-  local l, c = self:_point(x, y)
+  local l, c, cell = self:_point(x, y)
   if not l then return end
-  self.model:move_cursor(l, c)
-  self.drag_from = { l, c, self.model.text_changes,
-    press = love.state.presses, model = self.model }
+  local im = self.model
+  local chord = Key.combo('mouse1')
+  local from = { l, c }
+  if chord == 'shift+mouse1' then
+    local s = im:has_selection() and im:get_selection().start
+    from = s and { s.l, s.c } or { im:get_cursor_pos() }
+    im:select_to(from[1], from[2], l, c)
+  elseif chord == 'mouse1' and presses == 2
+      and im:select_word(l, cell) then
+    self:update_view()
+    return
+  else
+    im:move_cursor(l, c)
+  end
+  self.drag_from = { from[1], from[2], im.text_changes,
+    press = love.state.presses, model = im }
   self:update_view()
 end
 
@@ -971,7 +995,8 @@ function UserInputController:wheelmoved(x, y)
 end
 
 -- The derived clicks are the framework's synthesis, for
--- projects to bind; text editing has no use for them. Present
+-- projects to bind; text editing has no use for them (the
+-- field's double click is the press's, mousepressed). Present
 -- because the chain calls every channel on its terminal tier.
 function UserInputController:singleclick()
 end
