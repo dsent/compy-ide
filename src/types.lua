@@ -141,7 +141,7 @@
 --- @field app_state AppState
 --- @field prev_state AppState?
 --- @field suspend_msg string?
---- @field frame integer? --- the frames counted by the update
+--- @field presses integer? --- the gateway's count of button 1
 
 --- @class LoveDebug table
 --- @field show_snapshot boolean
