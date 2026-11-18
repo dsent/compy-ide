@@ -1,3 +1,4 @@
+local h = love.harmony.utils or error()
 local P = require('harmony.probe')
 local D = require('harmony.drive')
 
@@ -149,6 +150,23 @@ scenario('editor', function(wait)
   D.shot(wait, 'selected')
   D.type(wait, '0')
   D.eq(P.draft(), 'c =03', 'typing replaced the selection')
+  -- a double click selects the word under it, and Shift+click
+  -- from the cursor to the click; typing replaces each
+  local v = P.cc().cfg.view
+  local y = v.h - v.fh / 2
+  D.click(wait, 4, y)
+  D.click(wait, 4, y, 2)
+  D.shot(wait, 'word-selected')
+  D.type(wait, 'x')
+  D.eq(P.draft(), 'x =03', 'a double click selected the word')
+  h.hold('lshift')
+  wait(.02)
+  D.click(wait, 4 * v.fw + 4, y)
+  h.let_go('lshift')
+  wait(.02)
+  D.shot(wait, 'shift-clicked')
+  D.type(wait, 'y')
+  D.eq(P.draft(), 'xy3', 'a Shift+click selected to the click')
   D.key(wait, 'escape')
   click(wait, 'editor')
   D.shot(wait, 'clicked')
