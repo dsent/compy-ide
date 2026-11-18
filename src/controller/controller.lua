@@ -781,9 +781,6 @@ Controller = {
       return End.held(update_body, dt)
     end
     update_body = function(dt)
-      --- the frames counted, for what holds only within one
-      --- (UserInputController: a drag's move with the button up)
-      love.state.frame = (love.state.frame or 0) + 1
       if love.PROFILE then
         Prof.update()
       end
@@ -1673,6 +1670,12 @@ Controller = {
     handlers.mousepressed = function(x, y, btn, touch, presses)
       enter()
       Blink.restart()
+      --- every press of the primary button counted, whoever takes
+      --- it (UserInputController: a release a drag's field gets is
+      --- of its own press only while this count has not moved)
+      if btn == 1 then
+        love.state.presses = (love.state.presses or 0) + 1
+      end
       if CC:card_shows() then
         hold_press('button', btn)
         return

@@ -878,8 +878,23 @@ function UserInputController:mousepressed(x, y, btn)
   local l, c = self:_point(x, y)
   if not l then return end
   self.model:move_cursor(l, c)
-  self.drag_from = { l, c, self.model.text_changes }
+  self.drag_from = { l, c, self.model.text_changes,
+    press = love.state.presses, model = self.model }
   self:update_view()
+end
+
+--- Whether the drag is still the one its press began: the
+--- field's draft the same (the editor's field takes the front
+--- file's, review q1) and its text unchanged since, and no
+--- press of the button since, wherever it went (a program's
+--- hook may take a press and its release from the field)
+--- @private
+--- @param from table
+--- @return boolean
+function UserInputController:_drag_holds(from)
+  return from.model == self.model
+      and from[3] == self.model.text_changes
+      and from.press == love.state.presses
 end
 
 --- @param x integer
@@ -892,16 +907,17 @@ function UserInputController:mousereleased(
   if btn ~= 1 then return end
   local from = self.drag_from
   self.drag_from = nil
-  --- a move with the button already up in this frame (point E):
-  --- the release, where that move went, selects to it, in that
-  --- frame only (a later release is of a press this field did
-  --- not see). A release elsewhere than the last move, or with no
-  --- move seen (under the key card the moves are held back),
-  --- changes nothing.
-  if not from or from[3] ~= self.model.text_changes then return end
+  --- the release of the drag's own press, where the last move
+  --- went, selects to it, whether that move read the button up
+  --- in this frame (point E) or a frame before (the release
+  --- handled a frame after it reached the system, as measured
+  --- on a Compy on November 18, 2026). A release after a later
+  --- press is of a press the field did not see. A release
+  --- elsewhere than the last move, or with no move seen (under
+  --- the key card the moves are held back), changes nothing.
+  if not from or not self:_drag_holds(from) then return end
   local last = from.last
   if not last then return end
-  if from.up and from.up ~= (love.state.frame or 0) then return end
   local l, c = self:_point(x, y)
   if l ~= last[1] or c ~= last[2] then return end
   self.model:select_to(from[1], from[2], l, c)
@@ -910,10 +926,13 @@ end
 
 --- A drag from a press in the draft selects up to the point
 --- it has reached, while that point is in the field's rows; a
---- point back on the press selects nothing. With the button up
---- a move only marks where it went, for a release in the same
---- frame; after that frame, or with the button down again, the
---- drag is over (reviews s4 and s5).
+--- point back on the press selects nothing. Whether the drag
+--- goes on comes from the press and release events; the
+--- button's state as the system has it now only says whether
+--- a move selects: with the button up a move marks where it
+--- went, for the release still to come, and with the button
+--- down again after that the drag's release went unseen and
+--- the drag is over (reviews s4 and s5).
 --- @param x number
 --- @param y number
 --- @param dx number
@@ -922,23 +941,19 @@ end
 function UserInputController:mousemoved(x, y, dx, dy, touch)
   local from = self.drag_from
   if not from then return end
-  --- any change to the text since the press ends the drag
-  if from[3] ~= self.model.text_changes then
+  --- any change to the text, or any press, since the drag's
+  --- press ends the drag
+  if not self:_drag_holds(from) then
     self.drag_from = nil
     return
   end
   local down = love.mouse.isDown(1)
-  local frame = love.state.frame or 0
-  --- the button seen up lasts for its frame alone, the one where
-  --- a press, one move and the release come together (point E):
-  --- seen up in an earlier frame, or down again since, the
-  --- drag's release went unseen and the drag is over (s4, s5)
-  if from.up and (down or from.up ~= frame) then
+  if from.up and down then
     self.drag_from = nil
     return
   end
   local l, c = self:_point(x, y)
-  if not down then from.up = frame end
+  if not down then from.up = true end
   if not l then
     from.last = nil
     return

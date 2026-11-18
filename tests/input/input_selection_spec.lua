@@ -285,6 +285,27 @@ describe("selection in the draft #input", function()
       assert.same({ 1, 8 }, cursor(f), owner)
     end)
 
+    --- the quick drag measured on a Compy on November 18, 2026:
+    --- the release reaches the system after a frame's events are
+    --- taken and before its move is handled, so the move reads the
+    --- button up, and the release itself is handled a frame later
+    in_every_field("a quick drag whose release comes a frame after "
+        .. "its move selects from the press to the release",
+      function(owner)
+        local f = field_of(owner, { "hello world and more" }, 1, 21)
+        local x, y = at(f, 0, 3)
+        local x2 = at(f, 0, 8)
+        F.set_mouse_down(true)
+        F.session.mousepressed(x, y, 1, false, 1)
+        F.set_mouse_down(false)
+        F.session.mousemoved(x2, y, x2 - x, 0, false)
+        K.frame()
+        F.session.mousereleased(x2, y, 1, false, 1)
+        K.frame()
+        assert.same("llo w", selected(f), owner)
+        assert.same({ 1, 8 }, cursor(f), owner)
+      end)
+
     --- review s4's first finding
     in_every_field("a drag brought back to its press selects "
         .. "nothing", function(owner)
@@ -325,6 +346,35 @@ describe("selection in the draft #input", function()
     --- review s4's third finding: the key card comes up during a
     --- drag in the editor; the moves under it are held back, and
     --- the release that balances the press selects nothing
+    --- review q1: the editor's field takes another file's model
+    --- while the release is withheld; the new draft's revision
+    --- may equal the one the drag began on
+    it("a release after the editor's field took another file's "
+        .. "draft selects nothing", function()
+      K.reset({ ["main.lua"] = 'require("b")\n',
+        ["b.lua"] = "local b = 2\n" })
+      K.cc.cfg.editor = { mouse_enabled = true }
+      K.open("main.lua")
+      K.browse_to(1)
+      K.keys("f2")
+      local f = K.ed.input
+      local before = f.model
+      local x, y = at(f, 0, 2)
+      local x2 = at(f, 0, 5)
+      F.set_mouse_down(true)
+      F.session.mousepressed(x, y, 1, false, 1)
+      F.set_mouse_down(false)
+      F.session.mousemoved(x2, y, x2 - x, 0, false)
+      K.frame()
+      K.keys("escape")
+      K.keys("lctrl", "j")
+      K.browse_to(1)
+      K.keys("f2")
+      assert.are_not.equal(before, f.model)
+      F.session.mousereleased(x2, y, 1, false, 1)
+      assert.is_nil(selected(f))
+    end)
+
     it("a release under the key card selects nothing", function()
       local f = field_of("editor", { "abcdef" }, 1, 7)
       local x, y = at(f, 0, 2)
