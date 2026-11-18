@@ -722,7 +722,9 @@ does not get it. The console's field and its cursor are hidden while it
 runs, and its row is then your program's: the output has 17 rows where it
 had 16, `gotoxy` reaches the 17th, and the status line sits on the
 screen's last row, naming the project, the file it runs from and
-"running". The field comes back when the program stops (Ctrl+Q), pauses
+"running", in yellow. A field of your own has a status line of its
+own: your prompt, cut to fit, and where the cursor is in the
+answer. The field comes back when the program stops (Ctrl+Q), pauses
 (Ctrl+Pause), or can do nothing more, and so does the 16-row output when
 your program shows a field of its own: what is on the 17th row then
 scrolls up. A program that wants typing shows its own field. The one exception:

@@ -859,23 +859,37 @@ describe("the screen modes' keys #canvas", function()
       assert.is_false(has(texts, "text"))
     end)
 
-    it("keeps the mode's end in one place, whatever the position"
-      .. " shows", function()
+    --- the right block is packed to the right (the maintainer's
+    --- ruling of November 18, 2026): the mode's word stands two
+    --- columns before the cursor's place, and moves left as that
+    --- grows; with no position, at the line's right edge
+    it("stands two columns before the cursor's place, or at the"
+      .. " edge", function()
         K.reset()
         local fw = F.cfg.view.fw
-        local function mode_end(word)
+        local edge = F.cfg.view.w - fw
+        --- where `word`, or the text matching `pattern`, starts
+        --- and ends on the status line's row
+        local function at(pattern)
           for _, t in ipairs(K.screen().field) do
-            if t.text == word and t.y < F.cfg.view.fh then
-              return t.x + #word * fw
+            if t.text:match(pattern) and t.y < F.cfg.view.fh then
+              return t.x, t.x + string.ulen(t.text) * fw
             end
           end
         end
-        local at_start = mode_end("text")
-        assert.is_not_nil(at_start)
+        local function packed(word)
+          local _, mode_end = at("^" .. word .. "$")
+          local pos_start, pos_end = at("^%d+:%d+$")
+          assert.equal(edge, pos_end)
+          assert.equal(pos_start - 2 * fw, mode_end)
+          return mode_end
+        end
+        local short = packed("text")
         K.type(string.rep("y", 40))
-        assert.same(at_start, mode_end("text"))
+        local long = packed("text")
+        assert.equal(short - fw, long, "one column left for 1:41")
         K.keys("f12")
-        assert.same(at_start, mode_end("combined"))
+        packed("combined")
         K.keys("f12")
         K.keys("f12")
         -- behind a running program that owns the input: the bare
@@ -883,7 +897,8 @@ describe("the screen modes' keys #canvas", function()
         K.reset({ ["main.lua"] = recorder() })
         K.start()
         assert.is_true(K.cc:fieldless())
-        assert.same(at_start, mode_end("text"))
+        local _, mode_end = at("^text$")
+        assert.equal(edge, mode_end)
       end)
 
     it("is not drawn in the full picture", function()

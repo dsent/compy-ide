@@ -19,7 +19,6 @@ require("util.range")
 --- @field move_range fun(self, integer): integer
 --- @field get_content_length fun(self): integer
 --- @field get_visible function
---- @field get_more fun(self): More
 --- @field to_end fun(self)
 VisibleContent = {}
 VisibleContent.__index = VisibleContent
@@ -149,16 +148,6 @@ end
 
 function VisibleContent:get_content_length()
   return self:get_text_length()
-end
-
-function VisibleContent:get_more()
-  local vrange = self:get_range()
-  local vlen = self:get_content_length()
-  local more = {
-    up = vrange.start > 1,
-    down = vrange.fin < vlen
-  }
-  return more
 end
 
 --- @param cur Cursor

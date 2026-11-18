@@ -1,8 +1,9 @@
 require("util.color")
 
+--- The status line's themes: the console's, a running
+--- program's line included, a pause's and the editor's
 ---@alias InputTheme
 ---| 'console'
----| 'user'
 ---| 'inspect'
 ---| 'editor'
 
@@ -67,10 +68,18 @@ require("util.color")
 --- @field special RGB
 --- @field warning RGB
 --- @field error RGB
+--- @field state RGB? --- a program's state word ("running"), where it is not fg2
+--- @field mark RGB? --- the "[no sd card]" mark in front of the line
 
 local indicator = Color[Color.cyan + Color.bright]
 local special = Color[Color.cyan]
 local warning = Color[Color.orange]
+--- the "[no sd card]" mark in front of the IDE's status lines:
+--- the same orange at full brightness, 9.0:1 on the console's
+--- gray, 6.1:1 on the editor's blue and 4.3:1 on the pause's
+--- red, where the warning orange gives 5.2, 3.5 and 2.4:1; a
+--- pause can come without a card, from the Compy's own storage
+local mark = Color[Color.orange + Color.bright]
 local error = Color[Color.red]
 
 local lua_i = require('conf.lua')
@@ -188,29 +197,38 @@ return {
     --- band above it stands apart while '[no sd card]' keeps
     --- the orange of the other status lines (the maintainer's
     --- ruling of November 15, 2026); the palette has no such
-    --- gray, so it is given as it is
+    --- gray, so it is given as it is. A running program's line
+    --- is the console's too. The state word, "console",
+    --- "running" or "paused", is in the yellow of the editor's
+    --- (the maintainer's rulings of November 17, 2026: "keep the
+    --- bar dark gray, just add 'running' in yellow as a status",
+    --- and "We can write 'paused' in yellow as well")
     console = {
       fg = Color[Color.white + Color.bright],
       bg = { 24 / 255, 24 / 255, 24 / 255, 1 },
+      state = Color[Color.yellow + Color.bright],
       indicator = indicator,
       special = special,
       warning = warning,
+      mark = mark,
       error = error,
     },
-    user = {
-      bg = Color[Color.blue],
-      fg = Color[Color.white],
-      indicator = indicator,
-      special = special,
-      warning = warning,
-      error = error,
-    },
+    --- a pause: a darker red than the palette's, #A00000, with
+    --- white text and "paused" in yellow (the maintainer's
+    --- ruling of November 17, 2026: "maybe make red darker and
+    --- keep white text?"). White on it is 8.4:1 where the
+    --- palette's red gives 6.5:1, the yellow 7.8:1 and the cyan
+    --- indicator 6.7:1; a red darker still comes too close to
+    --- the console's gray for a protanope. The palette has no
+    --- such red, so it is given as it is
     inspect = {
-      bg = Color[Color.red],
-      fg = Color[Color.black],
+      bg = { 160 / 255, 0, 0, 1 },
+      fg = Color[Color.white + Color.bright],
+      state = Color[Color.yellow + Color.bright],
       indicator = indicator,
       special = special,
       warning = warning,
+      mark = mark,
       error = error,
     },
     editor = {
@@ -220,6 +238,7 @@ return {
       indicator = indicator,
       special = special,
       warning = warning,
+      mark = mark,
       error = error,
     },
   },

@@ -1609,18 +1609,31 @@ describe("the output's rows with no field under it #console",
         end
       end)
 
+    --- the state word is cut first, then the project, the file
+    --- the last (the maintainer's ruling of November 18, 2026)
     it("have a status line that fits the screen with a long "
-      .. "entry name, the name cut and \"running\" whole", function()
+      .. "entry name, the word cut first, then the file", function()
         owning()
         K.cc.entry = string.rep("e", 60) .. ".lua"
         local s = K.screen()
         local v = K.cc.cfg.view
-        local last = s.field[#s.field]
-        assert.equal("running", last.text)
-        assert.is_true(last.x + 7 * v.fw <= v.w, "running at "
-          .. last.x .. " of " .. v.w)
-        local name = s.field[#s.field - 1].text
-        assert.equal("…", name:sub(-#"…"))
+        local texts = { }
+        for _, t in ipairs(s.field) do
+          if t.y < v.fh then texts[#texts + 1] = t end
+        end
+        table.sort(texts, function(a, b) return a.x < b.x end)
+        assert.equal("ru…", texts[3].text)
+        assert.equal("…", texts[2].text:sub(-#"…"))
+        assert.equal("text", texts[4].text)
+        for i, t in ipairs(texts) do
+          assert.is_true(t.x + string.ulen(t.text) * v.fw <= v.w,
+            t.text)
+          if i > 1 then
+            local prev = texts[i - 1]
+            assert.is_true(prev.x + string.ulen(prev.text) * v.fw
+              <= t.x, prev.text .. " runs into " .. t.text)
+          end
+        end
         K.cc.entry = nil
         forget()
       end)
@@ -1684,10 +1697,9 @@ describe("the output's rows with no field under it #console",
         forget()
       end)
 
-    --- the line's colours go by the IDE's state: a program idle
-    --- behind the console that still takes keys has the console's,
-    --- one that runs the program's (review o4: a run that idles
-    --- and its rerun that runs say the same words)
+    --- the line's render goes by the IDE's state, which is in
+    --- its key (review o4: a run that idles and its rerun that
+    --- runs say the same words)
     it("render the status line under them again when a rerun of "
       .. "the same program runs where the first idled", function()
         local G = getfenv(0)
@@ -1860,11 +1872,1292 @@ describe("the output's rows with no field under it #console",
         local line = { }
         for _, t in ipairs(s.field) do line[#line + 1] = t.text end
         local name = K.cc.model.projects.current.name
-        assert.same({ "text", name, "main.lua", "running" }, line)
+        assert.same({ name, "main.lua", "running", "text" }, line)
         assert.equal(0, s.field_rows, "rows under the status line")
         forget()
       end)
   end)
+
+-- The status line's mode (the maintainer's rulings of November
+-- 17, 2026): its colour "clearly indicates the mode (but is never
+-- the single differentiating indicator)"; "keep the bar dark
+-- gray, just add 'running' in yellow as a status"; a program's
+-- own field shows its prompt and the cursor's place alone; and
+-- the IDE's own line "always starts with: project file mode",
+-- the word in yellow: "console", "running", "paused" or the
+-- editor's state. The console is dark gray, a running program's
+-- bare line too, the editor blue, a pause a darker red.
+describe("the status line's mode #console", function()
+  before_each(function() reset() end)
+  after_each(cleanup)
+
+  local function colors() return K.cc.cfg.view.colors.statusline end
+
+  local function same(a, b)
+    return a ~= nil and b ~= nil
+        and table.concat(a, ",") == table.concat(b, ",")
+  end
+
+  --- the line's ground, by the theme's name for it, and its
+  --- words, each with the colour it is drawn in
+  --- @return table<string, true> grounds
+  --- @return table<string, number[]> words
+  local function line()
+    local grounds, words = { }, { }
+    for _, e in ipairs(K.screen().field_log) do
+      if e.fill then
+        for name, c in pairs(colors()) do
+          if same(c.bg, e.colour) then grounds[name] = true end
+        end
+      elseif e.text then
+        words[e.text] = e.colour
+      end
+    end
+    return grounds, words
+  end
+
+  --- what one status line draws for `status`: its ground, by
+  --- the theme's name, and its words
+  --- @return table<string, true> grounds
+  --- @return table<string, true> words
+  local function drawn(statusline, status)
+    local gfx = love.graphics
+    local saved = { gfx.setColor, gfx.rectangle, gfx.print }
+    local colour, grounds, words = { }, { }, { }
+    gfx.setColor = function(c, ...)
+      colour = type(c) == "table" and c or { c, ... }
+    end
+    gfx.rectangle = function(mode)
+      if mode ~= "fill" then return end
+      for name, c in pairs(colors()) do
+        if same(c.bg, colour) then grounds[name] = true end
+      end
+    end
+    gfx.print = function(text) words[tostring(text)] = true end
+    local ok, e = pcall(statusline.draw, statusline, status, 0)
+    gfx.setColor, gfx.rectangle, gfx.print =
+        saved[1], saved[2], saved[3]
+    assert(ok, e)
+    return grounds, words
+  end
+
+  --- each text one status line draws for `status`, with where
+  --- it starts and ends, in pixels, as the line's font measures
+  --- it, and its colour, left to right
+  --- @return table[] --- { text, from, to, colour }
+  local function placed(statusline, status)
+    local gfx, font = love.graphics, statusline.cfg.font
+    local saved = { gfx.print, gfx.rectangle, gfx.setColor,
+      gfx.getFont, gfx.setFont }
+    local out, colour = { }, nil
+    --- the editor's line asks for the font
+    gfx.getFont = saved[4] or function() end
+    gfx.setFont = saved[5] or function() end
+    gfx.setColor = function(c, ...)
+      colour = type(c) == "table" and c or { c, ... }
+    end
+    gfx.rectangle = function() end
+    gfx.print = function(text, x)
+      text = tostring(text)
+      if text:match("%S") then
+        out[#out + 1] = { text = text, from = x,
+          to = x + font:getWidth(text), colour = colour }
+      end
+    end
+    local ok, e = pcall(statusline.draw, statusline, status, 0)
+    gfx.print, gfx.rectangle, gfx.setColor, gfx.getFont, gfx.setFont =
+        saved[1], saved[2], saved[3], saved[4], saved[5]
+    assert(ok, e)
+    table.sort(out, function(a, b) return a.from < b.from end)
+    return out
+  end
+
+  --- the console's own line, the texts it draws, left to right:
+  --- { text, x, colour }
+  local function head()
+    local fh = K.cc.cfg.view.fh
+    local out = { }
+    for _, e in ipairs(K.screen().field_log) do
+      if e.text and e.text:match("%S") and e.y < fh then
+        out[#out + 1] = { text = e.text, x = e.x, colour = e.colour }
+      end
+    end
+    table.sort(out, function(a, b) return a.x < b.x end)
+    return out
+  end
+
+  --- the line starts with the project, the entry file and the
+  --- state word, in yellow, at the places a console line has
+  --- them; returns the places
+  --- the console's own line names no file; a running or paused
+  --- program's names its entry file (the maintainer's ruling of
+  --- November 18, 2026)
+  local function starts_with(word, places)
+    local h = head()
+    local project = K.cc.model.projects.current.name
+    local want = word == "console" and { project, word }
+        or { project, "main.lua", word }
+    local got, at = { }, { }
+    for i = 1, #want do
+      got[i] = h[i] and h[i].text
+      at[i] = h[i] and h[i].x
+    end
+    assert.same(want, got)
+    assert.is_true(same(K.cc.cfg.view.colors.statusline.console.state,
+      h[#want].colour), word .. " in yellow")
+    if places then assert.same(places, at) end
+    return at
+  end
+
+  local function forget()
+    local lv = K.cc:get_project_env().love
+    lv.update, lv.keypressed = nil, nil
+    K.cc:get_project_env().compy.input.hooks.keypressed = nil
+  end
+
+  it("has a ground of its own for the console, the editor and a "
+    .. "pause, and none for a running program", function()
+      local c, seen = colors(), { }
+      for _, name in ipairs({ "console", "editor", "inspect" }) do
+        local key = table.concat(c[name].bg, ",")
+        assert.is_nil(seen[key], name .. " shares " .. tostring(seen[key]))
+        seen[key] = name
+      end
+      assert.is_nil(c.user)
+    end)
+
+  --- WCAG's contrast ratio of two colours
+  local function contrast(a, b)
+    local function lum(c)
+      local function ch(v)
+        if v <= 0.03928 then return v / 12.92 end
+        return ((v + 0.055) / 1.055) ^ 2.4
+      end
+      return 0.2126 * ch(c[1]) + 0.7152 * ch(c[2])
+          + 0.0722 * ch(c[3])
+    end
+    local x, y = lum(a), lum(b)
+    if x < y then x, y = y, x end
+    return (x + 0.05) / (y + 0.05)
+  end
+
+  --- the text, the state word and the position's indicator each
+  --- bar draws read on its ground
+  it("has tones that read on every bar", function()
+    for _, name in ipairs({ "console", "editor", "inspect" }) do
+      local c = colors()[name]
+      for tone, v in pairs({ fg = c.fg, state = c.state or c.fg2,
+        indicator = c.indicator, mark = c.mark }) do
+        --- the mark's bright orange on the pause's red is 4.26:1,
+        --- short of 4.5 (review e4's triage asked for #FFA500 on
+        --- every bar; the choice is open): held where it is
+        local least = (name == "inspect" and tone == "mark") and 4.25
+            or 4.5
+        assert.is_true(contrast(c.bg, v) >= least, name .. " " .. tone)
+      end
+    end
+  end)
+
+  it("is the console's, saying the project, the entry file and "
+    .. "\"console\" in yellow, in the console", function()
+      local grounds, words = line()
+      assert.same({ console = true }, grounds)
+      assert.is_nil(words.running)
+      assert.is_nil(words.paused)
+      assert.is_not_nil(words.text, "the display mode")
+      starts_with("console")
+    end)
+
+  it("is the editor's, saying its state, in the editor", function()
+    reset({ ["main.lua"] = "a = 1\n" })
+    K.open("main.lua")
+    local grounds, words = line()
+    assert.is_true(grounds.editor)
+    assert.is_nil(grounds.console)
+    assert.is_not_nil(words.browsing)
+  end)
+
+  for _, case in ipairs({
+    { "with an update", "function love.update() end\n" },
+    { "with love.keypressed alone",
+      "function love.keypressed() end\n" },
+  }) do
+    it("is the console's behind a running program, saying "
+      .. "\"running\" in yellow, " .. case[1], function()
+        reset({ ["main.lua"] = case[2] })
+        run("run()")
+        K.frame()
+        assert.is_true(K.cc:fieldless())
+        local grounds, words = line()
+        assert.same({ console = true }, grounds)
+        assert.same(colors().editor.fg2, colors().console.state)
+        assert.is_not_nil(words.text, "the display mode")
+        assert.is_nil(words.console)
+        starts_with("running")
+        K.keys("lctrl", "q")
+        forget()
+      end)
+  end
+
+  --- a program's own field draws its own status line, over the
+  --- console's: its prompt and the cursor's place alone
+  for _, case in ipairs({
+    { "no update", "compy.input.show { prompt = 'Your name?' }\n" },
+    { "an update", "compy.input.show { prompt = 'Your name?' }\n"
+      .. "function love.update() end\n" },
+    { "compy.ask", "compy.ask('Your name?', function() end)\n" },
+  }) do
+    it("is the console's under a program's own field, saying its "
+      .. "prompt and the cursor's place alone, with " .. case[1],
+      function()
+        reset({ ["main.lua"] = case[2] })
+        run("run()")
+        K.frame()
+        assert.is_true(K.cc.main_ctrl.program_owns_input())
+        local ui = love.state.user_input
+        local grounds, words = drawn(ui.V.statusline,
+          ui.M:get_status())
+        assert.same({ console = true }, grounds)
+        assert.same({ ["Your name?"] = true, ["1:1"] = true }, words)
+        K.keys("lctrl", "q")
+        forget()
+      end)
+  end
+
+  --- a field rendered in one state of the IDE is rendered again
+  --- in the next: its line's colours and a pause's word go by it
+  it("renders a program's field again when the IDE's state "
+    .. "changes", function()
+      reset({ ["main.lua"] = "compy.input.show { }\n" })
+      run("run()")
+      K.frame()
+      local V = love.state.user_input.V
+      V.ide_shown = "a state from before"
+      --- the draw's calls the fixture's graphics lack
+      local gfx = love.graphics
+      local blend, draw = gfx.setBlendMode, gfx.draw
+      gfx.setBlendMode = blend or function() end
+      gfx.draw = draw or function() end
+      local ok, e = pcall(V.draw, V)
+      gfx.setBlendMode, gfx.draw = blend, draw
+      assert(ok, e)
+      assert.equal(V.statusline:ide_key(), V.ide_shown)
+      K.keys("lctrl", "q")
+      forget()
+    end)
+
+  --- review e2: a program's prompt is its field's label, and
+  --- however long it is, it is cut to fit, and never covers or
+  --- pushes away the cursor's place
+  local QUESTION = "Which country would you like to visit next?"
+  for _, prompt in ipairs({
+    QUESTION,
+    string.rep("x", 63) .. "?",
+    string.rep("A long question. ", 8),
+  }) do
+    it("fits a program's prompt of " .. #prompt .. " characters, "
+      .. "the cursor's place whole, nothing overlapping", function()
+        assert.equal(43, #QUESTION)
+        reset({ ["main.lua"] = string.format(
+          "compy.ask(%q, function() end)\n", prompt) })
+        run("run()")
+        K.frame()
+        local ui = love.state.user_input
+        local w = K.cc.cfg.view.w
+        local texts = placed(ui.V.statusline, ui.M:get_status())
+        local whole = { }
+        for i, t in ipairs(texts) do
+          assert.is_true(t.from >= 0 and t.to <= w,
+            t.text .. " off the screen")
+          if i > 1 then
+            assert.is_true(texts[i - 1].to <= t.from,
+              texts[i - 1].text .. " runs into " .. t.text)
+          end
+          whole[t.text] = true
+        end
+        assert.is_true(whole["1:1"], "1:1")
+        assert.is_nil(whole.running)
+        assert.is_nil(whole.text)
+        -- the prompt gave way, and says how it begins
+        local first = texts[1].text
+        assert.equal(prompt:sub(1, 8), first:sub(1, 8))
+        if #prompt > 50 then
+          assert.equal("…", first:sub(-#"…"))
+        end
+        K.keys("lctrl", "q")
+        forget()
+      end)
+  end
+
+  --- every text on the screen and none running into the next
+  local function contained(texts, w)
+    for i, t in ipairs(texts) do
+      assert.is_true(t.from >= 0 and t.to <= w,
+        t.text .. " off the screen at " .. t.to)
+      if i > 1 then
+        assert.is_true(texts[i - 1].to <= t.from,
+          texts[i - 1].text .. " runs into " .. t.text)
+      end
+    end
+  end
+
+  --- review e3: a line break in a prompt printed its second line
+  --- under the bar
+  it("draws a prompt with line breaks and tabs on its one row",
+    function()
+      reset({ ["main.lua"] =
+        "compy.ask('Your name?\\nSECOND\\r\\tLINE', function() end)\n" })
+      run("run()")
+      K.frame()
+      local ui = love.state.user_input
+      local texts = placed(ui.V.statusline, ui.M:get_status())
+      assert.equal("Your name? SECOND  LINE", texts[1].text)
+      for _, t in ipairs(texts) do
+        assert.is_nil(t.text:find("%c"), t.text)
+      end
+      contained(texts, K.cc.cfg.view.w)
+      K.keys("lctrl", "q")
+      forget()
+    end)
+
+  --- a toned label is cut the same, in its tone
+  it("fits a long toned label, its tone kept", function()
+    local sl = K.cc.view.input.statusline
+    local w = K.cc.cfg.view.w
+    local status = { label = { text = string.rep("y", 90),
+      tone = "warning" }, cursor = { l = 1, c = 1 }, n_lines = 1,
+      mode = "text" }
+    local texts = placed(sl, status)
+    for i, t in ipairs(texts) do
+      assert.is_true(t.to <= w, t.text .. " off the screen")
+      if i > 1 then
+        assert.is_true(texts[i - 1].to <= t.from, t.text)
+      end
+    end
+    assert.equal("…", texts[1].text:sub(-#"…"))
+    assert.same(colors().console.warning, texts[1].colour)
+  end)
+
+  it("is a pause's, saying the project, the entry file and "
+    .. "\"paused\" in yellow",
+    function()
+      reset({ ["main.lua"] = "function love.update() end\n" })
+      run("run()")
+      K.frame()
+      K.keys("lctrl", "pause")
+      K.frame()
+      if K.app_state() == "snapshot" then K.cc:suspend() end
+      assert.same("inspect", K.app_state())
+      local grounds, words = line()
+      assert.is_true(grounds.inspect)
+      assert.is_nil(grounds.console)
+      assert.is_nil(words.console)
+      assert.is_nil(words.running)
+      assert.is_not_nil(words.text, "the display mode")
+      -- white text, "paused" in yellow
+      local project = K.cc.model.projects.current.name
+      assert.is_true(same(colors().inspect.fg, words[project]))
+      assert.is_true(same(colors().inspect.state, words.paused))
+      local h = head()
+      assert.same({ project, "main.lua", "paused" },
+        { h[1].text, h[2].text, h[3].text })
+      K.keys("lctrl", "q")
+      forget()
+    end)
+
+  it("is the console's again once a program ended by itself",
+    function()
+      reset({ ["main.lua"] = "print('done')\n" })
+      run("run()")
+      K.frame()
+      local grounds, words = line()
+      assert.same({ console = true }, grounds)
+      assert.is_nil(words.running)
+      starts_with("console")
+    end)
+
+  --- the no-card mark (the maintainer's rulings of November 17,
+  --- 2026: "[no sd card] stays in front", and on every line of
+  --- the IDE's own, the editor's too), read from
+  --- love.state.has_removable at each draw
+  local function without_card(f)
+    local was = love.state.has_removable
+    love.state.has_removable = false
+    local ok, e = pcall(f)
+    love.state.has_removable = was
+    assert(ok, e)
+  end
+
+  --- the texts begin with the mark, in the warning tone of the
+  --- line's colours, then the project, the file and `word`; or,
+  --- with a card, with the project
+  local function marked(texts, theme, word, file, card)
+    local project = K.cc.model.projects.current.name
+    local want = file and { project, file, word } or { project, word }
+    if not card then table.insert(want, 1, "[no sd]") end
+    local got = { }
+    for i = 1, #want do got[i] = texts[i] and texts[i].text end
+    if card then
+      assert.same(want, got)
+    else
+      assert.same(want, got)
+      assert.is_true(same(colors()[theme].mark, texts[1].colour),
+        "the mark in its bright orange")
+    end
+  end
+
+  local function editor_line()
+    local ec = K.cc.editor
+    return placed(ec.view.input.statusline, ec.input:get_status())
+  end
+
+  for _, card in ipairs({ true, false }) do
+    local with = card and "with an SD card, no mark" or
+        "without an SD card, the mark in front"
+    local function maybe(f)
+      if card then f() else without_card(f) end
+    end
+
+    it("starts the console's line " .. with, function()
+      maybe(function()
+        marked(head(), "console", "console", nil, card)
+      end)
+    end)
+
+    it("starts a running program's line " .. with, function()
+      reset({ ["main.lua"] = "function love.update() end\n" })
+      run("run()")
+      K.frame()
+      maybe(function()
+        marked(head(), "console", "running", "main.lua", card)
+      end)
+      K.keys("lctrl", "q")
+      forget()
+    end)
+
+    it("starts a pause's line " .. with, function()
+      reset({ ["main.lua"] = "function love.update() end\n" })
+      run("run()")
+      K.frame()
+      K.keys("lctrl", "pause")
+      K.frame()
+      if K.app_state() == "snapshot" then K.cc:suspend() end
+      assert.same("inspect", K.app_state())
+      maybe(function()
+        marked(head(), "inspect", "paused", "main.lua", card)
+      end)
+      K.keys("lctrl", "q")
+      forget()
+    end)
+
+    it("starts the editor's line in each state " .. with, function()
+      reset({ ["notes.lua"] = "a = 1\nb = 2\n" })
+      K.open("notes.lua")
+      maybe(function()
+        marked(editor_line(), "editor", "browsing", "notes.lua", card)
+      end)
+      K.type("c = 3")
+      maybe(function()
+        marked(editor_line(), "editor", "inserting", "notes.lua", card)
+      end)
+      K.keys("escape")
+      K.keys("lctrl", "up")
+      K.keys("f2")
+      assert.same("replacing", K.state())
+      maybe(function()
+        marked(editor_line(), "editor", "replacing", "notes.lua", card)
+      end)
+    end)
+  end
+
+  it("puts no mark on a program's own field without an SD card",
+    function()
+      reset({ ["main.lua"] = "compy.ask('Your name?', function() end)\n" })
+      run("run()")
+      K.frame()
+      without_card(function()
+        local ui = love.state.user_input
+        local texts = placed(ui.V.statusline, ui.M:get_status())
+        assert.same("Your name?", texts[1].text)
+        for _, t in ipairs(texts) do
+          assert.is_nil(t.text:find("sd card", 1, true))
+        end
+      end)
+      K.keys("lctrl", "q")
+      forget()
+    end)
+
+  --- the mark is never cut: the project's name gives way
+  it("keeps the mark whole beside a long project name", function()
+    local sl = K.cc.view.input.statusline
+    local w = K.cc.cfg.view.w
+    without_card(function()
+      local texts = placed(sl, { label = "", state = "console",
+        project = string.rep("p", 60), name = "main.lua",
+        cursor = { l = 1, c = 1 }, n_lines = 1, mode = "text" })
+      assert.same("[no sd]", texts[1].text)
+      assert.equal("…", texts[2].text:sub(-#"…"))
+      for i, t in ipairs(texts) do
+        assert.is_true(t.to <= w, t.text)
+        if i > 1 then assert.is_true(texts[i - 1].to <= t.from) end
+      end
+    end)
+  end)
+
+  --- review e4: the file's name took the project's room, and the
+  --- project went. Every text on the screen, none running into
+  --- the next, the project and the file both there, cut or not
+  local function both_named(texts, project, file)
+    local w = K.cc.cfg.view.w
+    local p, f
+    for i, t in ipairs(texts) do
+      assert.is_true(t.from >= 0 and t.to <= w, t.text)
+      if i > 1 then
+        assert.is_true(texts[i - 1].to <= t.from,
+          texts[i - 1].text .. " runs into " .. t.text)
+      end
+      if project:sub(1, 2) == t.text:sub(1, 2) then p = t.text end
+      if file:sub(1, 2) == t.text:sub(1, 2) then f = t.text end
+    end
+    assert.is_not_nil(p, "the project")
+    assert.is_not_nil(f, "the file")
+    return p, f
+  end
+
+  it("keeps the project beside a long file's name in the editor "
+    .. "without a card", function()
+      reset({ ["my-first-program.lua"] = "a = 1\n" })
+      K.open("my-first-program.lua")
+      without_card(function()
+        local texts = editor_line()
+        assert.same("[no sd]", texts[1].text)
+        both_named(texts, K.cc.model.projects.current.name,
+          "my-first-program.lua")
+      end)
+    end)
+
+  it("keeps the project beside a 60-character file's name in the "
+    .. "editor with a card", function()
+      local file = string.rep("f", 56) .. ".lua"
+      assert.equal(60, #file)
+      reset({ [file] = "a = 1\n" })
+      K.open(file)
+      local _, f = both_named(editor_line(),
+        K.cc.model.projects.current.name, file)
+      assert.equal("…", f:sub(-#"…"))
+    end)
+
+  --- the state word is cut first, then the project, the file
+  --- only if nothing more can (the maintainer's ruling of
+  --- November 18, 2026), none below three columns
+  for _, card in ipairs({ true, false }) do
+    it("cuts the word, then the project, then the file "
+      .. (card and "with a card" or "without one"), function()
+        local sl = K.cc.view.input.statusline
+        local project = string.rep("p", 40)
+        local file = string.rep("f", 30) .. ".lua"
+        local function draw()
+          local texts = placed(sl, { label = "", state = "paused",
+            project = project, name = file,
+            cursor = { l = 1, c = 1 }, n_lines = 1, mode = "text" })
+          local p, f = both_named(texts, project, file)
+          local word
+          for _, t in ipairs(texts) do
+            if t.text:sub(1, 2) == "pa" then word = t.text end
+          end
+          assert.equal("pa…", word)
+          assert.equal("…", p:sub(-#"…"))
+          assert.is_true(string.ulen(p) >= 3)
+          if f ~= file then
+            -- the file is cut only with the project at its floor
+            assert.equal(3, string.ulen(p))
+          end
+          return f
+        end
+        if card then
+          assert.equal(file, draw(), "the file whole with a card")
+        else
+          without_card(draw)
+        end
+      end)
+  end
+
+  --- review e5: the fit is total. The IDE's own parts take their
+  --- room whole, the names share what is left, and where even
+  --- their floors do not fit they go, the label, then the file,
+  --- then the project; nothing shares a cell or leaves the row.
+
+  --- the cells one draw of `statusline` inks for `status`, a
+  --- space inking none: nil and the cells, or the first clash
+  --- @return string? clash
+  --- @return table<integer, string> cells
+  local function inked(statusline, status)
+    local gfx, fw = love.graphics, K.cc.cfg.view.fw
+    local cols = math.floor(K.cc.cfg.view.w / fw)
+    local names = { "print", "rectangle", "setColor", "getFont",
+      "setFont", "push", "pop", "transformPoint", "intersectScissor" }
+    local saved = { }
+    for i, n in ipairs(names) do saved[i] = gfx[n] end
+    local cells, clash = { }, nil
+    --- the clip in force, its end as the first cell it hides,
+    --- as the graphics' scissor would hide them; a stack of them
+    local clip, stack = nil, { }
+    --- what this draw clipped and the right block's first cell
+    local info = { clip = nil, right = nil }
+    gfx.setColor = function() end
+    gfx.rectangle = function() end
+    gfx.getFont = saved[4] or function() end
+    gfx.setFont = saved[5] or function() end
+    gfx.push = function() stack[#stack + 1] = clip or false end
+    gfx.pop = function() clip = table.remove(stack) or nil end
+    gfx.transformPoint = function(x, y) return x, y end
+    gfx.intersectScissor = function(x, _, w)
+      local e = math.floor((x + w) / fw + 0.5)
+      clip = clip and math.min(clip, e) or e
+      info.clip = info.clip and math.min(info.clip, clip) or clip
+    end
+    gfx.print = function(text, x)
+      text = tostring(text)
+      local at = math.floor(x / fw + 0.5)
+      if not clip and text:match("%S") then
+        info.right = info.right and math.min(info.right, at) or at
+      end
+      local i = 0
+      for ch in text:gmatch("[%z\1-\127\194-\244][\128-\191]*") do
+        local cell = at + i
+        if ch ~= " " and not clash and not (clip and cell >= clip) then
+          if cell < 0 or cell >= cols then
+            clash = text .. " leaves the row at cell " .. cell
+          elseif cells[cell] then
+            clash = text .. " inks cell " .. cell .. ", "
+              .. cells[cell] .. "'s"
+          else
+            cells[cell] = text
+          end
+        end
+        i = i + 1
+      end
+    end
+    local ok, e = pcall(statusline.draw, statusline, status, 0)
+    for i, n in ipairs(names) do gfx[n] = saved[i] end
+    assert(ok, e)
+    --- the left side is clipped before the right block begins
+    if not clash and info.clip and info.right
+        and info.clip > info.right then
+      clash = "the left side's clip ends at cell " .. info.clip
+        .. ", past the right block's first, " .. info.right
+    end
+    return clash, cells, info
+  end
+
+  --- a name of `n` characters, nil for none
+  local function named(c, n, tail)
+    if n == 0 then return nil end
+    if tail and n > #tail then
+      return string.rep(c, n - #tail) .. tail
+    end
+    return string.rep(c, n)
+  end
+
+  --- The widest right block (the maintainer's rulings of
+  --- November 18, 2026): a draft's cursor of nine characters,
+  --- 9999:9999, numbers above 9999 being written in thousands
+  --- (10K); the editor's block and lines, B9999 L9999-9999; and
+  --- the output scrolled back the kept rows' limit, L-1000.
+  local WIDE_RANGE = { ln_label = function() return "L9999-9999" end }
+  local WIDE_CURSOR = { l = 9999, c = 9999 }
+  local WIDE_BACK = 1000
+
+  --- each state's status with the widest right block it draws:
+  --- { name, app state, its state word, status(p, f, caps) }
+  local STATES = {
+    { "the console", "ready", "console", function(p, _, caps)
+      return { label = "", project = p, state = "console",
+        cursor = WIDE_CURSOR, n_lines = 1,
+        back = WIDE_BACK, mode = "combined", caps = caps }
+    end },
+    { "a pause", "inspect", "paused", function(p, f, caps)
+      return { label = "", project = p, name = f, state = "paused",
+        cursor = WIDE_CURSOR, n_lines = 1,
+        back = WIDE_BACK, mode = "combined", caps = caps }
+    end },
+    { "a running program", "running", "running", function(p, f)
+      return { custom = { project = p, name = f, state = "running" },
+        back = WIDE_BACK, mode = "combined" }
+    end },
+    { "a program's field", "running", nil, function(p, _, caps)
+      return { label = p, cursor = WIDE_CURSOR, n_lines = 1,
+        caps = caps }
+    end },
+  }
+  --- the editor's states, and a state word with an arrow toward
+  --- the highlighted target, which a cut keeps after the word
+  for _, st in ipairs({ "browsing", "inserting", "replacing",
+    "replacing↑" }) do
+    --- the editor's status carries the word and its arrow apart
+    local word, arrow = st:match("^(%a+)(.*)$")
+    STATES[#STATES + 1] = { "the editor " .. st, "editor", st,
+      function(p, f, caps)
+        return { custom = { project = p, name = f, state = word,
+          arrow = arrow ~= "" and arrow or nil,
+          spans_lines = true, selection = 9999, buflen = 9999,
+          range = WIDE_RANGE },
+          cursor = WIDE_CURSOR, caps = caps }
+      end }
+  end
+
+  --- the editor with numbers in thousands and its block's lines
+  --- too wide for half the line, which leave it
+  STATES[#STATES + 1] = { "the editor, its lines left out", "editor",
+    "inserting", function(p, f, caps)
+      return { custom = { project = p, name = f, state = "inserting",
+        spans_lines = true, selection = 123456, buflen = 999999,
+        range = { ln_label = function()
+          return "L123456789-123456" end } },
+        cursor = { l = 123456, c = 123456 }, caps = caps }
+    end }
+
+  --- the forms a part may be drawn in: whole, or cut to `n`
+  --- columns, three at least, its arrow kept
+  local function forms(text)
+    local out = { [text] = true }
+    local l = string.ulen(text)
+    local last = string.usub(text, l, l)
+    local arrow = (last == "↑" or last == "↓" or last == "↕") and last
+    local word = arrow and string.usub(text, 1, l - 1) or text
+    for n = 3, l - 1 do
+      local k = arrow and n - 1 or n
+      if k >= 2 then
+        out[string.usub(word, 1, k - 1) .. "…" .. (arrow or "")] = true
+      end
+    end
+    return out
+  end
+
+  --- the first part missing or cut below its floor, if any
+  local function floors_held(cells, parts)
+    local drawn = { }
+    for _, t in pairs(cells) do drawn[t] = true end
+    for _, part in ipairs(parts) do
+      local found = false
+      for form in pairs(forms(part)) do
+        if drawn[form] then found = true end
+      end
+      if not found then return part .. " not drawn, nor cut to 3+" end
+    end
+  end
+
+  for _, case in ipairs(STATES) do
+    it("never overlaps nor leaves the row, nor drops a name or cuts "
+      .. "it below three columns, in " .. case[1] .. ", for any "
+      .. "project and file from 0 to 70 characters, with and "
+      .. "without a card, Caps Lock on and off", function()
+        local sl = K.cc.view.input.statusline
+        local was = love.state.app_state
+        local removable = love.state.has_removable
+        local clash
+        for _, card in ipairs({ true, false }) do
+          love.state.has_removable = card and true or false
+          for _, caps in ipairs({ false, "CAPS" }) do
+            for lp = 0, 70 do
+              for lf = 0, 70 do
+                love.state.app_state = case[2]
+                local p, f = named("p", lp), named("f", lf, ".lua")
+                local status = case[4](p, f, caps or nil)
+                local c, cells = inked(sl, status)
+                if not c then
+                  local parts = { case[3] }
+                  if p then parts[#parts + 1] = p end
+                  local custom = status.custom
+                  if f and (status.name or (custom and custom.name)) then
+                    parts[#parts + 1] = f
+                  end
+                  c = floors_held(cells, parts)
+                end
+                if c and not clash then
+                  clash = string.format("%s, project %d, file %d, %s, %s",
+                    c, lp, lf, card and "card" or "no card",
+                    caps and "Caps" or "no Caps")
+                end
+              end
+            end
+          end
+        end
+        love.state.app_state = was
+        love.state.has_removable = removable
+        assert.is_nil(clash)
+      end)
+  end
+
+  --- the scrolled output's `L-N`, every N to the kept rows' limit,
+  --- beside the longest names
+  for _, case in ipairs({ STATES[1], STATES[2], STATES[3] }) do
+    it("fits L-1 to L-1000 in " .. case[1] .. " beside the longest "
+      .. "names, without a card and with Caps Lock", function()
+        local sl = K.cc.view.input.statusline
+        local was = love.state.app_state
+        local clash
+        without_card(function()
+          for back = 1, WIDE_BACK do
+            love.state.app_state = case[2]
+            local status = case[4](string.rep("p", 70),
+              string.rep("f", 66) .. ".lua", "CAPS")
+            status.back = back
+            local c, cells = inked(sl, status)
+            local seen = false
+            for _, t in pairs(cells or { }) do
+              if t == "L-" .. back then seen = true end
+            end
+            if not c and not seen then c = "L-" .. back .. " not drawn" end
+            if c and not clash then clash = c .. ", back " .. back end
+          end
+        end)
+        love.state.app_state = was
+        assert.is_nil(clash)
+      end)
+  end
+
+  --- review e6, by name: no card, Caps Lock, inserting before
+  --- B9999 L9999-10000, the draft's cursor at 10:9999
+  it("keeps the right block whole and the left side before it, "
+    .. "e6's widest editor line", function()
+      local sl = K.cc.view.input.statusline
+      local was = love.state.app_state
+      love.state.app_state = "editor"
+      local clash
+      without_card(function()
+        clash = inked(sl, { custom = { project = "demo",
+          name = "notes.lua", state = "inserting", spans_lines = true,
+          selection = 9999, buflen = 9999,
+          range = { ln_label = function() return "L9999-10000" end } },
+          cursor = { l = 10, c = 9999 }, caps = "CAPS" })
+      end)
+      love.state.app_state = was
+      assert.is_nil(clash)
+    end)
+
+  --- where even the floors do not fit, the left side is cut off
+  --- at its clip, before the right block (review e6). No status
+  --- the IDE makes gets there: the widest right block, Caps Lock
+  --- and a position of half the line in the editor, leaves the
+  --- mark and three floors exactly their room. A Caps Lock word
+  --- twenty columns long makes it get there.
+  it("clips the left side before the right block where even its "
+    .. "floors do not fit", function()
+      local sl = K.cc.view.input.statusline
+      local was = love.state.app_state
+      love.state.app_state = "editor"
+      local clash, cells, info
+      without_card(function()
+        clash, cells, info = inked(sl, { custom = {
+          project = string.rep("p", 30), name = string.rep("f", 30),
+          state = "replacing", arrow = "↑", spans_lines = true,
+          selection = 9999, buflen = 9999, range = WIDE_RANGE },
+          cursor = { l = 9999, c = 9999 }, caps = string.rep("C", 20) })
+      end)
+      love.state.app_state = was
+      assert.is_nil(clash)
+      assert.is_not_nil(info.clip, "the left side is clipped")
+      for cell, text in pairs(cells) do
+        if cell >= info.clip then
+          assert.is_true(cell >= info.right, text .. " at " .. cell)
+        end
+      end
+    end)
+
+  --- the arrow toward the edit's target (the maintainer's ruling
+  --- of November 18, 2026): after "replacing" while no row of
+  --- the target is in view, up or down; none while any row is
+  it("puts an arrow after \"replacing\" toward a target out of view",
+    function()
+      local t = { }
+      for i = 1, 60 do t[i] = "line " .. i end
+      reset({ ["notes.txt"] = table.concat(t, "\n") .. "\n" })
+      K.open("notes.txt")
+      K.browse_to(30)
+      K.keys("f2")
+      assert.same("replacing", K.state())
+      local ec = K.cc.editor
+      local function arrow() return ec.input:get_status().custom.arrow end
+      local function line_word()
+        for _, x in ipairs(editor_line()) do
+          if x.text:find("^repl") or x.text:find("^r…") then
+            return x.text
+          end
+        end
+      end
+      assert.is_nil(arrow(), "the target in view")
+      assert.equal("replacing", line_word())
+      local sl = ec.view.input.statusline
+      local in_view = sl:key(ec.input:get_status())
+      K.keys("lctrl", "pageup")
+      assert.equal("↓", arrow(), "the target below the view")
+      assert.equal("replacing↓", line_word())
+      local below = sl:key(ec.input:get_status())
+      assert.are_not.equal(in_view, below)
+      K.keys("lctrl", "pagedown")
+      assert.equal("↑", arrow(), "the target above the view")
+      assert.equal("replacing↑", line_word())
+      assert.are_not.equal(below, sl:key(ec.input:get_status()))
+      K.keys("lctrl", "g")
+      assert.is_nil(arrow(), "back on the target")
+      assert.equal("replacing", line_word())
+      assert.equal(30, K.target())
+    end)
+
+  --- review e7: the arrow says what the document view draws of
+  --- the target's yellow highlight, its wrapped rows included:
+  --- none while any row of it is drawn, up or down while none is
+  local function arrow_holds(what)
+    local ec = K.cc.editor
+    local custom = ec.input:get_status().custom
+    local arrow = custom and custom.arrow
+    local t = K.target()
+    if not t then
+      assert.is_nil(arrow, what .. ": no target, no arrow")
+      return
+    end
+    local rows, shown = K.rows_shown(t)
+    assert.is_true(rows > 0, what)
+    if shown > 0 then
+      assert.is_nil(arrow, what .. ": " .. shown .. " of the "
+        .. rows .. " target rows in view")
+    else
+      local bv = ec.view:get_current_buffer()
+      local s = bv:_block_span(t)
+      local want = s > bv.content.range.fin and "↓" or "↑"
+      assert.equal(want, arrow, what)
+    end
+  end
+
+  --- a text file of 60 lines, line 20 of `n` characters
+  local function long_line_file(n)
+    local t = { }
+    for i = 1, 60 do t[i] = "line " .. i end
+    t[20] = string.rep("x", n)
+    return table.concat(t, "\n") .. "\n"
+  end
+
+  --- e7's case: line 20 wraps to two rows; loaded with F2 and
+  --- browsed to line 33, the view draws its second row
+  it("puts no arrow while a wrapped target's row is in view",
+    function()
+      reset({ ["notes.txt"] = long_line_file(65) })
+      K.open("notes.txt")
+      K.browse_to(20)
+      K.keys("f2")
+      assert.same(20, K.target())
+      --- browsing down until the view's first row is the
+      --- target's second, its other row above the view
+      local bv = K.cc.editor.view:get_current_buffer()
+      local _, last = bv:_block_span(20)
+      local found
+      for p = 21, 60 do
+        K.browse_to(p)
+        if bv.content.range.start == last then
+          found = p
+          break
+        end
+      end
+      assert.is_not_nil(found, "a view from the target's second row")
+      local _, shown = K.rows_shown(20)
+      assert.equal(1, shown, "the target's second row in view")
+      assert.is_nil(K.cc.editor.input:get_status().custom.arrow)
+      arrow_holds("browsed to " .. found)
+    end)
+
+  --- at every browsing position, for a target of two rows and one
+  --- taller than the view; then Ctrl+G, the end position, Escape
+  --- and its undo, and a submit
+  for _, n in ipairs({ 65, 1100 }) do
+    it("says what the view draws of a target of " .. n
+      .. " characters, wherever the view is", function()
+        reset({ ["notes.txt"] = long_line_file(n) })
+        K.open("notes.txt")
+        K.browse_to(20)
+        K.keys("f2")
+        assert.same(20, K.target())
+        for b = 1, 60 do
+          K.browse_to(b)
+          arrow_holds("browsed to " .. b)
+        end
+        K.keys("lctrl", "g")
+        assert.same(20, K.position())
+        arrow_holds("Ctrl+G")
+        assert.is_nil(K.cc.editor.input:get_status().custom.arrow)
+        K.keys("lctrl", "pagedown")
+        assert.same("end", K.position())
+        arrow_holds("the end position")
+        K.keys("escape")
+        assert.is_nil(K.target())
+        arrow_holds("after Escape")
+        K.keys("lctrl", "z")
+        arrow_holds("after the undo of Escape")
+        K.keys("lctrl", "g")
+        arrow_holds("Ctrl+G after the undo")
+        K.keys("escape")
+        K.browse_to(5)
+        K.keys("f2")
+        K.keys("return")
+        arrow_holds("after a submit")
+        assert.same("browsing", K.state())
+      end)
+  end
+
+  --- review e7: only the state word's own arrow is never cut; a
+  --- name of arrows is cut as any text
+  it("cuts a name of arrows as any text", function()
+    local sl = K.cc.view.input.statusline
+    local was = love.state.app_state
+    love.state.app_state = "inspect"
+    local project = "p" .. string.rep("↑", 59)
+    local texts = placed(sl, { label = "", project = project,
+      name = "notes.lua", state = "paused",
+      cursor = { l = 1, c = 1 }, n_lines = 1, mode = "text" })
+    love.state.app_state = was
+    contained(texts, K.cc.cfg.view.w)
+    local said = { }
+    for _, t in ipairs(texts) do said[t.text] = t end
+    local p
+    for text in pairs(said) do
+      if text:sub(1, 1) == "p" and text:find("↑") then p = text end
+    end
+    assert.is_not_nil(p)
+    assert.equal("…", p:sub(-#"…"))
+    assert.is_not_nil(said["notes.lua"])
+  end)
+
+  it("keeps the arrow after a cut \"replacing\", in its tone",
+    function()
+      local sl = K.cc.view.input.statusline
+      local was = love.state.app_state
+      love.state.app_state = "editor"
+      local texts = placed(sl, { custom = {
+        project = string.rep("p", 30), name = "notes.lua",
+        state = "replacing", arrow = "↑", spans_lines = true,
+        selection = 3, buflen = 9,
+        range = { ln_label = function() return "L3" end } },
+        cursor = { l = 1, c = 1 } })
+      love.state.app_state = was
+      local word
+      for _, x in ipairs(texts) do
+        if x.text:find("↑$") then word = x end
+      end
+      assert.is_not_nil(word)
+      assert.equal("…↑", word.text:sub(-#"…↑"))
+      assert.is_true(word.text:sub(1, 1) == "r")
+      assert.same(colors().editor.fg2, word.colour)
+    end)
+
+  --- the maintainer's ruling of November 18, 2026: a number
+  --- above 9999 in the draft's cursor and in the block's number
+  --- is written in thousands with a K
+  for _, case in ipairs({ { 9999, "9999" }, { 10000, "10K" },
+    { 10999, "10K" }, { 11000, "11K" }, { 123456, "123K" } }) do
+    it("writes " .. case[1] .. " as " .. case[2]
+      .. " in the cursor and the block", function()
+        local sl = K.cc.view.input.statusline
+        local was = love.state.app_state
+        love.state.app_state = "editor"
+        local texts = placed(sl, { custom = { project = "p",
+          name = "f.lua", state = "browsing", spans_lines = true,
+          selection = case[1], buflen = case[1] + 1,
+          range = { ln_label = function() return "L1" end } },
+          cursor = { l = case[1], c = 2 } })
+        love.state.app_state = "ready"
+        local console = placed(sl, { label = "", project = "p",
+          state = "console", cursor = { l = 2, c = case[1] },
+          n_lines = 1 })
+        love.state.app_state = was
+        local said = { }
+        for _, t in ipairs(texts) do said[t.text] = true end
+        for _, t in ipairs(console) do said[t.text] = true end
+        assert.is_true(said["B" .. case[2]], "B" .. case[2])
+        assert.is_true(said[case[2] .. ":2"], case[2] .. ":2")
+        assert.is_true(said["2:" .. case[2]], "2:" .. case[2])
+      end)
+  end
+
+  --- the position's width: from its first part to the cursor's end
+  local function position_width(texts)
+    local first, last
+    for _, t in ipairs(texts) do
+      if t.text:match("^B") or t.text:match("^L") then
+        first = first and math.min(first, t.from) or t.from
+      end
+      if t.text:match("^[%dK]+:[%dK]+$") then last = t.to end
+    end
+    return (last - first) / K.cc.cfg.view.fw
+  end
+
+  --- the block's lines go exactly when the position would be
+  --- wider than half the line, 32 of 64 columns, and not before:
+  --- B9999, a gap of one, the lines, a gap of two and 9999:9999
+  --- take 17 columns and the lines'
+  for _, case in ipairs({ { 15, true }, { 16, false } }) do
+    it("keeps the block's lines of " .. case[1] .. " columns "
+      .. (case[2] and "within" or "past") .. " half the line "
+      .. (case[2] and "" or "out"), function()
+        local sl = K.cc.view.input.statusline
+        local lines = "L" .. string.rep("1", case[1] - 1)
+        local was = love.state.app_state
+        love.state.app_state = "editor"
+        local texts = placed(sl, { custom = { project = "p",
+          name = "f.lua", state = "browsing", spans_lines = true,
+          selection = 9999, buflen = 10000,
+          range = { ln_label = function() return lines end } },
+          cursor = { l = 9999, c = 9999 } })
+        love.state.app_state = was
+        local kept = false
+        for _, t in ipairs(texts) do
+          if t.text == lines then kept = true end
+        end
+        assert.equal(case[2], kept)
+        assert.is_true(position_width(texts) <= 32)
+        assert.equal(case[2] and 32 or 16, position_width(texts))
+      end)
+  end
+
+  --- with the numbers in thousands above 9999 the rest of the
+  --- position always fits in half the line: the widest numbers,
+  --- the block's lines from none to 40 columns
+  it("keeps the position within half the line for the widest "
+    .. "numbers", function()
+      local sl = K.cc.view.input.statusline
+      local was = love.state.app_state
+      local over
+      for _, n in ipairs({ 9999, 10000, 99999, 999999, 9999999 }) do
+        for l = 0, 40 do
+          local lines = l > 0 and ("L" .. string.rep("9", l - 1)) or nil
+          love.state.app_state = "editor"
+          local w = position_width(placed(sl, { custom = {
+            project = "p", name = "f.lua", state = "replacing",
+            spans_lines = true, selection = n, buflen = n + 1,
+            range = { ln_label = function() return lines end } },
+            cursor = { l = n, c = n } }))
+          love.state.app_state = "inspect"
+          local wc = position_width(placed(sl, { label = "",
+            project = "p", name = "f.lua", state = "paused", back = 1000,
+            cursor = { l = n, c = n }, n_lines = 1 }))
+          if (w > 32 or wc > 32) and not over then
+            over = string.format("%d, lines %d: %d, %d", n, l, w, wc)
+          end
+        end
+      end
+      love.state.app_state = was
+      assert.is_nil(over)
+    end)
+
+  --- e5's Major, by name: project demo, notes.lua, no card, Caps
+  --- Lock, inserting before block B10 L10-23
+  it("inserting before B10 L10-23 without a card, with Caps Lock, "
+    .. "leaves B10 whole", function()
+      local sl = K.cc.view.input.statusline
+      local was = love.state.app_state
+      love.state.app_state = "editor"
+      local clash, cells
+      without_card(function()
+        clash, cells = inked(sl, { custom = { project = "demo",
+          name = "notes.lua", state = "inserting", spans_lines = true,
+          selection = 10, buflen = 30,
+          range = { ln_label = function() return "L10-23" end } },
+          cursor = { l = 1, c = 1 }, caps = "CAPS" })
+      end)
+      love.state.app_state = was
+      assert.is_nil(clash)
+      local inks = { }
+      for _, t in pairs(cells) do inks[t] = true end
+      for _, t in ipairs({ "[no sd]", "inserting", "CAPS",
+        "B10", "L10-23" }) do
+        assert.is_true(inks[t], t)
+      end
+    end)
+
+  --- e5's Minor, by name: the right block is packed to the right
+  --- (the maintainer's ruling of November 18, 2026), so no room
+  --- is kept for a longer position, and the file is whole
+  it("in a pause without a card, with Caps Lock and combined, packs "
+    .. "the right block and keeps the file whole", function()
+      local sl = K.cc.view.input.statusline
+      local fw = K.cc.cfg.view.fw
+      local was = love.state.app_state
+      love.state.app_state = "inspect"
+      local texts
+      without_card(function()
+        texts = placed(sl, { label = "", project = "demo",
+          name = "notes.lua", state = "paused",
+          cursor = { l = 1, c = 1 }, n_lines = 1, mode = "combined",
+          caps = "CAPS" })
+      end)
+      love.state.app_state = was
+      contained(texts, K.cc.cfg.view.w)
+      local at = { }
+      for _, t in ipairs(texts) do at[t.text] = t end
+      assert.is_not_nil(at.demo)
+      assert.is_not_nil(at["notes.lua"])
+      assert.is_not_nil(at.paused)
+      -- right to left from the edge: the cursor, Caps, the mode,
+      -- each two columns apart
+      local edge = K.cc.cfg.view.w - fw
+      assert.equal(edge, at["1:1"].to)
+      assert.equal(at["1:1"].from - 2 * fw, at.CAPS.to)
+      assert.equal(at.CAPS.from - 2 * fw, at.combined.to)
+    end)
+
+  --- the kept render's key holds whether a card is in
+  it("has a key that changes with the SD card", function()
+    local sl = K.cc.view.input.statusline
+    local status = { custom = { project = "p", name = "main.lua",
+      state = "running" }, mode = "text" }
+    local with = sl:key(status)
+    local without
+    without_card(function() without = sl:key(status) end)
+    assert.are_not.equal(with, without)
+  end)
+
+  --- as a program starts, pauses and stops, the project keeps
+  --- its place, and the file and the word keep theirs between the
+  --- running line and the paused one
+  it("keeps the project in its place, and the file and the word "
+    .. "between running and paused", function()
+      reset({ ["main.lua"] = "function love.update() end\n" })
+      local idle = starts_with("console")
+      run("run()")
+      K.frame()
+      local running = starts_with("running")
+      assert.equal(idle[1], running[1], "the project's place")
+      K.keys("lctrl", "pause")
+      K.frame()
+      if K.app_state() == "snapshot" then K.cc:suspend() end
+      assert.same("inspect", K.app_state())
+      starts_with("paused", running)
+      K.keys("lctrl", "q")
+      K.frame()
+      starts_with("console", idle)
+      forget()
+    end)
+
+  --- the kept render of the bare line is compared by its key:
+  --- the line's words change between the console's, a running
+  --- program's and a pause's, and so does the key
+  it("has a key that changes as the line's words do", function()
+    local sl = K.cc.view.input.statusline
+    local console = { label = "", project = "p", name = "main.lua",
+      state = "console", cursor = { l = 1, c = 1 }, n_lines = 1,
+      mode = "text" }
+    local running = { custom = { project = "p", name = "main.lua",
+      state = "running" }, mode = "text" }
+    local was = love.state.app_state
+    love.state.app_state = "ready"
+    local idle, live = sl:key(console), sl:key(running)
+    love.state.app_state = "inspect"
+    local paused = sl:key(console)
+    love.state.app_state = was
+    assert.are_not.equal(idle, live)
+    assert.are_not.equal(idle, paused)
+    assert.are_not.equal(live, paused)
+  end)
+end)
 
 --- The view's one rule (CanvasModel:show): its top lies between
 --- the oldest kept row and the filled view's top, however the

@@ -458,44 +458,20 @@ describe('the screen modes #canvas', function()
   end)
 
   --- compy.screen (stage 3; the maintainer ruled the shape "ok")
-  --- round j1: a program's own field paints its own status line,
-  --- which names the mode as the console's does, and renders
-  --- again when the mode changes
+  --- a program's own field paints its own status line: its prompt
+  --- and the cursor's place, and not the screen's mode, which
+  --- round j1 had put there (the maintainer's ruling of November
+  --- 17, 2026: "when the user creates their own input widget,
+  --- drop 'text' and 'running'")
   describe('a program\'s own field', function()
-    it('names the mode on its status line', function()
+    it('names no mode on its status line', function()
       F.run_project(function()
         F.compy_input().show({ prompt = 'Name?' })
       end)
       local field = love.state.user_input_controller
       F.cc.model.screen:set('combined')
-      assert.equal('combined', field.model:get_status().mode)
-      F.cc:stop_project_run()
-    end)
-
-    it('renders again when the mode changes', function()
-      F.run_project(function()
-        F.compy_input().show({ prompt = 'Name?' })
-      end)
-      local field = love.state.user_input_controller
-      -- what drawing the field calls does nothing
-      local meta = getmetatable(gfx)
-      setmetatable(gfx, {
-        __index = function() return function() end end,
-      })
-      finally(function() setmetatable(gfx, meta) end)
-      love.draw()
-      local renders = 0
-      local update = field.update_view
-      field.update_view = function(...)
-        renders = renders + 1
-        return update(...)
-      end
-      love.draw()
-      local before = renders
-      F.cc.model.screen:set('combined')
-      love.draw()
-      field.update_view = update
-      assert.is_true(renders > before)
+      assert.is_nil(field.model:get_status().mode)
+      assert.equal('Name?', field.model:get_status().label)
       F.cc:stop_project_run()
     end)
   end)

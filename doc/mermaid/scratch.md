@@ -90,7 +90,6 @@ class Scrollable {
   follow_focus()
 
   calculate_end_range()
-  get_more()
 }
 
 class WrappedText {

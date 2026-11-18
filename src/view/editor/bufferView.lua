@@ -177,6 +177,23 @@ function BufferView:_block_span(b)
   return a[1], z[#z]
 end
 
+--- Where the replacement target lies while the view draws no
+--- row of its yellow highlight: '↑' above the view's first
+--- row, '↓' below its last; nil while any row of it is drawn,
+--- and with no target. It reads the rows the highlight is drawn
+--- from (draw_highlight: the target's wrapped rows, _block_span,
+--- within the content's range), so that it never says otherwise
+--- than the view shows (review e7: a target's wrapped rows).
+--- @return string?
+function BufferView:target_side()
+  local s, e = self:_block_span(self.buffer.loaded)
+  if not s then return nil end
+  local range = self.content.range
+  if e < range.start then return '↑' end
+  if range.fin < s then return '↓' end
+  return nil
+end
+
 --- First and last view row of the browsing position; at the
 --- end position the first lies past the last
 --- @private

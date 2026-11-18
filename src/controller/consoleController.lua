@@ -155,9 +155,29 @@ function ConsoleController.new(M, main_ctrl)
   local EC = EditorController(M.editor, self)
   self.editor = EC
   --- the console's status line names the open project (FR4.6)
+  --- and what the console is doing, as a running program's line
+  --- does (the maintainer's ruling of November 17, 2026: "the
+  --- status line always starts with: project file mode"); the
+  --- program's entry file only while a program is paused, as a
+  --- running one's line names it: the console itself has no
+  --- file (his ruling of November 18, 2026)
   M.input.project_source = function()
     local p = M.projects and M.projects.current
     return p and p.name
+  end
+  M.input.name_source = function()
+    local p = M.projects and M.projects.current
+    if not p or love.state.app_state ~= 'inspect' then return nil end
+    return self:entry_file()
+  end
+  --- how far its output is scrolled back, as `L-N` (the
+  --- maintainer's ruling of November 18, 2026)
+  M.input.scroll_source = function()
+    return M.output and M.output:scrolled_back()
+  end
+  M.input.state_source = function()
+    return love.state.app_state == 'inspect' and 'paused'
+        or 'console'
   end
   --- and the screen's mode, where it shows (model/screenModel.lua)
   M.input.screen_source = function()
@@ -723,14 +743,6 @@ function ConsoleController:_run_project(name, stopped, entry)
       build_input_widget(self.cfg, function()
         self.model.output:to_rest()
       end)
-      --- its status line names the screen's mode, as the
-      --- console's does (round j1)
-      local field = love.state.user_input_controller
-      if field then
-        field.model.screen_source = function()
-          return self.model.screen:get()
-        end
-      end
       -- The program speaks for the board from here on; the
       -- console's own listeners wait until it has stopped.
       SerialPort:programStarted()
@@ -2215,6 +2227,13 @@ function ConsoleController:fit_output()
   self.model.output:field_drawn(not self:fieldless())
 end
 
+--- The file a run of the project starts from: the live run's,
+--- else the one a run would start from
+--- @return string
+function ConsoleController:entry_file()
+  return self.entry or 'main.lua'
+end
+
 --- What the status line says while no field is drawn: the
 --- project, the file the run started from, and that it runs.
 --- @return Status
@@ -2223,9 +2242,10 @@ function ConsoleController:running_status()
   return {
     custom = {
       project = P.current and P.current.name,
-      name = self.entry or 'main.lua',
+      name = self:entry_file(),
       state = 'running',
     },
+    back = self.model.output:scrolled_back(),
     mode = self.model.screen:get(),
   }
 end

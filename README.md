@@ -25,6 +25,22 @@ For simplicity and security reasons, the user is only allowed to
 access files inside a project. To interact with the filesystem,
 a project must be selected first.
 
+The status line at the bottom of the screen starts with the
+project and, in yellow, what has the keys: `console` on dark
+gray; `running` on dark gray while a program runs and `paused`
+on red while it is paused, each after the file the program
+started from; and the editor's state (`browsing`, `inserting`,
+`replacing`) on blue, after the open file; while the block you
+replace is out of view, an arrow after `replacing` points to
+it. Without an SD
+card, `[no sd]` stands in front, in orange. At its right end,
+in yellow, it shows where the cursor is in what you type, as
+`line:column`; before that, while the output is scrolled back,
+how far, as `L-4`, and in the editor the block and its lines,
+as `B3 L3`. A number past 9999 is written in thousands, as
+`10K`. A program that asks for typing shows its own
+question there instead, and where the cursor is in the answer.
+
 ## Keys
 
 | Command                                                           | Combination                                   |

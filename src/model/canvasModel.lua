@@ -231,6 +231,16 @@ function CanvasModel:is_scrolled()
   return self:top() ~= nil
 end
 
+--- How many rows the view is scrolled back from rest, which
+--- shows the screen from its first row: nil at rest, else 1 to
+--- the kept rows' count (the status line's `L-N`)
+--- @return integer?
+function CanvasModel:scrolled_back()
+  local t = self:top()
+  if not t then return nil end
+  return self.kept.last + 1 - t
+end
+
 --- The view's one rule: a scrolled view's top lies between the
 --- oldest kept row and the filled view's top, so that it is a
 --- full window whenever enough rows exist, however the

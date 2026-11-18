@@ -265,13 +265,16 @@ scenario('seventeenth-row', function(wait)
   D.shot(wait, 'seventeen-rows')
   local _, ink = P.cell(img, 1, 17, top())
   is(ink, th.terminal.fg, 'the text on the seventeenth row')
-  local first = P.band(img, th.statusline.user.bg)
+  local first = P.band(img, th.statusline.console.bg)
   D.eq(first, v.h - lay.bottom - lay.status_h,
     "the status line's first pixel row")
   for _, word in ipairs({ 'h-rows', 'main.lua', 'running' }) do
     assert(P.shows(says, word), 'the status line does not say ' .. word)
   end
-  assert(not P.shows(says, 'L1'), 'the status line shows a position')
+  for _, said in ipairs(says) do
+    assert(not said:match('^%d+:%d+$'),
+      'the status line shows a position: ' .. said)
+  end
 
   D.key(wait, 'C-q')
   wait(.2)
