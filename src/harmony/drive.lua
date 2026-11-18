@@ -97,14 +97,16 @@ function D.held(wait, key, repeats)
   wait(.02)
 end
 
---- a click of the left button at `x`, `y`
+--- a click of the left button at `x`, `y`, the `presses`-th
+--- of quick ones (LÖVE's count; 1 if not given)
 --- @param wait function
 --- @param x number
 --- @param y number
-function D.click(wait, x, y)
-  h.love_event('mousepressed', x, y, 1, false, 1)
+--- @param presses integer?
+function D.click(wait, x, y, presses)
+  h.love_event('mousepressed', x, y, 1, false, presses or 1)
   wait(.02)
-  h.love_event('mousereleased', x, y, 1, false, 1)
+  h.love_event('mousereleased', x, y, 1, false, presses or 1)
   wait(.05)
 end
 

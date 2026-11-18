@@ -1198,10 +1198,13 @@ function UserInputModel:cursor_word_left()
   self:_jump_to(self:_word_left_of(self:get_cursor_pos()))
 end
 
---- Ctrl+Right: to the end of the word under or after the
---- cursor (IS3.8)
-function UserInputModel:cursor_word_right()
-  local l, c = self:get_cursor_pos()
+--- Where Ctrl+Right lands from (l, c): the end of the word
+--- under or after it (IS3.8)
+--- @param l integer
+--- @param c integer
+--- @return integer l
+--- @return integer c
+function UserInputModel:_word_right_of(l, c)
   local n = self:get_n_text_lines()
   while true do
     local line = self:get_text_line(l)
@@ -1221,7 +1224,28 @@ function UserInputModel:cursor_word_right()
   while c <= len and is_word_char(string.usub(line, c, c)) do
     c = c + 1
   end
-  self:_jump_to(l, c)
+  return l, c
+end
+
+--- Ctrl+Right: to the end of the word under or after the
+--- cursor (IS3.8)
+function UserInputModel:cursor_word_right()
+  self:_jump_to(self:_word_right_of(self:get_cursor_pos()))
+end
+
+--- Select the word the character at (l, c) is in, as Ctrl+Left
+--- and Ctrl+Right take words, the cursor at its end: a double
+--- click. A character of no word changes nothing.
+--- @param l integer
+--- @param c integer
+--- @return boolean --- whether it is a word's
+function UserInputModel:select_word(l, c)
+  local ch = string.usub(self:get_text_line(l), c, c)
+  if not is_word_char(ch) then return false end
+  local _, from = self:_word_left_of(l, c + 1)
+  local _, to = self:_word_right_of(l, c)
+  self:_select(l, from, l, to)
+  return true
 end
 
 --- @param cs CustomStatus
