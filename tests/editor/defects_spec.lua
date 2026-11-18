@@ -300,4 +300,80 @@ describe("editor defects #editor", function()
     assert.same(before, K.file())
     assert.same("", K.draft())
   end)
+
+  -- compy-editor-pending-confirm-survives-close, filed on
+  -- September 29, 2026 against the editor before its rework: a
+  -- discard question left open survived Ctrl+T, and Enter or
+  -- Space in the next file answered it there. The editor asks
+  -- no question now; an exit during an edit is refused, and
+  -- what was left of the edit goes nowhere after the exit.
+  for _, exit in ipairs({
+    { "Ctrl+T", { "lctrl", "t" } },
+    { "Ctrl+Q", { "lctrl", "q" } },
+  }) do
+    it(exit[1] .. " during an edit asks nothing, and nothing of "
+        .. "the edit reaches the next file", function()
+      K.reset({ ["main.lua"] = "x = 1\ny = 2\n",
+        ["notes.txt"] = "a\nb\n" })
+      K.open()
+      K.browse_to(1)
+      K.keys("f2")
+      K.type("0")
+      K.keys(unpack(exit[2]))
+      assert.same("editor", K.app_state())
+      assert.same("replacing", K.state())
+      assert.same("x = 10", K.draft())
+      assert.same("notice", K.message_kind())
+      -- Escape drops the edit at once, and the exit is taken
+      K.keys("escape")
+      assert.same("browsing", K.state())
+      assert.is_nil(K.message())
+      K.keys(unpack(exit[2]))
+      assert.same("ready", K.app_state())
+      K.open("notes.txt")
+      assert.same("notes.txt", K.file_name())
+      assert.same("browsing", K.state())
+      assert.same("", K.draft())
+      assert.is_nil(K.message())
+      -- the keys that answered the question do their own work
+      K.keys("space")
+      assert.same(" ", K.draft())
+      K.keys("escape")
+      assert.same("a\nb\n", K.file("notes.txt"))
+      -- Enter on an empty field adds an empty line where it
+      -- stands, the file's end on opening
+      K.keys("return")
+      assert.same("a\nb\n\n", K.file("notes.txt"))
+      assert.same("x = 1\ny = 2\n", K.file("main.lua"))
+    end)
+  end
+
+  -- compy-ide-editor-error-drops-first-glyph, filed on
+  -- September 30, 2026 against the editor before its rework:
+  -- the first character typed over an error message was lost
+  describe("a character typed over an error message", function()
+    --- a syntax failure's message over the draft `x = = 1`,
+    --- the cursor before the failing `=`
+    local function failed()
+      K.browse_to_end()
+      K.type("x = = 1")
+      K.keys("return")
+      assert.same("error", K.message_kind())
+    end
+
+    it("is typed, its key first", function()
+      failed()
+      K.type("print")
+      assert.is_nil(K.message())
+      assert.same("x = print= 1", K.draft())
+    end)
+
+    it("is typed, its text first", function()
+      failed()
+      K.type_text_first("p")
+      K.type("rint")
+      assert.is_nil(K.message())
+      assert.same("x = print= 1", K.draft())
+    end)
+  end)
 end)
