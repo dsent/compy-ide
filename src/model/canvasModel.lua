@@ -3,6 +3,7 @@ require("util.string.string")
 require("util.view")
 local class = require('util.class')
 local Terminal = require("lib.terminal")
+local NameHint = require("util.name_hint")
 require("model.keptRows")
 
 local gfx = love.graphics
@@ -17,6 +18,7 @@ local gfx = love.graphics
 --- @field term_canvas love.Canvas
 --- @field rows integer --- the grid's rows while a field is drawn
 --- @field cfg table
+--- @field name_source (fun(): table)? --- the environment runs' errors come from (write_error)
 --- @field write function
 --- @field push function
 --- @field reset function
@@ -148,9 +150,20 @@ end
 
 --- A run's error, a typed line's or a program's, in the
 --- output's error color, the theme's red, which is for errors
---- alone (the maintainer's rulings of November 15, 2026)
+--- alone (the maintainer's rulings of November 15, 2026). A
+--- call of a name that does not exist gains a line naming the
+--- near name, where there is one (util/name_hint.lua), looked
+--- for in the environment `name_source` gives, or the one
+--- `hint` names, already found: false where it was looked for
+--- and there is none.
 --- @param msg string
-function CanvasModel:write_error(msg)
+--- @param hint (string|false)?
+function CanvasModel:write_error(msg, hint)
+  if hint == nil then
+    hint = NameHint.of(msg, self.name_source
+      and self.name_source())
+  end
+  if hint then msg = tostring(msg) .. '\n' .. hint end
   say(self, msg, self.cfg.view.colors.terminal.error)
 end
 

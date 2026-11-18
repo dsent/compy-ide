@@ -17,6 +17,7 @@ require("util.table")
 local TerminalTest = require("util.test_terminal")
 local KeyCard = require('model.editor.keyCard')
 local ConsoleKeys = require('model.input.consoleKeys')
+local NameHint = require('util.name_hint')
 
 --- What the console's commands say when they refuse: in the
 --- output, through CanvasModel:write_refusal (the maintainer's
@@ -182,6 +183,11 @@ function ConsoleController.new(M, main_ctrl)
   --- and the screen's mode, where it shows (model/screenModel.lua)
   M.input.screen_source = function()
     return M.screen and M.screen:get()
+  end
+  --- the names a run's error is checked against for a near
+  --- name: the environment typed lines and programs run in
+  M.output.name_source = function()
+    return self:get_project_env()
   end
   -- initialize the user environment
   ConsoleController.prepare_project_env(self)
@@ -759,12 +765,18 @@ function ConsoleController:_run_project(name, stopped, entry)
         -- (doc/development/decisions/input.md,
         -- D-ROUTE-LIFETIME).
         self.main_ctrl.release_keyboard_route(self)
+        --- the near-name hint looks through the program's
+        --- globals, which the flush ends: read here, protected
+        --- and raising nothing (util/name_hint.lua), and written
+        --- with the error after the flush
+        local hint = NameHint.of(run_err, self:get_project_env())
         -- ...then the one flush, as a stop's: nothing survives
         -- the project that raised, its globals included.
         -- before_exit is removed but NOT called: the hook is
         -- scoped to stop paths and excludes a crash.
         self:flush_program_state(false)
-        self.model.output:write_error('Error: ' .. tostring(run_err))
+        self.model.output:write_error('Error: ' .. tostring(run_err),
+          hint or false)
       else
         if not self.main_ctrl.user_is_blocking() then
           -- The route is NOT released here. A non-blocking run

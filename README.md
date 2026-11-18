@@ -106,7 +106,13 @@ line. <kbd>Enter</kbd> on a line that runs brings the screen
 back, as do a program's start, stop or pause. Each line the
 console runs is
 written to the output in blue before it runs, and its error
-after it, in red. A command that refuses says why in the output,
+after it, in red. When the error is a call of a global name
+that does not exist, and exactly one global you can call
+differs from it only in capitals and underscores, the error
+names that one too: `listProjects()` says
+`There is no listProjects. Did you mean list_projects?`. A
+field, such as `compy.input.setText()`, gets no such line. A
+command that refuses says why in the output,
 in orange. The band above the status line belongs to the line
 being typed: it says why a line did not run because it does not
 parse, and, in orange, that a statement is not finished yet,

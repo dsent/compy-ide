@@ -157,6 +157,161 @@ describe("the console's channels #console", function()
       end)
   end)
 
+  --- the near name (Beads compy-ide-console-suggests-the-near-
+  --- name, the maintainer's ruling of November 17, 2026): a call
+  --- of a global name that does not exist, where one name the
+  --- code could have called differs from it in case and
+  --- underscores alone, gains a line naming it, in the error's red
+  describe("a call of a name that does not exist", function()
+    local HINT = "There is no listProjects. Did you mean list_projects?"
+
+    it("of a typed line names the near name after the error",
+      function()
+        reset()
+        run("listProjects()")
+        said(HINT, colors().error)
+        local t = K.console_text()
+        local at_error = t:find("attempt to call global 'listProjects'",
+          1, true)
+        assert.truthy(at_error, t)
+        assert.truthy(at_error < t:find(HINT, 1, true))
+        no_band()
+      end)
+
+    it("runs nothing in its place", function()
+      reset()
+      local calls, list = 0, K.cc:get_project_env().list_projects
+      K.cc:get_project_env().list_projects = function(...)
+        calls = calls + 1
+        return list(...)
+      end
+      run("listProjects()")
+      K.cc:get_project_env().list_projects = list
+      said(HINT, colors().error)
+      assert.equal(0, calls)
+    end)
+
+    it("of a program's first lines names it too", function()
+      reset({ ["main.lua"] = "listProjects()\n" })
+      run("run()")
+      said(HINT, colors().error)
+    end)
+
+    it("of a running program names it too", function()
+      reset({ ["main.lua"] = "local done\n"
+        .. "function love.update()\n"
+        .. "  if done then return end\n"
+        .. "  done = true\n"
+        .. "  listProjects()\n"
+        .. "end\n" })
+      K.type("run()")
+      K.keys("return")
+      K.frame()
+      K.cc:suspend()
+      K.frame(100)
+      assert.same("inspect", K.app_state())
+      said(HINT, colors().error)
+      K.keys("lctrl", "q")
+    end)
+
+    it("names a program's own function, by the case it has",
+      function()
+        reset({ ["main.lua"] = "function draw_tree() end\n"
+          .. "drawTree()\n" })
+        run("run()")
+        said("There is no drawTree. Did you mean draw_tree?",
+          colors().error)
+      end)
+
+    --- written as the error is, it wraps at the output's width
+    it("wraps a long name's hint within the output, as the error",
+      function()
+        reset()
+        local long = string.rep("a", 30) .. "_b"
+        K.cc:get_project_env()[long] = function() end
+        local typed = string.rep("A", 30) .. "B"
+        run(typed .. "()")
+        K.cc:get_project_env()[long] = nil
+        local t = K.cc.model.output.terminal
+        local rows = { }
+        for _, r in ipairs(t.buffer) do
+          local line = table.concat(r):gsub("%s+$", "")
+          assert.is_true(#line <= t.width)
+          rows[#rows + 1] = line
+        end
+        local all = table.concat(rows)
+        assert.truthy(all:find("There is no " .. typed
+          .. ". Did you mean " .. long .. "?", 1, true), all)
+      end)
+
+    --- review h1: the run seam does what it did before the hint,
+    --- the flush and then the error; only a protected read of
+    --- the program's names comes before the flush
+    it("of a program's first lines is written after the flush, "
+      .. "as before", function()
+        reset({ ["main.lua"] = "local p = newproxy(true)\n"
+          .. "getmetatable(p).__gc = function()\n"
+          .. "  compy.terminal.clear()\n"
+          .. "end\n"
+          .. "p = nil\n"
+          .. "listProjects()\n" })
+        -- the fixture collects nothing; the flush does here
+        local was = K.cc.collect_garbage
+        K.cc.collect_garbage = collectgarbage
+        local ok, e = pcall(run, "run()")
+        K.cc.collect_garbage = was
+        assert(ok, e)
+        said(HINT, colors().error)
+        assert.truthy(K.console_text():find(
+          "attempt to call global 'listProjects'", 1, true))
+        assert.is_false(K.cc.run_live)
+      end)
+
+    it("leaves the flush whole when the error cannot be written",
+      function()
+        reset({ ["main.lua"] = "error(setmetatable({ }, {\n"
+          .. "  __tostring = function() error('FORMAT') end }))\n" })
+        -- the error's own text raises, as it did before the hint:
+        -- after the flush
+        pcall(run, "run()")
+        assert.is_false(K.cc.run_live)
+        assert.same("ready", K.app_state())
+      end)
+
+    it("runs none of the program's code while it looks", function()
+      reset({ ["main.lua"] = "draw_tree = setmetatable({ }, "
+        .. "setmetatable({ }, { __index = function()\n"
+        .. "  print('META ran')\n"
+        .. "  error('META')\n"
+        .. "end }))\n"
+        .. "drawTree()\n" })
+      run("run()")
+      local t = K.console_text()
+      assert.truthy(t:find("attempt to call global 'drawTree'", 1,
+        true), t)
+      assert.is_nil(t:find("META", 1, true))
+      assert.is_nil(t:find("Did you mean", 1, true))
+      assert.is_false(K.cc.run_live)
+    end)
+
+    it("names none where no name is near", function()
+      reset()
+      run("listTheProjects()")
+      assert.is_nil(K.console_text():find("Did you mean", 1, true))
+    end)
+
+    --- Lua's message names a field and not its table, which only
+    --- the source says
+    it("names none for a field", function()
+      reset()
+      run("compy.input.setText('x')")
+      local t = K.console_text()
+      assert.truthy(t:find("attempt to call field 'setText'", 1, true),
+        t)
+      assert.is_nil(t:find("Did you mean", 1, true))
+    end)
+  end)
+
   --- a pause is the debugger's: its text shows in the band as
   --- an orange notice, and the program's screen is not touched
   --- (the maintainer's ruling of November 16, 2026)
