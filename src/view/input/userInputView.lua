@@ -34,6 +34,7 @@ end
 --- @field field_hidden boolean? --- the console's field behind a program that owns the input: its status line alone
 --- @field bare_status Status? --- what the status line says while no field is drawn under it; it is then the screen's last row
 --- @field bare_drawn string? --- what the canvas holds while it holds that status line alone (_bare_key)
+--- @field ide_shown string? --- the IDE's state its last render's status line was drawn in (Statusline:ide_key)
 UserInputView = class.create(new)
 
 local get_colors = function(cf_colors)
@@ -491,10 +492,10 @@ end
 --- @param status Status
 function UserInputView:render(input, status, time)
   local gfx = love.graphics
-  --- what this render shows of the cursor's blink, and of the
-  --- screen's mode on the status line
+  --- what this render shows of the cursor's blink, and the
+  --- IDE's state its status line was drawn in
   self.cursor_shown = Blink.shown(self.cfg.blink)
-  self.mode_shown = status and status.mode
+  self.ide_shown = self.statusline:ide_key()
   --- what the canvas holds from this render on
   self.bare_drawn = self:_bare_key()
   --- @diagnostic disable-next-line: undefined-field
@@ -532,11 +533,11 @@ function UserInputView:draw()
   local project = love.state.user_input_controller
   local shown = Blink.shown(self.cfg.blink)
   local turned = shown ~= self.cursor_shown
-  --- and when the screen's mode its status line names changes
-  --- (round j1)
-  local model = self.controller and self.controller.model
-  local source = model and model.screen_source
-  local moded = source ~= nil and source() ~= self.mode_shown
+  --- and when the IDE's state its status line was drawn in
+  --- changes, which picks its colours and a pause's word: a
+  --- field rendered during a pause, by a line typed then, does
+  --- not keep "paused" once the program goes on
+  local ided = self.statusline:ide_key() ~= self.ide_shown
   --- The bare status line behind a running program is the
   --- same frame after frame: the canvas that holds it is kept
   --- until anything its draw reads changes (_bare_key), or
@@ -545,7 +546,8 @@ function UserInputView:draw()
   local key = self:_bare_key()
   local kept = key ~= nil and key == self.bare_drawn
   if not kept
-      and (self.controller ~= project or turned or moded) then
+      and (self.controller ~= project or turned or ided)
+  then
     self.controller:update_view()
   end
   local h = self.start_h

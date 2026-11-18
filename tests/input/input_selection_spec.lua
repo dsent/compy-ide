@@ -176,8 +176,9 @@ describe("selection in the draft #input", function()
       assert.same("two", selected(f), owner)
     end)
 
-    --- the device run's point D (the lead's ruling): typing over
-    --- a selection is two steps, the removal and then the typing
+    --- the device run's point D (the ruling of November 17,
+    --- 2026): typing over a selection is two steps, the removal
+    --- and then the typing
     in_every_field("typing over a selection is two steps: the "
         .. "typing, then the removal", function(owner)
       local f = field_of(owner, { "hello world" }, 1, 12)

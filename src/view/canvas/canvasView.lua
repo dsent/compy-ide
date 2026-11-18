@@ -49,8 +49,8 @@ end
 --- - combined: the program's picture on its ground, then the
 ---   output over it on a translucent ground of its own, its
 ---   text unshaded, with the two opacities of the theme's
----   `screen.combined` (the lead's decision 5 of November 17,
----   2026, open to the maintainer's choice);
+---   `screen.combined` (decision 5 of November 17, 2026, open
+---   to the maintainer's choice);
 --- - picture: the picture on the ground the program chose, on
 ---   the whole screen, alone.
 --- @param terminal table

@@ -13,14 +13,13 @@ require("model.project.project")
 --- @field projects ProjectService
 --- @field cfg Config
 ConsoleModel = class.create(function(cfg)
+  --- The console's line names no label of its own: it says
+  --- "console" where a running program's says "running" (the
+  --- maintainer's ruling of November 17, 2026); an empty label
+  --- shows nothing. Every line of the IDE's own puts the no-card
+  --- mark in front (Statusline's NO_CARD).
   --- @type PromptLabel
-  local console_label = 'console'
-  if love.state.has_removable == false then
-    console_label = {
-      text = '[no sd card] console',
-      tone = 'warning',
-    }
-  end
+  local console_label = ''
   return {
     input    = UserInputModel(cfg, LuaEval(), console_label),
     editor   = EditorModel(cfg),

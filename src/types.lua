@@ -73,7 +73,6 @@
 --- @field autotest boolean
 --- @field mode Mode
 
---- @alias More {up: boolean, down: boolean}
 
 --- @alias PromptTone 'default'|'warning'|'error'|'special'
 
@@ -87,10 +86,12 @@
 --- @field label PromptLabel?
 --- @field cursor Cursor?
 --- @field n_lines integer
---- @field input_more More
 --- @field custom CustomStatus?
 --- @field caps string? --- 'CAPS' while Caps Lock is on
 --- @field project string? --- the open project's name
+--- @field name string? --- the console's: the project's entry file
+--- @field state string? --- the console's: what it is doing, "console" or "paused"
+--- @field back integer? --- the console's: how many rows its output is scrolled back
 --- @field mode ScreenMode? --- the console's: the screen's mode
 
 --- @class InputDTO table

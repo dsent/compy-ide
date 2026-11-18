@@ -36,9 +36,8 @@ local messages = {
   --- only a card that cannot hold scratchpad leaves none open
   no_project      = 'No project is open: the SD card cannot be used.',
   --- a pause shows the console; a picture the program drew
-  --- waits behind it (the lead's decision 7 of November 17,
-  --- 2026, after the maintainer's "press F12 to see the drawing
-  --- canvas")
+  --- waits behind it (decision 7 of November 17, 2026, after
+  --- the maintainer's "press F12 to see the drawing canvas")
   picture_hint    = 'F12 shows the picture',
   --- run() makes no project: project() does
   no_such_project = function(name)
@@ -156,9 +155,29 @@ function ConsoleController.new(M, main_ctrl)
   local EC = EditorController(M.editor, self)
   self.editor = EC
   --- the console's status line names the open project (FR4.6)
+  --- and what the console is doing, as a running program's line
+  --- does (the maintainer's ruling of November 17, 2026: "the
+  --- status line always starts with: project file mode"); the
+  --- program's entry file only while a program is paused, as a
+  --- running one's line names it: the console itself has no
+  --- file (his ruling of November 18, 2026)
   M.input.project_source = function()
     local p = M.projects and M.projects.current
     return p and p.name
+  end
+  M.input.name_source = function()
+    local p = M.projects and M.projects.current
+    if not p or love.state.app_state ~= 'inspect' then return nil end
+    return self:entry_file()
+  end
+  --- how far its output is scrolled back, as `L-N` (the
+  --- maintainer's ruling of November 18, 2026)
+  M.input.scroll_source = function()
+    return M.output and M.output:scrolled_back()
+  end
+  M.input.state_source = function()
+    return love.state.app_state == 'inspect' and 'paused'
+        or 'console'
   end
   --- and the screen's mode, where it shows (model/screenModel.lua)
   M.input.screen_source = function()
@@ -724,14 +743,6 @@ function ConsoleController:_run_project(name, stopped, entry)
       build_input_widget(self.cfg, function()
         self.model.output:to_rest()
       end)
-      --- its status line names the screen's mode, as the
-      --- console's does (round j1)
-      local field = love.state.user_input_controller
-      if field then
-        field.model.screen_source = function()
-          return self.model.screen:get()
-        end
-      end
       -- The program speaks for the board from here on; the
       -- console's own listeners wait until it has stopped.
       SerialPort:programStarted()
@@ -2216,6 +2227,13 @@ function ConsoleController:fit_output()
   self.model.output:field_drawn(not self:fieldless())
 end
 
+--- The file a run of the project starts from: the live run's,
+--- else the one a run would start from
+--- @return string
+function ConsoleController:entry_file()
+  return self.entry or 'main.lua'
+end
+
 --- What the status line says while no field is drawn: the
 --- project, the file the run started from, and that it runs.
 --- @return Status
@@ -2224,9 +2242,10 @@ function ConsoleController:running_status()
   return {
     custom = {
       project = P.current and P.current.name,
-      name = self.entry or 'main.lua',
+      name = self:entry_file(),
       state = 'running',
     },
+    back = self.model.output:scrolled_back(),
     mode = self.model.screen:get(),
   }
 end
@@ -2381,8 +2400,8 @@ end
 --- A pause's text with how to see the picture behind it: on the
 --- pause's own row, in brackets after its text, where both fit,
 --- so that the band covers no more of the output; on a row of
---- its own where they do not (the lead's ruling of November 17,
---- 2026: ASCII alone in the words the screen shows), the text
+--- its own where they do not (the ruling of November 17, 2026:
+--- ASCII alone in the words the screen shows), the text
 --- cut to the band's rows less the hint's, as the band cuts a
 --- message, so that the hint is always seen; alone after a
 --- pause with no text. The text is measured as the band shows
@@ -2812,8 +2831,8 @@ end
 --- maintainer's ruling "The natural end is a stop; the build
 --- waits for the canvas", built in stage 4 of the canvas plan).
 --- At the end of its first lines a program that drew leaves its
---- picture on show until a key or a click (the lead's decision
---- 1 of November 17, 2026); one found ended as an event comes
+--- picture on show until a key or a click (decision 1 of
+--- November 17, 2026); one found ended as an event comes
 --- leaves the console, which that event reaches, or the picture
 --- when it is on show as the end is made (`shown`; stage 2's k5
 --- and k6: the screen after the end is set here, by the end
@@ -3142,6 +3161,11 @@ local ACTIONS = {
       out:to_rest()
     end
   end,
+  --- Ctrl+PgUp and Ctrl+PgDn, whatever the field holds
+  output_edge = function(cc, k)
+    local out = cc.model.output
+    if k == 'pageup' then out:to_oldest() else out:to_rest() end
+  end,
   terminal_test = function(cc)
     if love.DEBUG then cc:_terminal_test() end
   end,
@@ -3151,6 +3175,7 @@ local ACTIONS = {
 --- it takes behind a program that leaves them (output_key)
 local SCROLLS = {
   scroll_row = true, scroll_page = true, scroll_end = true,
+  output_edge = true,
 }
 
 --- Rows a wheel's notch scrolls the output
@@ -3163,7 +3188,8 @@ local WHEEL_ROWS = 3
 --- keys and events"): a key the program's chain left that is
 --- one of the output's scrolling keys scrolls it. Home and End
 --- go to the oldest row and back to rest, the field being
---- hidden. Nothing else of the console's keys acts.
+--- hidden, as Ctrl+PgUp and Ctrl+PgDn do. Nothing else of the
+--- console's keys acts.
 --- @param k string
 --- @param isrepeat boolean?
 --- @return boolean scrolled
@@ -3396,7 +3422,8 @@ end
 --- returns, raised or was ended, before the target goes back: a
 --- push saves the state it is made in, the program's canvas
 --- bound, and one left behind would bind it again where it is
---- popped (the lead's ruling on rounds c1 and c2).
+--- popped (the ruling of November 17, 2026, on rounds c1 and
+--- c2).
 --- @param f function
 function ConsoleController:use_canvas(f)
   local canvas = self.model.output.canvas

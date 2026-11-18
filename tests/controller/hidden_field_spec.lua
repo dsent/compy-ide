@@ -2,10 +2,10 @@
 -- console's field and its cursor are hidden, and the status
 -- line and the output stay (the maintainer, on the field shown
 -- and dead there: "that is also weird. Should we maybe hide the
--- console in that case?"; the lead's option B). The field comes
--- back by itself at a pause, a stop, or when the program takes
--- keys no more. Drawn through the real draw functions, recorded
--- by the K helper.
+-- console in that case?"; option B, the ruling of November 17,
+-- 2026). The field comes back by itself at a pause, a stop, or
+-- when the program takes keys no more. Drawn through the real
+-- draw functions, recorded by the K helper.
 
 local K = require("tests.helpers.editor_keys")
 

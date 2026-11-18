@@ -121,10 +121,15 @@ local function enrich_gfx()
 end
 
 -- A monospace font is a leaf dependency of the terminal; stub
--- the metrics it queries at construction.
+-- the metrics it queries at construction. A text is as wide as
+-- its characters at 16 pixels each, a cell each, as the
+-- monospace font draws them.
 local font_stub = setmetatable({
   getHeight     = function() return 32 end,
-  getWidth      = function() return 16 end,
+  getWidth      = function(_, s)
+    if type(s) ~= 'string' then return 16 end
+    return select(2, s:gsub('[^\128-\191]', '')) * 16
+  end,
   setFallbacks  = function() end,
   setLineHeight = function() end,
 }, { __index = function() return function() end end })

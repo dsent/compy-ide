@@ -391,14 +391,16 @@ describe("status line, notice and key card drawn #editor",
     assert.truthy(f:find("scratchpad", 1, true))
     assert.truthy(f:find("main.lua", 1, true))
     assert.truthy(f:find("inserting", 1, true))
-    -- a name too long for the line gives way, alone
+    -- a name too long for the line: the state word is cut first,
+    -- then the project, the file only if nothing more can (the
+    -- maintainer's ruling of November 18, 2026)
     K.cc.model.projects.current.name = string.rep("p", 40)
     f = field(K.screen())
-    -- up to two columns before the position: 16 and the mark
-    assert.truthy(f:find(string.rep("p", 16) .. "…", 1, true))
-    assert.is_nil(f:find(string.rep("p", 17), 1, true))
+    assert.truthy(f:find("in…", 1, true))
+    assert.is_nil(f:find("inserting", 1, true))
+    assert.truthy(f:find("pp…", 1, true))
+    assert.is_nil(f:find(string.rep("p", 40), 1, true))
     assert.truthy(f:find("main.lua", 1, true))
-    assert.truthy(f:find("inserting", 1, true))
   end)
 
   it("the key card keeps the status line under it", function()

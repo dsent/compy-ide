@@ -70,8 +70,9 @@ function ConsoleView:draw(terminal, canvas, mode)
     if ViewUtils.conditional_draw('show_input') then
       --- behind a live program that owns the input the field
       --- and its cursor are hidden, its status line stays (the
-      --- maintainer's question of November 16, 2026, the lead's
-      --- option B): the field takes no typing there
+      --- maintainer's question of November 16, 2026; option B,
+      --- the ruling of November 17, 2026): the field takes no
+      --- typing there
       local hidden = self.controller.main_ctrl.program_owns_input()
       self.input.field_hidden = hidden
       --- with no field drawn at all the field's row is the

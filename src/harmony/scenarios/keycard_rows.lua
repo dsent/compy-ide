@@ -15,7 +15,8 @@ local KeyCard = require('model.editor.keyCard')
 --- row, Backspace, Delete, paging) are on no card (the ruling
 --- of November 14, late); fields.lua tries them, and
 --- scrollback.lua the console's PgUp, PgDn, and Home and End
---- with the field empty. Also: Ctrl+Q is held back while the
+--- with the field empty. Ctrl+PgUp and Ctrl+PgDn, on every
+--- card, are tried here. Also: Ctrl+Q is held back while the
 --- card shows, in the console as in the editor (IS3.16, the
 --- ruling of November 16).
 
@@ -175,6 +176,13 @@ local EDITOR = {
       D.eq(P.position(), 1, 'Home, to the first block')
       D.eq(P.draft(), '', 'no text')
     end },
+    ['Ctrl+PgUp/PgDn'] = { 'file start/end', function(wait)
+      D.key(wait, 'C-pagedown')
+      D.eq(P.position(), 'end', 'Ctrl+PgDn, to the end position')
+      D.key(wait, 'C-pageup')
+      D.eq(P.position(), 1, 'Ctrl+PgUp, to the first block')
+      D.eq(P.draft(), '', 'no text')
+    end },
   },
 }
 
@@ -193,6 +201,13 @@ local function draft_rows(d)
     ['Ctrl+Up/Down'] = { 'browse blocks', function(wait)
       D.key(wait, 'C-up')
       D.eq(P.position(), 1, 'Ctrl+Up')
+      D.eq(P.draft(), d, 'the draft stays')
+    end },
+    ['Ctrl+PgUp/PgDn'] = { 'file start/end', function(wait)
+      D.key(wait, 'C-pagedown')
+      D.eq(P.position(), 'end', 'Ctrl+PgDn, to the end position')
+      D.key(wait, 'C-pageup')
+      D.eq(P.position(), 1, 'Ctrl+PgUp, to the first block')
       D.eq(P.draft(), d, 'the draft stays')
     end },
     ['Ctrl+Left/Right'] = { 'a word', function(wait)
@@ -462,6 +477,21 @@ local CONSOLE = {
     D.key(wait, 'end')
     assert(not out:is_scrolled(),
       'End on an empty field left the view scrolled')
+  end },
+  --- the output's ends with the draft in the field (the
+  --- maintainer's ruling of November 17, 2026)
+  ['Ctrl+PgUp/PgDn'] = { 'oldest/newest', function(wait)
+    D.key(wait, 'escape')
+    D.enter(wait, "for i = 1, 40 do print('row ' .. i) end")
+    wait(1)
+    D.type(wait, D0)
+    local out = P.cc().model.output
+    D.key(wait, 'C-pageup')
+    D.eq(out.view_top, out.kept.first, 'Ctrl+PgUp, the oldest row')
+    D.eq(P.console_draft(), D0, 'the draft stays')
+    D.key(wait, 'C-pagedown')
+    assert(not out:is_scrolled(), 'Ctrl+PgDn left the view scrolled')
+    D.eq(P.console_draft(), D0, 'the draft stays')
   end },
   ['Ctrl+L'] = { 'clear screen', function(wait)
     D.key(wait, 'escape')

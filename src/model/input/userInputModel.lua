@@ -195,8 +195,8 @@ function UserInputModel:add_text(text)
     if self:has_selection() then
       --- typing over a selection is two steps: the selection's
       --- removal, then the typing, a run of its own from its
-      --- first letter (the lead's ruling after the device run of
-      --- November 17, 2026)
+      --- first letter (the ruling of November 17, 2026, after
+      --- that day's device run)
       self:delete_selection()
       self:_record_edit(single and 'insert' or 'text', true)
     elseif single then
@@ -1047,21 +1047,28 @@ end
 
 --- A host that sets status_source (the file editor) has its
 --- custom status read afresh each time; one that sets
---- project_source (the console) names the open project, and
+--- project_source (the console) names the open project,
+--- name_source its entry file, state_source what it is doing,
+--- scroll_source how far its output is scrolled back, and
 --- screen_source the screen's mode.
 --- @return Status
 function UserInputModel:get_status()
   local src = self.status_source
   local project = self.project_source
+  local name = self.name_source
+  local state = self.state_source
+  local scroll = self.scroll_source
   local screen = self.screen_source
   return {
     label = self:get_label(),
     cursor = self.cursor,
     n_lines = self:get_n_text_lines(),
     custom = src and src() or self.custom_status,
-    input_more = self.visible:get_more(),
     caps = caps_lock() and 'CAPS' or nil,
     project = project and project() or nil,
+    name = name and name() or nil,
+    state = state and state() or nil,
+    back = scroll and scroll() or nil,
     mode = screen and screen() or nil,
   }
 end

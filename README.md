@@ -25,6 +25,22 @@ For simplicity and security reasons, the user is only allowed to
 access files inside a project. To interact with the filesystem,
 a project must be selected first.
 
+The status line at the bottom of the screen starts with the
+project and, in yellow, what has the keys: `console` on dark
+gray; `running` on dark gray while a program runs and `paused`
+on red while it is paused, each after the file the program
+started from; and the editor's state (`browsing`, `inserting`,
+`replacing`) on blue, after the open file; while the block you
+replace is out of view, an arrow after `replacing` points to
+it. Without an SD
+card, `[no sd]` stands in front, in orange. At its right end,
+in yellow, it shows where the cursor is in what you type, as
+`line:column`; before that, while the output is scrolled back,
+how far, as `L-4`, and in the editor the block and its lines,
+as `B3 L3`. A number past 9999 is written in thousands, as
+`10K`. A program that asks for typing shows its own
+question there instead, and where the cursor is in the answer.
+
 ## Keys
 
 | Command                                                           | Combination                                   |
@@ -40,6 +56,7 @@ a project must be selected first.
 | Scroll the output a row (the field keeps its text)                | <kbd>Ctrl</kbd>+<kbd>⇧</kbd>/<kbd>Ctrl</kbd>+<kbd>⇩</kbd> |
 | Scroll the output a page of 15 rows                               | <kbd>PageUp</kbd>/<kbd>PageDown</kbd>         |
 | To the oldest / newest row of the output (empty field)            | <kbd>Home</kbd>/<kbd>End</kbd>                |
+| To the oldest / newest row of the output (the field keeps its text) | <kbd>Ctrl</kbd>+<kbd>PageUp</kbd>/<kbd>Ctrl</kbd>+<kbd>PageDown</kbd> |
 | **Input**                                                         |                                               |
 | Move cursor horizontally                                          | <kbd>⇦</kbd>/<kbd>⇨</kbd>                     |
 | Move cursor vertically                                            | <kbd>⇧</kbd>/<kbd>⇩</kbd>                     |
@@ -62,6 +79,7 @@ a project must be selected first.
 | Browse block by block (empty field) / move the cursor a row (text in the field) | <kbd>⇧</kbd>/<kbd>⇩</kbd>                     |
 | Page down / up: the next block hidden below comes to the top, the one above to the bottom | <kbd>PageDown</kbd>/<kbd>PageUp</kbd>        |
 | To the first block / the end of the file (empty field)            | <kbd>Home</kbd>/<kbd>End</kbd>                |
+| To the first block / the end of the file (the field keeps its text) | <kbd>Ctrl</kbd>+<kbd>PageUp</kbd>/<kbd>Ctrl</kbd>+<kbd>PageDown</kbd> |
 | Back to the block being replaced (while replacing)                | <kbd>Ctrl</kbd>+<kbd>G</kbd>                  |
 | Insert the field's text before the highlighted block, or at the end of the file | <kbd>Enter ⏎</kbd>                            |
 | Insert an empty line (empty field)                                | <kbd>Enter ⏎</kbd>                            |

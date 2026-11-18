@@ -393,6 +393,17 @@ function EditorController:_generate_status(sel)
     range or nil)
   --- the state and the open project, always shown (FR4.6)
   cs.state = self:state_name()
+  --- while replacing, an arrow after the state word toward the
+  --- edit's target, the yellow highlight, while no row of it is
+  --- in view: up when it lies above the view, down when below
+  --- (the maintainer's ruling of November 18, 2026, from the
+  --- continuation cue's discussion of November 14-15:
+  --- "'replacing↑' so we understand what the arrow is about")
+  if cs.state == 'replacing' then
+    --- what the document view draws of the target: no second
+    --- reckoning of its rows
+    cs.arrow = bufview:target_side()
+  end
   local projects = self.console and self.console.model
       and self.console.model.projects
   local project = projects and projects.current
@@ -910,11 +921,12 @@ local ACTIONS = {
       ec.input:keypressed(k)
     end
   end,
-  --- with an empty field: Home to the first block, End to the
-  --- end position
+  --- Home with an empty field and Ctrl+PgUp to the first
+  --- block, End and Ctrl+PgDn to the end position
   file_edge = function(ec, k)
     local buf = ec:get_active_buffer()
-    local to = k == 'home' and 1 or buf:get_content_length() + 1
+    local first = k == 'home' or k == 'pageup'
+    local to = first and 1 or buf:get_content_length() + 1
     buf:set_selection(to)
     ec.view:get_current_buffer():follow_selection()
     ec:update_status()

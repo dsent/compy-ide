@@ -8,6 +8,7 @@ local class = require('util.class')
 --- @field selection integer
 --- @field range Range?
 --- @field state EditorStateName? --- the file editor's state
+--- @field arrow string? --- while replacing, '↑' or '↓' toward the target out of view
 --- @field project string? --- the open project's name
 CustomStatus = class.create(
   function(name, spans, len, sel, range)

@@ -129,11 +129,12 @@ scenario('console-while-running', function(wait)
   local status = v.h - l.bottom - l.status_h
   same(before, running, 'the console while a program runs',
     { { 600, 120 }, { 800, 300 }, { 40, 40 } })
-  -- the status line takes the running theme's ground, whole
+  -- the status line takes the console's ground, whole, as a
+  -- running program's line does (November 17, 2026)
   local bg = (P.colors(running, 600, status, 120, l.status_h))
-  assert(P.near(bg, v.colors.statusline.user.bg), string.format(
+  assert(P.near(bg, v.colors.statusline.console.bg), string.format(
     'the status line while a program runs: %s, the theme has %s',
-    P.show(bg), P.show(v.colors.statusline.user.bg)))
+    P.show(bg), P.show(v.colors.statusline.console.bg)))
   D.key(wait, 'C-q')
   wait(.2)
   hm_done()

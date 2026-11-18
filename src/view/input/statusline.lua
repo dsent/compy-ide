@@ -7,48 +7,131 @@ Statusline = class.create(function(cfg)
 end)
 
 
---- The room the console's position may take at the line's end,
---- before which the screen's mode stands
-local POSITION_ROOM = 'L99:999'
+--- The columns between two parts of the line
+local GAP = 2
 
---- The columns `text` takes with the gap after it.
+--- A part's columns, a column for each character: a character
+--- wider than its column is the fonts' defect, and overruns
+--- until they are fixed (Beads
+--- compy-ide-fonts-characters-wider-than-a-cell; the
+--- maintainer's ruling of November 18, 2026)
 --- @param text string?
 --- @return integer
-local function need(text)
-  return text and string.ulen(text) + 2 or 0
+local function len(text)
+  return text and string.ulen(text) or 0
 end
 
---- `text` in at most `chars` columns, the last an ellipsis
---- when it is cut; nil when under two fit.
---- @param text string?
---- @param chars integer
---- @return string?
-local function fit(text, chars)
-  if not text or string.ulen(text) <= chars then
-    return text
+--- A line's, a column's or a block's number as the line shows
+--- it: whole up to 9999, in thousands with a K above, 10K for
+--- 10000 to 10999 (the maintainer's ruling of November 18, 2026:
+--- "Shorten the position in the draft to 10K after 9999 ...
+--- shorten B to 10K after 9999")
+--- @param n integer
+--- @return string
+local function count(n)
+  if type(n) == 'number' and n > 9999 then
+    return math.floor(n / 1000) .. 'K'
   end
-  if chars < 2 then return nil end
-  return string.usub(text, 1, chars - 1) .. '…'
+  return tostring(n)
 end
 
---- A name or a label as it can be shown: a program's prompt
---- may hold bytes that are not UTF-8.
+--- `text` in at most `n` columns, the last an ellipsis where it
+--- is cut; never less than the ellipsis. Any text is cut so,
+--- arrows in it included (review e7)
+--- @param text string
+--- @param n integer
+--- @return string
+local function cut(text, n)
+  local l = len(text)
+  if l <= n then return text end
+  if n <= 1 then return '…' end
+  return string.usub(text, 1, n - 1) .. '…'
+end
+
+--- The fewest columns a part of the left side is cut to before
+--- the next is cut: two characters and the ellipsis (the state
+--- word's arrow counts among them)
+local FLOOR = 3
+
+--- The left side's parts, { t = text, tail = never cut } in the
+--- order they are cut, fitted into `room` columns, a gap after
+--- each, a tail (the state word's arrow) after its text and
+--- never cut (the
+--- maintainer's ruling of November 18, 2026: "nothing should be
+--- dropped fully, only cut"): each in turn is cut down to FLOOR,
+--- until all fit. Where even the floors do not fit, the left
+--- side is drawn as far as its clip, which ends before the
+--- right block (review e6), and nothing overlaps.
+--- @param room integer
+--- @param parts table[]
+local function fit_left(room, parts)
+  local total = 0
+  for _, p in ipairs(parts) do
+    if p.t then total = total + len(p.t) + len(p.tail) + GAP end
+  end
+  for _, p in ipairs(parts) do
+    if total <= room then return end
+    if p.t then
+      local l = len(p.t)
+      local least = math.max(1, FLOOR - len(p.tail))
+      local n = math.max(math.min(l, least), l - (total - room))
+      if n < l then
+        p.t = cut(p.t, n)
+        total = total - (l - len(p.t))
+      end
+    end
+  end
+end
+
+--- A name or a label as it can be shown, on the line's one
+--- row: a program's prompt may hold bytes that are not UTF-8,
+--- and a control character, a line break or a tab among them,
+--- is a space (review e3).
 --- @param text any
 --- @return string?
 local function shown(text)
   if not text then return nil end
-  return string.scrub(tostring(text))
+  return (string.scrub(tostring(text)):gsub('%c', ' '))
 end
 
 --- What a status line's picture takes from the IDE beside its
---- status: the state, which picks the colours, and the debug
---- marks. A draw reads them here and nowhere else, and
---- Statusline:key compares by the same three.
+--- status: the state, which picks the colours, the debug
+--- marks, and whether the Compy runs without an SD card. A draw
+--- reads them here and nowhere else, and Statusline:key
+--- compares by the same four.
 --- @return string? state
 --- @return any testing
 --- @return any debug
+--- @return any removable --- false: no SD card
 local function ide_state()
-  return love.state.app_state, love.state.testing, love.DEBUG
+  return love.state.app_state, love.state.testing, love.DEBUG,
+      love.state.has_removable
+end
+
+--- In front of every line of the IDE's own, the console's, a
+--- running program's, a pause's and the editor's, while the
+--- Compy runs without an SD card, in the theme's `mark` tone;
+--- never cut. A program's own field has none (the maintainer's
+--- ruling of November 17, 2026: "[no sd card] stays in front";
+--- and of November 18: "shorten [no sd card] to [no sd]").
+local NO_CARD = '[no sd]'
+
+--- The line's colours, by their name in the theme: the editor
+--- is blue, a pause red, and the console dark gray, a running
+--- program's line included (the maintainer's rulings of
+--- November 17, 2026: the colour "clearly indicates the mode
+--- (but is never the single differentiating indicator)", and
+--- "keep the bar dark gray, just add 'running' in yellow as a
+--- status"). The words say each too, after the project and the
+--- file, in the state's yellow: the editor its state, the
+--- console "console", the bare line behind a program "running"
+--- (ConsoleController:running_status), a pause "paused".
+--- @param app_state string?
+--- @return InputTheme
+local function theme_of(app_state)
+  if app_state == 'editor' then return 'editor' end
+  if app_state == 'inspect' then return 'inspect' end
+  return 'console'
 end
 
 --- `v` spelled for a comparison: a string, a number or a
@@ -76,6 +159,16 @@ local function spell(v, out, depth)
   end
 end
 
+--- What a draw reads of the IDE's state (ide_state), as one
+--- string: a field kept rendered is rendered again when it
+--- changes (UserInputView:draw).
+--- @return string
+function Statusline:ide_key()
+  local out = { }
+  spell({ ide_state() }, out, 0)
+  return table.concat(out, ' ')
+end
+
 --- What a draw of `status` reads that can differ between two
 --- frames, as one string: the IDE's state (ide_state) and the
 --- whole of `status`, every field of it, read by this draw or
@@ -99,19 +192,9 @@ end
 function Statusline:draw(status, start_y)
   local gfx = love.graphics
   local cf = self.cfg
-  local app_state, testing, debug = ide_state()
-  local colors = (function()
-    local state = app_state
-    if state == 'inspect' then
-      return cf.colors.statusline.inspect
-    elseif state == 'running' then
-      return cf.colors.statusline.user
-    elseif state == 'editor' then
-      return cf.colors.statusline.editor
-    else
-      return cf.colors.statusline.console
-    end
-  end)()
+  local app_state, testing, debug, removable = ide_state()
+  local theme = theme_of(app_state)
+  local colors = cf.colors.statusline[theme]
 
   local h = start_y or 0
   local w = cf.w
@@ -130,7 +213,10 @@ function Statusline:draw(status, start_y)
   end
 
   local start_box = { x = 0, y = h }
-  local margin = 2 * cf.fw
+  --- one cell on each side of the line (the maintainer's
+  --- ruling of November 18, 2026: "Have just one space on each
+  --- side")
+  local margin = cf.fw
   local endTextX = start_box.x + w - margin
   local midX = (start_box.x + w) / 2
 
@@ -140,205 +226,180 @@ function Statusline:draw(status, start_y)
     gfx.rectangle("fill", start_box.x, start_box.y, w, band)
   end
 
-  --- @param m More?
-  --- @return string
-  local function morelabel(m)
-    if not m then return '' end
-
-    if m.up and not m.down then
-      return '↑↑'
-    elseif not m.up and m.down then
-      return '↓↓ '
-    elseif m.up and m.down then
-      return '↕↕ '
-    else
-      return ''
-    end
-  end
-
-  --- The console names the screen's mode, `text` or
-  --- `combined`, right-aligned at one place in every state: its
-  --- end stands where the room a position such as "L99:999"
-  --- takes begins, whether a position shows or not, so that the
-  --- word does not move as the position grows; a wider position
-  --- pushes it left. The full picture has no status line.
-  --- @param pos_x number? --- where the position begins, if one
-  --- shows
-  --- @return number? left --- where the word begins
-  local function drawMode(pos_x)
-    local mode = status.mode
-    if not mode or mode == 'picture' then return nil end
-    local right = math.min(endTextX - cols(POSITION_ROOM),
-      pos_x or endTextX) - 2 * cf.fw
-    local left = right - cols(mode)
-    gfx.setColor(colors.fg2 or colors.fg)
-    gfx.print(mode, left, start_box.y + pad)
-    gfx.setColor(colors.fg)
-    return left
-  end
-
   local function drawStatus()
     local state = app_state
     local custom = status.custom
-    local start_text = {
-      x = start_box.x + margin,
-      y = start_box.y + pad,
-    }
-
-    gfx.setColor(colors.fg)
-    local left_x = start_text.x
-    --- What the status line names (FR4.6, H-NFR4.4), after
-    --- the input's label: the open project, the open file,
-    --- the editor's state, and Caps Lock while it is on. Left
-    --- of `limit`, the project's name gives way first, then
-    --- the file's.
-    --- @param limit number?
-    local function drawLeft(limit)
-      local project = shown(custom and custom.project
-          or status.project)
-      local name = shown(custom and custom.name)
-      local state = custom and custom.state
-      local caps = status.caps
-      if limit then
-        local room = math.floor((limit - left_x) / cf.fw)
-        room = room - need(state) - need(caps)
-        name = fit(name, room - 2)
-        project = fit(project, room - need(name) - 2)
-      end
-      local x = left_x
-      local function put(text, color)
-        if not text then return end
-        gfx.setColor(color)
-        gfx.print(text, x, start_text.y)
-        x = x + need(text) * cf.fw
-      end
-      put(project, colors.fg)
-      put(name, colors.fg)
-      put(state, colors.fg2 or colors.fg)
-      put(caps, colors.indicator)
-      gfx.setColor(colors.fg)
-    end
-    --- in the file editor the state is the kind of input
-    --- expected, and takes the label's place
-    local label = status.label
-    if label and not (custom and custom.state) then
-      local text = label
+    local y = start_box.y + pad
+    local left_x = start_box.x + margin
+    local fw = cf.fw
+    --- The input's label, as the program gave it (its prompt),
+    --- with its tone; an empty one shows nothing. The editor's
+    --- line names its state in the label's place
+    local label, tone
+    if status.label and not (custom and custom.state) then
+      label = status.label
       if type(label) == 'table' then
-        text = label.text
-        local tone = label.tone
-        if tone and tone ~= 'default' and colors[tone] then
-          gfx.setColor(colors[tone])
+        tone = label.tone
+        label = label.text
+      end
+      label = shown(label)
+      if label == '' then label = nil end
+    end
+    local label_color = colors.fg
+    if tone and tone ~= 'default' and colors[tone] then
+      label_color = colors[tone]
+    end
+
+    --- The right block, packed to the right edge (the
+    --- maintainer's ruling of November 18, 2026: "Move B and L
+    --- to the right and only move them to the left when there's
+    --- no space ... block, line and draft position are never
+    --- cut"), left to right: the screen's mode, Caps Lock, and
+    --- the position: the file's block and its lines in the
+    --- editor, or how far the output is scrolled back, `L-N`,
+    --- elsewhere; and the draft's cursor, `line:column`, in the
+    --- state's yellow, at the edge. Each stands next to the one
+    --- to its right, moving left only as that grows; none is
+    --- cut, and no room is kept for a wider one.
+    local right = { }
+    --- @param list table[]
+    --- @param t string?
+    --- @param color table
+    --- @param sep integer? --- the columns before it, GAP if nil
+    local function add(list, t, color, sep)
+      if t and t ~= '' then
+        list[#list + 1] = { t = t, color = color, sep = sep or GAP }
+      end
+    end
+    --- @param list table[]
+    --- @return integer
+    local function width_of(list)
+      local n = 0
+      for i, p in ipairs(list) do
+        n = n + len(p.t) + (i > 1 and p.sep or 0)
+      end
+      return n
+    end
+    local mode = status.mode
+    if mode == 'picture' then mode = nil end
+    add(right, mode, colors.fg2 or colors.fg)
+    add(right, status.caps, colors.indicator)
+    --- The position, never wider than half the line (the
+    --- maintainer's ruling of November 18, 2026: "the position
+    --- indicator is never more than half the status line"):
+    --- where it would be, the block's lines are left out, the
+    --- one part of the line that may go, and only for this. With
+    --- its numbers in thousands above 9999 the rest always fits.
+    local pos = { }
+    local c = type(status.cursor) == 'table' and status.cursor or nil
+    local editor = custom ~= nil and c ~= nil
+    local lines
+    if editor then
+      local sel = custom.selection
+      if custom.spans_lines then
+        local last = sel == custom.buflen
+        add(pos, 'B' .. count(sel),
+          last and colors.indicator or colors.fg)
+        lines = custom.range and custom.range:ln_label() or nil
+        add(pos, lines, colors.fg, 1)
+      else
+        add(pos, 'L' .. count(sel), colors.fg)
+      end
+    elseif status.back then
+      --- how far the output is scrolled back from rest (the
+      --- maintainer's ruling of November 18, 2026: "when we
+      --- scroll, we can show L-4"); nothing at rest
+      add(pos, 'L-' .. status.back, colors.fg)
+    end
+    if c then
+      local ln = c.l
+      if custom and not editor then ln = custom.line or c.l end
+      add(pos, count(ln) .. ':' .. count(c.c),
+        colors.state or colors.fg2 or colors.fg)
+    end
+    local half = math.floor(w / fw / 2)
+    if lines and width_of(pos) > half then
+      for i, p in ipairs(pos) do
+        if p.t == lines then
+          table.remove(pos, i)
+          break
         end
       end
-      text = shown(text) or ''
-      gfx.print(text, start_text.x, start_text.y)
-      gfx.setColor(colors.fg)
-      left_x = left_x + cols(text .. '  ')
     end
+    for _, p in ipairs(pos) do right[#right + 1] = p end
+    local width = width_of(right)
+    local right_x = endTextX - width * fw
+
+    --- The left side: the no-card mark, never cut; the input's
+    --- label (a program's prompt), the project, the file and the
+    --- state word, in the state's yellow. Short of room the
+    --- label is cut first, then the state word, then the
+    --- project, the file the last (the maintainer's ruling of
+    --- November 18, 2026: "the project name gets cut next, and
+    --- the file name only if nothing more can"); see fit_left.
+    local project = shown(custom and custom.project or status.project)
+    local name = shown(custom and custom.name or status.name)
+    local word = custom and custom.state or status.state
+    local mark = word and removable == false and NO_CARD or nil
+    local p_label = { t = label }
+    --- the arrow toward the edit's target, after the word, in
+    --- its tone, and never cut: a cut word's ellipsis comes
+    --- before it
+    local p_state = { t = word,
+      tail = word and custom and custom.arrow or nil }
+    local p_project = { t = project }
+    local p_name = { t = name }
+    local room = math.floor((right_x - left_x) / fw)
+        - (mark and len(mark) + GAP or 0)
+    fit_left(room, { p_label, p_state, p_project, p_name })
+
+    --- drawn inside a clip that ends a gap before the right
+    --- block, so that where even the floors do not fit the left
+    --- side is cut off there and covers none of it (review e6).
+    --- The clip is in the target's pixels: the line's corners
+    --- go through the transform in force.
+    gfx.push('all')
+    if gfx.intersectScissor and gfx.transformPoint then
+      local x1, y1 = gfx.transformPoint(start_box.x, start_box.y)
+      local x2, y2 = gfx.transformPoint(right_x - GAP * fw,
+        start_box.y + band)
+      if x1 and y1 and x2 and y2 then
+        gfx.intersectScissor(x1, y1, math.max(0, x2 - x1),
+          math.max(0, y2 - y1))
+      end
+    end
+    local x = left_x
+    local function put(t, color)
+      if not t then return end
+      gfx.setColor(color)
+      gfx.print(t, x, y)
+      x = x + (len(t) + GAP) * fw
+    end
+    put(mark, colors.mark or colors.warning)
+    put(p_label.t, label_color)
+    put(p_project.t, colors.fg)
+    put(p_name.t, colors.fg)
+    put(p_state.t and p_state.t .. (p_state.tail or ''),
+      colors.state or colors.fg2 or colors.fg)
+    gfx.pop()
+
+    x = right_x
+    for i, p in ipairs(right) do
+      if i > 1 then x = x + p.sep * fw end
+      gfx.setColor(p.color)
+      gfx.print(p.t, x, y)
+      x = x + len(p.t) * fw
+    end
+    gfx.setColor(colors.fg)
+
     if debug then
       gfx.setColor(cf.colors.debug)
       if testing then
-        gfx.print('testing',
-          midX - (8 * cf.fw),
-          start_text.y)
+        gfx.print('testing', midX - (8 * fw), y)
       end
       local sl = state or '???'
-      local lw = cols(sl) / 2
-      gfx.print((sl),
-        midX - lw, start_text.y)
+      gfx.print(sl, midX - cols(sl) / 2, y)
       gfx.setColor(colors.fg)
-    end
-
-    local c = status.cursor
-    if type(c) == 'table' then
-      if custom then
-        local t_ic = ' ' .. c.l .. ':' .. c.c
-        local lim = custom.buflen
-        local sel, t_bbp, t_blp
-        -- local more_i = ''
-        if custom.spans_lines then
-          sel = custom.selection
-          t_bbp = 'B' .. sel .. ' '
-          t_blp = custom.range and custom.range:ln_label() or ''
-        else
-          sel = custom.selection
-          t_blp = 'L' .. sel
-        end
-        local more_i = morelabel(status.input_more) .. ' '
-
-        gfx.setColor(colors.fg)
-        local font = gfx.getFont()
-        local w_il  = cols(" 99:999")
-        local w_mi  = cols("  ↕↕ ")
-        local cw_p  = cols(t_blp)
-        local cw_il = cols(t_ic)
-        local sxl   = endTextX - (cw_p + w_il + w_mi)
-        local s_mi  = endTextX - w_il
-        --- the left text ends before the position; scrolling
-        --- the view changes nothing here (IS2.2), so what the
-        --- view hides is no part of the line
-        local s_pos = sxl
-        if t_bbp then
-          s_pos = s_pos - cols(t_bbp)
-        end
-
-        drawLeft(s_pos)
-
-        gfx.setFont(self.cfg.font)
-        gfx.setColor(colors.fg)
-        if colors.fg2 then gfx.setColor(colors.fg2) end
-        --- cursor pos
-        gfx.print(t_ic, endTextX - cw_il, start_text.y)
-        --- input more
-        gfx.print(more_i, s_mi, start_text.y - 3)
-
-        gfx.setColor(colors.fg)
-        --- block line range / line
-        gfx.print(t_blp, sxl, start_text.y)
-        gfx.setColor(colors.fg)
-        --- block number
-        if custom.spans_lines then
-          local bpw = cols(t_bbp)
-          local sxb = sxl - bpw
-          if sel == lim then
-            gfx.setColor(colors.indicator)
-          end
-          gfx.print(t_bbp, sxb, start_text.y)
-        end
-        gfx.setColor(colors.fg)
-      else
-        --- normal statusline
-        local pos_c = ':' .. c.c
-        local ln, l_lim
-        if custom then
-          ln = custom.line
-          l_lim = custom.buflen
-        else
-          ln = c.l
-          l_lim = status.n_lines
-        end
-        local pos_l = 'L' .. ln
-
-        local lw = cols(pos_l)
-        local cw = cols(pos_c)
-        local sx = endTextX - (lw + cw)
-        local left_end = drawMode(sx) or sx
-        --- the project's name ends before the mode and the
-        --- position
-        drawLeft(left_end)
-        if ln == l_lim then
-          gfx.setColor(colors.indicator)
-        end
-        gfx.print(pos_l, sx, start_text.y)
-        gfx.setColor(colors.fg)
-        gfx.print(pos_c, sx + lw, start_text.y)
-      end
-    else
-      --- a status with no cursor names things alone: what runs
-      --- behind a hidden field, and the screen's mode where the
-      --- console's status line has it. A long name is cut, the
-      --- state kept whole, within the screen.
-      drawLeft(drawMode() or endTextX)
     end
   end
 

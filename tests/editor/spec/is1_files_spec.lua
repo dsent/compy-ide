@@ -557,9 +557,9 @@ describe("IS1 files #editor #spec", function()
 
     -- Leaving the editor during an edit: the spec names no
     -- rule, so the editor does as Luditor, its reference
-    -- implementation, does on Ctrl+Q (the lead's call, pending
-    -- the maintainer's confirmation): the exit is refused with
-    -- a notice and the state kept, as Ctrl+J is above.
+    -- implementation, does on Ctrl+Q (the ruling of November
+    -- 17, 2026): the exit is refused with a notice and the
+    -- state kept, as Ctrl+J is above.
     -- Ctrl+Shift+R and Ctrl+Shift+S left this list on
     -- 2026-11-14, when the keys were dropped, and Ctrl+R on
     -- 2026-11-16, when it came to restart a live program only:
@@ -637,10 +637,10 @@ describe("IS1 files #editor #spec", function()
     end)
 
     -- Ctrl+Q in the file editor (the reserved map of
-    -- 2026-11-14; this reading of it for the editor is the
-    -- lead's, pending the maintainer's confirmation): from the
-    -- browsing state it returns to the console, every file on
-    -- the editor's stack closed, and the project stays open.
+    -- 2026-11-14, read for the editor by the ruling of November
+    -- 17, 2026): from the browsing state it returns to the
+    -- console, every file on the editor's stack closed, and the
+    -- project stays open.
     spec_it("IS1.6 Step back from a file with Escape: Ctrl+Q "
         .. "from the browsing state leaves the editor for the "
         .. "console, the project still open", function()

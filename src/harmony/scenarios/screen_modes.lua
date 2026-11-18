@@ -9,8 +9,8 @@ local D = require('harmony.drive')
 --- the text over the picture; a pause shows the console;
 --- reset() clears the picture. Each mode is read from the
 --- screen's pixels, and the combined mode's two looks are shot
---- for the maintainer to choose (the lead's decision 5 of
---- November 17, 2026).
+--- for the maintainer to choose (decision 5 of November 17,
+--- 2026).
 
 local YELLOW = { 1, .8, .2 }
 
@@ -119,8 +119,9 @@ scenario('f12-and-any-key', function(wait)
 end)
 
 --- a program that drew and ended by itself is stopped, and leaves
---- its picture on show (the lead's decision 1); back() is what
---- any key does once the key gate takes it (stage 2)
+--- its picture on show (decision 1 of November 17, 2026);
+--- back() is what any key does once the key gate takes it
+--- (stage 2)
 scenario('natural-end-shows-picture', function(wait)
   wait(.1)
   local before = project(wait, 'h-screen-d', DRAWS)
