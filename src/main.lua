@@ -26,7 +26,9 @@ local usb = require("util.usb")
 require("lib.error_explorer")
 
 --- The IDE's main loop: LÖVE's own, handing love.quit the quit
---- event's value (Application.run). Harmony brings its own.
+--- event's value and leaving out its sleep after a presented
+--- frame about a display period long (Application.run). Harmony
+--- brings its own.
 if not love.harmony then
   love.run = require("util.application").run
 end
