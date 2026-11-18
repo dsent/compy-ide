@@ -232,7 +232,10 @@ to conflate and the distinction is enforced, not merely stated: there is no
 What a project configures is the `validator` (runs at submit, receives `string[]`,
 returns `true` or `false, Error[]`) and the `highlighter` (display only). The
 evaluator decides what a submit *means* for the widget; those two are the project's
-hooks into it.
+hooks into it. Both are handed the field's own lines to read. A callback that changes
+that table in place goes around the model's change path (`text_change`: the rewrap of
+the visible rows, the highlight memo, the count of changes a held drag checks) and the
+edit history, and is unsupported.
 
 Host evaluators can validate during editing. The project widget's public
 validator runs at submit and receives `string[]`; it returns `true` or
