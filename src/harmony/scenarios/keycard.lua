@@ -4,14 +4,24 @@ local D = require('harmony.drive')
 --- The key card (IS3.16, the key card rulings): while F1 is
 --- held it shows the keys of the editor's state, or of the
 --- console, and every other key does nothing; it goes when F1
---- is let go. A running program shows none; a paused one
---- shows the console's.
+--- is let go. A running program shows none and gets F1
+--- itself, its press, its release and its held state; a
+--- paused one shows the console's.
 
 local PROJECT = 'h-card'
---- a program that owns the screen: one that draws nothing
---- leaves the console showing, and the keys it does not take
---- go to the console, F1 included
+--- a program that draws, and notes F1's press and release
+--- and whether it saw F1 held
 local DRAWS = [[
+F1 = { }
+function love.keypressed(k)
+  if k == 'f1' then F1[#F1 + 1] = 'press' end
+end
+function love.keyreleased(k)
+  if k == 'f1' then F1[#F1 + 1] = 'release' end
+end
+function love.update()
+  if Key.any_pressed('f1') then HELD = true end
+end
 function love.draw()
   love.graphics.setColor(1, 0.5, 0)
   love.graphics.rectangle('fill', 100, 100, 300, 200)
@@ -104,6 +114,10 @@ scenario('program', function(wait)
       'a card is drawn over a running program')
     D.shot(wait, 'running')
   end)
+  local env = P.cc():get_project_env()
+  D.eq(table.concat(env.F1, ' '), 'press release',
+    'the program gets F1')
+  D.eq(env.HELD, true, 'the program sees F1 held')
   -- paused, the console shows its card
   D.key(wait, 'C-pause')
   D.in_state('inspect')

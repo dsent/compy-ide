@@ -1,4 +1,8 @@
 
+Measured on a stock Compy. The rooted system image maps the browser key to F1
+and releases F1 to F12 from Android's shortcuts: F1 and F2 reach a project
+there.
+
 | Label                | KeyConstant | ok?  |
 | :------------------- | :---------- | :--- |
 | Esc                  | escape      | ✓    |

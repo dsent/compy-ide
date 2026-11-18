@@ -914,11 +914,15 @@ The rooted system image maps the keyboard's browser key to F1 and releases F1
 to F12 from Android's shortcuts, and the IDE's own editor uses F1 and F2 there.
 Which of the other function keys a physical press delivers on the rooted image
 is not recorded here; several of them share a key with a volume or brightness
-control. F10 arrives on both, which is why the platform could take it. Until a
-key is known to arrive on the Compies your project runs on, bind help, pause
-and debug gestures to letter chords instead: an example that wants a held help
-overlay uses Alt+H (`doc/development/keyboard.md` is the per-key availability
-table, measured on a stock Compy).
+control. F10 arrives on both, which is why the platform could take it.
+
+**F1 is the help key.** The console and the file editor show their key card
+while it is held, and a running program gets F1 itself, with no card over it:
+show your program's help for as long as F1 is held (ask
+`Key.any_pressed('f1')`, as in "Choosing the mechanism" below). Until another
+key is known to arrive on the Compies your project runs on, bind pause and
+debug gestures to letter chords (`doc/development/keyboard.md` is the per-key
+availability table).
 
 Ctrl+Q leaves the editor for the console, with every file you had opened in
 it, and the project stays open. Ctrl+T while you browse the file leaves it to run
@@ -1071,14 +1075,14 @@ shape the opening one expects:
 
 ```lua
 -- DON'T: the flag can outlive the key.
-compy.input.shortcuts.keypressed['alt+h']  = fn.side_run(function() peek = true end)
-compy.input.shortcuts.keyreleased['alt+h'] = fn.side_run(function() peek = false end)
+compy.input.shortcuts.keypressed['f1']  = fn.side_run(function() peek = true end)
+compy.input.shortcuts.keyreleased['f1'] = fn.side_run(function() peek = false end)
 ```
 
-Release Alt before `H` and the second event serialises as plain `'h'`, so the
-clearing binding never runs and `peek` stays true. Hold an unrelated modifier
-while releasing and a bare `'space'` binding misses the same way. Lose the
-window to a notification and no release arrives at all. **A modifier's own
+Press Shift while F1 is down and the release serialises as `'shift+f1'`, so
+the clearing binding never runs and `peek` stays true. A chord misses the same
+way when its modifier goes up first: `'alt+h'`'s release then arrives as plain
+`'h'`. Lose the window to a notification and no release arrives at all. **A modifier's own
 release cannot even be bound**, so for some chords the closing half is not
 writable.
 
@@ -1087,7 +1091,7 @@ Ask instead, at the moment the answer matters:
 ```lua
 -- DO: a question with no state to go stale.
 local function peeking()
-  return Key.any_pressed('h') and Key.alt() and not Key.ctrl()
+  return Key.any_pressed('f1')
 end
 
 compy.input.hooks.mousemoved = function(x, y)
