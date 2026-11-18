@@ -336,12 +336,30 @@ local function screen_rows(img, t, rows)
   return part:getString()
 end
 
---- How many pixels of two pictures differ
+--- The levels of a channel (of 255) two pictures of the same
+--- rows may differ by. Under Mesa's llvmpipe, the renderer of a
+--- machine with no GPU, some pixels at a glyph's edge come out a
+--- level apart on the screen and on the expectation's canvas:
+--- 3 of the paused output's pixels with this scenario run alone
+--- (November 18, 2026; softpipe gives 2). On the GPU it was
+--- checked on (Mesa's D3D12) the two pictures are equal.
+--- Rows drawn twice, the defect checked here, put a glyph's ink
+--- on the ground, about 190 levels apart: 15,916 pixels of the
+--- paused output differ by more than a shade on the tree before
+--- its fix.
+local SHADE = 2
+
+--- How many pixels of two pictures differ by more than a shade
 local function differ(a, b)
   if a == b then return 0 end
-  local n = 0
+  local n, byte, abs = 0, string.byte, math.abs
   for i = 1, #a, 4 do
-    if a:sub(i, i + 3) ~= b:sub(i, i + 3) then n = n + 1 end
+    for j = i, i + 3 do
+      if abs(byte(a, j) - byte(b, j)) > SHADE then
+        n = n + 1
+        break
+      end
+    end
   end
   return n
 end
