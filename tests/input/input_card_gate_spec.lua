@@ -546,3 +546,122 @@ describe("a key's receiver #input", function()
     assert.same("", K.console_draft())
   end)
 end)
+
+-- F1 is the help key in programs too, and a running program gets
+-- F1 itself: no card shows over it (the ruling behind Beads
+-- compy-f1-help-key-in-programs). Every way the input API offers
+-- a key brings it the press, the release and the held state; a
+-- paused or stopped program has the console in front, which
+-- shows its own card, and gets nothing of F1.
+describe("F1 in a running program #input", function()
+  setup(K.setup)
+  teardown(K.teardown)
+  after_each(K.cleanup)
+
+  local NOTES = table.concat({
+    "KEYS = {}",
+    "function note(s) KEYS[#KEYS + 1] = s end",
+    "function love.update() HELD = Key.any_pressed('f1') end",
+  }, "\n") .. "\n"
+
+  local function env() return K.cc:get_project_env() end
+
+  --- start `code`, hold F1 a frame, let it go a frame: what the
+  --- program noted, whether a card showed and whether the
+  --- program saw F1 held, while held and after
+  local function hold_f1(code)
+    K.reset({ ["main.lua"] = NOTES .. code })
+    K.start()
+    assert.same("running", K.app_state())
+    K.hold("f1")
+    local card, held = K.cc:card_shows(), env().HELD
+    K.release("f1")
+    return env().KEYS, card, held, env().HELD
+  end
+
+  it("reaches love.keypressed and love.keyreleased, held between",
+    function()
+      local keys, card, held, after = hold_f1(table.concat({
+        "function love.keypressed(k) note('press ' .. k) end",
+        "function love.keyreleased(k) note('release ' .. k) end",
+      }, "\n"))
+      assert.same({ "press f1", "release f1" }, keys)
+      assert.is_false(card)
+      assert.is_true(held)
+      assert.is_false(after)
+    end)
+
+  it("reaches an 'f1' shortcut and the hooks", function()
+    local keys, card = hold_f1(table.concat({
+      "local sc = compy.input.shortcuts",
+      "sc.keypressed['f1'] = function() note('shortcut press') end",
+      "sc.keyreleased['f1'] = function() note('shortcut release') end",
+      "compy.input.hooks.keypressed = function(k)",
+      "  note('hook press ' .. k)",
+      "end",
+      "compy.input.hooks.keyreleased = function(k)",
+      "  note('hook release ' .. k)",
+      "end",
+    }, "\n"))
+    assert.same({ "shortcut press", "hook press f1",
+      "shortcut release", "hook release f1" }, keys)
+    assert.is_false(card)
+  end)
+
+  it("reaches compy.on_key while a question is open", function()
+    local keys, card, held = hold_f1(table.concat({
+      "compy.on_key = function(k) note('key ' .. k) return true end",
+      "compy.ask('name?')",
+    }, "\n"))
+    assert.same({ "key f1" }, keys)
+    assert.is_false(card)
+    assert.is_true(held)
+    assert.is_true(love.state.user_input_controller:is_shown())
+  end)
+
+  it("brings no card over a question that leaves it", function()
+    local keys, card = hold_f1("compy.ask('name?', nil, 'ada')\n")
+    assert.same({ }, keys)
+    assert.is_false(card)
+    local field = love.state.user_input_controller
+    assert.is_true(field:is_shown())
+    assert.same({ "ada" }, field:get_text())
+  end)
+
+  --- a program that notes its key events, for the console's turn
+  local KEYS = table.concat({
+    "function love.keypressed(k) note('press ' .. k) end",
+    "function love.keyreleased(k) note('release ' .. k) end",
+  }, "\n") .. "\n"
+
+  it("is the console's while the program is paused, and the "
+      .. "program gets none of it at continue()", function()
+    K.reset({ ["main.lua"] = NOTES .. KEYS })
+    K.start()
+    K.keys("lctrl", "pause")
+    K.frame()
+    if K.app_state() == "snapshot" then K.cc:suspend() end
+    assert.same("inspect", K.app_state())
+    K.hold("f1")
+    assert.is_true(K.cc:card_shows())
+    K.release("f1")
+    assert.is_false(K.cc:card_shows())
+    K.type("continue()")
+    K.keys("return")
+    assert.same("running", K.app_state())
+    assert.same({ "press lctrl", "release lctrl" }, env().KEYS)
+  end)
+
+  it("is the console's once the program is stopped", function()
+    K.reset({ ["main.lua"] = NOTES .. KEYS })
+    K.start()
+    local keys = env().KEYS
+    K.keys("lctrl", "q")
+    assert.same("ready", K.app_state())
+    K.hold("f1")
+    assert.is_true(K.cc:card_shows())
+    K.release("f1")
+    --- Ctrl+Q's own Ctrl went down on the program
+    assert.same({ "press lctrl" }, keys)
+  end)
+end)
