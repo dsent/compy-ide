@@ -57,8 +57,8 @@ for (`../../../input_api.md`, "Held keys"). `keyreleased` holds **no** acceptanc
 only remaining job is dispatch, which `bubble.lua`'s hold judge needs.
 
 **`inputTick` runs in `love.update`, not in `updateStep`.** `updateStep` returns early before the
-first draw, while paused, and while the help overlay is shown — and that overlay is **held** Alt+H,
-so a claim would outlive its key in ordinary use rather than in a corner case.
+first draw, while paused, and while the help overlay is shown — and `Alt+P`, which pauses, claims
+its `P`, so a claim would outlive its key in ordinary use rather than in a corner case.
 
 ### The character → key inference, and its limit
 
@@ -80,7 +80,7 @@ crash this cost before the guard existed.
 ### A chord owns its trigger key
 
 A chord's trigger keeps producing characters if its modifier is released while the key stays down —
-Alt+H, then letting go of Alt, leaves `H` repeating and those characters are not a typed answer. So
+Alt+P, then letting go of Alt, leaves `P` repeating and those characters are not a typed answer. So
 **whoever takes a chord claims its trigger**, without judging it:
 
 - the swallowing classes do it — `alt+*` and `alt+shift+*`, two of them because a class is its

@@ -60,9 +60,11 @@ has is worse than none, because it passes.
 ## keyboard
 
 **Repository:** `src/examples/keyboard` (separate remote, own PR). **Last mechanism change:**
-2026-08-12, the way a typed character is accepted, and the teacher chord `Ctrl+Alt+H` becoming a
-registered shortcut instead of a hand-matched combo — see `internals/examples/keyboard.md`. Cases marked **[new]** exercise that mechanism and have never been
-run by a human; the rest are regression checks against behaviour the example already had.
+2026-11-18, help shows while `F1` is held, in place of `Alt+H`. Before it, 2026-08-12, the way a
+typed character is accepted, and the teacher chord `Ctrl+Alt+H` becoming a registered shortcut
+instead of a hand-matched combo — see `internals/examples/keyboard.md`. Cases marked **[new]**
+exercise these mechanisms and have never been run by a human; the rest are regression checks
+against behaviour the example already had.
 
 ### The four commits a result should be reported against
 
@@ -139,9 +141,9 @@ nothing but this table.)*
 
 | | do | expect |
 |---|---|---|
-| D1 | in any game, **hold** `Alt+H` | the help overlay appears and the game freezes behind it |
-| D2 | release **H** first | the overlay disappears |
-| D3 | hold `Alt+H`, then release **Alt** first, keeping H down | **[new]** the overlay disappears **and** no stray `h` is typed into the game — no knock, no miss |
+| D1 | in any game, while it is being played, **hold** `F1` | **[new]** the help overlay appears and the game freezes behind it; no knock, no miss, no IDE key card |
+| D2 | release `F1` | **[new]** the overlay disappears |
+| D3 | hold `Alt+H`, then release **Alt** first, keeping H down | **[new]** no help overlay at any point, **and** no stray `h` is typed into the game — no knock, no miss |
 | D4 | `Shift+Esc` | leaves the game for the menu |
 | D5 | `Alt+Shift+Esc` | **[new]** also leaves. *(It stopped working during the migration and was restored.)* |
 | D6 | `Ctrl+Alt+Up`, `Ctrl+Alt+Down` | the notch moves one step per press — **not** repeatedly while held |
