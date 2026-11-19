@@ -206,5 +206,6 @@ end
 input.show({
   prompt = PROMPT,
   highlighter = LuaHighlighter,
-  on_text_entered = sendLine
+  on_text_entered = sendLine,
+  clear_on_cancel = true
 })

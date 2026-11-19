@@ -143,11 +143,15 @@ strategy.set_opp_strategy("manual")
 ```
 for a second human using arrow keys.
 
-Press Space to start or restart; 
-Escape to quit.Input handling 
-is done via a small key_actions
-table instead of long if-chains, 
-making it easy to extend for 
+On the start screen, press Space to start
+and Escape to leave. During play, R or Escape
+returns to the start screen. On game over,
+the first Space press returns to the start
+screen and the second starts play; Escape
+also returns to the start screen. Input
+handling is done via a small key_actions
+table instead of long if-chains,
+making it easy to extend for
 new game states.
 
 ---

@@ -276,8 +276,15 @@ function love.draw()
   drawPicture()
 end
 
-function love.keypressed(k)
+function love.keypressed(k, _, isrepeat)
   if k == "space" then
     SCREEN = (SCREEN + 1) % SCREENS
+  end
+  local back = Key.combo(k) == "escape" and not isrepeat
+  if back then
+    if SCREEN == 0 then
+      return stop()
+    end
+    SCREEN = 0
   end
 end
