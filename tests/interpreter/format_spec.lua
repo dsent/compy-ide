@@ -198,6 +198,65 @@ describe('lua format #format', function()
     assert.equal(text, out)
   end)
 
+  --- LuaJIT skips a `#!` first line, and so does the parser:
+  --- it is in no program the printer prints from
+  describe('with a #! first line', function()
+    local H = '#!/usr/bin/env luajit -b whatever'
+
+    it('keeps it byte for byte and formats the rest',
+      function()
+        local out, ok = format.format({ H, 'x=1', 'y  =  2' }, W)
+        assert.is_true(ok)
+        assert.same({ H, 'x = 1', 'y = 2' }, out)
+      end)
+
+    it('formats the rest as it formats it alone', function()
+      for _, code in ipairs({
+        { 'x=1' },
+        { '', 'x=1' },
+        { '-- note', 'function f() return 1 end' },
+        { 'a = 1', '', '', 'b = 2', '', '' },
+        { '' },
+      }) do
+        local alone, ok = format.format(code, W)
+        local with = { H }
+        for _, l in ipairs(code) do table.insert(with, l) end
+        local out, ok2 = format.format(with, W)
+        assert.equal(ok, ok2)
+        assert.same(H, out[1])
+        assert.same(alone, table.slice(out, 2, #out))
+        assert.same(out, (format.format(out, W)))
+      end
+    end)
+
+    it('is formatted alone, and stays as it is', function()
+      for _, text in ipairs({ { H }, { H, '' } }) do
+        local out, ok = format.format(text, W)
+        assert.is_true(ok)
+        assert.same(text, out)
+      end
+    end)
+
+    it('keeps a carriage return ending it', function()
+      local out, ok = format.format({ H .. '\r', 'x = 1\r' }, W)
+      assert.is_true(ok)
+      assert.same({ H .. '\r', 'x = 1' }, out)
+    end)
+
+    it('leaves the text as it is when the rest fails', function()
+      for _, text in ipairs({
+        { H, 'x = = 1' },
+        { H, '#!/usr/bin/lua', 'x = 1' },
+        { H, '# note' },
+        { 'x = 1', H },
+      }) do
+        local out, ok = format.format(text, W)
+        assert.is_false(ok)
+        assert.equal(text, out)
+      end
+    end)
+  end)
+
   it('collapses every run of blank lines to one', function()
     local out = format.format({
       '', '', 'a = 1', '', '', '', 'b = 2', '', '',

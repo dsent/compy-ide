@@ -15,6 +15,15 @@ describe('textfile #textfile', function()
       assert.same({ '' }, textfile.lines('\n'))
     end)
 
+  it('reads CRLF and a lone CR as line ends, as LF', function()
+    local want = { 'x = 1', 'y = 2' }
+    assert.same(want, textfile.lines('x = 1\r\ny = 2\r\n'))
+    assert.same(want, textfile.lines('x = 1\ry = 2\r'))
+    assert.same(want, textfile.lines('x = 1\r\ny = 2\n'))
+    assert.same({ 'x = 1', '', 'y = 2' },
+      textfile.lines('x = 1\r\ry = 2'))
+  end)
+
   it('writes a newline after every line, the last one too',
     function()
       assert.same('', textfile.text({}))

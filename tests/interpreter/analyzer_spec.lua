@@ -108,3 +108,46 @@ describe('analyzer #analyzer', function()
 
   ---
 end)
+
+--- A `require` names a file only with its name written out as
+--- a string; any other call of it is no reference, and the
+--- rest of the file is analyzed all the same
+describe('analyzer requires #analyzer', function()
+  --- @param code string[]
+  --- @return boolean, SemanticInfo|string
+  local function analyzed(code)
+    local ok, ast = parser.parse(code)
+    assert.is_true(ok)
+    return pcall(analyzer.analyze, ast)
+  end
+
+  it('find no reference in require()', function()
+    local ok, si = analyzed({ 'require()', 'x = 1' })
+    assert.is_true(ok, si)
+    assert.same(SemanticInfo({
+      { name = 'x', line = 2, type = 'global' },
+    }, {}), si)
+  end)
+
+  it('find no reference in require(name)', function()
+    local ok, si = analyzed({ 'name = "a"', 'require(name)' })
+    assert.is_true(ok, si)
+    assert.same({}, si.requires)
+  end)
+
+  it('find the name in require "a.b"', function()
+    local ok, si = analyzed({ 'require "a.b"' })
+    assert.is_true(ok, si)
+    assert.same({ { name = 'a.b', line = 1 } }, si.requires)
+  end)
+
+  it('find require("a") beside a definition', function()
+    local ok, si = analyzed({ 'require("a")', 'function f() end' })
+    assert.is_true(ok, si)
+    assert.same(SemanticInfo({
+      { name = 'f', line = 2, type = 'function' },
+    }, {
+      { name = 'a', line = 1 },
+    }), si)
+  end)
+end)
