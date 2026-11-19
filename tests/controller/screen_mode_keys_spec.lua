@@ -155,6 +155,45 @@ describe("the screen modes' keys #canvas", function()
       assert.same("text", mode())
     end)
 
+    --- the line under the card names no mode, which would offer
+    --- F12 while the card holds it back; released, the label is
+    --- back (review r1's blocker)
+    --- @param word string --- the line's state word
+    local function no_label_under_card(word)
+      K.hold("f1")
+      assert.is_true(K.cc:card_shows())
+      local texts = { }
+      for _, t in ipairs(K.screen().texts) do
+        texts[#texts + 1] = t.text
+      end
+      assert.is_true(has(texts, word), "the line under the card")
+      assert.is_false(has(texts, "text>F12"))
+      assert.is_false(has(texts, "comb>F12"))
+      K.keys("f12")
+      K.release("f1")
+      assert.is_false(K.cc:card_shows())
+      assert.same("text", mode())
+      assert.is_true(has(status_texts(), "text>F12"),
+        "the label back once F1 is released")
+    end
+
+    it("leaves the line under the key card without the mode in the"
+      .. " idle console", function()
+        K.reset()
+        no_label_under_card("console")
+      end)
+
+    it("leaves the line under the key card without the mode in a"
+      .. " pause", function()
+        K.reset({ ["main.lua"] = recorder(true) })
+        K.start()
+        K.keys("lctrl", "pause")
+        K.frame()
+        assert.same("inspect", K.app_state())
+        assert.same("text", mode())
+        no_label_under_card("paused")
+      end)
+
     it("does nothing in the editor", function()
       K.reset()
       K.open()
@@ -850,14 +889,17 @@ describe("the screen modes' keys #canvas", function()
   end)
 
   describe("the status line", function()
-    it("names text and combined", function()
-      K.reset()
-      assert.is_true(has(status_texts(), "text"))
-      K.keys("f12")
-      local texts = status_texts()
-      assert.is_true(has(texts, "combined"))
-      assert.is_false(has(texts, "text"))
-    end)
+    --- the maintainer's ruling of November 19, 2026: "show
+    --- text/combined as `text>F12`/`comb>F12`"
+    it("names text and combined with the key to the next mode",
+      function()
+        K.reset()
+        assert.is_true(has(status_texts(), "text>F12"))
+        K.keys("f12")
+        local texts = status_texts()
+        assert.is_true(has(texts, "comb>F12"))
+        assert.is_false(has(texts, "text>F12"))
+      end)
 
     --- the right block is packed to the right (the maintainer's
     --- ruling of November 18, 2026): the mode's word stands two
@@ -884,12 +926,12 @@ describe("the screen modes' keys #canvas", function()
           assert.equal(pos_start - 2 * fw, mode_end)
           return mode_end
         end
-        local short = packed("text")
+        local short = packed("text>F12")
         K.type(string.rep("y", 40))
-        local long = packed("text")
+        local long = packed("text>F12")
         assert.equal(short - fw, long, "one column left for 1:41")
         K.keys("f12")
-        packed("combined")
+        packed("comb>F12")
         K.keys("f12")
         K.keys("f12")
         -- behind a running program that owns the input: the bare
@@ -897,7 +939,7 @@ describe("the screen modes' keys #canvas", function()
         K.reset({ ["main.lua"] = recorder() })
         K.start()
         assert.is_true(K.cc:fieldless())
-        local _, mode_end = at("^text$")
+        local _, mode_end = at("^text>F12$")
         assert.equal(edge, mode_end)
       end)
 

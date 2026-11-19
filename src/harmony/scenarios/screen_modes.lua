@@ -100,11 +100,15 @@ scenario('f12-and-any-key', function(wait)
   D.eq(P.console_draft(), '', 'the key typed nothing')
   D.eq(P.cc().input:get_status().mode, 'text',
     'the status line names the text')
+  assert(P.shows(P.drawn(wait), 'text>F12'),
+    'the status line prints text>F12')
   D.shot(wait, 'text-status')
   D.key(wait, 'f12')
   D.eq(mode(), 'combined', 'F12, combined')
   D.eq(P.cc().input:get_status().mode, 'combined',
     'the status line names combined')
+  assert(P.shows(P.drawn(wait), 'comb>F12'),
+    'the status line prints comb>F12')
   D.shot(wait, 'combined-status')
   D.key(wait, 'f12')
   D.eq(mode(), 'picture', 'F12 again, the picture')

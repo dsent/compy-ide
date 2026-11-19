@@ -116,6 +116,16 @@ end
 --- and of November 18: "shorten [no sd card] to [no sd]").
 local NO_CARD = '[no sd]'
 
+--- The screen's mode as the line prints it, with the key that
+--- shows the next (the maintainer's ruling of November 19,
+--- 2026: "show text/combined as `text>F12`/`comb>F12`"); the
+--- full picture has no line. Only the console's lines carry a
+--- mode (UserInputModel.screen_source,
+--- ConsoleController:running_status), and F12 steps it in each
+--- of them; the editor's and a program's own field's have none.
+--- @type table<ScreenMode, string>
+local MODE_LABEL = { text = 'text>F12', combined = 'comb>F12' }
+
 --- The line's colours, by their name in the theme: the editor
 --- is blue, a pause red, and the console dark gray, a running
 --- program's line included (the maintainer's rulings of
@@ -280,9 +290,7 @@ function Statusline:draw(status, start_y)
       end
       return n
     end
-    local mode = status.mode
-    if mode == 'picture' then mode = nil end
-    add(right, mode, colors.fg2 or colors.fg)
+    add(right, MODE_LABEL[status.mode], colors.fg2 or colors.fg)
     add(right, status.caps, colors.indicator)
     --- The position, never wider than half the line (the
     --- maintainer's ruling of November 18, 2026: "the position

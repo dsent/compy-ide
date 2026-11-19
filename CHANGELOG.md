@@ -20,7 +20,7 @@ Project-author guide: `doc/input_api.md`.
 
 - **F12 shows the screen's next mode.** In the console, whether a program runs, is
   paused or none is, F12 steps through the text, the text over the picture and the picture;
-  the status line names `text` or `combined`, and the console's key card lists F12. On the
+  the status line names `text>F12` or `comb>F12`, and the console's key card lists F12. On the
   full picture, while no program that can act runs, any key or mouse button goes back to the
   text and types or clicks nothing; a program that can act keeps its keys there,
   and F12 is the way back. A pause with a picture says `F12 shows the picture`. A program no

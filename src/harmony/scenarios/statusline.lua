@@ -164,9 +164,12 @@ end
 --- the IDE's own line: the project, the entry file and the
 --- word; the console's own names no file (the maintainer's
 --- ruling of November 18, 2026)
+--- the mode's labels, which no line under a key card shows
+local NO_LABEL = { 'text>F12', 'comb>F12' }
+
 local function ide_line(word)
-  if word == 'console' then return { PROJECT, word, 'text' } end
-  return { PROJECT, 'main.lua', word, 'text' }
+  if word == 'console' then return { PROJECT, word, 'text>F12' } end
+  return { PROJECT, 'main.lua', word, 'text>F12' }
 end
 
 scenario('modes', function(wait)
@@ -181,9 +184,13 @@ scenario('modes', function(wait)
     bar(wait, 'console-idle-no-card', 'console',
       { '[no sd]', PROJECT, 'console' }, { 'main.lua' })
   end)
+  --- the line under a card names no mode: the card holds F12
+  --- back (review r1)
   D.with_card(wait, function()
-    bar(wait, 'console-card', 'console', { 'Keys now, console:' })
+    bar(wait, 'console-card', 'console',
+      { 'Keys now, console:', PROJECT }, NO_LABEL)
   end)
+  bar(wait, 'console-card-released', 'console', ide_line('console'))
   --- scrolled back, the line says how far: `L-N` (the
   --- maintainer's ruling of November 18, 2026); at rest nothing
   D.enter(wait, "for i = 1, 40 do print('row ' .. i) end")
@@ -289,8 +296,10 @@ scenario('modes', function(wait)
     { 'running', 'console' })
   word_yellow(P.capture(wait), 'paused', 'inspect')
   D.with_card(wait, function()
-    bar(wait, 'paused-card', 'inspect', { 'paused' }, nil, 'console')
+    bar(wait, 'paused-card', 'inspect', { 'paused' }, NO_LABEL,
+      'console')
   end)
+  bar(wait, 'paused-card-released', 'inspect', ide_line('paused'))
   stop(wait)
 
   runs(wait, "print('done')\n")
