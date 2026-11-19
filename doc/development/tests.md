@@ -179,8 +179,9 @@ after every key that may write it:
   through formatting (`cursor-format`).
 - `fields.lua`: the editor's, the console's and a program's field take the same field keys and
   the same word deletions (what Ctrl+Left moves over), a
-  click places the cursor and a click on the document view browses nothing, Shift with the
-  arrows selects nothing, and chords nothing binds, Ctrl+Enter first, do nothing.
+  click places the cursor and a click on the document view browses nothing, Shift with movement
+  keys, a double click and Shift+click select text that typing replaces, and chords nothing binds,
+  Ctrl+Enter first, do nothing.
 - `editor_rulings.lua`: a run of empty lines lands as one in Lua and stays in text; a refused
   formatting says why.
 - `keycard_rows.lua`: each row among the keys now of the editor's card in each state and of the

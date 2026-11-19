@@ -25,7 +25,7 @@ Key transitions not obvious from the state table:
 |---|---|
 | `running → editor` | Ctrl+T (quickswitch) while running |
 | `editor → running` | Ctrl+T while in editor (browsing state) |
-| `editor → inspect` | `finish_edit()` when project was running before edit was opened |
+| `editor → ready` | `finish_edit()` (entering the editor stops any live run first) |
 | `inspect → editor` | `edit()` called while in inspect |
 
 The full machine is diagrammed in `doc/mermaid/fsm.md` and `doc/mermaid/fsm_f.md`.

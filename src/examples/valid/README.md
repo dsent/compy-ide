@@ -4,9 +4,10 @@ To check what the user types before `on_text_entered` runs, pass a `validator`
 to `compy.input.show`. The built-in `LineValidators` helper turns one or more
 line-filter functions into a validator.
 
-A filter takes one line string and returns `true`, or `false` and an `Error`.
-An `Error` holds a message (`msg`) and an optional location with character and
-line fields (`c` and `l`).
+A filter takes one line string and returns `true`, or `false` and either a
+message string or an `Error`. An `Error` holds a message (`msg`) and an
+optional location with character and line fields (`c` and `l`, both defaulting
+to `1`).
 
 Example:
 
@@ -19,10 +20,15 @@ function non_empty(s)
 end
 ```
 
-`LineValidators` runs every filter on every submitted line. For multi-line
-input, the line number is also reported when a line is invalid. To highlight
-the text in red from the first offending character onward, pass its character
-index to `Error`:
+A completely empty submission is not accepted and skips validation, so
+`non_empty` above is only an illustration of a filter's shape.
+
+`LineValidators` runs every filter on every submitted line. On multi-line
+input, returning a plain error string (`return false, "too short!"`) tags the
+error with the failing line automatically; returning an `Error(msg, c, l)` uses
+the line number you supply (omitting `l` defaults to line `1`). To highlight
+the text in red from the first offending character onward on a single-line
+prompt, pass its character index to `Error`:
 
 ```lua
 function min_length(n)
