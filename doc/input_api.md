@@ -888,7 +888,7 @@ yourself.
 | `ctrl+pause` | suspends the run of a program that runs or can still act, one with only key handlers included; the console and its field come back, and `continue()` resumes it as it was | development only |
 | `ctrl+alt+p` / `ctrl+alt+shift+p` | starts / stops the profiler | profiling builds |
 | `f10` | cycles the FPS overlay corner | profiling builds |
-| `f12` | shows the screen's next mode: text, combined, the picture | development only |
+| `f12` | shows the screen's next mode: text, combined, the picture. A packaged build has no modes to show and still keeps the key from your project | always |
 
 "Development only" means the combo is inert in a packaged build, where the
 console it returns you to is not there to return to.
@@ -897,7 +897,8 @@ console it returns you to is not there to return to.
 a project receives them like any other chord, so `ctrl+s` can save. No key
 closes the project; the console's `close_project()` does. `f10` and `f12` are
 the reservations with no modifier at all: bare F10 is the platform's in a
-profiling build, bare F12 in a development build, and either with any modifier
+profiling build, bare F12 is reserved in both development and packaged
+playback (cycling the screen in the console), and either with any modifier
 is yours.
 
 **The full picture.** While your program draws, the IDE shows its picture on
@@ -909,23 +910,19 @@ mouse button pressed on the full picture goes back to the console's text and
 goes nowhere else: no handler, hook or field sees its press, repeats, release or
 text, and the wheel, a move and text with no key do nothing there.
 
-F10 is also the only F-key that arrives on every Compy. The function row shares
-its keys with the keyboard's Fn layer — Insert is Fn+F12, Scroll Lock is
-Fn+F10, mute and the media keys are Fn+F5 through Fn+F8 — and on a stock,
-unrooted Compy **F1 to F9 never reach your project**; the system answers them.
-The rooted system image maps the keyboard's browser key to F1 and releases F1
-to F12 from Android's shortcuts, and the IDE's own editor uses F1 and F2 there.
-Which of the other function keys a physical press delivers on the rooted image
-is not recorded here; several of them share a key with a volume or brightness
-control. F10 arrives on both, which is why the platform could take it.
+The function row shares its keys with the keyboard's Fn layer — Insert is
+Fn+F12, Scroll Lock is Fn+F10, and mute and the media keys are Fn+F5 through
+Fn+F8. F3, F4, F7 and F8 are the keyboard's own volume and brightness keys and
+never reach your project. F1, F2, F5, F6, F9, F10, F11 and F12 reach the IDE;
+bare F10 is reserved in profiling builds and bare F12 is reserved in both
+development and packaged playback (cycling the screen in the console), while
+either with a modifier is yours (`doc/development/keyboard.md` is the per-key
+availability table).
 
 **F1 is the help key.** The console and the file editor show their key card
 while it is held, and a running program gets F1 itself, with no card over it:
 show your program's help for as long as F1 is held (ask
-`Key.any_pressed('f1')`, as in "Choosing the mechanism" below). Until another
-key is known to arrive on the Compies your project runs on, bind pause and
-debug gestures to letter chords (`doc/development/keyboard.md` is the per-key
-availability table).
+`Key.any_pressed('f1')`, as in "Choosing the mechanism" below).
 
 Ctrl+Q leaves the editor for the console, with every file you had opened in
 it, and the project stays open. Ctrl+T while you browse the file leaves it to run
