@@ -414,11 +414,15 @@ function UserInputView:render_input(input, status, time)
       paint = { { x = 0, w = drawableWidth, color = colors.bg } },
     })
   end
-  if 1 < shown.start then
-    cue('top', 1)
-  end
-  if shown.fin < vc:get_content_length() then
-    cue('bottom', inLines)
+  --- a field of one row with rows on both sides carries both
+  --- marks on that row
+  local above = 1 < shown.start
+  local below = shown.fin < vc:get_content_length()
+  if above and below and inLines == 1 then
+    cue('both', 1)
+  else
+    if above then cue('top', 1) end
+    if below then cue('bottom', inLines) end
   end
 
   drawCursor()
