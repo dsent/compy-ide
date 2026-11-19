@@ -1624,7 +1624,7 @@ describe("the output's rows with no field under it #console",
         table.sort(texts, function(a, b) return a.x < b.x end)
         assert.equal("ru…", texts[3].text)
         assert.equal("…", texts[2].text:sub(-#"…"))
-        assert.equal("text", texts[4].text)
+        assert.equal("text>F12", texts[4].text)
         for i, t in ipairs(texts) do
           assert.is_true(t.x + string.ulen(t.text) * v.fw <= v.w,
             t.text)
@@ -1691,7 +1691,7 @@ describe("the output's rows with no field under it #console",
         assert.equal(0, renders())
         local says = { }
         for _, t in ipairs(K.screen().field) do says[t.text] = true end
-        assert.is_true(says["combined"])
+        assert.is_true(says["comb>F12"])
         K.cc.model.screen:set("text")
         assert.equal(1, renders(), "the first mode again")
         forget()
@@ -1872,7 +1872,7 @@ describe("the output's rows with no field under it #console",
         local line = { }
         for _, t in ipairs(s.field) do line[#line + 1] = t.text end
         local name = K.cc.model.projects.current.name
-        assert.same({ name, "main.lua", "running", "text" }, line)
+        assert.same({ name, "main.lua", "running", "text>F12" }, line)
         assert.equal(0, s.field_rows, "rows under the status line")
         forget()
       end)
@@ -2064,7 +2064,7 @@ describe("the status line's mode #console", function()
       assert.same({ console = true }, grounds)
       assert.is_nil(words.running)
       assert.is_nil(words.paused)
-      assert.is_not_nil(words.text, "the display mode")
+      assert.is_not_nil(words["text>F12"], "the display mode")
       starts_with("console")
     end)
 
@@ -2075,6 +2075,11 @@ describe("the status line's mode #console", function()
     assert.is_true(grounds.editor)
     assert.is_nil(grounds.console)
     assert.is_not_nil(words.browsing)
+    --- F12 does nothing in the editor, and its line names no
+    --- mode to step
+    assert.is_nil(words["text>F12"])
+    assert.is_nil(words["comb>F12"])
+    assert.is_nil(words.text)
   end)
 
   for _, case in ipairs({
@@ -2091,7 +2096,7 @@ describe("the status line's mode #console", function()
         local grounds, words = line()
         assert.same({ console = true }, grounds)
         assert.same(colors().editor.fg2, colors().console.state)
-        assert.is_not_nil(words.text, "the display mode")
+        assert.is_not_nil(words["text>F12"], "the display mode")
         assert.is_nil(words.console)
         starts_with("running")
         K.keys("lctrl", "q")
@@ -2177,7 +2182,10 @@ describe("the status line's mode #console", function()
         end
         assert.is_true(whole["1:1"], "1:1")
         assert.is_nil(whole.running)
-        assert.is_nil(whole.text)
+        --- a program's own field names no mode (the ruling of
+        --- November 17, 2026), in neither label
+        assert.is_nil(whole["text>F12"])
+        assert.is_nil(whole["comb>F12"])
         -- the prompt gave way, and says how it begins
         local first = texts[1].text
         assert.equal(prompt:sub(1, 8), first:sub(1, 8))
@@ -2253,7 +2261,7 @@ describe("the status line's mode #console", function()
       assert.is_nil(grounds.console)
       assert.is_nil(words.console)
       assert.is_nil(words.running)
-      assert.is_not_nil(words.text, "the display mode")
+      assert.is_not_nil(words["text>F12"], "the display mode")
       -- white text, "paused" in yellow
       local project = K.cc.model.projects.current.name
       assert.is_true(same(colors().inspect.fg, words[project]))
@@ -2689,6 +2697,51 @@ describe("the status line's mode #console", function()
       end)
   end
 
+  --- the mode's two labels take the same eight columns (the
+  --- maintainer's ruling of November 19, 2026: `text>F12` "takes
+  --- exactly the same number of characters as `combined`"), so
+  --- the text mode leaves the rest of the line as the combined
+  --- mode does: every other part drawn the same, at the same
+  --- place, for any project and file
+  for _, case in ipairs({ STATES[1], STATES[2], STATES[3] }) do
+    it("lays out the rest of the line in the text mode as in the "
+      .. "combined, in " .. case[1] .. ", for any project and file "
+      .. "from 0 to 70 characters, with and without a card",
+      function()
+        local sl = K.cc.view.input.statusline
+        local was = love.state.app_state
+        local removable = love.state.has_removable
+        --- the line's texts and places, the mode's label as `M`
+        local function line(mode, p, f)
+          local status = case[4](p, f, "CAPS")
+          status.mode = mode
+          local out = { }
+          for _, t in ipairs(placed(sl, status)) do
+            local m = (t.text == "text>F12" or t.text == "comb>F12")
+            out[#out + 1] = (m and "M" or t.text) .. "@" .. t.from
+          end
+          return table.concat(out, " ")
+        end
+        local differs
+        for _, card in ipairs({ true, false }) do
+          love.state.has_removable = card
+          love.state.app_state = case[2]
+          for lp = 0, 70 do
+            for _, lf in ipairs({ 0, 8, 30, 70 }) do
+              local p, f = named("p", lp), named("f", lf, ".lua")
+              local text = line("text", p, f)
+              if not differs and text ~= line("combined", p, f) then
+                differs = text
+              end
+            end
+          end
+        end
+        love.state.app_state = was
+        love.state.has_removable = removable
+        assert.is_nil(differs)
+      end)
+  end
+
   --- the scrolled output's `L-N`, every N to the kept rows' limit,
   --- beside the longest names
   for _, case in ipairs({ STATES[1], STATES[2], STATES[3] }) do
@@ -3101,7 +3154,7 @@ describe("the status line's mode #console", function()
       local edge = K.cc.cfg.view.w - fw
       assert.equal(edge, at["1:1"].to)
       assert.equal(at["1:1"].from - 2 * fw, at.CAPS.to)
-      assert.equal(at.CAPS.from - 2 * fw, at.combined.to)
+      assert.equal(at.CAPS.from - 2 * fw, at["comb>F12"].to)
     end)
 
   --- the kept render's key holds whether a card is in

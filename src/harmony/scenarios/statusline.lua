@@ -164,9 +164,22 @@ end
 --- the IDE's own line: the project, the entry file and the
 --- word; the console's own names no file (the maintainer's
 --- ruling of November 18, 2026)
+--- the mode's labels, which no line under a key card shows
+local NO_LABEL = { 'text>F12', 'comb>F12' }
+
+--- the screen's last pixel row takes `want` (under a status line
+--- on the last row, the line's ground; under a field, the
+--- field's; the maintainer's ruling of November 19, 2026)
+local function bottom_row(img, want, what)
+  local v = P.cc().cfg.view
+  local bg = (P.colors(img, 0, v.h - 1, v.w, 1))
+  assert(P.near(bg, want), what .. ': last pixel row in '
+    .. P.show(bg) .. ', expected ' .. P.show(want))
+end
+
 local function ide_line(word)
-  if word == 'console' then return { PROJECT, word, 'text' } end
-  return { PROJECT, 'main.lua', word, 'text' }
+  if word == 'console' then return { PROJECT, word, 'text>F12' } end
+  return { PROJECT, 'main.lua', word, 'text>F12' }
 end
 
 scenario('modes', function(wait)
@@ -176,14 +189,21 @@ scenario('modes', function(wait)
   D.key(wait, 'C-l')
   bar(wait, 'console-idle', 'console', ide_line('console'),
     { 'running', 'paused', 'main.lua' })
-  word_yellow(P.capture(wait), 'console', 'console')
+  local idle = P.capture(wait)
+  word_yellow(idle, 'console', 'console')
+  bottom_row(idle, P.cc().cfg.view.colors.input.console.bg,
+    'console-idle')
   without_card(wait, 'console', function()
     bar(wait, 'console-idle-no-card', 'console',
       { '[no sd]', PROJECT, 'console' }, { 'main.lua' })
   end)
+  --- the line under a card names no mode: the card holds F12
+  --- back (review r1)
   D.with_card(wait, function()
-    bar(wait, 'console-card', 'console', { 'Keys now, console:' })
+    bar(wait, 'console-card', 'console',
+      { 'Keys now, console:', PROJECT }, NO_LABEL)
   end)
+  bar(wait, 'console-card-released', 'console', ide_line('console'))
   --- scrolled back, the line says how far: `L-N` (the
   --- maintainer's ruling of November 18, 2026); at rest nothing
   D.enter(wait, "for i = 1, 40 do print('row ' .. i) end")
@@ -248,7 +268,9 @@ scenario('modes', function(wait)
   runs(wait, 'function love.update() end\n')
   D.in_state('running')
   bar(wait, 'running-update', 'console', RUNNING, NOT_CONSOLE)
-  word_yellow(P.capture(wait), 'running', 'console')
+  local running = P.capture(wait)
+  word_yellow(running, 'running', 'console')
+  bottom_row(running, theme().console.bg, 'running-update')
   stop(wait)
   runs(wait, 'function love.keypressed(k) end\n')
   D.in_state('ready')
@@ -289,8 +311,10 @@ scenario('modes', function(wait)
     { 'running', 'console' })
   word_yellow(P.capture(wait), 'paused', 'inspect')
   D.with_card(wait, function()
-    bar(wait, 'paused-card', 'inspect', { 'paused' }, nil, 'console')
+    bar(wait, 'paused-card', 'inspect', { 'paused' }, NO_LABEL,
+      'console')
   end)
+  bar(wait, 'paused-card-released', 'inspect', ide_line('paused'))
   stop(wait)
 
   runs(wait, "print('done')\n")

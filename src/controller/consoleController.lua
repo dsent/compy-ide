@@ -2218,6 +2218,7 @@ function ConsoleController:pass_time(dt)
   --- the text cursor blinks on the frames' time
   Blink.pass_time(dt)
   self.model.output.terminal:update(dt)
+  self.model.screen:pass_time(dt)
 end
 
 --- Whether no input field is drawn: the console's is hidden
@@ -2258,6 +2259,21 @@ function ConsoleController:running_status()
       state = 'running',
     },
     back = self.model.output:scrolled_back(),
+    mode = self.model.screen:get(),
+  }
+end
+
+--- What the status line says for two seconds after F12 into
+--- the full picture: the project, `picture` in the state word's
+--- place, and the mode.
+--- @return Status
+function ConsoleController:picture_status()
+  local P = self.model.projects
+  return {
+    custom = {
+      project = P.current and P.current.name,
+      state = 'picture',
+    },
     mode = self.model.screen:get(),
   }
 end

@@ -69,8 +69,7 @@ function KeyCardView:draw_cells(cells, colors, statusline,
   local grid, col_w, key_w, cols =
       KeyCard.layout(cells, rows, width)
   --- the card's rows on the screen's grid, the status line
-  --- on the field's row; a strip reserved at an edge takes
-  --- the card's ground
+  --- on the last row
   local l = Layout(cf)
   local status_y = cf.h - l.bottom - l.status_h
 
@@ -96,7 +95,13 @@ function KeyCardView:draw_cells(cells, colors, statusline,
   end
   gfx.pop()
 
+  --- the line under the card names no screen mode: its label
+  --- offers F12, which the card holds back (review r1); the
+  --- label is back once F1 is released
+  local under = { }
+  for k, v in pairs(status) do under[k] = v end
+  under.mode = nil
   gfx.push('all')
-  statusline:draw(status, status_y)
+  statusline:draw(under, status_y, true)
   gfx.pop()
 end

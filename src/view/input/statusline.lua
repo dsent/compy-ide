@@ -1,4 +1,5 @@
 local class = require("util.class")
+require("util.color")
 local Layout = require("view.layout")
 
 --- @class Statusline : ViewBase
@@ -116,6 +117,20 @@ end
 --- and of November 18: "shorten [no sd card] to [no sd]").
 local NO_CARD = '[no sd]'
 
+--- The screen's mode as the line prints it, with the key that
+--- shows the next (the maintainer's rulings of November 19,
+--- 2026: `text>F12`, `comb>F12`, and on F12 into the full
+--- picture `view>F12`). Only the console's lines carry a mode
+--- (UserInputModel.screen_source, running_status,
+--- picture_status), and F12 steps it in each of them; the
+--- editor's and a program's own field's have none.
+--- @type table<ScreenMode, string>
+local MODE_LABEL = {
+  text = 'text>F12',
+  combined = 'comb>F12',
+  picture = 'view>F12',
+}
+
 --- The line's colours, by their name in the theme: the editor
 --- is blue, a pause red, and the console dark gray, a running
 --- program's line included (the maintainer's rulings of
@@ -189,7 +204,9 @@ end
 
 --- @param status Status
 --- @param start_y integer?
-function Statusline:draw(status, start_y)
+--- @param last_row boolean? --- on the screen's last row: the
+---   ground covers the bottom strip too
+function Statusline:draw(status, start_y, last_row)
   local gfx = love.graphics
   local cf = self.cfg
   local app_state, testing, debug, removable = ide_state()
@@ -221,9 +238,14 @@ function Statusline:draw(status, start_y)
   local midX = (start_box.x + w) / 2
 
   local function drawBackground()
-    gfx.setColor(colors.bg)
+    local pic = status.mode == 'picture'
+    local bg = pic and Color.with_alpha(
+      cf.colors.statusline.console.bg,
+      cf.colors.screen.combined.ground) or colors.bg
+    gfx.setColor(bg)
     gfx.setFont(font)
-    gfx.rectangle("fill", start_box.x, start_box.y, w, band)
+    gfx.rectangle("fill", start_box.x, start_box.y, w,
+      last_row and band + lay.bottom or band)
   end
 
   local function drawStatus()
@@ -280,9 +302,7 @@ function Statusline:draw(status, start_y)
       end
       return n
     end
-    local mode = status.mode
-    if mode == 'picture' then mode = nil end
-    add(right, mode, colors.fg2 or colors.fg)
+    add(right, MODE_LABEL[status.mode], colors.fg2 or colors.fg)
     add(right, status.caps, colors.indicator)
     --- The position, never wider than half the line (the
     --- maintainer's ruling of November 18, 2026: "the position

@@ -236,9 +236,15 @@ text and keeps the picture until the next run or `reset()`.
 
 <kbd>F12</kbd> shows the next mode, text, combined, picture and
 text again, whether a program runs, is paused or none is; the
-status line names the mode, `text` or `combined`, and the full
-picture has none. In the editor <kbd>F12</kbd> does nothing. A
-running program never gets <kbd>F12</kbd>.
+status line names the mode and the key, `text>F12` or
+`comb>F12`, except under the key card while <kbd>F1</kbd> is
+held. When <kbd>F12</kbd> brings the full picture up, the
+status line shows on the last row for two seconds over a dimmed
+band, reading `picture` and `view>F12`, then disappears, or
+leaves with the view on a key or mouse button; a picture a
+program brings up by itself shows none. In the editor
+<kbd>F12</kbd> does nothing, and its status line names no mode.
+A running program never gets <kbd>F12</kbd>.
 
 On the full picture, any key or mouse button goes back to the
 text, and types or clicks nothing. While a program that can still act runs, its keys and clicks

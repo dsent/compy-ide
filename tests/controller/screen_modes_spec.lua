@@ -455,6 +455,49 @@ describe('the screen modes #canvas', function()
       F.cc.model.screen:back()
       assert.equal('text', mode())
     end)
+
+    it('keeps the F12 picture banner for two seconds from first draw'
+      .. ', and drops it on time or leave', function()
+        local S = F.cc.model.screen
+        S:set('combined')
+        S:step()
+        assert.is_true(S:banner_shown())
+        S:pass_time(3)
+        assert.is_true(S:banner_shown())
+        S:banner_drawn()
+        S:pass_time(1.5)
+        assert.is_true(S:banner_shown())
+        S:pass_time(0.5)
+        assert.is_false(S:banner_shown())
+
+        S:set('combined')
+        S:step()
+        assert.is_true(S:banner_shown())
+        S:back()
+        assert.is_false(S:banner_shown())
+      end)
+
+    it('keeps the banner when picture is asked for while it'
+      .. ' already shows', function()
+        local S = F.cc.model.screen
+        S:set('combined')
+        S:step()
+        assert.is_true(S:banner_shown())
+        S:choose('picture')
+        assert.is_true(S:banner_shown())
+      end)
+
+    it('shows no banner when a run, end or resume brings the'
+      .. ' picture up', function()
+        local S = F.cc.model.screen
+        F.run_project(draw)
+        assert.is_false(S:banner_shown())
+        S:choose('picture')
+        assert.is_false(S:banner_shown())
+        S:pause()
+        S:resume()
+        assert.is_false(S:banner_shown())
+      end)
   end)
 
   --- compy.screen (stage 3; the maintainer ruled the shape "ok")
