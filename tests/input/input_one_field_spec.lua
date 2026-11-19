@@ -29,8 +29,24 @@ local OWNERS = {
     F.activate_project()
     return F.show_widget({ text = "" })
   end,
+  --- a program's field that shows one row, and three: the
+  --- lines past them hidden, the field scrolled to the cursor
+  ["program, 1 row"] = function()
+    K.reset()
+    F.activate_project()
+    return F.show_widget({ text = "", max_rows = 1 })
+  end,
+  ["program, 3 rows"] = function()
+    K.reset()
+    F.activate_project()
+    return F.show_widget({ text = "", max_rows = 3 })
+  end,
 }
-local ORDER = { "console", "editor", "program" }
+local ORDER = { "console", "editor", "program",
+  "program, 1 row", "program, 3 rows" }
+--- the fields that show this spec's short drafts whole: a
+--- click in them finds a row of every line
+local WHOLE = { "console", "editor", "program", "program, 3 rows" }
 
 --- @param owner string
 --- @param lines string[]?
@@ -279,7 +295,7 @@ describe("one text field everywhere #input", function()
     it("a click lands on its own line's column below a wrapped "
         .. "line, and on a wrapped line's second row", function()
       local long = string.rep("a", 80)
-      for _, owner in ipairs(ORDER) do
+      for _, owner in ipairs(WHOLE) do
         local f = field_of(owner, { long, "hello" }, 1, 1)
         click(at(f, 0, 2))
         assert.same({ 2, 2 }, { f:get_cursor_pos() }, owner)
@@ -312,7 +328,7 @@ describe("one text field everywhere #input", function()
     it("a click finds the field's first and last row at their "
         .. "pixels, and not the strip under them or the status "
         .. "line over them", function()
-      for _, owner in ipairs(ORDER) do
+      for _, owner in ipairs(WHOLE) do
         local function lands(y)
           local f = field_of(owner, { "one", "two" }, 1, 1)
           click(16 * 1.2, y)
@@ -332,7 +348,7 @@ describe("one text field everywhere #input", function()
 
     it("a click in the draft places the cursor, in every "
         .. "field", function()
-      for _, owner in ipairs(ORDER) do
+      for _, owner in ipairs(WHOLE) do
         local f = field_of(owner)
         local x, y = at(f, 1, 3)
         F.session.mousepressed(x, y, 1, false, 1)

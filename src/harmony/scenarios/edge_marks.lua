@@ -180,3 +180,51 @@ scenario('wrap-mark', function(wait)
   D.leave(wait)
   hm_done()
 end)
+
+--- A program's field of one row (compy.input's max_rows), its
+--- draft's second line shown with lines above and below: both
+--- marks on the row, `^` in the column before the last and `v`
+--- in the last, and the row not faded
+scenario('field-one-row', function(wait)
+  local t = theme()
+  local cue = t.editor.cue
+  local v = P.cc().cfg.view
+  local fh = v.fh
+  wait(.1)
+  D.enter(wait, string.format('project(%q)', PROJECT))
+  P.put(PROJECT, 'main.lua',
+    "compy.input.show{ prompt = 'cmd:', max_rows = 1 }\n")
+  D.enter(wait, 'run_project()')
+  wait(.2)
+  local f = P.field('program')
+  assert(f, 'the program shows no field')
+  D.type(wait, 'one')
+  D.key(wait, 'S-return')
+  D.type(wait, 'two')
+  D.key(wait, 'S-return')
+  D.type(wait, 'three')
+  D.key(wait, 'up')
+  D.eq(P.text('program'), 'one\ntwo\nthree', 'the draft')
+  D.eq(f.view:get_rows(f:get_input()), 1, 'the field\'s rows')
+  local img = P.capture(wait)
+  D.shot(wait, 'both-marks')
+  local y = v.h - require('view.layout')(v).bottom - fh
+  local box = over(t.input.user.bg, cue.box, cue.box_alpha)
+  for i, glyph in ipairs({ '^', 'v' }) do
+    local x = (v.drawableChars - 3 + i) * v.fw
+    local bg, fg = P.colors(img, x, y, v.fw, fh)
+    is(bg, box, 'the box of ' .. glyph)
+    is(fg, over(box, cue.mark, cue.mark_alpha), 'the mark ' .. glyph)
+  end
+  -- "two" is black on white in the row's upper half as in its
+  -- lower half: no fade from either edge
+  local upper = darkest(img, 0, 3 * v.fw - 1, y, y + fh / 2)
+  local lower = darkest(img, 0, 3 * v.fw - 1, y + fh / 2, y + fh - 1)
+  assert(upper < .15 and lower < .15, string.format(
+    'the row is not faded: its darkest %.2f above, %.2f below',
+    upper, lower))
+  is(P.cell(img, 20, 1, y), t.input.user.bg, 'the row\'s background')
+  D.key(wait, 'C-q')
+  D.in_state('ready')
+  hm_done()
+end)
