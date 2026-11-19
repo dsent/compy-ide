@@ -188,7 +188,7 @@ after every key that may write it:
   console's, with and without a program behind it, pressed and checked against what the row
   says; a row there with no check fails. The rows under "Other keys" are not pressed (each is a
   key now in another state), and Ctrl+Esc's is read but not pressed, since it would end the run.
-  Ctrl+Q while F1 is held is held back in the console as in the editor, and acts once F1 is released.
+  Ctrl+Q pressed while F1 is held is discarded in the console as in the editor; releasing F1 and pressing Ctrl+Q again stops a live program.
 - `colors.lua`: the highlights, the strips of a block both browsed and loaded, a syntax error's
   red and the band's, the notice's orange, a Markdown heading, the block cursor, and the status
   line's pixel rows with a field of one row and of eight, which it prints as `LAYOUT` lines.
