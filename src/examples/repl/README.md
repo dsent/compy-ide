@@ -1,42 +1,37 @@
 ### REPL
 
-This project provides example of the minimum code required for utilizing the builtin user input helper. It also demonstrates taking control of application updates by overriding `love.update`.
-The project is very light on functionality, only echoing the text the user enters.
+This example shows the smallest program that reads text from the user with
+`compy.input`. It echoes every submitted line back to the console.
 
-#### Using user input
+#### Reading user input
 
-The process of reading values from console has a necessarily asynchronous nature to it. The result can not be available at the point of declaring the variable that holds it.
-Hence, it has to consist of multiple steps: first, we create a handle; then initiate the prompt, and only when the user is finished, can we read the data supplied.
+Text entry is event-driven: show the input widget with `compy.input.show` and
+provide an `on_text_entered` callback that receives each submitted line as a
+string.
 
-How this translates into code:
 ```lua
--- create a handle
-r = user_input()
-
--- if it doesn't hold a value currently, prompt the user
-function repl()
-  if r:is_empty() then
-    input_text()
-  else
-    -- read the value
-    local input = r()
+compy.input.show({
+  on_text_entered = function(text)
+    print(text)
   end
-end
+})
 ```
 
-There are two options available:
-* `input_text()` for plaintext
-* `input_code()` which only accepts syntactically valid lua 
-(Validated input is not discussed here, see the 'valid' project)
+By default, the widget stays shown after each submission and clears its text
+for the next line (`clear_on_submit = true`, `hide_on_submit = false`), so a
+continuous prompt needs no `love.update` loop and no extra lifecycle flags.
 
-#### Update
+For Lua code entry instead of plain text, pass the built-in helpers:
 
-To create interactivity, a program needs to run continuously, waiting for input and reacting to it.
-In LOVE2D, this is achieved by overriding various handlers, the first of which is `update()`. 
-By defining `love.update()`, we can control what happens when time passes:
 ```lua
-function love.update(dt)
-  repl()
-end
+compy.input.show({
+  highlighter = LuaHighlighter,
+  validator = LuaSyntaxValidator,
+  on_text_entered = function(text)
+    print(text)
+  end
+})
 ```
-The parameter `dt` is the (fractional) number of seconds passed since the last run of the function.
+
+For custom validation filters, see the `valid` example. For a one-off question,
+use `compy.ask` and `compy.on_answer`. See `doc/input_api.md` for the full API.

@@ -24,7 +24,7 @@ Key transitions not obvious from the state table:
 | Transition | Trigger |
 |---|---|
 | `running → editor` | Ctrl+T (quickswitch) while running |
-| `editor → running` | Ctrl+T while in editor (normal mode) |
+| `editor → running` | Ctrl+T while in editor (browsing state) |
 | `editor → inspect` | `finish_edit()` when project was running before edit was opened |
 | `inspect → editor` | `edit()` called while in inspect |
 
