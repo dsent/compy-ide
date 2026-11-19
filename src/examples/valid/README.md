@@ -20,8 +20,8 @@ function non_empty(s)
 end
 ```
 
-A completely empty submission is not accepted and skips validation, so
-`non_empty` above is only an illustration of a filter's shape.
+A wholly empty submission skips validation, while a blank line inside a
+non-empty multi-line submission reaches `non_empty` and can be refused.
 
 `LineValidators` runs every filter on every submitted line. On multi-line
 input, returning a plain error string (`return false, "too short!"`) tags the
