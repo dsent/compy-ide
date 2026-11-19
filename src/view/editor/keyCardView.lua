@@ -69,8 +69,7 @@ function KeyCardView:draw_cells(cells, colors, statusline,
   local grid, col_w, key_w, cols =
       KeyCard.layout(cells, rows, width)
   --- the card's rows on the screen's grid, the status line
-  --- on the field's row; a strip reserved at an edge takes
-  --- the card's ground
+  --- on the last row
   local l = Layout(cf)
   local status_y = cf.h - l.bottom - l.status_h
 
@@ -103,6 +102,6 @@ function KeyCardView:draw_cells(cells, colors, statusline,
   for k, v in pairs(status) do under[k] = v end
   under.mode = nil
   gfx.push('all')
-  statusline:draw(under, status_y)
+  statusline:draw(under, status_y, true)
   gfx.pop()
 end

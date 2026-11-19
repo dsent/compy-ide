@@ -72,7 +72,7 @@ function ConsoleView:draw(terminal, canvas, mode)
         self.controller.model.screen:banner_drawn()
         self.input.statusline:draw(
           self.controller:picture_status(),
-          self.input:status_y(0))
+          self.input:status_y(0), true)
       end
       return
     end

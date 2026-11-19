@@ -302,7 +302,8 @@ function UserInputView:render_input(input, status, time)
   drawBackground()
 
   gfx.push('all')
-  self.statusline:draw(self.bare_status or status, 0)
+  self.statusline:draw(self.bare_status or status, 0,
+    self.bare_status ~= nil)
   gfx.pop()
   --- hidden behind a program that owns the input: the status
   --- line alone, the field's rows background, no cursor

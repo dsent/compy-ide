@@ -204,7 +204,9 @@ end
 
 --- @param status Status
 --- @param start_y integer?
-function Statusline:draw(status, start_y)
+--- @param last_row boolean? --- on the screen's last row: the
+---   ground covers the bottom strip too
+function Statusline:draw(status, start_y, last_row)
   local gfx = love.graphics
   local cf = self.cfg
   local app_state, testing, debug, removable = ide_state()
@@ -243,7 +245,7 @@ function Statusline:draw(status, start_y)
     gfx.setColor(bg)
     gfx.setFont(font)
     gfx.rectangle("fill", start_box.x, start_box.y, w,
-      pic and gfx.getHeight() - start_box.y or band)
+      last_row and band + lay.bottom or band)
   end
 
   local function drawStatus()

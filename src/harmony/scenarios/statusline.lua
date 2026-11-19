@@ -167,6 +167,16 @@ end
 --- the mode's labels, which no line under a key card shows
 local NO_LABEL = { 'text>F12', 'comb>F12' }
 
+--- the screen's last pixel row takes `want` (under a status line
+--- on the last row, the line's ground; under a field, the
+--- field's; the maintainer's ruling of November 19, 2026)
+local function bottom_row(img, want, what)
+  local v = P.cc().cfg.view
+  local bg = (P.colors(img, 0, v.h - 1, v.w, 1))
+  assert(P.near(bg, want), what .. ': last pixel row in '
+    .. P.show(bg) .. ', expected ' .. P.show(want))
+end
+
 local function ide_line(word)
   if word == 'console' then return { PROJECT, word, 'text>F12' } end
   return { PROJECT, 'main.lua', word, 'text>F12' }
@@ -179,7 +189,10 @@ scenario('modes', function(wait)
   D.key(wait, 'C-l')
   bar(wait, 'console-idle', 'console', ide_line('console'),
     { 'running', 'paused', 'main.lua' })
-  word_yellow(P.capture(wait), 'console', 'console')
+  local idle = P.capture(wait)
+  word_yellow(idle, 'console', 'console')
+  bottom_row(idle, P.cc().cfg.view.colors.input.console.bg,
+    'console-idle')
   without_card(wait, 'console', function()
     bar(wait, 'console-idle-no-card', 'console',
       { '[no sd]', PROJECT, 'console' }, { 'main.lua' })
@@ -255,7 +268,9 @@ scenario('modes', function(wait)
   runs(wait, 'function love.update() end\n')
   D.in_state('running')
   bar(wait, 'running-update', 'console', RUNNING, NOT_CONSOLE)
-  word_yellow(P.capture(wait), 'running', 'console')
+  local running = P.capture(wait)
+  word_yellow(running, 'running', 'console')
+  bottom_row(running, theme().console.bg, 'running-update')
   stop(wait)
   runs(wait, 'function love.keypressed(k) end\n')
   D.in_state('ready')
