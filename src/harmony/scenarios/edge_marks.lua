@@ -180,3 +180,90 @@ scenario('wrap-mark', function(wait)
   D.leave(wait)
   hm_done()
 end)
+
+--- The status line's band ends right above a program's field
+--- of `rows` rows, and the field's first row starts there: the
+--- pixel above in the band's own gray, the one below in the
+--- field's white
+local function sits_on(img, rows, what)
+  local v = P.cc().cfg.view
+  local t = theme()
+  local top = v.h - require('view.layout')(v).bottom - rows * v.fh
+  local function exact(y, want, part)
+    local c = px(img, 1, y)
+    for i = 1, 3 do
+      assert(math.abs(c[i] - want[i]) < .02, string.format(
+        '%s: at y %d %s %s, the theme makes %s', what, y, part,
+        P.show(c), P.show(want)))
+    end
+  end
+  exact(top - 1, t.statusline.console.bg, 'the band is')
+  exact(top, t.input.user.bg, 'the field is')
+end
+
+--- A program's field of one row (compy.input's max_rows), its
+--- draft's second line shown with lines above and below: it
+--- carries no continuation cue (the maintainer's ruling of
+--- November 19, 2026), so its last two cells are the field's
+--- own background and the row is not faded
+scenario('field-one-row', function(wait)
+  local t = theme()
+  local v = P.cc().cfg.view
+  local fh = v.fh
+  wait(.1)
+  D.enter(wait, string.format('project(%q)', PROJECT))
+  P.put(PROJECT, 'main.lua',
+    "compy.input.show{ prompt = 'cmd:', max_rows = 1 }\n")
+  D.enter(wait, 'run_project()')
+  wait(.2)
+  local f = P.field('program')
+  assert(f, 'the program shows no field')
+  D.type(wait, 'one')
+  D.key(wait, 'S-return')
+  D.type(wait, 'two')
+  D.key(wait, 'S-return')
+  D.type(wait, 'three')
+  D.key(wait, 'up')
+  D.eq(P.text('program'), 'one\ntwo\nthree', 'the draft')
+  D.eq(f.view:get_rows(f:get_input()), 1, 'the field\'s rows')
+  local img = P.capture(wait)
+  D.shot(wait, 'one-row')
+  sits_on(img, 1, 'a field of one row')
+  local y = v.h - require('view.layout')(v).bottom - fh
+  for col = v.drawableChars - 1, v.drawableChars do
+    local bg, fg = P.cell(img, col, 1, y)
+    is(bg, t.input.user.bg, 'cell ' .. col .. '\'s background')
+    assert(fg == nil, 'cell ' .. col .. ' shows ' .. P.show(fg))
+  end
+  -- "two" is black on white in the row's upper half as in its
+  -- lower half: no fade from either edge
+  local upper = darkest(img, 0, 3 * v.fw - 1, y, y + fh / 2)
+  local lower = darkest(img, 0, 3 * v.fw - 1, y + fh / 2, y + fh - 1)
+  assert(upper < .15 and lower < .15, string.format(
+    'the row is not faded: its darkest %.2f above, %.2f below',
+    upper, lower))
+  D.key(wait, 'C-q')
+  D.in_state('ready')
+  hm_done()
+end)
+
+--- A program's field of three rows holding five lines: the
+--- status line sits right above its three rows
+scenario('field-three-rows', function(wait)
+  wait(.1)
+  D.enter(wait, string.format('project(%q)', PROJECT))
+  P.put(PROJECT, 'main.lua', "compy.input.show{ prompt = 'cmd:', "
+    .. "max_rows = 3, text = 'a\\nb\\nc\\nd\\ne' }\n")
+  D.enter(wait, 'run_project()')
+  wait(.2)
+  local f = P.field('program')
+  assert(f, 'the program shows no field')
+  D.eq(P.text('program'), 'a\nb\nc\nd\ne', 'the draft')
+  D.eq(f.view:get_rows(f:get_input()), 3, 'the field\'s rows')
+  local img = P.capture(wait)
+  D.shot(wait, 'three-rows')
+  sits_on(img, 3, 'a field of three rows')
+  D.key(wait, 'C-q')
+  D.in_state('ready')
+  hm_done()
+end)

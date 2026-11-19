@@ -224,6 +224,7 @@ Everything that puts the widget on screen and alters it while it is there.
 | Key | Meaning |
 |---|---|
 | `prompt` | Label shown beside the text the user types. |
+| `max_rows` | The most rows the field shows, a whole number from 1 to 14; see *"The rows the field shows"*. |
 | `text` | Initial content: a string or list of line strings — the two spellings mean the same thing. |
 | `cursor` | Initial `{line, col}` after `text` is applied. |
 | `highlighter` | `function(lines) -> coloring`; changes display only. |
@@ -273,7 +274,7 @@ they set:
   out changes nothing, and there is no key that `show` applies and `configure`
   quietly drops.
 
-`false` is how you unset any project-owned key (`prompt`, `highlighter`, `validator`, `on_text_entered`, `on_limit_reached`, and the four lifecycle flags). Passing `false` restores the key to its absent/default state, making expressions like `custom_validator or false` safe to pass when dynamically toggling settings.
+`false` is how you unset any project-owned key (`prompt`, `max_rows`, `highlighter`, `validator`, `on_text_entered`, `on_limit_reached`, and the four lifecycle flags). Passing `false` restores the key to its absent/default state, making expressions like `custom_validator or false` safe to pass when dynamically toggling settings.
 
 For `prompt`, `''` is an empty label and `false` restores the default one. A
 `cursor` of `false` seats none, leaving the baseline `show` just applied. A
@@ -356,9 +357,9 @@ reproduces the *behaviour* on a list of its own rather than sharing the widget's
 ### Live changes
 
 `compy.input.configure(config)` changes the project's own settings on the
-input widget — `prompt`, `highlighter`, `validator`, `on_text_entered`,
-`on_limit_reached`, and the four lifecycle flags. It raises on an unrecognised
-key by the same rule as `show`.
+input widget — `prompt`, `max_rows`, `highlighter`, `validator`,
+`on_text_entered`, `on_limit_reached`, and the four lifecycle flags. It raises
+on an unrecognised key by the same rule as `show`.
 
 `configure` never touches your content, so `text`, `cursor` and `force` raise
 from it as keys belonging to another call, the way a lifecycle callback already
@@ -459,6 +460,52 @@ reshape how your content is *spelled*, but it will not guess what you
 meant by a value that is not text: convert it yourself with `tostring`
 where you want a number shown. The refusal leaves the current content
 untouched.
+
+### The rows the field shows
+
+The field grows upward with its text, a row for each line and for each row a
+long line wraps to, up to 14 rows. Past that it keeps its height and scrolls:
+the text goes on, and the row the cursor is on is always shown. `max_rows`
+gives your field a smaller limit, any whole number from 1 to 14. The text can
+still be longer: the field grows to `max_rows` rows and scrolls past them as it
+does past 14.
+
+```lua
+-- a command field of at most three rows, so that the board
+-- above it keeps its rows
+compy.input.show{
+  prompt = 'command:',
+  max_rows = 3,
+  on_text_entered = function(text)
+    run_command(text)
+  end,
+}
+```
+
+Every key and the mouse work in the hidden lines as in the shown ones. Up,
+Down, Ctrl+Home and Ctrl+End move the cursor into them, and the field scrolls
+with it; a selection runs through them; a click lands on the row it points at.
+A click on the right half of a wrapped row's last cell puts the cursor at the
+start of the line's next row, and the field scrolls to that row when it is
+hidden. The mouse wheel does not scroll the field.
+
+**The field marks what it hides**, as the editor's field does. While lines lie
+above, its top row carries `^` in its last column and fades toward its top
+edge; while lines lie below, its bottom row carries `v` and fades toward its
+bottom edge. A field of one row scrolls the same way but shows no marks.
+
+`max_rows` belongs to your project, like `prompt`: set it on `show` or
+`configure`, and it stays until you change it; `false` gives the field its 14
+rows back. A `configure` while the field is in use changes the field's height
+at once and keeps the cursor's row in view; the status line above the field
+says what it said before. Each run starts with a field of 14 rows.
+
+A message from your validator shows in the field's place on as many rows as it
+takes, up to 14, whatever `max_rows` is.
+
+Anything but a whole number from 1 to 14, or `false`, raises and leaves the
+field as it was: `compy.input.show{ max_rows = 20 }` raises
+`compy.input.show: max_rows must be a whole number from 1 to 14`.
 
 ## What the widget tells you — callbacks
 

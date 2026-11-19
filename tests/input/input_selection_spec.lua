@@ -34,8 +34,21 @@ local OWNERS = {
     F.activate_project()
     return F.show_widget({ text = "" })
   end,
+  --- a program's field that shows one row, and three: the
+  --- lines past them hidden, the field scrolled to the cursor
+  ["program, 1 row"] = function()
+    K.reset()
+    F.activate_project()
+    return F.show_widget({ text = "", max_rows = 1 })
+  end,
+  ["program, 3 rows"] = function()
+    K.reset()
+    F.activate_project()
+    return F.show_widget({ text = "", max_rows = 3 })
+  end,
 }
-local ORDER = { "console", "editor", "program" }
+local ORDER = { "console", "editor", "program",
+  "program, 1 row", "program, 3 rows" }
 
 --- @param owner string
 --- @param lines string[]?
@@ -59,11 +72,19 @@ end
 
 local function cursor(f) return { f:get_cursor_pos() } end
 
---- each owner in turn
-local function in_every_field(name, case)
+--- the fields that show this spec's short drafts whole: a
+--- click in them finds a row of every line
+local WHOLE = { "console", "editor", "program", "program, 3 rows" }
+
+--- each of `owners` in turn
+local function in_every_field_of(owners, name, case)
   it(name .. ", in every field", function()
-    for _, owner in ipairs(ORDER) do case(owner) end
+    for _, owner in ipairs(owners) do case(owner) end
   end)
+end
+
+local function in_every_field(name, case)
+  in_every_field_of(ORDER, name, case)
 end
 
 describe("selection in the draft #input", function()
@@ -251,6 +272,11 @@ describe("selection in the draft #input", function()
       local bottom = love.graphics.getHeight() - Layout(v).bottom
       return v.fw * (col - 1 + 0.2),
           bottom - v.fh * (row_from_bottom + 0.5)
+    end
+    --- the cases click rows of every line; the one-row field
+    --- is input_field_rows_spec's
+    local function in_every_field(name, case)
+      in_every_field_of(WHOLE, name, case)
     end
 
     in_every_field("a drag selects from where it began", function(owner)

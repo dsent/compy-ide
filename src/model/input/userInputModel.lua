@@ -28,6 +28,8 @@ require("util.lua")
 --- @field cfg Config
 --- @field custom_status CustomStatus?
 --- @field custom_label PromptLabel?
+--- @field max_rows integer? --- the most rows a program's
+--- field shows, nil for the IDE's limit (set_max_rows)
 --- @field _memo table
 --- methods
 --- @field new function
@@ -85,17 +87,40 @@ function UserInputModel:get_label()
   if eval and eval.label then return eval.label end
 end
 
+--- The most rows the field shows: the program's choice
+--- (compy.input's max_rows) or the IDE's limit; the editor
+--- field takes at most half the rows it shares with the
+--- document view (IS3.13)
+--- @private
+--- @return integer
+function UserInputModel:_rows_limit()
+  if self.editing then
+    return math.floor((self.cfg.view.lines + 1) / 2)
+  end
+  return self.max_rows or self.cfg.view.input_max
+end
+
 --- @param text string[]
 function UserInputModel:init_visible(text)
   local w = self.cfg.view.drawableChars
-  local s = self.cfg.view.input_max
-  if self.editing then
-    --- the editor field takes at most half the rows it
-    --- shares with the document view (IS3.13)
-    s = math.floor((self.cfg.view.lines + 1) / 2)
-  end
-  self.visible = VisibleContent(w, text, 1, s)
+  self.visible = VisibleContent(w, text, 1, self:_rows_limit())
   self.visible:set_default_range()
+end
+
+--- Set the most rows the field shows, nil for the IDE's
+--- limit. The field keeps its first row where it can and
+--- scrolls to keep the cursor's row in view.
+--- @param n integer?
+function UserInputModel:set_max_rows(n)
+  self.max_rows = n
+  local vis = self.visible
+  vis.size_max = self:_rows_limit()
+  local len = vis:get_content_length()
+  local h = math.min(vis.size_max, len)
+  local start = math.max(1,
+    math.min(vis:get_range().start, len - h + 1))
+  vis:set_range(Range(start, start + h - 1))
+  self:_follow_cursor()
 end
 
 --- Drop bytes that do not form valid UTF-8
@@ -179,8 +204,9 @@ end
 --- @param snap table
 function UserInputModel:_apply_edit_snapshot(snap)
   self.entered = InputText(table.clone(snap.text))
+  --- the caret in its place before the field scrolls to it
+  self:set_cursor(Cursor(snap.cursor.l, snap.cursor.c))
   self:text_change()
-  self:move_cursor(snap.cursor.l, snap.cursor.c)
   self:clear_selection()
   local s = snap.selection
   if s then self:_select(s[1], s[2], s[3], s[4]) end
@@ -297,10 +323,10 @@ function UserInputModel:reformat(text, at)
     nl, nc = at.l, at.c
   end
   self.entered = InputText(lines)
+  --- the caret in its place before the field scrolls to it
   self:set_cursor(Cursor(nl, nc))
-  self:text_change()
   self:_clamp_cursor_pos()
-  self:_follow_cursor()
+  self:text_change()
   self:_note_edit()
 end
 
@@ -334,11 +360,14 @@ function UserInputModel:set_text(text, keep_cursor)
   if lines then
     self.entered = InputText(lines)
   end
-  self:text_change()
+  --- the cursor in its place in the new text before the
+  --- field scrolls to it
   if keep_cursor then
     self:_clamp_cursor_pos()
+    self:text_change()
     return
   end
+  self:text_change()
   self:init_visible(self.entered)
   self:jump_end()
 end
@@ -534,8 +563,8 @@ function UserInputModel:backspace_word()
     lines[#lines + 1] = self:get_text_line(i)
   end
   self.entered = InputText(lines)
+  self:set_cursor(Cursor(tl, tc))
   self:text_change()
-  self:move_cursor(tl, tc)
   self:_note_edit()
 end
 
@@ -580,9 +609,11 @@ function UserInputModel:clear_input()
   --- undo with it
   self.edit_history:reset()
   self.entered = InputText()
+  --- the empty text's one place, before the field scrolls to
+  --- the cursor
+  self:set_cursor(Cursor(1, 1))
   self:text_change()
   self:clear_selection()
-  self:_update_cursor(true)
   self.custom_status = nil
   self.history:reset_index()
 end
@@ -1595,8 +1626,8 @@ function UserInputModel:pop_selected_text()
     local from, to = self:diff_cursors(start, fin)
     if from and to then
       self:get_text():traverse(from, to, { delete = true })
+      self:set_cursor(Cursor(from.l, from.c))
       self:text_change()
-      self:move_cursor(from.l, from.c)
       self:clear_selection()
       return t
     end
