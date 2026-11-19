@@ -1712,7 +1712,7 @@ sets**:
 | | owner | set by |
 |---|---|---|
 | `text`, `cursor` | **the user** — they are typing in it | `show` (the baseline), and `set_text` / `set_cursor` / `clear` while it is up |
-| `prompt`, `highlighter`, `validator`, `on_text_entered`, `on_limit_reached`, and the four lifecycle flags | **the project** | `show` **and** `configure`, set-if-given, persisting until replaced |
+| `prompt`, `max_rows`, `highlighter`, `validator`, `on_text_entered`, `on_limit_reached`, and the four lifecycle flags | **the project** | `show` **and** `configure`, set-if-given, persisting until replaced |
 
 **The `show`-only side is `text`, `cursor` and `force`, and the three belong there for two different
 reasons.** `text` and `cursor` are the **user's**, and a call that changes

@@ -340,6 +340,10 @@ local configure_core = function(self, cfg)
   if cfg.prompt ~= nil then
     self.model.custom_label = cfg.prompt
   end
+  -- `false` gives the field back the IDE's limit
+  if cfg.max_rows ~= nil then
+    self.model:set_max_rows(cfg.max_rows or nil)
+  end
   -- Persistent until replaced, like every other key here: they
   -- configure a TYPE of behaviour, not one show/hide cycle
   -- (D-LIFECYCLE-FLAGS, statement 2).

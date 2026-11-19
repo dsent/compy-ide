@@ -1122,7 +1122,7 @@ end
 -- ones are. They differ only in WHERE they live: on the widget
 -- itself rather than in the store above.
 local WIDGET_KEYS = {
-  'prompt',
+  'prompt', 'max_rows',
   'clear_on_submit', 'hide_on_submit',
   'clear_on_cancel', 'hide_on_cancel',
 }
@@ -1257,6 +1257,24 @@ local function checked_text(fname, text)
     ': text must be a string or a list of line strings', 4)
 end
 
+--- Sibling of checked_cursor, same level-4 depth rule. The
+--- most rows the field shows is a whole number from 1 to the
+--- rows the field has on the screen (conf/display.lua);
+--- `false`, the uniform unset, gives it those rows back.
+--- @param fname string
+--- @param n any
+--- @return integer|false|nil
+local function checked_max_rows(fname, n)
+  if n == nil or n == false then return n end
+  local most = display.input_lines
+  if type(n) == 'number' and n == math.floor(n)
+      and 1 <= n and n <= most then
+    return n
+  end
+  error(fname .. ': max_rows must be a whole number from 1 to '
+    .. most, 4)
+end
+
 -- The two stores compy.input keeps for a project live ON the
 -- widget, and the surface RESOLVES them instead of holding
 -- them: a widget lives for a project RUN, so a captured
@@ -1323,6 +1341,8 @@ local function api_show(get_widget, state, cfg)
     checked_cursor('compy.input.show', next_cfg.cursor)
   next_cfg.text =
     checked_text('compy.input.show', next_cfg.text)
+  next_cfg.max_rows =
+    checked_max_rows('compy.input.show', next_cfg.max_rows)
   merge_callback_keys(state, next_cfg)
   local ui = get_widget()
   local l, c = cursor_of(ui)
@@ -1379,6 +1399,8 @@ local function api_configure(get_widget, state, cfg)
   local next_cfg = cfg or { }
   check_keys(next_cfg, 'compy.input.configure',
     CONFIGURE_KEYS)
+  next_cfg.max_rows = checked_max_rows('compy.input.configure',
+    next_cfg.max_rows)
   merge_callback_keys(state, next_cfg)
   local ui = get_widget()
   if ui then ui:configure(next_cfg) end

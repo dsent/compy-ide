@@ -28,6 +28,8 @@ require("util.lua")
 --- @field cfg Config
 --- @field custom_status CustomStatus?
 --- @field custom_label PromptLabel?
+--- @field max_rows integer? --- the most rows a program's
+--- field shows, nil for the IDE's limit (set_max_rows)
 --- @field _memo table
 --- methods
 --- @field new function
@@ -85,17 +87,40 @@ function UserInputModel:get_label()
   if eval and eval.label then return eval.label end
 end
 
+--- The most rows the field shows: the program's choice
+--- (compy.input's max_rows) or the IDE's limit; the editor
+--- field takes at most half the rows it shares with the
+--- document view (IS3.13)
+--- @private
+--- @return integer
+function UserInputModel:_rows_limit()
+  if self.editing then
+    return math.floor((self.cfg.view.lines + 1) / 2)
+  end
+  return self.max_rows or self.cfg.view.input_max
+end
+
 --- @param text string[]
 function UserInputModel:init_visible(text)
   local w = self.cfg.view.drawableChars
-  local s = self.cfg.view.input_max
-  if self.editing then
-    --- the editor field takes at most half the rows it
-    --- shares with the document view (IS3.13)
-    s = math.floor((self.cfg.view.lines + 1) / 2)
-  end
-  self.visible = VisibleContent(w, text, 1, s)
+  self.visible = VisibleContent(w, text, 1, self:_rows_limit())
   self.visible:set_default_range()
+end
+
+--- Set the most rows the field shows, nil for the IDE's
+--- limit. The field keeps its first row where it can and
+--- scrolls to keep the cursor's row in view.
+--- @param n integer?
+function UserInputModel:set_max_rows(n)
+  self.max_rows = n
+  local vis = self.visible
+  vis.size_max = self:_rows_limit()
+  local len = vis:get_content_length()
+  local h = math.min(vis.size_max, len)
+  local start = math.max(1,
+    math.min(vis:get_range().start, len - h + 1))
+  vis:set_range(Range(start, start + h - 1))
+  self:_follow_cursor()
 end
 
 --- Drop bytes that do not form valid UTF-8
