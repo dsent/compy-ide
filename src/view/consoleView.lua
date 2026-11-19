@@ -63,9 +63,19 @@ function ConsoleView:draw(terminal, canvas, mode)
       terminal, canvas, tc,
       self.drawable_height, mode,
       self.controller.model.output)
-    --- the full picture is the picture alone: no status line,
-    --- no field
-    if mode == 'picture' then return end
+    if mode == 'picture' then
+      --- F12 into the full picture shows the status line on the
+      --- last row for two seconds while no program is running
+      --- (the maintainer's rulings of November 19, 2026)
+      if self.controller.model.screen:banner_shown()
+          and ViewUtils.conditional_draw('show_input') then
+        self.controller.model.screen:banner_drawn()
+        self.input.statusline:draw(
+          self.controller:picture_status(),
+          self.input:status_y(0))
+      end
+      return
+    end
 
     if ViewUtils.conditional_draw('show_input') then
       --- behind a live program that owns the input the field

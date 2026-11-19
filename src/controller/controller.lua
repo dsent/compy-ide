@@ -1307,7 +1307,7 @@ Controller = {
 
     --- F12: the screen's next mode in the console, idle,
     --- running or paused; the editor shows no mode, and
-    --- playback no console
+    --- playback no console. No banner while a program is running.
     local function reserved_screen_mode()
       if playback or not screen then return end
       --- the editor shows no mode; between a pause's request and
@@ -1315,7 +1315,7 @@ Controller = {
       --- pause saves for continue() (k1)
       local st = love.state.app_state
       if st == 'editor' or st == 'snapshot' then return end
-      screen:step()
+      screen:step(not Controller.program_owns_input())
     end
 
     --- The full picture shows, and no program that can act

@@ -65,7 +65,7 @@ of it is one call there.
 | --- | --- | --- |
 | `text` | The output on its ground, no picture | Shown |
 | `combined` | The picture on its ground, then the output on a translucent ground, without cell backgrounds | Shown |
-| `picture` | The picture on the program's background colour, opaque, on the whole screen | None |
+| `picture` | The picture on the program's background colour, opaque, on the whole screen | No field; when F12 brings it up, the status line for 2 s (`picture`, `view>F12`, translucent ground) |
 
 In the combined mode the theme's `screen.combined.ground` is the opacity
 of the output's ground over the picture, and `screen.combined.text` that

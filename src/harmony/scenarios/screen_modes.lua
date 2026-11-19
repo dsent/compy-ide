@@ -87,14 +87,17 @@ scenario('picture-then-console', function(wait)
 end)
 
 --- F12 steps through the modes over a kept picture, the status
---- line naming each but the picture's, and any key goes back
---- from the full picture to the text, typing nothing
+--- line naming each (view>F12 on F12 into the picture for two
+--- seconds), and any key goes back from the full picture to the
+--- text, typing nothing
 scenario('f12-and-any-key', function(wait)
   wait(.1)
   project(wait, 'h-screen-e', DRAWS)
   D.enter(wait, 'run()')
   wait(.3)
   D.eq(mode(), 'picture', 'a run that drew shows its picture')
+  assert(not P.shows(P.drawn(wait), 'view>F12'),
+    'a program\'s own picture shows no status line')
   D.key(wait, 'a')
   D.eq(mode(), 'text', 'a key goes back to the text')
   D.eq(P.console_draft(), '', 'the key typed nothing')
@@ -112,6 +115,14 @@ scenario('f12-and-any-key', function(wait)
   D.shot(wait, 'combined-status')
   D.key(wait, 'f12')
   D.eq(mode(), 'picture', 'F12 again, the picture')
+  local banner = P.drawn(wait)
+  assert(P.shows(banner, 'h-screen-e'),
+    'the picture banner names the project')
+  assert(P.shows(banner, 'picture'),
+    'the picture banner says picture')
+  assert(P.shows(banner, 'view>F12'),
+    'the picture banner prints view>F12')
+  D.shot(wait, 'picture-status')
   local shown = P.capture(wait)
   assert(P.near(at_picture(shown), YELLOW), 'the kept picture '
     .. 'whole: ' .. P.show(at_picture(shown)))
@@ -119,6 +130,53 @@ scenario('f12-and-any-key', function(wait)
   D.eq(mode(), 'text', 'a key goes back to the text, past '
     .. 'combined')
   D.eq(P.console_draft(), '', 'the key typed nothing')
+  assert(not P.shows(P.drawn(wait), 'view>F12'),
+    'leaving the picture drops view>F12 at once')
+  -- draw onto the bottom row so we see the banner dim it and go
+  D.enter(wait, 'love.graphics.setColor(1, .8, .2)')
+  D.enter(wait, "love.graphics.rectangle('fill', 350, 565, 100, 35)")
+  D.key(wait, 'f12')
+  D.eq(mode(), 'picture', 'F12 from combined into the picture')
+  assert(P.shows(P.drawn(wait), 'view>F12'),
+    'view>F12 shows over the bottom row')
+  local during = P.capture(wait)
+  local dimmed = P.colors(during, 380, 570, 40, 20)
+  assert(not P.near(dimmed, YELLOW), 'the banner dims its band: '
+    .. P.show(dimmed))
+  local edge = P.colors(during, 380, 598, 40, 2)
+  assert(not P.near(edge, YELLOW), 'the banner dims to the bottom'
+    .. ' edge: ' .. P.show(edge))
+  wait(2.1)
+  D.eq(mode(), 'picture', 'two seconds keep the picture')
+  assert(not P.shows(P.drawn(wait), 'view>F12'),
+    'view>F12 is gone after two seconds')
+  local clear_img = P.capture(wait)
+  local clear = P.colors(clear_img, 380, 570, 40, 20)
+  assert(P.near(clear, YELLOW), 'the band\'s picture is whole'
+    .. ' again: ' .. P.show(clear))
+  local clear_edge = P.colors(clear_img, 380, 598, 40, 2)
+  assert(P.near(clear_edge, YELLOW), 'the bottom edge is whole'
+    .. ' again: ' .. P.show(clear_edge))
+  -- a running program gets no banner on F12 and keeps its keys
+  D.key(wait, 'a')
+  P.put('h-screen-e', 'main.lua', DRAWS
+    .. 'function love.update() end\n'
+    .. 'function love.keypressed() end\n')
+  D.enter(wait, 'run()')
+  wait(.2)
+  D.eq(mode(), 'picture', 'a live program shows its picture')
+  assert(not P.shows(P.drawn(wait), 'view>F12'),
+    'no banner when a live program draws first')
+  D.key(wait, 'f12')
+  D.key(wait, 'f12')
+  D.key(wait, 'f12')
+  D.eq(mode(), 'picture', 'F12 returns to the live picture')
+  assert(not P.shows(P.drawn(wait), 'view>F12'),
+    'no banner on F12 while a program runs')
+  D.key(wait, 'x')
+  D.eq(mode(), 'picture', 'a key goes to the running program')
+  D.key(wait, 'C-q')
+  wait(.2)
   hm_done()
 end)
 
@@ -234,6 +292,8 @@ scenario('pause-shows-console', function(wait)
   wait(.1)
   assert(mode() == 'picture', 'continue() brings back the '
     .. 'picture, the mode is ' .. mode())
+  assert(not P.shows(P.drawn(wait), 'view>F12'),
+    'continue() into the picture shows no status line')
   D.key(wait, 'C-q')
   wait(.2)
   hm_done()

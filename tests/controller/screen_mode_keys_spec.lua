@@ -13,11 +13,10 @@
 -- (love.handlers, F.session), drawn through the real draw
 -- functions (K.screen).
 --
--- Spec justification (dev testing policy): the full picture
--- shows no field and no status line, so a key path that misses
--- the way back leaves a person on a picture with no sign of how
--- to leave it, and a key that leaks through types into a field
--- no one sees. Both show only on a device.
+-- Spec justification (dev testing policy): a key path from the
+-- full picture that misses the way back leaves a person there,
+-- and a key that leaks through types into a field no one sees;
+-- the timed status line's opacity and expiry show on a screen.
 
 local F = require("tests.helpers.input_fixture")
 local K = require("tests.helpers.editor_keys")
@@ -943,11 +942,97 @@ describe("the screen modes' keys #canvas", function()
         assert.equal(edge, mode_end)
       end)
 
-    it("is not drawn in the full picture", function()
+    local function picture_banner()
+      local v = F.cfg.view
+      local sy = K.cc.view.input:status_y(0)
+      local s = K.screen()
+      assert.same({ }, s.field)
+      local words = { }
+      for _, t in ipairs(s.texts) do
+        if t.y >= sy then
+          words[#words + 1] = t.text
+          assert.equal(1, t.colour[4] or 1)
+          assert.is_nil(t.text:match("^%d+:%d+$"))
+        end
+      end
+      local band_alpha
+      local band_h = love.graphics.getHeight() - sy
+      for _, f in ipairs(s.fills) do
+        if f.y == sy and f.h == band_h and f.w == v.w then
+          band_alpha = f.colour[4]
+        end
+      end
+      return words, band_alpha
+    end
+
+    it("shows on F12 into the full picture for two seconds", function()
       K.reset()
       K.keys("f12")
       K.keys("f12")
-      assert.same({ }, status_texts())
+      local words, alpha = picture_banner()
+      assert.is_true(has(words, K.PROJECT))
+      assert.is_true(has(words, "picture"))
+      assert.is_true(has(words, "view>F12"))
+      assert.equal(F.cfg.view.colors.screen.combined.ground, alpha)
+
+      K.frame(1.9)
+      assert.is_true(has((picture_banner()), "view>F12"))
+      K.frame(0.11)
+      local gone, gone_alpha = picture_banner()
+      assert.same({ }, gone)
+      assert.is_nil(gone_alpha)
+
+      -- leaving on a key or mouse button clears it at once
+      K.keys("f12")
+      K.keys("f12")
+      K.keys("f12")
+      assert.is_true(has((picture_banner()), "view>F12"))
+      F.session.mousepressed(100, 100, 1)
+      assert.equal("text", mode())
+      assert.is_false(has(status_texts(), "view>F12"))
+
+      -- a draw-once program's picture shows no line
+      K.reset({ ["main.lua"] = DRAWS_ONCE })
+      K.start()
+      assert.same({ }, (picture_banner()))
+    end)
+
+    it("shows no banner on F12 while a program runs", function()
+      K.reset({ ["main.lua"] = recorder(true) })
+      K.start()
+      assert.same({ }, (picture_banner()))
+      K.keys("f12")
+      K.keys("f12")
+      K.keys("f12")
+      assert.equal("picture", mode())
+      assert.is_false(K.cc.model.screen:banner_shown())
+      local words, alpha = picture_banner()
+      assert.same({ }, words)
+      assert.is_nil(alpha)
+      K.keys("a")
+      assert.equal("picture", mode())
+      assert.matches("press a", seen())
+
+      -- idling behind the console with a handler still counts as running
+      K.reset({ ["main.lua"] = DRAWS_ONCE
+        .. "function love.keypressed() end\n" })
+      K.start()
+      assert.equal("ready", K.app_state())
+      K.keys("f12")
+      K.keys("f12")
+      K.keys("f12")
+      assert.equal("picture", mode())
+      assert.is_false(K.cc.model.screen:banner_shown())
+      assert.same({ }, (picture_banner()))
+
+      -- a paused program is a console state: F12 shows the banner
+      K.keys("lctrl", "pause")
+      K.frame()
+      assert.equal("inspect", K.app_state())
+      K.keys("f12")
+      K.keys("f12")
+      assert.equal("picture", mode())
+      assert.is_true(has((picture_banner()), "view>F12"))
     end)
   end)
 
