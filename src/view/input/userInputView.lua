@@ -310,13 +310,20 @@ function UserInputView:render_input(input, status, time)
 
   local shown = vc:get_range()
   local function row_y(r) return self:row_y(field_row(r)) end
+  --- the edges beyond which rows of the draft lie, each to
+  --- carry a continuation cue; a field of one row carries none
+  --- (the maintainer's ruling of November 19, 2026: its marks
+  --- are a later issue)
+  local cued = 1 < inLines
+  local above = cued and 1 < shown.start
+  local below = cued and shown.fin < vc:get_content_length()
   --- a wrapped line's marks, under the draft's text; an edge
   --- row with a continuation cue takes no mark in its last
   --- column
   local first, last = vc.offset + 1, vc.offset + inLines
   local bare = { }
-  if 1 < shown.start then bare[first] = true end
-  if shown.fin < vc:get_content_length() then bare[last] = true end
+  if above then bare[first] = true end
+  if below then bare[last] = true end
   WrapMark.draw(WrapMark.places(vc.wrap_reverse, first, last,
     vc:get_content_length(), bare), row_y, w * fw, fh,
     cf_colors.editor.wrap_mark)
@@ -414,12 +421,8 @@ function UserInputView:render_input(input, status, time)
       paint = { { x = 0, w = drawableWidth, color = colors.bg } },
     })
   end
-  if 1 < shown.start then
-    cue('top', 1)
-  end
-  if shown.fin < vc:get_content_length() then
-    cue('bottom', inLines)
-  end
+  if above then cue('top', 1) end
+  if below then cue('bottom', inLines) end
 
   drawCursor()
 end

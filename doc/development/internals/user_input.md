@@ -170,7 +170,7 @@ recorded because a reader meeting the old shape in an older tree needs to know w
 no longer differ. The `add_text` path never had the split, having normalised with `string.unlines`
 at the controller before it reaches the model.
 
-The console's input view is `input_max = 14` lines high; the editor's field shows at most 8 rows, half the rows it shares with the document view. Both are display limits only — the model holds every line, and the field scrolls to its cursor. `input_max` is also the editor's block size limit, so a block at the limit is taller than the editor's field (see `editor.md` — *Three heights* and *Monster Blocks*).
+The console's input view is `input_max = 14` lines high; the editor's field shows at most 8 rows, half the rows it shares with the document view; a program's field shows at most 14, or the `max_rows` its program gave (`UserInputModel:set_max_rows`, applied by `configure_core`). All are display limits only — the model holds every line, and the field scrolls to its cursor. `input_max` is also the editor's block size limit, so a block at the limit is taller than the editor's field (see `editor.md` — *Three heights* and *Monster Blocks*).
 
 ### Selection
 

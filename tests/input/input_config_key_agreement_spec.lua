@@ -79,6 +79,12 @@ PROOFS.hide_on_submit = flag_proof('hide_on_submit')
 PROOFS.clear_on_cancel = flag_proof('clear_on_cancel')
 PROOFS.hide_on_cancel = flag_proof('hide_on_cancel')
 
+-- the field's window takes the limit
+PROOFS.max_rows = function(apply)
+  apply({ max_rows = 3 })
+  assert.same(3, F.widget.model.visible.size_max)
+end
+
 PROOFS.text = function(apply)
   apply({ text = 'seeded' })
   assert.same({ 'seeded' }, F.widget:get_text())
