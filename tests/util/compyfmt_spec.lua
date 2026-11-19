@@ -272,6 +272,40 @@ describe('compyfmt #compyfmt', function()
     assert.truthy(string.find(printed[1], p .. ':1: ', 1, true))
   end)
 
+  it('keeps a #! first line, fixing the rest', function()
+    local p = new_file('#!/usr/bin/lua\nx=1\n')
+    assert.equal(0, compyfmt.main({ '--fix', p }))
+    assert.same('#!/usr/bin/lua\nx = 1\n', read(p))
+    assert.same({}, printed)
+    assert.equal(0, compyfmt.main({ p }))
+  end)
+
+  --- LF, CRLF and a lone CR each end a line, and a file is
+  --- written with LF, so a file formatted but for its line ends
+  --- is not formatted, and --fix gives it LF throughout
+  it('writes LF throughout a file with CRLF or CR', function()
+    for _, text in ipairs({
+      '#!/usr/bin/lua\r\nx = 1\r\ny = 2\r\n',
+      '#!/usr/bin/lua\rx = 1\ry = 2\r',
+      '#!/usr/bin/lua\r\nx = 1\ry = 2\n',
+    }) do
+      local p = new_file(text)
+      assert.equal(1, compyfmt.main({ p }))
+      assert.same({ p .. ': not formatted' }, printed)
+      printed = {}
+      assert.equal(0, compyfmt.main({ '--fix', p }))
+      assert.same('#!/usr/bin/lua\nx = 1\ny = 2\n', read(p))
+      assert.equal(0, compyfmt.main({ p }))
+      assert.same({}, printed)
+    end
+  end)
+
+  it('has nothing to report on a #! line alone', function()
+    local p = new_file('#!/usr/bin/lua\n')
+    assert.equal(0, compyfmt.main({ p }))
+    assert.same({}, printed)
+  end)
+
   it('leaves a file it cannot format byte for byte', function()
     local text = 'local colors = {\n  black = 0, -- #000000\n}'
     local p = new_file(text)

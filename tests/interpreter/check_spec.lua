@@ -142,5 +142,24 @@ describe('lua check #check', function()
         end
         assert.same({ 'code', 'empty', 'code', 'empty' }, kinds)
       end)
+
+    it('keeps a #! first line as a block of one line', function()
+      require('model.editor.content')
+      local verdict = check.gate({ '#!/usr/bin/lua', 'x=1' })
+      assert.is_true(verdict.ok)
+      assert.same({ '#!/usr/bin/lua', 'x = 1' }, verdict.lines)
+      assert.same({
+        Chunk({ '#!/usr/bin/lua' }, Range.singleton(1)),
+        Chunk({ 'x = 1' }, Range.singleton(2)),
+      }, verdict.blocks:items())
+      assert.equal(1 - verdict.max_block, check.excess(verdict, 1))
+    end)
+
+    it('places a failure below a #! line in the whole text',
+      function()
+        local verdict = check.gate({ '#!/usr/bin/lua', 'x = = 1' })
+        assert.is_false(verdict.ok)
+        assert.equal(2, verdict.errors[1].l)
+      end)
   end)
 end)
