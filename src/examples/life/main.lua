@@ -136,6 +136,9 @@ function love.keypressed(k)
   end
 end
 
+compy.input.shortcuts.keypressed.escape = compy.input.fn.
+    ignore_repeat(stop)
+
 function love.mousepressed(_, y, button)
   if button == 1 then
     mouse_held = true

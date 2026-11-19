@@ -128,3 +128,17 @@ function love.update()
     debug_color = Color.red
   end
 end
+
+function goBack()
+  if not compy.input.is_shown() then
+    stop()
+  elseif compy.input.get_text() ~= "" then
+    compy.input.clear()
+  else
+    compy.input.hide()
+    arm_echo_guard()
+  end
+end
+
+compy.input.shortcuts.keypressed.escape = compy.input.fn.
+    stop_here(compy.input.fn.ignore_repeat(goBack))

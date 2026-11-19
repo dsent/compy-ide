@@ -307,11 +307,16 @@ end
 
 key_actions.gameover.space = key_actions.play.r
 
-for name in pairs(key_actions) do
-  key_actions[name].escape = love.event.quit
-end
+key_actions.start.escape = stop
+key_actions.play.escape = key_actions.play.r
+key_actions.gameover.escape = key_actions.play.r
 
-function love.keypressed(k)
+function love.keypressed(k, _, isrepeat)
+  local skip = k == "escape"
+       and (isrepeat or Key.combo(k) ~= "escape")
+  if skip then
+    return
+  end
   local group = key_actions[S.state]
   local action = group and group[k]
   if action then

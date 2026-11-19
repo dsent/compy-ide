@@ -100,3 +100,6 @@ function love.keyreleased(k)
     pause("STOP THE CLOCKS!")
   end
 end
+
+compy.input.shortcuts.keypressed.escape = compy.input.fn.
+    ignore_repeat(stop)
