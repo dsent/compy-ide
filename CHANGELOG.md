@@ -18,6 +18,11 @@ Project-author guide: `doc/input_api.md`.
 
 ### Added
 
+- **The terminal example sends Ctrl+C and Ctrl+D to the micro:bit.** Ctrl+C sends
+  byte 3, which drops the line the board is reading and ends a `listen()`; Ctrl+D sends
+  byte 4, which ends a radio link and stops the calling that tries to bring a lost one
+  back, as the board's `lost; calling again, Ctrl+D stops.` says. Their letters are not
+  typed. The terminal sent neither before.
 - **F12 shows the screen's next mode.** In the console, whether a program runs, is
   paused or none is, F12 steps through the text, the text over the picture and the picture;
   the status line names `text>F12` or `comb>F12`, shows `picture` and `view>F12` for two

@@ -110,17 +110,26 @@ local RESTARTING = table.concat({
   " a robot]"
 })
 
--- The way back from a board that no longer reads what is
--- typed, stuck in a loop or in listen(): it restarts, as its
--- reset button makes it, and greets you again.
---- @return string what to tell
-local function restartBoard()
+--- Why nothing can go to the board now, or nil when it can
+--- @return string?
+local function notReady()
   if not serial.isConnected() then
     return "[plug the micro:bit in]"
   end
   if onItsWay() then
     return "[a file is on its way to the micro:bit: wait until"
         .. " the Compy says how it went]"
+  end
+end
+
+-- The way back from a board that no longer reads what is
+-- typed, stuck in a loop or in listen(): it restarts, as its
+-- reset button makes it, and greets you again.
+--- @return string what to tell
+local function restartBoard()
+  local why = notReady()
+  if why then
+    return why
   end
   if serial.reset() then
     return RESTARTING
@@ -138,6 +147,26 @@ end
 -- text; this "m" is not meant for the board.
 compy.input.shortcuts.textinput["ctrl+m"] = function()
   return true
+end
+
+-- Ctrl+C and Ctrl+D go to the board as the bytes they are:
+-- Ctrl+C drops the line the board is reading and ends a
+-- listen(), Ctrl+D ends a radio link, or the calling that
+-- tries to bring one back.
+local KEYS = {
+  ["ctrl+c"] = "\3",
+  ["ctrl+d"] = "\4"
+}
+for chord, byte in pairs(KEYS) do
+  compy.input.shortcuts.keypressed[chord] = function()
+    local why = notReady()
+    if why then
+      print(why)
+    else
+      serial.send(byte)
+    end
+    return true
+  end
 end
 
 -- What has been sent, newest last, the hundred most recent
