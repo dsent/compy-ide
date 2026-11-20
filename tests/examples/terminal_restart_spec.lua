@@ -141,5 +141,55 @@ describe('terminal Ctrl+M through the IDE #microbit', function()
       assert.same(0, board.resets)
       assert.same({ 'x\r' }, send_x(board))
     end)
+
+    -- the board's interrupt and end-of-link, which listen()
+    -- and a radio link's calling wait for
+    for key, byte in pairs({ c = '\3', d = '\4' }) do
+      it('Ctrl+' .. key:upper() .. ' sends byte ' .. byte:byte()
+          .. ', its ' .. key .. ' typed nowhere, the text '
+          .. order .. ' the key press', function()
+        local board = terminal()
+        chord('lctrl', key, order)
+        assert.same(0, board.resets)
+        assert.same({ byte, 'x\r' }, send_x(board))
+      end)
+    end
   end
+end)
+
+describe('terminal Ctrl+C and Ctrl+D #microbit', function()
+  it('say why nothing went while a file goes to the board',
+    function()
+      local serial = {
+        send = function()
+          return nil, 'A file is on its way to the micro:bit.'
+        end,
+        reset = function() return true end,
+        isConnected = function() return true end,
+        isFlashing = function() return true end,
+      }
+      local input, said = load_terminal(serial)
+      input.shortcuts.keypressed['ctrl+d']()
+      assert.truthy(said[#said]:find('on its way to the micro:bit',
+        1, true))
+    end)
+
+  it('ask for the board, as Ctrl+M does, when none is plugged in',
+    function()
+      local sent = 0
+      local serial = {
+        send = function() sent = sent + 1 return true end,
+        reset = function() return true end,
+        isConnected = function() return false end,
+        isFlashing = function() return false end,
+      }
+      local input, said = load_terminal(serial)
+      for _, chord in ipairs({ 'ctrl+c', 'ctrl+d', 'ctrl+m' }) do
+        local before = #said
+        input.shortcuts.keypressed[chord]()
+        assert.same(before + 1, #said)
+        assert.same('[plug the micro:bit in]', said[#said])
+      end
+      assert.same(0, sent)
+    end)
 end)
