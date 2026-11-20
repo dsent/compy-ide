@@ -28,46 +28,18 @@ local function is_blank(l)
   return l ~= nil and string.match(l, '^%s*$') ~= nil
 end
 
---- The node a comparison looks at: parentheses the printer
---- keeps or adds are not the program, it writes
---- `not (a == b)` as `a ~= b`, and it splits a long string
---- into pieces joined with `..`
---- @param n any
---- @return any
-local function plain(n)
-  while type(n) == 'table' and n.tag == 'Paren' do n = n[1] end
-  if type(n) ~= 'table' or n.tag ~= 'Op' then return n end
-  if n[1] == 'not' then
-    local inner = plain(n[2])
-    if type(inner) == 'table' and inner.tag == 'Op'
-        and inner[1] == 'eq' then
-      return { tag = 'Op', 'ne', inner[2], inner[3] }
-    end
-  elseif n[1] == 'concat' then
-    local a, b = plain(n[2]), plain(n[3])
-    if type(a) == 'table' and a.tag == 'String'
-        and type(b) == 'table' and b.tag == 'String' then
-      return { tag = 'String', a[1] .. b[1] }
-    end
-  end
-  return n
-end
-
---- Two ASTs are the same program: same tags, same values,
---- positions aside
---- @param a any
---- @param b any
---- @return boolean
-local function same_program(a, b)
-  a, b = plain(a), plain(b)
-  if type(a) ~= 'table' or type(b) ~= 'table' then
-    return a == b
-  end
-  if a.tag ~= b.tag or #a ~= #b then return false end
-  for i = 1, #a do
-    if not same_program(a[i], b[i]) then return false end
-  end
-  return true
+--- LuaJIT's stripped bytecode for `lines`, or nil when LuaJIT
+--- does not load it. Returns the chunk too so its interned
+--- strings stay pinned: LuaJIT dumps template-table keys in
+--- hash order, which can change if GC collects and re-interns
+--- a string between two compiles.
+--- @param lines string[]
+--- @return string?
+--- @return function?
+local function bytecode(lines)
+  local fn = loadstring(table.concat(lines, '\n'))
+  if not fn then return nil end
+  return string.dump(fn, true), fn
 end
 
 --- The printer re-wraps comments, so their text is compared
@@ -91,15 +63,16 @@ local MAX_PASSES = 4
 --- @return boolean ok
 local function format_code(lines, width)
   local p = get_parser()
-  local ok, ast = p.parse(lines)
-  if not ok then return lines, false end
+  if not p.parse(lines) then return lines, false end
+  local before, pinned = bytecode(lines)
+  if not before then return lines, false end
   local comments = comment_text(lines)
   local out, settled = lines, false
   for _ = 1, MAX_PASSES do
     local printed, next_out = pcall(p.pprint, out, width)
     if not printed or not next_out then return lines, false end
-    local ok2, ast2 = p.parse(next_out)
-    if not ok2 or not same_program(ast, ast2)
+    local after = bytecode(next_out)
+    if not after or after ~= before
         or comment_text(next_out) ~= comments then
       return lines, false
     end
@@ -107,7 +80,7 @@ local function format_code(lines, width)
     out = next_out
     if settled then break end
   end
-  if not settled then return lines, false end
+  if not settled or not pinned then return lines, false end
   --- a run of blank lines ending the text follows no token
   --- the printer measures from; one is kept here
   local has_code = string.is_non_empty_string_array(lines)
