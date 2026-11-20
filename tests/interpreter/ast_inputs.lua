@@ -173,7 +173,7 @@ local meta_res = {
   '        first = cfirst,',
   '        last = clast,',
   '        text = comment_text,',
-  '        multiline = (4 < d),',
+  '        multiline = (d > 4),',
   '        position = pos,',
   '        prepend_newline = newline',
   '      }',
@@ -239,8 +239,7 @@ local clock_res = {
   'function love.update(dt)',
   '  t = t + dt',
   '  s = math.floor(t)',
-  -- canonized compare order
-  '  if midnight < s then',
+  '  if s > midnight then',
   '    s = 0',
   '  end',
   'end',
@@ -249,8 +248,7 @@ local clock_res = {
   -- 'cycle = function(c)',
   --- syntax sugar
   'function cycle(c)',
-  -- canonized compare order
-  '  if 7 < c then',
+  '  if c > 7 then',
   '    return 1',
   '  end',
   '  return c + 1',
@@ -322,7 +320,7 @@ local operators = {
     'len = #(V:get_input():get_text())'),
   prep('len = # "asd" .. "vfds"', 'len = #"asd" .. "vfds"'),
   prep('len = # ("asd" .. "vfds")', 'len = #("asd" .. "vfds")'),
-  prep('bool = 2 >= 3 ~= 4 < 5', 'bool = (3 <= 2) ~= 4 < 5'),
+  prep('bool = 2 >= 3 ~= 4 < 5', 'bool = (2 >= 3) ~= 4 < 5'),
 }
 
 local comments = {
@@ -1486,7 +1484,7 @@ local self = {
 
 local canon = {
   prep('if a > b then     return a else return b end', {
-    'if b < a then',
+    'if a > b then',
     '  return a',
     'else',
     '  return b',

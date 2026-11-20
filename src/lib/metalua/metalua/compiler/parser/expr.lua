@@ -167,8 +167,11 @@ return function(M)
             { "~=", prec = 30, builder = op_ne  },
             { "<",  prec = 30, builder = opf2 "lt"  },
             { "<=", prec = 30, builder = opf2 "le"  },
-            { ">",  prec = 30, builder = opf2r "lt"  },
-            { ">=", prec = 30, builder = opf2r "le"  },
+            -- Keep > and >= with operands in typed order rather than
+            -- reversing into lt/le, so formatting preserves the operator
+            -- and operand evaluation order.
+            { ">",  prec = 30, builder = opf2 "gt"  },
+            { ">=", prec = 30, builder = opf2 "ge"  },
             { "and",prec = 20, builder = opf2 "and" },
             { "or", prec = 10, builder = opf2 "or"  } },
 
