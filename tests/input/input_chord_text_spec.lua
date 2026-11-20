@@ -180,6 +180,21 @@ describe("a chord's own glyph is no text #input", function()
       chord(order, { "lctrl" }, "v", "v")
       assert.same("x = = 1", K.console_draft())
     end)
+
+    -- bytes that are no UTF-8 are no text (the text entry,
+    -- controller.lua): on their own they dismiss no message,
+    -- as a letter does
+    it("bytes that are no UTF-8 leave the message showing",
+      function()
+        assert.is_true(F.console:has_error())
+        F.session.type("\192\128")
+        K.frame()
+        assert.is_true(F.console:has_error())
+        assert.same("x = = 1", K.console_draft())
+        F.session.type("a")
+        K.frame()
+        assert.is_false(F.console:has_error())
+      end)
   end)
 
   describe("in the file editor's field", function()
@@ -603,6 +618,24 @@ describe("a chord's own glyph is no text #input", function()
         "l",
         "a"
       }, got)
+    end)
+
+    -- For an Alt chord that has no character a Compy sends the
+    -- bytes c0 80, an overlong NUL (seen for Alt+H at a Compy's
+    -- own keyboard). They are no UTF-8, so they are no text: a
+    -- program that drew them would stop on them.
+    in_both_orders("bytes that are no UTF-8 reach no text "
+        .. "handler", function(order)
+      local got = { }
+      F.activate_project({
+        textinput = function(t)
+          got[#got + 1] = t
+        end
+      })
+      chord(order, { "lalt" }, "h", "\192\128")
+      chord(order, { }, "a", "\255")
+      chord(order, { }, "a", "a")
+      assert.same({ "a" }, got)
     end)
   end)
 end)
