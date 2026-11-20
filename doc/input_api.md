@@ -513,8 +513,9 @@ Everything the widget calls back about: a submission, a cancel, a boundary, a va
 
 ### Submit lifecycle
 
-Enter submits, once however long it is held: its repeats run no callback,
-though a hook or shortcut of yours still sees them. Only a bare Enter submits,
+Enter submits and Escape cancels, each once however long it is held: its
+repeats run no callback, though a hook or shortcut of yours still sees them.
+Only a bare Enter submits,
 and only a bare Escape cancels: each chord is a key of its own, and a chord the
 widget does not name does nothing in it (Ctrl+Enter, Shift+Escape, Ctrl+Up).
 Shift+Enter and Alt+Enter insert a newline. Ctrl+Z and Ctrl+Y undo and redo

@@ -184,14 +184,15 @@ describe("every chord is its own key #input", function()
     -- natural stop), for the keys whose repeat no key test can
     -- tell from a press: a second F2, Alt+F or Ctrl+L changes
     -- nothing the first did not. Once per press: what the
-    -- specification says (a program field's Enter, API2.2) and
-    -- what has no natural stop (the console's Enter, Shift+Ins,
+    -- specification says (a program field's Enter, API2.2),
+    -- its Escape, which calls the program as Enter does, what
+    -- has no natural stop (the console's Enter, Shift+Ins,
     -- Ctrl+Ins), and the help key
     local ONCE = {
       { EditorKeys, { "shift+insert", "ctrl+insert", "escape",
         "ctrl+j", "f1", "f5" } },
       { ConsoleKeys, { "return", "kpenter", "f1" } },
-      { FieldKeys, { "return", "kpenter" } },
+      { FieldKeys, { "return", "kpenter", "escape" } },
     }
     local REPEATS = {
       { EditorKeys, { "up", "ctrl+down", "pagedown", "pageup",
@@ -203,8 +204,7 @@ describe("every chord is its own key #input", function()
       { FieldKeys, { "shift+return", "alt+return", "left",
         "ctrl+right", "home", "ctrl+end", "up", "backspace",
         "shift+backspace", "delete", "ctrl+backspace", "ctrl+w",
-        "ctrl+k", "alt+shift+up", "ctrl+z",
-        "ctrl+y", "escape" } },
+        "ctrl+k", "alt+shift+up", "ctrl+z", "ctrl+y" } },
     }
     it("say which keys act once and which repeat", function()
       for _, set in ipairs({ { ONCE, false }, { REPEATS, true } })

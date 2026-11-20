@@ -87,12 +87,14 @@ local DEFS = {
     { chords = { 'ctrl+z' }, card = 'Ctrl+Z', repeats = true }),
   with(key('redo', 'redo'),
     { chords = { 'ctrl+y' }, card = 'Ctrl+Y', repeats = true }),
-  --- the widget's own submit and cancel (D-EDIT-LIFECYCLE)
+  --- the widget's own submit and cancel (D-EDIT-LIFECYCLE),
+  --- each once per press: a repeat would call a program's
+  --- callback again at repeat speed
   with(key('submit', 'submit'),
     { chords = { 'return' }, card = 'Enter' }),
   with(key('submit'), { chords = { 'kpenter' } }),
   with(key('cancel', 'cancel'),
-    { chords = { 'escape' }, card = 'Esc', repeats = true }),
+    { chords = { 'escape' }, card = 'Esc' }),
 }
 
 return Keymap.new(DEFS, { 'field' })

@@ -691,7 +691,7 @@ web build's space.
 
 Enter and Escape are ordinary entries of that table, **uniformly for every instance**: bare Enter
 calls `self:submit_flow()` (once per press: a repeat submits nothing, API2.2), bare Escape
-`self:cancel_flow()` — see "Submit and cancel" below. Ctrl+Enter, Shift+Escape and every other
+`self:cancel_flow()` (once per press likewise) — see "Submit and cancel" below. Ctrl+Enter, Shift+Escape and every other
 chord on those keys do nothing (the ruling of 2026-11-14, which ended D-DEFACTO-KEPT's
 "Enter-without-Shift-or-Alt" guard), pinned by `tests/input/input_widget_callbacks_spec.lua`, the
 `the same lifecycle on every route` group.
