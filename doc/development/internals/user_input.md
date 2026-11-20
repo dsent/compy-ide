@@ -181,7 +181,10 @@ designed" in part). Shift with each movement key of the field's table
 Ctrl+Right, Home, End, Ctrl+Home, Ctrl+End, Up, Down) runs that movement through
 `UserInputModel:select_by`, which holds the selection from where it began, or
 from the cursor, to where the cursor lands; Up on the first row and Down on the
-last go to the draft's ends and recall no history. A press in the field places
+last go to the draft's ends and recall no history. Ctrl+A (`select_all`, once
+per press) clears any selection, jumps to the draft's start, and runs `jump_end`
+through `select_by`, selecting the whole draft with the cursor at its end (and
+selecting nothing on an empty field). A press in the field places
 the cursor and clears the selection; a drag from it selects
 (`UserInputController:mousemoved`, `select_to`) while the button is down, and
 its release selects to where the last move went (see "Input widget mouse"
@@ -678,19 +681,23 @@ The project widget runs the flows for real (that IS its submit/cancel).
 
 ### UserInputController keypressed (shared)
 
-`UserInputController:keypressed` looks the key's chord up in the widget's own table (`FIELD_KEYS`)
-and does nothing for a chord it does not name, whichever route drives it (console, editor, or the
-project widget), one table for all three (the maintainer's ruling of 2026-11-14): moves
-(Left/Right, Ctrl+Left/Right by word, Home/End to the ends of the cursor's row, Ctrl+Home/End to the
-ends of the text, Up/Down), Alt+Shift+Up/Down moving the cursor's line, Backspace (with Shift too,
-held from a capital) and Delete, Ctrl+Backspace and Ctrl+W deleting what Ctrl+Left
-would cross (at a line's start, the break and the word before it), Ctrl+K the rest of its line,
-Shift+Enter and Alt+Enter breaking the line, Ctrl+Z and Ctrl+Y undoing and redoing the draft
-(D-UNDO-KEYS), bare Enter submitting and bare Escape cancelling. Every owner gets the same keys.
-Alt+Up/Down are the editor's block move and the widget's for no owner. Shift with each move
-selects (see "Selection" above); it has no clipboard keys and never inserts literal characters — see "Text Input Widget" above for why
-`keypressed` and `textinput` divide the work this way. Ahead of the table run the error lock and the
-web build's space.
+`UserInputController:keypressed` looks the key's chord up in the widget's own
+table (`model/input/fieldKeys.lua`) and does nothing for a chord it does not
+name, whichever route drives it (console, editor, or the project widget), one
+table for all three (the maintainer's ruling of 2026-11-14): moves (Left/Right,
+Ctrl+Left/Right by word, Home/End to the ends of the cursor's row,
+Ctrl+Home/End to the ends of the text, Up/Down), Alt+Shift+Up/Down moving the
+cursor's line, Backspace (with Shift too, held from a capital) and Delete,
+Ctrl+Backspace and Ctrl+W deleting what Ctrl+Left would cross (at a line's
+start, the break and the word before it), Ctrl+K the rest of its line,
+Shift+Enter and Alt+Enter breaking the line, Ctrl+Z and Ctrl+Y undoing and
+redoing the draft (D-UNDO-KEYS), bare Enter submitting and bare Escape
+canceling. Every owner gets the same keys. Alt+Up/Down are the editor's block
+move and the widget's for no owner. Shift with each move selects, and Ctrl+A
+selects the whole draft once per press (see "Selection" above); it has no
+clipboard keys and never inserts literal characters — see "Text Input Widget"
+above for why `keypressed` and `textinput` divide the work this way. Ahead of
+the table run the error lock and the web build's space.
 
 Enter and Escape are ordinary entries of that table, **uniformly for every instance**: bare Enter
 calls `self:submit_flow()` (once per press: a repeat submits nothing, API2.2), bare Escape

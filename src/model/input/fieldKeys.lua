@@ -63,6 +63,10 @@ local DEFS = {
       'ctrl+shift+home', 'ctrl+shift+end',
       'shift+up', 'shift+down' },
       card = 'Shift+move', repeats = true }),
+  --- the whole draft, once per press: Ctrl+Shift+Home is four
+  --- keys on a Compy
+  with(key('select_all', 'select all'),
+    { chords = { 'ctrl+a' }, card = 'Ctrl+A' }),
   --- IS3.12
   with(key('backspace'),
     { chords = { 'backspace' }, repeats = true,

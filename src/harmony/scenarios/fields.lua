@@ -121,7 +121,7 @@ local function click(wait, which)
 end
 
 local FIELD_CHORDS = { 'C-return', 'C-kpenter',
-  'C-a', 'C-S-up', 'A-left', 'A-home',
+  'C-e', 'C-S-up', 'A-left', 'A-home',
   -- removed on November 14, late
   'C-d', 'S-delete' }
 
@@ -134,7 +134,7 @@ scenario('editor', function(wait)
   D.key(wait, 'escape')
   word_keys(wait, 'editor', function() D.key(wait, 'escape') end)
   -- browsing: chords nothing binds change nothing at all
-  for _, k in ipairs({ 'C-return', 'C-a', 'S-up', 'A-left',
+  for _, k in ipairs({ 'C-return', 'C-e', 'S-up', 'A-left',
     'A-pageup', 'A-end', 'C-S-s', 'S-f2' }) do
     D.key(wait, k)
     D.in_state('editor')
