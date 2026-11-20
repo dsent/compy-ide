@@ -478,11 +478,14 @@ desktop, where it surfaces, it comes after. `Key.chord_text(t)`
   console.
 
 The rule reads the device, like every modifier read (D-ASK-THE-DEVICE): any
-Ctrl or the left Alt held makes the text a chord's. On a Compy
-(`love.system.getOS() == 'Android'`) the right Alt key does too: it is an
-Alt like the left one, not AltGr. On a computer, where people run the IDE
-with their own keyboard layouts, AltGr composes text and is the right Alt
-key: `ralt` alone on Linux, left Ctrl plus `ralt` on Windows. A chord's
+Ctrl or the left Alt held makes the text a chord's. The right Alt key
+depends on the platform. On Android (`love.system.getOS() == 'Android'`),
+which a Compy runs, a right Alt key does too: it is an Alt like the left
+one, not AltGr. A Compy's own keyboard has no right Alt, so on a Compy this
+concerns an attached keyboard only. On a computer (Linux, Windows), where
+people run the IDE with their own keyboard layouts, AltGr composes text and
+is the right Alt key: `ralt` alone on Linux, left Ctrl plus `ralt` on
+Windows. A chord's
 stray glyph exists only on the device: a computer's SDL sends no text for a
 Ctrl or Alt chord, so every character that arrives under AltGr is typed,
 whatever it is (the French `us-alt` layout types `6` through AltGr).

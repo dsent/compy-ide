@@ -803,9 +803,12 @@ tiers ① and ② like any other text event, so `shortcuts.textinput['ctrl+j']`,
 `'alt+*'` and your `textinput` hook all see it with its modifiers. It stops
 there: the widget never types it, and it reaches no console's prompt
 either. The character of a reserved combo (the table below),
-such as Ctrl+R's `r`, reaches nothing at all. Shift alone composes text. On a Compy the right Alt
-key is an Alt like the left one, so what it sends is a chord's character
-too, whatever the character. On a computer running the IDE, the right Alt
+such as Ctrl+R's `r`, reaches nothing at all. Shift alone composes text.
+The right Alt key depends on the platform. A Compy's own keyboard has one
+Alt, on the left, and no right Alt. On Android, which a Compy runs, a right
+Alt key of an attached keyboard is an Alt like the left one, so what it sends
+is a chord's character too, whatever the character. On a computer running the
+IDE (Linux, Windows), the right Alt
 key is AltGr and composes text in the keyboard layout set there: whatever
 it types reaches the widget, `@`, `ł`, `€` or a digit alike, since a
 computer sends no text for a chord. AltGr is no Ctrl and no Alt, so a key
