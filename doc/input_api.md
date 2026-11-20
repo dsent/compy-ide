@@ -58,9 +58,9 @@ still a field.*
 
 **Draft.** The text the user has typed and **not yet submitted**. It is a
 first-class term in this guide, deliberately: the widget's content key is
-`text`, so prose needs a separate word for *content that is still the user's*,
-and `discard_draft()` is named for it. A draft is what a validator rejects
-without losing, what Escape clears, and what survives a `configure`.
+`text`, so prose needs a separate word for *content that is still the user's*.
+A draft is what a validator rejects without losing, what Escape clears when
+`clear_on_cancel` is set, and what survives a `configure`.
 
 *The word means **only** that. Configuration a project has staged for a widget
 that is not shown yet is **pending config**, never a draft; and an earlier

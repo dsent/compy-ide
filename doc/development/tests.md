@@ -84,7 +84,7 @@ Tags beyond the file-level `#input`:
 | `input_routing_spec.lua:141` | `routes the pointer to the editor` | The input fixture leaves the editor's mouse off (`cfg.editor.mouse_enabled`), so pointer delivery has no observable outcome without extra scaffolding |
 | `input_routing_spec.lua:209` | `touch reaches the active route` | The gateway has touch entries (`handlers.touchpressed` and its pair in `controller.lua`), but the widget's and the console's touch handlers do nothing yet, so delivery isn't black-box observable. Greens when a touch consumer lands |
 
-**A second kind of pending row, added deliberately: the reserved combos' own effects.** `input_global_shortcuts_spec.lua` asserts one property live — that a project cannot suppress a global shortcut by registering the same combo — and lists the remaining reserved combos (the profiler pair, `f10`, and `ctrl+escape` on release) as pending. `ctrl+s` and `ctrl+shift+r` left the list on 2026-11-14, when they stopped being reserved; the same file asserts that a running program receives them. Those are not unobservable like the rows above; they are simply **someone else's contract**. What each one *does* is the framework's own behaviour, worth asserting eventually and out of scope for the input API's suite, so the gap is named where a reader will meet it rather than left to be rediscovered. `ctrl+pause` and `ctrl+q` are absent from that list because their effects are asserted live, and **`ctrl+t` left it on 2026-09-09** for the same reason, once both arms of `reserved_quickswitch` were covered — the running one in that file, the editor one in `input_editor_keys_spec.lua`. `ctrl+r` left it on 2026-11-14, when it replaced `ctrl+alt+r`: `input_run_anew_spec.lua` runs the project with it from the console, the editor and over a running program and holds it back under the editor's card, `is1_files_spec.lua` and `input_editor_files_spec.lua` cover its refusal during an edit, and `program_canvas_spec.lua` sees the program start again.
+**A second kind of pending row, added deliberately: the reserved combos' own effects.** `input_global_shortcuts_spec.lua` asserts one property live — that a project cannot suppress a global shortcut by registering the same combo — and lists the remaining reserved combos (the profiler pair, `f10`, and `ctrl+escape` on release) as pending. `ctrl+s` and `ctrl+shift+r` left the list on 2026-11-14, when they stopped being reserved; the same file asserts that a running program receives them. Those are not unobservable like the rows above; they are simply **someone else's contract**. What each one *does* is the framework's own behaviour, worth asserting eventually and out of scope for the input API's suite, so the gap is named where a reader will meet it rather than left to be rediscovered. `ctrl+pause` and `ctrl+q` are absent from that list because their effects are asserted live, and **`ctrl+t` left it on 2026-09-09** for the same reason, once both arms of `reserved_quickswitch` were covered — the running one in that file, the editor one in `input_editor_keys_spec.lua`. `ctrl+r` left it on 2026-11-14, when it replaced `ctrl+alt+r`: `input_run_anew_spec.lua` restarts a live program with `ctrl+r`, verifies that `ctrl+r` does nothing in the console or the editor with no live program (or under the editor's key card), and checks that `ctrl+alt+r` does nothing anywhere; `program_canvas_spec.lua` sees the program start again.
 
 ---
 
@@ -180,15 +180,16 @@ after every key that may write it:
   through formatting (`cursor-format`).
 - `fields.lua`: the editor's, the console's and a program's field take the same field keys and
   the same word deletions (what Ctrl+Left moves over), a
-  click places the cursor and a click on the document view browses nothing, Shift with the
-  arrows selects nothing, and chords nothing binds, Ctrl+Enter first, do nothing.
+  click places the cursor and a click on the document view browses nothing, Shift with movement
+  keys, a double click and Shift+click select text that typing replaces, and chords nothing binds,
+  Ctrl+Enter first, do nothing.
 - `editor_rulings.lua`: a run of empty lines lands as one in Lua and stays in text; a refused
   formatting says why.
 - `keycard_rows.lua`: each row among the keys now of the editor's card in each state and of the
   console's, with and without a program behind it, pressed and checked against what the row
   says; a row there with no check fails. The rows under "Other keys" are not pressed (each is a
   key now in another state), and Ctrl+Esc's is read but not pressed, since it would end the run.
-  Ctrl+Q while F1 is held acts in the console and is held back in the editor.
+  Ctrl+Q pressed while F1 is held is discarded in the console as in the editor; releasing F1 and pressing Ctrl+Q again stops a live program.
 - `colors.lua`: the highlights, the strips of a block both browsed and loaded, a syntax error's
   red and the band's, the notice's orange, a Markdown heading, the block cursor, and the status
   line's pixel rows with a field of one row and of eight, which it prints as `LAYOUT` lines.
