@@ -376,4 +376,44 @@ describe("editor defects #editor", function()
       assert.same("x = print= 1", K.draft())
     end)
   end)
+
+  describe("formatter preserves tokens on Enter", function()
+    it("keeps > and >= with operands in typed order", function()
+      K.browse_to_end()
+      K.type("if next_score() > best() then end")
+      K.keys("return")
+      assert.same("", K.draft())
+      assert.is_nil(K.message())
+      assert.same(
+        FILE .. "if next_score() > best() then\n  \nend\n",
+        K.file()
+      )
+
+      K.type("ok = x >= 3")
+      K.keys("return")
+      assert.same("", K.draft())
+      assert.is_nil(K.message())
+      assert.same(
+        FILE .. "if next_score() > best() then\n  \nend\nok = x >= 3\n",
+        K.file()
+      )
+    end)
+
+    it("leaves LuaJIT string escapes unchanged when formatting would alter them",
+        function()
+      for _, line in ipairs({
+        [[s = "\u{48}"]],
+        [[s = "\0\z  1"]],
+      }) do
+        K.reset({ ["main.lua"] = FILE })
+        K.open()
+        K.browse_to_end()
+        K.type(line)
+        K.keys("return")
+        assert.same("", K.draft())
+        assert.is_nil(K.message())
+        assert.same(FILE .. line .. "\n", K.file())
+      end
+    end)
+  end)
 end)

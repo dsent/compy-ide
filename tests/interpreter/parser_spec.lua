@@ -222,7 +222,7 @@ describe('a first line starting with # #parser', function()
       local n = code[1] == '' and 2 or 1
       local ok, ast = parser.parse(code)
       assert.is_true(not ok or ast[1].lineinfo.first.line == n)
-      assert.same(string.match(code[n], '#.*'), gated(code)[n])
+      assert.same(code[n], gated(code)[n])
     end
   end)
 
