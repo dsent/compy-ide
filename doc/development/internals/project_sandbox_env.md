@@ -16,8 +16,17 @@ is load-bearing for any feature touching project lifecycle, global state, or tea
 
 - `ConsoleController.new` captures the file env: `local env = getfenv()` (`consoleController.lua:40`),
   and clones it: `pre_env = table.clone(env)` (`:41`).
-- The project env descends from that clone (`get_pre_env_c` → `prepare_project_env`, `:514–520`); the
-  project's files are loaded via `project_dofile` which does `setfenv(chunk, env)` (`:297`).
+- The project env descends from that clone (`get_pre_env_c` →
+  `prepare_project_env`); the project's files are loaded via `project_dofile`
+  and `ProjectService:run` / `Project:get_loader` with `setfenv` into
+  `project_env`.
+- `loadstring`, `load`, `eval`, and `print_eval` are wrapped in
+  `prepare_project_env` so chunks compiled from strings also get the current
+  `project_env` by default (leaving `_G.loadstring`, `_G.load`, `codeload`, and
+  `util.eval` untouched for the IDE). Calling `setfenv` on a returned chunk, or
+  passing a table as the fourth argument of either loader, still overrides it. `eval` and
+  `print_eval` raise errors in the string through the IDE's usual error path
+  instead of swallowing them.
 - `table.clone` (`util/table.lua:48`) is **recursive** (deep) and copies metatables, with a `seen` set
   for cycles.
 

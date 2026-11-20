@@ -865,6 +865,46 @@ local function project_dofile(cc, filename, env)
   end
 end
 
+local loadstring = _G.loadstring
+local load = _G.load
+
+--- Evaluate a Lua expression string in `env`; a syntax or
+--- runtime error reaches the caller, leaving util.eval.eval
+--- unchanged for the IDE's own callers.
+--- @param s string
+--- @param env LuaEnv
+--- @param level integer
+--- @return any ...
+local function project_eval(s, env, level)
+  if type(s) ~= 'string' then
+    error('eval expects a string, got ' .. type(s), level)
+  end
+  --- a chunk name of its own: the default one is the string
+  --- itself, and an error's line marker is read out of it
+  local expr, err = loadstring('return ' .. s, '=eval')
+  if not expr then
+    error(err, 0)
+  end
+  setfenv(expr, env)
+  --- the first value only, as eval always gave
+  local r = expr()
+  return r
+end
+
+--- A chunk compiled from a string or a reader, in the program's
+--- environment unless the caller gave a table as LuaJIT's
+--- fourth argument.
+--- @param cc ConsoleController
+--- @param loader function
+--- @return function?, string?
+local function project_load(cc, loader, src, name, mode, env)
+  local own = type(env) == 'table'
+  local f, err = loader(src, name, mode, own and env or nil)
+  if not f then return nil, err end
+  if not own then setfenv(f, cc:get_project_env()) end
+  return f
+end
+
 
 -- Set up audio table
 local compy_audio = require("util.audio")
@@ -2218,8 +2258,25 @@ local terminal              = cc.model.output.terminal
     project_env[name] = nil
   end
 
-  project_env.eval           = LANG.eval
-  project_env.print_eval     = LANG.print_eval
+  --- Code compiled from a string runs in the program's environment
+  --- (and the console's, which shares it), leaving the IDE's own
+  --- _G.loadstring / _G.load and util.eval untouched.
+  project_env.loadstring     = function(...)
+    return project_load(cc, loadstring, ...)
+  end
+  project_env.load           = function(...)
+    return project_load(cc, load, ...)
+  end
+  project_env.eval           = function(s)
+    return project_eval(s, cc:get_project_env(), 2)
+  end
+  project_env.print_eval     = function(s)
+    local r = project_eval(s, cc:get_project_env(), 3)
+    if r then
+      cc:get_project_env().print(r)
+    end
+    return r
+  end
 
   project_env.appver         = function()
     local ver = FS.read('ver.txt', true)

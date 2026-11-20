@@ -26,7 +26,7 @@ function setupTixy()
 end
 ```
 
-`body` is a single line of Lua (e.g. `r = math.sin(t + x)`). `loadstring` compiles it wrapped in a function, `setfenv` gives it access to the global environment, and the returned closure becomes `tixy`. This is called whenever the user submits new code.
+`body` is a single line of Lua (e.g. `r = math.sin(t + x)`). `loadstring` compiles it wrapped in a function in the program's environment, `setfenv(f, _G)` keeps working redundantly on the same environment, and the returned closure becomes `tixy`. This is called whenever the user submits new code.
 
 ## Input pattern
 

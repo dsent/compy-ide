@@ -172,7 +172,8 @@ after every key that may write it:
 - `clipboard.lua`: Ctrl+V, Ctrl+C and Ctrl+X change neither the field nor the system clipboard,
   in the editor and the console.
 - `console.lua`: lines run by Enter, broken by Shift+Enter and Alt+Enter, Shift+Ins doing
-  nothing, and the history.
+  nothing, `eval`/`print_eval`/`loadstring` in the console environment (with errors reported),
+  and the history.
 - `editor_open.lua`: a file that is not UTF-8 refused, a file without a final line end, Ctrl+J
   to a file that cannot be opened, an empty file, a block taller than the view scrolled a row at
   a time, and PgUp and PgDn paging by the view. `editor_states.lua` also keeps the cursor

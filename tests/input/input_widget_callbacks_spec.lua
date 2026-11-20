@@ -726,6 +726,30 @@ describe('input surface: widget callbacks #input', function()
         assert.same(2, sent)
       end)
 
+    -- a held Escape cancels once, as a held Enter submits
+    -- once: the field's table gives neither a repeat
+    it('a held Escape cancels once, before_cancel included',
+      function()
+        local input = F.activate_project()
+        local before, after = 0, 0
+        input.callbacks.before_cancel = function()
+          before = before + 1
+        end
+        input.callbacks.after_cancel = function()
+          after = after + 1
+        end
+        input.show({ text = 'a' })
+        F.session.press('escape')
+        F.session.repeat_press('escape')
+        F.session.repeat_press('escape')
+        F.session.release('escape')
+        assert.same(1, before)
+        assert.same(1, after)
+        F.session.press('escape')
+        F.session.release('escape')
+        assert.same(2, after)
+      end)
+
     -- the rule is the field's: a program that reads the key
     -- itself still gets every repeat
     it("a held Enter's repeats still reach the program's hook",

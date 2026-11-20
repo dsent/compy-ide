@@ -217,6 +217,26 @@ local function console()
     D.key(wait, 'escape')
     hm_done()
   end)
+
+  -- eval, print_eval and loadstring run in the console/program
+  -- environment, and eval reports an error in the string
+  scenario('eval-env', function(wait)
+    D.key(wait, 'escape')
+    D.key(wait, 'C-l')
+    D.enter(wait, 'x = 5')
+    D.enter(wait, 'print("ev=" .. eval("x"))')
+    D.enter(wait, 'print_eval("x + 1")')
+    D.enter(wait, 'loadstring("y = x * 2")()')
+    D.enter(wait, 'print("y=" .. y)')
+    D.enter(wait, 'eval("10 / ")')
+    local out = P.console_text()
+    assert(string.find(out, 'ev=5', 1, true), 'eval did not see x')
+    assert(string.find(out, '\n6\n', 1, true), 'print_eval did not print 6')
+    assert(string.find(out, 'y=10', 1, true), 'loadstring did not set y')
+    assert(string.find(out, 'unexpected symbol', 1, true),
+      'eval error was not reported')
+    hm_done()
+  end)
 end
 
 console()

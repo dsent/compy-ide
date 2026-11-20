@@ -739,11 +739,8 @@ local ACT = {
   --- IS3.15: Shift+Enter and Alt+Enter each break the line
   line_feed = function(_, input) input:line_feed() end,
   --- the widget's own submit and cancel (D-EDIT-LIFECYCLE),
-  --- out through callbacks. A held Enter submits once: its
-  --- repeats reach no callback (API2.2).
-  submit = function(self, _, _, isr)
-    if not isr then self:submit_flow() end
-  end,
+  --- out through callbacks
+  submit = function(self) self:submit_flow() end,
   cancel = function(self) self:cancel_flow() end,
   --- the draft's own undo and redo (D-UNDO-KEYS)
   undo = function(_, input) input:undo_edit() end,
@@ -768,7 +765,7 @@ local UNLOCKS = {
 --- LÖVE's own argument list, like every other consumer on the
 --- chain (doc/development/decisions/input.md, D-LOVE-ARGS).
 --- The scancode is unread; a repeat edits as its press does,
---- and submits nothing (API2.2).
+--- and submits and cancels nothing (API2.2).
 --- @param k string
 --- @param sc string?    scancode
 --- @param isr boolean?  key repeat
@@ -806,9 +803,12 @@ function UserInputController:keypressed(k, sc, isr)
     return
   end
 
+  --- a held key acts again only if its entry repeats: a held
+  --- Enter submits once and a held Escape cancels once, so
+  --- their repeats reach no callback (API2.2)
   local entry = self:names(chord)
-  if entry then
-    ACT[entry.act](self, input, k, isr)
+  if entry and (entry.repeats or not isr) then
+    ACT[entry.act](self, input, k)
   end
   self:update_view()
 end
