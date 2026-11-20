@@ -144,9 +144,12 @@ describe("IS3.4 letters outside ASCII #editor #spec", function()
   spec_it("IS3.4 Locate a syntax failure: a byte that is not "
       .. "UTF-8, arriving as text, raises nothing", function()
     open_file()
-    F.session.type("\255 = 1")
+    -- the bytes are no text and reach no field (the text
+    -- entry, controller.lua); what is typed after them does
+    F.session.type("\255")
+    F.session.type(" = 1")
     K.frame()
-    assert.is_true(valid(K.draft()))
+    assert.same(" = 1", K.draft())
     local ok, err = pcall(K.keys, "return")
     assert.is_true(ok, err)
     assert.same(FILE, K.file())

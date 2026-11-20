@@ -1612,6 +1612,10 @@ Controller = {
 
     handlers.textinput = function(t)
       enter()
+      --- bytes that are no UTF-8 are no text. For an Alt chord
+      --- that has no character a Compy sends c0 80, an overlong
+      --- NUL, and a program that drew it would stop on it.
+      if string.scrub(t) ~= t then return end
       Blink.restart()
       if not love.textinput then return end
       if CC:card_shows() then return end
