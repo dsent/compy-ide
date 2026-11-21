@@ -146,6 +146,34 @@ describe('parse failure boundary #parser', function()
         assert.is_true(lua.submission({ code }, 64, 14).ok, code)
       end
     end)
+
+  it('refuses a method name with no arguments', function()
+    local msg = 'A name after a colon needs () right after it.'
+      .. ' For a value like player.x, use a dot.'
+    for _, case in ipairs({
+      { { 't:m.x = 1' }, 1, 4, false },
+      { { 't:x = 1' }, 1, 5, false },
+      { { 't:m+{1}' }, 1, 4, false },
+      { { 'player:jump', 'x = 1' }, 2, 1, false },
+      { { 't:m' }, 1, 4, true },
+    }) do
+      local ok, err = parser.parse(case[1])
+      assert.is_false(ok)
+      assert.same(msg, err.msg)
+      assert.same({ l = case[2], c = case[3], eof = case[4] },
+        err.token)
+      local f = lua.failure(case[1], err)
+      assert.same({ case[2], case[3], case[4], msg },
+        { f.l, f.c, f.at_end or false, f.msg })
+    end
+    for _, code in ipairs({
+      { 't:m()' }, { 't:m"s"' }, { 't:m{1}' }, { 't:m(1, 2)' },
+      { 't:m "s"', 'y = 1' }, { 's = ("a"):upper()' },
+    }) do
+      assert.is_true((parser.parse(code)), code[1])
+      assert.is_true(lua.submission(code, 64, 14).ok, code[1])
+    end
+  end)
 end)
 
 --- The editor's rules around the language layer's verdict

@@ -254,4 +254,12 @@ return {
   invalid({ '(x) = 1' }, Cursor.inline(1)),
   invalid({ '1 = 2' }, Cursor.inline(1)),
   invalid({ 'a, f() = 1, 2' }, Cursor.inline(4)),
+  valid({ 't:m()' }),
+  valid({ 't:m"s"' }),
+  valid({ 't:m{1}' }),
+  valid({ 't:m(1, 2)' }),
+  invalid({ 't:m.x = 1' }, Cursor.inline(2)),
+  invalid({ 'player:jump', 'x = 1' }, Cursor.inline(7)),
+  invalid({ 't:x = 1' }, Cursor.inline(2)),
+  invalid({ 't:m+{1}' }, Cursor.inline(2)),
 }
