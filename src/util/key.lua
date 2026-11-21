@@ -198,9 +198,8 @@ end
 --- bring their own layouts. Linux reports it as `ralt` alone;
 --- Windows as left Ctrl plus right Alt. With the left Alt or
 --- the right Ctrl down as well, the keys are a chord of their
---- own. On Android, which a Compy runs, no key is AltGr: a
---- right Alt key is an Alt like the left one. A Compy's own
---- keyboard has no right Alt, only an attached one may.
+--- own. On Android, which a Compy runs, no key is AltGr, and
+--- every Alt is an Alt.
 --- @return boolean
 local function altgr()
   local name = os_name()
