@@ -260,81 +260,85 @@ lexer.patterns = {
    word = "^([%a_][%w_]*)()",
 }
 
--- unescape a whole string, applying [unesc_digits] and
--- [unesc_letter] as many times as required.
+local simple_escapes = {
+   a = "\a", b = "\b", f = "\f", n = "\n", r = "\r",
+   t = "\t", v = "\v", ["\\"] = "\\", ["'"] = "'", ['"'] = '"',
+}
+
+local function encode_utf8(cp)
+   if cp < 0x80 then
+      return string.char(cp)
+   elseif cp < 0x800 then
+      return string.char(0xC0 + math.floor(cp / 0x40), 0x80 + (cp % 0x40))
+   elseif cp < 0x10000 then
+      return string.char(
+         0xE0 + math.floor(cp / 0x1000),
+         0x80 + (math.floor(cp / 0x40) % 0x40),
+         0x80 + (cp % 0x40)
+      )
+   else
+      return string.char(
+         0xF0 + math.floor(cp / 0x40000),
+         0x80 + (math.floor(cp / 0x1000) % 0x40),
+         0x80 + (math.floor(cp / 0x40) % 0x40),
+         0x80 + (cp % 0x40)
+      )
+   end
+end
+
+-- Unescape a short string in a single left-to-right scan.
 local function unescape_string(s)
-   -- Turn the digits of an escape sequence into the corresponding
-   -- character, e.g. [unesc_digits("123") == string.char(123)].
-   local function unesc_digits(backslashes, digits)
-      if #backslashes % 2 == 0 then
-         -- Even number of backslashes, they escape each other, not the digits.
-         -- Return them so that unesc_letter() can treat them
-         return backslashes .. digits
+   if not s:find("\\", 1, true) then
+      return s
+   end
+   local out, i, n = {}, 1, #s
+   while i <= n do
+      local b = s:find("\\", i, true)
+      if not b then
+         out[#out + 1] = s:sub(i)
+         break
+      end
+      if b > i then
+         out[#out + 1] = s:sub(i, b - 1)
+      end
+      local c = s:sub(b + 1, b + 1)
+      if simple_escapes[c] then
+         out[#out + 1] = simple_escapes[c]
+         i = b + 2
+      elseif c == "\n" or c == "\r" then
+         local d = s:sub(b + 2, b + 2)
+         out[#out + 1] = "\n"
+         i = b + ((d == "\n" or d == "\r") and d ~= c and 3 or 2)
+      elseif c == "z" then
+         i = s:match("^%s*()", b + 2)
+      elseif c == "x" then
+         local hex = s:match("^(%x%x)", b + 2)
+         if not hex then
+            error("Illegal escape sequence '\\x' in string")
+         end
+         out[#out + 1] = string.char(tonumber(hex, 16))
+         i = b + 4
+      elseif c == "u" then
+         local hex, next_i = s:match("^{(%x+)}()", b + 2)
+         local cp = hex and tonumber(hex, 16)
+         if not cp or cp > 0x10FFFF or (cp >= 0xD800 and cp <= 0xDFFF) then
+            error("Illegal escape sequence '\\u' in string")
+         end
+         out[#out + 1] = encode_utf8(cp)
+         i = next_i
+      elseif c:match("^%d") then
+         local digits, next_i = s:match("^(%d%d?%d?)()", b + 1)
+         local code = tonumber(digits)
+         if code > 255 then
+            error("Illegal escape sequence '\\" .. digits .. "' in string: ASCII codes must be in [0..255]")
+         end
+         out[#out + 1] = string.char(code)
+         i = next_i
       else
-         -- Remove the odd backslash, which escapes the number sequence.
-         -- The rest will be returned and parsed by unesc_letter()
-         backslashes = backslashes:sub(1, -2)
-      end
-      local k, j, i = digits:reverse():byte(1, 3)
-      local z = string.byte("0")
-      local code = (k or z) + 10 * (j or z) + 100 * (i or z) - 111 * z
-      if code > 255 then
-         error("Illegal escape sequence '\\" .. digits .. "' in string: ASCII codes must be in [0..255]")
-      end
-      local c = string.char(code)
-      if c == "\\" then
-         c = "\\\\"
-      end -- parsed by unesc_letter (test: "\092b" --> "\\b")
-      return backslashes .. c
-   end
-
-   -- Turn hex digits of escape sequence into char.
-   local function unesc_hex(backslashes, digits)
-      if #backslashes % 2 == 0 then
-         return backslashes .. "x" .. digits
-      else
-         backslashes = backslashes:sub(1, -2)
-      end
-      local c = string.char(tonumber(digits, 16))
-      if c == "\\" then
-         c = "\\\\"
-      end -- parsed by unesc_letter (test: "\x5cb" --> "\\b")
-      return backslashes .. c
-   end
-
-   -- Handle Lua 5.2 \z sequences
-   local function unesc_z(backslashes, more)
-      if #backslashes % 2 == 0 then
-         return backslashes .. more
-      else
-         return backslashes:sub(1, -2)
+         error("Illegal escape sequence '\\" .. c .. "' in string")
       end
    end
-
-   -- Take a letter [x], and returns the character represented by the
-   -- sequence ['\\'..x], e.g. [unesc_letter "n" == "\n"].
-   local function unesc_letter(x)
-      local t = {
-         a = "\a",
-         b = "\b",
-         f = "\f",
-         n = "\n",
-         r = "\r",
-         t = "\t",
-         v = "\v",
-         ["\\"] = "\\",
-         ["'"] = "'",
-         ['"'] = '"',
-         ["\n"] = "\n",
-      }
-      return t[x] or x
-   end
-
-   s = s:gsub("(\\+)(z%s*)", unesc_z)                      -- Lua 5.2
-   s = s:gsub("(\\+)([0-9][0-9]?[0-9]?)", unesc_digits)
-   s = s:gsub("(\\+)x([0-9a-fA-F][0-9a-fA-F])", unesc_hex) -- Lua 5.2
-   s = s:gsub("\\(%D)", unesc_letter)
-   return s
+   return table.concat(out)
 end
 
 lexer.extractors = {
@@ -444,6 +448,9 @@ function lexer:extract_short_string()
       if x == "\\" then
          if y == "z" then                                        -- Lua 5.2 \z
             j = self.src:match("^%s*()", j + 1)
+         elseif y == "\r" or y == "\n" then
+            local nxt = self.src:sub(j + 1, j + 1)
+            j = j + ((nxt == "\r" or nxt == "\n") and nxt ~= y and 2 or 1)
          else
             j = j + 1 -- escaped char
          end

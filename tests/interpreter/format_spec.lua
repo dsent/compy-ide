@@ -312,6 +312,47 @@ describe('lua format #format', function()
     assert.same(text, out)
   end)
 
+  it('decodes \\u{...} escapes and rejects unknown escapes', function()
+    for _, lit in ipairs({ '"\\u{48}"', '"\\u{10FFFF}"' }) do
+      local src = 'return ' .. lit
+      local out, ok = format.format({ src }, W)
+      assert.is_true(ok, lit)
+      assert.equal(
+        assert(loadstring(src))(),
+        assert(loadstring(table.concat(out, '\n')))(),
+        lit
+      )
+    end
+    for _, bad in ipairs({
+      's = "\\q"',
+      's = "\\u{D800}"',
+      's = "\\u{110000}"',
+      's = "\\x4"',
+    }) do
+      assert.is_false((parser.parse({ bad })), bad)
+    end
+  end)
+
+  it('scans string escapes left to right as LuaJIT does', function()
+    for _, lit in ipairs({
+      '"\\0\\z  1"',
+      '"\\z  \\65"',
+      '"\\\\z"',
+      '"\\092z  1"',
+      '"\\x5cn"',
+      '"\\0921"',
+    }) do
+      local src = 'return ' .. lit
+      local out, ok = format.format({ src }, W)
+      assert.is_true(ok, lit)
+      assert.equal(
+        assert(loadstring(src))(),
+        assert(loadstring(table.concat(out, '\n')))(),
+        lit
+      )
+    end
+  end)
+
   --- every byte, in a string long enough to be split into
   --- pieces: the printed literal holds the same bytes
   it('keeps the value of a string holding every byte', function()
