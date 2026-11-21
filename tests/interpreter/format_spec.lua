@@ -491,6 +491,60 @@ describe('lua format #format', function()
       assert.equal(run(text), run(out))
     end)
 
+  it('preserves LuaJIT bytecode across ast_inputs and bundled examples',
+    function()
+      local ast_inputs = require('tests.interpreter.ast_inputs')
+      local allowed_diff = {
+        ['wrap[3]'] = 'long string split into .. pieces',
+        ['wrap[13]'] = 'long string split into .. pieces',
+        ['operators[31]'] = '>= written as <= with sides swapped',
+        ['canon[1]'] = '> written as < with sides swapped',
+        ['full[2]'] = '> written as < with sides swapped',
+      }
+      local expected_refused = {}
+      local actual_diff, actual_refused = {}, {}
+
+      local function check(name, lines, expected)
+        local src = table.concat(lines, '\n')
+        local before = loadstring(src)
+        if not before then return end
+        local out, ok = format.format(lines, W)
+        if not ok then
+          assert.same(lines, out, name)
+          table.insert(actual_refused, name)
+          return
+        end
+        local after = assert(loadstring(table.concat(out, '\n')), name)
+        local exp_fn = expected and allowed_diff[name]
+            and assert(loadstring(table.concat(expected, '\n')), name)
+        local bc_before = string.dump(before, true)
+        local bc_after = string.dump(after, true)
+        local bc_exp = exp_fn and string.dump(exp_fn, true)
+        assert.is_function(before)
+        assert.is_function(after)
+        if exp_fn then assert.is_function(exp_fn) end
+        if bc_before ~= bc_after then
+          if allowed_diff[name] then
+            assert.equal(bc_exp, bc_after, name)
+          end
+          actual_diff[name] = allowed_diff[name] or 'unexpected diff'
+        end
+      end
+
+      for _, group in ipairs(ast_inputs) do
+        local tag, cases = group[1], group[2]
+        for i, tc in ipairs(cases) do
+          check(string.format('%s[%d]', tag, i), tc[1], tc[2])
+        end
+      end
+      for _, path in ipairs(bundled_examples()) do
+        check(path, read_lines(path))
+      end
+
+      assert.same(allowed_diff, actual_diff)
+      assert.same(expected_refused, actual_refused)
+    end)
+
   describe('on the bundled examples', function()
     for _, path in ipairs(bundled_examples()) do
       it('formats ' .. path .. ', and a second time changes nothing',
