@@ -1233,13 +1233,23 @@ function M:string_fits(str)
   return self._line_len + l <= self.wrap
 end
 
+--- A string literal that M:String will split into concatenated
+--- pieces
+--- @param str string
+--- @return boolean
+function M:string_splits(str)
+  local fl = string.len('"" ..' .. self.indent_step)
+  local wl = self.wrap - fl
+  return not self:string_fits(str)
+      and (string.ulen(str) or string.len(str)) > wl
+end
+
 function M:String(_, str)
   local fl        = string.len('"" ..' .. self.indent_step)
   local wl        = self.wrap - fl
   --- bytes that are not UTF-8 have no length in characters;
   --- a literal that fits its line is never cut
-  local multiline = not self:string_fits(str)
-      and (string.ulen(str) or string.len(str)) > wl
+  local multiline = self:string_splits(str)
   local rendered  = ''
   if multiline then
     --- a piece per line of the text, cut to the width
@@ -1351,6 +1361,10 @@ function M:Op(node, op, a, b)
     if a.tag == "Op"
         and op_prec[op] >= op_prec[a[1]]
         and not op_comm[a[1]]
+    then
+      left_paren = true
+    elseif op == "concat" and a.tag == "String"
+        and self:string_splits(a[1])
     then
       left_paren = true
     end

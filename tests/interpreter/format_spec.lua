@@ -389,6 +389,25 @@ describe('lua format #format', function()
       end
     end)
 
+  it('parenthesizes a split string on the left of ..', function()
+    local long = string.rep('a', 90)
+    local cases = {
+      { 'return function(a) return "' .. long .. '" .. a end' },
+      { 'return function(t, l) return t .. [[' .. long .. ']] .. l end' },
+      read_lines('tests/interpreter/markdown_inputs.lua'),
+    }
+    for _, text in ipairs(cases) do
+      local out, ok = format.format(text, W)
+      assert.is_true(ok, text[1])
+      assert.same(out, (format.format(out, W)))
+      if #text == 1 then
+        local before = assert(loadstring(text[1]))()
+        local after = assert(loadstring(table.concat(out, '\n')))()
+        assert.equal(before('X', 'Y'), after('X', 'Y'))
+      end
+    end
+  end)
+
   --- every byte, in a string long enough to be split into
   --- pieces: the printed literal holds the same bytes
   it('keeps the value of a string holding every byte', function()
