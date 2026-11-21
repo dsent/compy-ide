@@ -403,6 +403,7 @@ function EditorController:_generate_status()
   --- no block under the position: the end position
   cs.end_position = not buffer.content[buffer.loaded
     or buffer:get_selection()]
+  cs.broken = buffer.broken
   --- the state and the open project, always shown (FR4.6)
   cs.state = self:state_name()
   --- while replacing, an arrow after the state word toward the

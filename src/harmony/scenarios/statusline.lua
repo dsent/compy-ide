@@ -240,6 +240,12 @@ scenario('modes', function(wait)
   bar(wait, 'editor-replacing', 'editor',
     { 'replacing', 'L2/2', ':6' })
   D.leave(wait)
+  P.put(PROJECT, 'broken.lua', 'x = = 1\n')
+  D.enter(wait, 'edit("broken.lua")')
+  D.in_state('editor')
+  bar(wait, 'editor-broken', 'editor',
+    { 'broken.lua', '[broken]', 'browsing', 'L2/1' })
+  D.leave(wait)
   --- the arrow toward the edit's target while no row of it is in
   --- view (the maintainer's ruling of November 18, 2026)
   local long = { }

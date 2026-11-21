@@ -61,14 +61,16 @@ end
 --- @return Dequeue<Block> blocks
 --- @return boolean invalid --- the syntax could not split the
 --- text, or its blocks would not keep it
+--- @return boolean broken --- the file does not load as its syntax
 local function file_blocks(syntax, lines)
+  local broken = not syntax.loads(lines)
   local blocks = syntax.blocks(lines)
   if blocks then
     for _, b in ipairs(blocks) do
       local l = b:is_empty() and b.pos and lines[b.pos.start]
       if l and l ~= '' then b.text = l end
     end
-    if tiles(blocks, lines) then return blocks, false end
+    if tiles(blocks, lines) then return blocks, false, broken end
   end
   local out = Dequeue.typed('block')
   for ln, l in ipairs(lines) do
@@ -78,7 +80,7 @@ local function file_blocks(syntax, lines)
       out:push_back(Chunk(l, Range.singleton(ln)))
     end
   end
-  return out, true
+  return out, true, broken
 end
 
 --- Todo: convert to class, store revmap
@@ -107,7 +109,7 @@ local function new(name, content, save, syntax)
     lines = type(content) == 'table' and string.lines(content)
         or textfile.lines(content)
   end
-  local blocks, invalid = file_blocks(syntax, lines)
+  local blocks, invalid, broken = file_blocks(syntax, lines)
 
   local self = {
     name = name or 'untitled',
@@ -118,6 +120,7 @@ local function new(name, content, save, syntax)
     selection = 1,
     active_line = 1,
     invalid = invalid,
+    broken = broken,
     stored = stored,
     history = {},
     redo_history = {}
@@ -144,6 +147,8 @@ end
 --- @field syntax table --- the file's syntax (model.syntax)
 --- @field invalid boolean --- a file whose syntax cannot split
 --- it: its blocks are its lines, until the syntax can again
+--- @field broken boolean --- a file whose syntax reports it does
+--- not load
 --- @field semantic BufferSemanticInfo?
 --- @field revmap table?
 ---
@@ -249,7 +254,8 @@ function BufferModel:_splice(start, n_out, lines_in)
   local at = carry((self:_span_of(self.selection)))
   for _ = 1, n_out do table.remove(lines, start) end
   for i = n_in, 1, -1 do table.insert(lines, start, lines_in[i]) end
-  self.content, self.invalid = file_blocks(self.syntax, lines)
+  self.content, self.invalid, self.broken =
+      file_blocks(self.syntax, lines)
   self:set_selection(self:_position_of_line(at))
 end
 
@@ -267,7 +273,7 @@ end
 
 --- what a file read anew replaces (reload)
 local READ_FIELDS = {
-  'content', 'invalid', 'stored', 'revmap',
+  'content', 'invalid', 'broken', 'stored', 'revmap',
   'semantic',
 }
 
@@ -325,7 +331,8 @@ end
 
 function BufferModel:rechunk()
   local content = self:snapshot().lines
-  self.content, self.invalid = file_blocks(self.syntax, content)
+  self.content, self.invalid, self.broken =
+      file_blocks(self.syntax, content)
 end
 
 --- A file is written as its lines, each with an LF line

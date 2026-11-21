@@ -32,7 +32,9 @@ on red while it is paused, each after the file the program
 started from; and the editor's state (`browsing`, `inserting`,
 `replacing`) on blue, after the open file; while the block you
 replace is out of view, an arrow after `replacing` points to
-it. Without an SD card, `[no sd]` stands in front, in orange.
+it. When the open Lua file does not load, `[broken]` appears
+in orange right after its name. Without an SD card, `[no sd]`
+stands in front, in orange.
 At its right end, the console shows where the cursor is in what
 you type, in yellow, as `line:column` (numbers past 9999 in
 thousands, as `10K`), and while the output is scrolled back,

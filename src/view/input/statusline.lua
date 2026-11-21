@@ -116,6 +116,12 @@ end
 --- and of November 18: "shorten [no sd card] to [no sd]").
 local NO_CARD = '[no sd]'
 
+--- After the open file's name on the editor's line while the
+--- file does not load, in the theme's `mark` tone; never cut
+--- (rulings.md, "A file that does not load is marked on the
+--- status line").
+local BROKEN = '[broken]'
+
 --- The screen's mode as the line prints it, with the key that
 --- shows the next (the maintainer's rulings of November 19,
 --- 2026: `text>F12`, `comb>F12`, and on F12 into the full
@@ -330,16 +336,19 @@ function Statusline:draw(status, start_y, last_row)
     local right_x = endTextX - width * fw
 
     --- The left side: the no-card mark, never cut; the input's
-    --- label (a program's prompt), the project, the file and the
-    --- state word, in the state's yellow. Short of room the
-    --- label is cut first, then the state word, then the
-    --- project, the file the last (the maintainer's ruling of
-    --- November 18, 2026: "the project name gets cut next, and
-    --- the file name only if nothing more can"); see fit_left.
+    --- label (a program's prompt), the project, the file with
+    --- `[broken]` after it (one space between, never cut) when
+    --- the file does not load, and the state word, in the state's
+    --- yellow. Short of room the label is cut first, then the
+    --- state word, then the project, the file the last (the
+    --- maintainer's ruling of November 18, 2026: "the project name
+    --- gets cut next, and the file name only if nothing more
+    --- can"); see fit_left.
     local project = shown(custom and custom.project or status.project)
     local name = shown(custom and custom.name or status.name)
     local word = custom and custom.state or status.state
     local mark = word and removable == false and NO_CARD or nil
+    local broken = custom and custom.broken and BROKEN or nil
     local p_label = { t = label }
     --- the arrow toward the edit's target, after the word, in
     --- its tone, and never cut: a cut word's ellipsis comes
@@ -350,6 +359,7 @@ function Statusline:draw(status, start_y, last_row)
     local p_name = { t = name }
     local room = math.floor((right_x - left_x) / fw)
         - (mark and len(mark) + GAP or 0)
+        - (broken and len(broken) + 1 or 0)
     fit_left(room, { p_label, p_state, p_project, p_name })
 
     --- drawn inside a clip that ends a gap before the right
@@ -368,16 +378,24 @@ function Statusline:draw(status, start_y, last_row)
       end
     end
     local x = left_x
-    local function put(t, color)
+    local function put(t, color, after, after_color)
       if not t then return end
       gfx.setColor(color)
       gfx.print(t, x, y)
-      x = x + (len(t) + GAP) * fw
+      x = x + len(t) * fw
+      if after then
+        x = x + fw
+        gfx.setColor(after_color)
+        gfx.print(after, x, y)
+        x = x + len(after) * fw
+      end
+      x = x + GAP * fw
     end
-    put(mark, colors.mark or colors.warning)
+    local mark_color = colors.mark or colors.warning
+    put(mark, mark_color)
     put(p_label.t, label_color)
     put(p_project.t, colors.fg)
-    put(p_name.t, colors.fg)
+    put(p_name.t, colors.fg, broken, mark_color)
     put(p_state.t and p_state.t .. (p_state.tail or ''),
       colors.state or colors.fg2 or colors.fg)
     gfx.pop()
