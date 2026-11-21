@@ -1115,4 +1115,451 @@ describe("the screen modes' keys #canvas", function()
       assert.same(HINT, notice())
     end)
   end)
+
+  describe("compy.screen.showNotice", function()
+    local function fh()
+      return F.cfg.view.fh
+    end
+
+    local function notice_colors()
+      return F.cfg.view.colors.input.notice
+    end
+
+    local function same_rgb(a, b)
+      return a and b and a[1] == b[1] and a[2] == b[2] and a[3] == b[3]
+    end
+
+    --- texts drawn in the notice warning colour
+    local function drawn_notice(s)
+      local warn = notice_colors().warning
+      local out = { }
+      for _, t in ipairs(s.texts) do
+        if same_rgb(t.colour, warn) then
+          out[#out + 1] = t
+        end
+      end
+      return out
+    end
+
+    it("starts empty, shows a notice of kind 'notice', and returns"
+      .. " no values", function()
+        K.reset()
+        assert.is_false(K.cc.input:has_error())
+        assert.is_nil(K.cc.input:message_kind())
+        run('compy.screen.showNotice("Press Space to jump")')
+        assert.same("Press Space to jump", notice())
+        assert.same("notice", K.cc.input:message_kind())
+        local rows = drawn_notice(K.screen())
+        assert.equal(1, #rows)
+        assert.same("Press Space to jump", rows[1].text)
+        assert.equal(0,
+          select("#", env().compy.screen.showNotice("again")))
+        assert.equal(0,
+          select("#", env().compy.screen.showNotice("")))
+      end)
+
+    it("replaces the previous message and clears with empty string",
+      function()
+        K.reset()
+        env().compy.screen.showNotice("First notice")
+        assert.same("First notice", notice())
+        env().compy.screen.showNotice("Try the arrow keys")
+        assert.same("Try the arrow keys", notice())
+        assert.same("notice", K.cc.input:message_kind())
+        env().compy.screen.showNotice("")
+        assert.is_false(K.cc.input:has_error())
+        assert.is_nil(K.cc.input:message_kind())
+        assert.is_nil(K.cc.view.input:notice_rows())
+      end)
+
+    it("wraps between words and cuts longer text to three rows",
+      function()
+        K.reset()
+        local words = string.rep("seven77 ", 12) .. "end."
+        env().compy.screen.showNotice(words)
+        local rows = K.cc.view.input:notice_rows()
+        assert.equal(2, #rows)
+        assert.same(words, rows[1] .. " " .. rows[2])
+        for _, r in ipairs(rows) do
+          assert.is_true(#r <= 64, r)
+        end
+
+        env().compy.screen.showNotice(string.rep("seven77 ", 40))
+        local cut = K.cc.view.input:notice_rows()
+        assert.equal(3, #cut)
+        assert.same("…", cut[3]:sub(-#"…"))
+        local drawn = drawn_notice(K.screen())
+        assert.equal(3, #drawn)
+        assert.same(cut[3], drawn[3].text)
+      end)
+
+    it("is dismissed by the next key at the console while the key"
+      .. " still acts", function()
+        K.reset()
+        run('compy.screen.showNotice("Watch this")')
+        assert.same("Watch this", notice())
+        K.screen()
+        K.type("x")
+        assert.is_false(K.cc.input:has_error())
+        assert.same("x", K.console_draft())
+      end)
+
+    it("is dismissed by the next key during a run while the key"
+      .. " still reaches love.keypressed", function()
+        K.reset({ ["main.lua"] = recorder()
+          .. 'compy.screen.showNotice("Press Space to jump")\n' })
+        K.start()
+        assert.same("Press Space to jump", notice())
+        K.screen()
+        K.keys("space")
+        assert.is_false(K.cc.input:has_error())
+        assert.truthy(seen():find("press space", 1, true), seen())
+      end)
+
+    it("keeps a newer notice set by love.keypressed on that key",
+      function()
+        K.reset({ ["main.lua"] = [[
+compy.screen.showNotice("First")
+function love.update() end
+function love.keypressed()
+  compy.screen.showNotice("Second")
+end
+]] })
+        K.start()
+        assert.same("First", notice())
+        K.screen()
+        K.keys("space")
+        assert.same("Second", notice())
+      end)
+
+    it("keeps a notice set by love.textinput when text arrives"
+      .. " before keypressed, then dismisses after a draw", function()
+        K.reset({ ["main.lua"] = [[
+function love.update() end
+function love.keypressed() end
+function love.textinput(t)
+  if t == 'x' then
+    compy.screen.showNotice("Use 8 letters or fewer")
+  end
+end
+]] })
+        K.start()
+        -- Compy order: text arrives before its key press
+        K.type_text_first("x")
+        assert.same("Use 8 letters or fewer", notice())
+        K.screen()
+        K.keys("space")
+        assert.is_false(K.cc.input:has_error())
+        K.keys("lctrl", "q")
+      end)
+
+    it("stays visible on a lone modifier or lock key, idle and"
+      .. " running", function()
+        K.reset()
+        run('compy.screen.showNotice("Stay idle")')
+        K.screen()
+        for _, k in ipairs({ "lshift", "rshift", "lctrl", "lalt",
+          "capslock" }) do
+          K.keys(k)
+          assert.same("Stay idle", notice(), k)
+        end
+        K.keys("capslock")
+
+        K.reset({ ["main.lua"] = recorder()
+          .. 'compy.screen.showNotice("Stay running")\n' })
+        K.start()
+        K.screen()
+        for _, k in ipairs({ "lshift", "lctrl", "lalt",
+          "capslock" }) do
+          K.keys(k)
+          assert.same("Stay running", notice(), k)
+        end
+        K.keys("capslock")
+        -- key repeat does not dismiss either
+        K.hold("a")
+        assert.is_false(K.cc.input:has_error())
+        env().compy.screen.showNotice("During hold")
+        K.screen()
+        K.repeat_key("a")
+        assert.same("During hold", notice())
+        K.release("a")
+        K.keys("lctrl", "q")
+      end)
+
+    it("draws above the bare status line during a run in text and"
+      .. " combined, hides in picture, and shows on return", function()
+        K.reset({ ["main.lua"] = recorder()
+          .. 'compy.screen.showNotice("Run hint")\n' })
+        K.start()
+        assert.is_true(K.cc:fieldless())
+        local sy = K.cc.view.input:status_y(0)
+
+        -- text mode during a run (field hidden)
+        assert.same("text", mode())
+        local s = K.screen()
+        local rows = drawn_notice(s)
+        assert.equal(1, #rows)
+        assert.same("Run hint", rows[1].text)
+        assert.equal(sy - fh(), rows[1].y)
+        -- black band fill sits directly above the bare status line
+        local bg = notice_colors().bg
+        local found_bg = false
+        for _, f in ipairs(s.fills) do
+          if same_rgb(f.colour, bg) and f.y + f.h == sy then
+            found_bg = true
+          end
+        end
+        assert.is_true(found_bg)
+
+        -- combined mode during a run (program switches mode)
+        env().compy.screen.show("combined")
+        assert.same("combined", mode())
+        rows = drawn_notice(K.screen())
+        assert.equal(1, #rows)
+        assert.same("Run hint", rows[1].text)
+
+        -- full picture draws no band
+        env().compy.screen.show("picture")
+        assert.same("picture", mode())
+        rows = drawn_notice(K.screen())
+        assert.equal(0, #rows)
+
+        -- return to text from code shows the still-current notice
+        env().compy.screen.show("text")
+        assert.same("text", mode())
+        rows = drawn_notice(K.screen())
+        assert.equal(1, #rows)
+        assert.same("Run hint", rows[1].text)
+        K.keys("lctrl", "q")
+      end)
+
+    it("draws above a shown two-row program input field without"
+      .. " being covered by it", function()
+        K.reset({ ["main.lua"] = [[
+compy.input.show({ prompt = 'Answer?', text = { 'First', 'Second' } })
+compy.screen.showNotice('Read this first')
+]] })
+        K.start()
+        local ui = love.state.user_input
+        assert.is_not_nil(ui)
+        local expected_y = ui.V:status_y(2)
+        local s = K.screen(function()
+          ui.C:update_view()
+          ui.V:draw()
+        end)
+        assert.equal(expected_y, ui.V.start_h)
+        local rows = drawn_notice(s)
+        assert.equal(1, #rows)
+        assert.same("Read this first", rows[1].text)
+        assert.equal(expected_y - fh(), rows[1].y)
+        assert.is_true(rows[1].y + fh() <= ui.V.start_h)
+        local bg = notice_colors().bg
+        local found_bg = false
+        for _, f in ipairs(s.fills) do
+          if same_rgb(f.colour, bg) and f.y + f.h == expected_y then
+            found_bg = true
+          end
+        end
+        assert.is_true(found_bg)
+        K.keys("lctrl", "q")
+      end)
+
+    it("is dismissed by F12 while F12 still cycles the mode",
+      function()
+        K.reset()
+        run('compy.screen.showNotice("Dismiss on F12")')
+        assert.same("Dismiss on F12", notice())
+        K.screen()
+        K.keys("f12")
+        assert.is_false(K.cc.input:has_error())
+        assert.same("combined", mode())
+
+        K.reset({ ["main.lua"] = recorder()
+          .. 'compy.screen.showNotice("Run F12")\n' })
+        K.start()
+        assert.same("Run F12", notice())
+        K.screen()
+        K.keys("f12")
+        assert.is_false(K.cc.input:has_error())
+        assert.same("combined", mode())
+        K.keys("lctrl", "q")
+      end)
+
+    it("is dismissed by F1 behind a running program while F1 still"
+      .. " reaches love.keypressed", function()
+        K.reset({ ["main.lua"] = recorder()
+          .. 'compy.screen.showNotice("Run F1")\n' })
+        K.start()
+        assert.same("Run F1", notice())
+        K.screen()
+        K.keys("f1")
+        assert.is_false(K.cc.input:has_error())
+        assert.truthy(seen():find("press f1", 1, true), seen())
+        K.keys("lctrl", "q")
+      end)
+
+    it("out of the full picture keeps an unseen notice and"
+      .. " dismisses one already drawn", function()
+        -- set while in picture mode (never drawn): survives return
+        K.reset()
+        env().compy.screen.show("picture")
+        env().compy.screen.showNotice("Set in picture")
+        K.screen()
+        assert.same("Set in picture", notice())
+        K.keys("f1")
+        assert.same("text", mode())
+        assert.same("Set in picture", notice())
+        local rows = drawn_notice(K.screen())
+        assert.equal(1, #rows)
+        assert.same("Set in picture", rows[1].text)
+
+        -- already drawn in text, then switched to picture:
+        -- returning with a key dismisses it
+        env().compy.screen.show("picture")
+        assert.same("picture", mode())
+        K.keys("a")
+        assert.same("text", mode())
+        assert.is_false(K.cc.input:has_error())
+      end)
+
+    it("stays when F1 is held for the key card and released",
+      function()
+        K.reset()
+        run('compy.screen.showNotice("Under card")')
+        assert.same("Under card", notice())
+        K.screen()
+        K.hold("f1")
+        assert.is_not_nil(K.key_card())
+        K.keys("a")
+        K.release("f1")
+        assert.is_nil(K.key_card())
+        assert.same("Under card", notice())
+        assert.same("notice", K.cc.input:message_kind())
+      end)
+
+    it("keeps the notice on pause() without a message, replaces on"
+      .. " pause('text'), and keeps across continue()", function()
+        K.reset({ ["main.lua"] = [[
+compy.screen.showNotice("Keep at pause")
+function love.update() end
+pause()
+]] })
+        K.start()
+        K.frame()
+        assert.same("inspect", K.app_state())
+        assert.same("Keep at pause", notice())
+        assert.same("notice", K.cc.input:message_kind())
+
+        run('compy.screen.showNotice("Carry on"); continue()')
+        assert.same("running", K.app_state())
+        assert.same("Carry on", notice())
+        K.keys("lctrl", "q")
+
+        K.reset({ ["main.lua"] = [[
+compy.screen.showNotice("Old notice")
+function love.update() end
+pause("Newer pause")
+]] })
+        K.start()
+        K.frame()
+        assert.same("inspect", K.app_state())
+        assert.same("Newer pause", notice())
+        K.keys("lctrl", "q")
+      end)
+
+    it("clears on stop (Ctrl+Q and stop()), natural end, reset(),"
+      .. " restart, and a new accepted run", function()
+        -- Ctrl+Q
+        K.reset({ ["main.lua"] = recorder()
+          .. 'compy.screen.showNotice("Gone on Q")\n' })
+        K.start()
+        assert.same("Gone on Q", notice())
+        K.keys("lctrl", "q")
+        assert.is_false(K.cc.input:has_error())
+
+        -- stop()
+        K.reset({ ["main.lua"] = recorder()
+          .. 'compy.screen.showNotice("Gone on stop")\n' })
+        K.start()
+        assert.same("Gone on stop", notice())
+        env().stop()
+        assert.is_false(K.cc.input:has_error())
+
+        -- natural end
+        K.reset({ ["main.lua"] =
+          'compy.screen.showNotice("Gone on end")\n' })
+        K.start()
+        assert.is_false(K.cc.run_live)
+        assert.is_false(K.cc.input:has_error())
+
+        -- reset()
+        K.reset()
+        env().compy.screen.showNotice("Gone on reset")
+        assert.same("Gone on reset", notice())
+        K.cc:reset()
+        assert.is_false(K.cc.input:has_error())
+
+        -- restart (called directly so only restart's own restore
+        -- can clear it)
+        K.reset({ ["main.lua"] = recorder() })
+        K.start()
+        env().compy.screen.showNotice("Gone on restart")
+        assert.same("Gone on restart", notice())
+        K.cc:restart()
+        assert.is_false(K.cc.input:has_error())
+        K.keys("lctrl", "q")
+
+        -- new accepted run from idle clears before main.lua runs;
+        -- a refused run keeps the notice
+        K.reset({ ["main.lua"] = "function love.update() end\n" })
+        env().compy.screen.showNotice("Idle notice")
+        K.cc:run_project("no_such_project")
+        assert.same("Idle notice", notice())
+        K.cc:run_project()
+        assert.is_false(K.cc.input:has_error())
+        K.keys("lctrl", "q")
+      end)
+
+    for _, args in ipairs({
+      "",
+      "'a', 'b'",
+      "'a', nil",
+      "nil",
+      "42",
+      "{ }",
+      "true",
+    }) do
+      it("refuses showNotice(" .. args .. ") on the calling line"
+        .. " and changes nothing", function()
+          K.reset({ ["main.lua"] = "local a = 1\nlocal b = 2\n"
+            .. "compy.screen.showNotice(" .. args .. ")\n" })
+          K.start()
+          assert.same("ready", K.app_state())
+          local text = K.console_text()
+          assert.truthy(text:find(
+            "L3:compy.screen.showNotice: expects one string", 1, true),
+            text)
+          -- empty band stays empty on a bad call
+          assert.is_false(K.cc.input:has_error())
+          local f = assert(loadstring(
+            "compy.screen.showNotice(" .. args .. ")"))
+          setfenv(f, env())
+          local ok, err = pcall(f)
+          assert.is_false(ok)
+          assert.truthy(err:find(
+            "compy.screen.showNotice: expects one string", 1, true),
+            err)
+          assert.is_false(K.cc.input:has_error())
+          -- existing notice stays intact on a bad call
+          env().compy.screen.showNotice("Intact")
+          ok, err = pcall(f)
+          assert.is_false(ok)
+          assert.truthy(err:find(
+            "compy.screen.showNotice: expects one string", 1, true),
+            err)
+          assert.same("Intact", notice())
+          assert.same("notice", K.cc.input:message_kind())
+        end)
+    end
+  end)
 end)

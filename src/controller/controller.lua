@@ -1504,7 +1504,7 @@ Controller = {
       end
     end
 
-    handlers.keypressed = function(k, sc, isr)
+    local function handle_keypressed(k, sc, isr)
       enter()
       --- a key press shows the text cursor (H-NFR4.4)
       Blink.restart()
@@ -1591,6 +1591,17 @@ Controller = {
       -- a refusal at the gate holds back this key press alone
       -- (EditorController:refuse_to_leave), never a later one
       if CC.editor then CC.editor:gate_key_done() end
+      return handled
+    end
+
+    handlers.keypressed = function(k, sc, isr)
+      local handled = handle_keypressed(k, sc, isr)
+      --- After a key press has acted, a notice the person has
+      --- seen goes unless a key card now shows.
+      if not isr and not Key.is_lone(k)
+          and not CC:card_shows() and CC.input then
+        CC.input:dismiss_seen()
+      end
       return handled
     end
 

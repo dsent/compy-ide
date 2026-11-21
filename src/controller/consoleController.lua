@@ -722,7 +722,7 @@ function ConsoleController:_run_project(name, stopped, entry)
         SerialPort:programEnded()
       end
     end
-    self:_restore_echo()
+    self:_restore_defaults()
     local runner_env = self:get_project_env()
     -- A run starts on a blank canvas, whatever the last one
     -- left there; a project that fails to load leaves the
@@ -939,6 +939,19 @@ local function screen_api(cc)
     --- @return ScreenMode
     getMode = function()
       return cc.model.screen:get()
+    end,
+    --- Show `text` in the notice band, or clear it with "".
+    --- Expects one string.
+    showNotice = function(...)
+      local text = ...
+      if select('#', ...) ~= 1 or type(text) ~= 'string' then
+        error('compy.screen.showNotice: expects one string', 2)
+      end
+      if text == '' then
+        cc.input:clear_error()
+      else
+        cc.input:notice(text)
+      end
     end,
   }
 end
@@ -2831,9 +2844,10 @@ local function end_looping()
   end
 end
 
---- Restore console line echo to its default (on).
-function ConsoleController:_restore_echo()
+--- Restore console defaults: line echo on, notice band clear.
+function ConsoleController:_restore_defaults()
   self.echo_input = true
+  if self.input then self.input:clear_error() end
 end
 
 --- The mouse as the console needs it (CONSOLE_MOUSE): the
@@ -2932,7 +2946,7 @@ function ConsoleController:flush_program_state(call_exit)
   local kb = love.keyboard
   if kb and kb.setKeyRepeat then kb.setKeyRepeat(true) end
   if kb and kb.setTextInput then kb.setTextInput(true) end
-  self:_restore_echo()
+  self:_restore_defaults()
   self.run_live = false
   love.state.paused_from = nil
   --- the entry point lives with the run (the maintainer's

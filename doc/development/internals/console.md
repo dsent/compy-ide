@@ -232,7 +232,32 @@ The custom loader is stored in `self.loaders[name]` so it can be removed on clos
 
 ### A program that can act owns all input
 
-The maintainer's ruling of November 17, 2026: "hide the console when any program runs/all input is the program's while it runs". While the program whose route holds the input can still act (`can_act` in `controller.lua`: an update or a draw, a hook or a non-empty shortcut table on any channel, its own shown field, or a serial handler), every key, text, pointer and touch event is the program's, and what its chain leaves goes nowhere, with one exception below. The console's field and cursor are hidden meanwhile (`Controller.program_owns_input`, which `ConsoleView:draw` asks each frame; `UserInputView.field_hidden` renders the status line alone, the field's rows background, and the notice band is not drawn). While the field is hidden and the program shows none of its own, the output takes the field's row and the status line goes to the screen's bottom, naming the project, the file it runs from and "running" in yellow (see "The Output and Its Kept Rows" and "The status line's colours and words" above). A program that wants typing shows its own field, drawn over the console's. A program that can do none of these has ended at its last line: the first event after that releases the route (`release_keyboard_route`) and goes to the console, whose field shows again; a finished program whose picture stays (`run_live`) counts as ended, so a draw-once lesson goes on typing. A pause gives the input and the field back to the console, and `continue()` gives them back to the program. The predicate is asked as each event comes, before the program's chain; the hook table is the one record of a program's own handlers (they are seeded there when the run begins). The reserved chords are the gate's, untouched. The console's key card comes up only while F1 reaches the console, so behind a program only while it is paused. A key pressed while the input went back to the console during that press (the program could no longer act) is the console's: its repeats and release go there.
+The maintainer's ruling of November 17, 2026: "hide the console when any program
+runs/all input is the program's while it runs". While the program whose route
+holds the input can still act (`can_act` in `controller.lua`: an update or a
+draw, a hook or a non-empty shortcut table on any channel, its own shown field,
+or a serial handler), every key, text, pointer and touch event is the program's,
+and what its chain leaves goes nowhere, with one exception below. The console's
+field and cursor are hidden meanwhile (`Controller.program_owns_input`, which
+`ConsoleView:draw` asks each frame; `UserInputView.field_hidden` renders the
+status line alone and the field's rows background, while the notice band still
+draws above the visible status line in `text` and `combined` modes). While the
+field is hidden and the program shows none of its own, the output takes the
+field's row and the status line goes to the screen's bottom, naming the project,
+the file it runs from and "running" in yellow (see "The Output and Its Kept
+Rows" and "The status line's colours and words" above). A program that wants
+typing shows its own field, drawn over the console's. A program that can do none
+of these has ended at its last line: the first event after that releases the
+route (`release_keyboard_route`) and goes to the console, whose field shows
+again; a finished program whose picture stays (`run_live`) counts as ended, so a
+draw-once lesson goes on typing. A pause gives the input and the field back to
+the console, and `continue()` gives them back to the program. The predicate is
+asked as each event comes, before the program's chain; the hook table is the one
+record of a program's own handlers (they are seeded there when the run begins).
+The reserved chords are the gate's, untouched. The console's key card comes up
+only while F1 reaches the console, so behind a program only while it is paused.
+A key pressed while the input went back to the console during that press (the
+program could no longer act) is the console's: its repeats and release go there.
 
 The one exception, ruling 1.1: "the scrollback area is *visible* so it takes keys and mouse events that normally belong to it, if the program doesn't take these keys and events". A key press the program's chain leaves that is one of the output's scrolling keys (Ctrl+Up and Ctrl+Down, PgUp and PgDn, Home and End, Ctrl+PgUp and Ctrl+PgDn, as `consoleKeys.lua` names them; Home and End go to the oldest row and back, the field being hidden, as Ctrl+PgUp and Ctrl+PgDn do) scrolls the output (`ConsoleController:output_key`), and a wheel event it leaves scrolls it three rows a notch (`output_wheel`, which the console's own wheel uses too). "Takes" is per event: a key press is taken when a shortcut or a hook for it returns truthy, or a shown field takes it, and a program's own `love.keypressed`, seeded as a hook, takes every key press, so behind it only the wheel scrolls; a wheel event is taken the same way by a wheel shortcut or hook, its own `love.wheelmoved` among them. No other key of the console's acts behind a program.
 
@@ -301,6 +326,7 @@ Projects receive a `compy` table with:
 |---|---|
 | `compy.audio` | Sound effects (`sfx.beep()`, `sfx.gameover()`, etc.) — `src/util/audio.lua` |
 | `compy.terminal` | VT-100 terminal control (`gotoxy`, `clear`, `setEcho`); a `gotoxy` position outside the screen is taken to the nearest edge |
+| `compy.screen` | Screen mode and notice band (`show(mode)`, `getMode()`, `showNotice(text)`) |
 | `compy.graphics` | Extended graphics (`shape2d`) — `src/util/graphics/shape2d.lua` |
 | `compy.fonts` | Font path constants (`mono`, `sans`, `serif`, etc.) — `src/util/namespace/fonts.lua` |
 | `compy.input` | Text input widget surface (`show`/`hide`/`configure`/`clear`/`set_text`) — see [`user_input.md`](user_input.md) |
@@ -316,12 +342,34 @@ on, and a change takes effect on the next accepted line: turning echo off still
 echoes the line that called it, and turning echo back on is silent. History,
 printed output, refusals, and errors are unchanged. Every accepted run, stop (a
 natural end included), `reset()`, and restart restores echo to on
-(`ConsoleController:_restore_echo`, called from `flush_program_state` and the
-run seam in `_run_project`); `pause()` and `continue()` keep the run's setting,
-and an idle console change holds until the next flush or run start. Passing
-anything other than one boolean raises
+(`ConsoleController:_restore_defaults`, called from `flush_program_state` and
+the run seam in `_run_project`); `pause()` and `continue()` keep the run's
+setting, and an idle console change holds until the next flush or run start.
+Passing anything other than one boolean raises
 `compy.terminal.setEcho: expects one boolean` at the calling line before
 changing anything.
+
+`compy.screen.showNotice(text)` takes one string `text`, returns no values, and
+displays `text` in the console's notice band (`UserInputController:notice`,
+orange on black, word-wrapped up to three rows with `…` on overflow), replacing
+any previous message; `""` clears the band. After a non-repeat key press other
+than a lone modifier or lock (`Key.is_lone`) acts in `handlers.keypressed`
+(`src/controller/controller.lua`), a notice that has been drawn goes unless a
+key card now shows (`UserInputController:dismiss_seen`); a notice created by the
+press itself, by its text, or while hidden in `picture` mode stays until drawn.
+A key or a character that reaches the console's own field still clears its
+message before it acts, drawn or not, as for the field's other messages
+(`ConsoleController:keypressed` and `:textinput`).
+During a run, `ConsoleView:draw` draws the band directly above whichever status
+line is visible — the program's own input field's status line when one is shown
+(`love.state.user_input` outside `inspect`), otherwise the console's (or bare)
+status line — in the `text` and `combined` modes; the `picture` mode draws no
+band, and a notice still current on return to `text` shows there. Every accepted
+run, stop (a natural end included), `reset()`, and restart clears the band
+through `ConsoleController:_restore_defaults`; `pause()` keeps it unless the
+pause brings a newer message, and `continue()` keeps it. Passing anything other
+than one string raises `compy.screen.showNotice: expects one string` at the
+calling line before changing anything.
 
 ---
 

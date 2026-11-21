@@ -275,6 +275,33 @@ local function console()
     D.key(wait, 'escape')
     hm_done()
   end)
+
+  -- compy.screen.showNotice(text) shows a notice in the band
+  -- above the status line; the next key dismisses it
+  scenario('show-notice', function(wait)
+    D.key(wait, 'escape')
+    D.key(wait, 'C-l')
+    D.enter(wait, 'compy.screen.showNotice("Press Space to jump")')
+    D.eq(P.console_message(), 'Press Space to jump',
+      'showNotice sets the console notice')
+    D.eq(P.console_message_kind(), 'notice',
+      'showNotice sets kind notice')
+    assert(P.shows(P.drawn(wait), 'Press Space to jump'),
+      'the band draws the notice')
+    D.key(wait, 'lshift')
+    D.eq(P.console_message(), 'Press Space to jump',
+      'a lone modifier keeps the notice')
+    --- x as a Compy sends it: its text, then its key press
+    D.type(wait, 'x')
+    D.key(wait, 'x')
+    D.eq(P.console_message(), nil,
+      'the next key dismisses the notice')
+    D.eq(P.console_draft(), 'x', 'and still acts')
+    assert(not P.shows(P.drawn(wait), 'Press Space to jump'),
+      'the band no longer draws the notice')
+    D.key(wait, 'escape')
+    hm_done()
+  end)
 end
 
 console()
