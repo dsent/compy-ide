@@ -487,6 +487,7 @@ end
 ---@return string?, number?
 function lexer:extract_number()
    local j = self.src:match(self.patterns.number_hex, self.i)
+   local is_hex = j ~= nil
    if j then
       j = self.src:match(self.patterns.number_mantissa_hex[1], j)
           or self.src:match(self.patterns.number_mantissa_hex[2], j)
@@ -503,8 +504,20 @@ function lexer:extract_number()
    if not j then
       return
    end
-   -- Number found, interpret with tonumber() and return it
    local str = self.src:sub(self.i, j - 1)
+   local suf_j = self.src:match("^[lL][lL][uU]()", j)
+       or self.src:match("^[uU]?[lL][lL]()", j)
+       or self.src:match("^[iI]()", j)
+   if suf_j and not self.src:match("^[%w_]", suf_j) then
+      local is_imag = suf_j == j + 1
+      local is_float = str:find(is_hex and "[%.pP]" or "[%.eE]") ~= nil
+      if is_imag or not is_float then
+         local lit = self.src:sub(self.i, suf_j - 1)
+         self.i = suf_j
+         return "Number", lit
+      end
+   end
+   -- Number found, interpret with tonumber() and return it
    -- :TODO: tonumber on Lua5.2 floating hex may or may not work on Lua5.1
    local n = tonumber(str)
    if not n then

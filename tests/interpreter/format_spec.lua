@@ -496,6 +496,37 @@ describe('lua format #format', function()
     assert.same({ 'x = 1e999' }, out)
   end)
 
+  it_luajit('keeps LuaJIT FFI number literals as typed', function()
+    for _, lit in ipairs({
+      '1LL', '1ll', '1ULL', '1ull', '1LLu',
+      '0x1e2LL', '0x1000000000000000ULL',
+      '12i', '12I', '1.5i', '1e2i', '0x1p2i',
+    }) do
+      local src = 'return ' .. lit
+      local out, ok = format.format({ src }, W)
+      assert.is_true(ok, lit)
+      assert.same({ src }, out, lit)
+      local fn_before = assert(loadstring(src))
+      local fn_after = assert(loadstring(table.concat(out, '\n')))
+      assert.equal(
+        string.dump(fn_before, true),
+        string.dump(fn_after, true),
+        lit
+      )
+      assert.equal(tostring(fn_before()), tostring(fn_after()), lit)
+    end
+    for _, bad in ipairs({ '1.5LL', '1e2LL', '0x1.5LL', '0x1p2LL' }) do
+      local text = { 'x = ' .. bad }
+      local out, ok = format.format(text, W)
+      assert.is_false(ok, bad)
+      assert.equal(text, out)
+    end
+    --- a suffixed literal is distinct from a plain number in the AST
+    local _, ast_ll = parser.parse({ 'x = 1LL' })
+    local _, ast_n = parser.parse({ 'x = 1' })
+    assert.are_not.equal(ast_ll[1][2][1][1], ast_n[1][2][1][1])
+  end)
+
   it('formats not eq and not "eq" without confusing them for ==',
     function()
       for _, text in ipairs({

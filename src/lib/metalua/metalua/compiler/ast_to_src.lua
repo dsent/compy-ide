@@ -1175,6 +1175,10 @@ M.True = "true"
 M.Dots = "..."
 
 function M:Number(_, n)
+  if type(n) == "string" then
+    self:acc(n)
+    return
+  end
   if n == math.huge then
     self:acc("1e999")
     return

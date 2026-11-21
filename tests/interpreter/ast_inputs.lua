@@ -286,6 +286,11 @@ local basics = {
   prep([[quoted = "say \"hi\" \\ back"]]),
   prep([[del = "\127"]]),
   prep([[decimal = "\116\101\120\116"]], { [[decimal = "text"]] }),
+  prep('x = 1LL'),
+  prep('x = 1ULL'),
+  prep('x = 12i'),
+  prep('x = 0x1000000000000000ULL'),
+  prep('x = 1.5i'),
 }
 
 local operators = {
