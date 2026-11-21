@@ -1516,10 +1516,11 @@ describe("the output's rows with no field under it #console",
       K.keys("lctrl", "pause")
       K.frame()
       K.cc:suspend()
-      K.frame()
+      K.frame(100)
       assert.same("inspect", K.app_state())
       assert.equal(16, rows())
-      assert.equal("last", screen()[16])
+      assert.equal("last", screen()[14])
+      assert.equal("BREAK into program", screen()[15])
       forget()
     end)
 

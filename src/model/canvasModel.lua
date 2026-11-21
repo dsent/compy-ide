@@ -167,8 +167,8 @@ function CanvasModel:write_error(msg, hint)
   say(self, msg, self.cfg.view.colors.terminal.error)
 end
 
---- A command's refusal, which is no error, in the output's
---- refusal color
+--- A command's refusal or a pause's message, neither an error,
+--- in the output's refusal color
 --- @param msg string
 function CanvasModel:write_refusal(msg)
   say(self, msg, self.cfg.view.colors.terminal.refusal)

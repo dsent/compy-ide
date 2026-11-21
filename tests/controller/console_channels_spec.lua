@@ -312,23 +312,80 @@ describe("the console's channels #console", function()
     end)
   end)
 
-  --- a pause is the debugger's: its text shows in the band as
-  --- an orange notice, and the program's screen is not touched
-  --- (the maintainer's ruling of November 16, 2026)
-  describe("a pause's text", function()
-    local function paused_by(how)
-      -- a run starts from a fresh environment: the flag is
-      -- the program's own
-      reset({ ["main.lua"] = "print('mine')\n"
-        .. "local PAUSE = " .. tostring(how == "pause") .. "\n"
-        .. "local n = 0\n"
-        .. "function love.update()\n"
-        .. "  n = n + 1\n"
-        .. "  if n == 1 and PAUSE then pause('Look here') end\n"
-        .. "end\n" })
+  --- a pause happened to the program, so its message prints on a
+  --- row of its own in the output, in the refusal color, and
+  --- leaves the band untouched (ruling of November 21, 2026)
+  describe("a pause's message", function()
+    local HINT = "F12 shows the picture"
+    local DRAW = "love.graphics.rectangle('fill', 0, 0, 9, 9)\n"
+
+    local function stub_rectangle()
+      local saved = rawget(love.graphics, "rectangle")
+      rawset(love.graphics, "rectangle", function() end)
+      finally(function()
+        rawset(love.graphics, "rectangle", saved)
+      end)
+    end
+
+    local function stub_io_write()
+      local base = K.cc:get_base_env()
+      local io_was = base.io
+      finally(function()
+        base.io = io_was
+        K.cc:get_project_env().io = io_was
+      end)
+      base.io = { write = function(s)
+        K.cc.model.output:write(s)
+      end }
+    end
+
+    local function start_and_pause(opts)
+      local draw = opts.draws and DRAW or ""
+      local notice_line = opts.notice
+        and ((opts.draws and "compy.screen.show('combined')\n" or "")
+          .. string.format("compy.screen.showNotice(%q)\n", opts.notice))
+        or ""
+      local body
+      if opts.how == "ctrl" then
+        body = "function love.update() end\n"
+      elseif opts.how == "pause_text" then
+        local arg = opts.msg ~= nil and string.format("%q", opts.msg)
+          or "'Look here'"
+        body = "local n = 0\nfunction love.update()\n"
+          .. "  n = n + 1\n"
+          .. "  if n == 3 then pause(" .. arg .. ") end\n"
+          .. "end\n"
+      elseif opts.how == "pause_bare" then
+        body = "local n = 0\nfunction love.update()\n"
+          .. "  n = n + 1\n"
+          .. "  if n == 3 then pause() end\n"
+          .. "end\n"
+      elseif opts.how == "error" then
+        body = "local n = 0\nfunction love.update()\n"
+          .. "  n = n + 1\n"
+          .. "  if n == 3 then error('late') end\n"
+          .. "end\n"
+      end
+      reset({ ["main.lua"] = draw
+        .. (opts.prefix or "print('mine')\n")
+        .. notice_line
+        .. body })
+      if opts.draws then stub_rectangle() end
+      if opts.io_write then stub_io_write() end
       run("run()")
-      local before = K.console_text()
-      if how == "ctrl" then K.keys("lctrl", "pause") end
+      assert.same("running", K.app_state())
+      local term = K.cc.model.output.terminal
+      local before = {
+        text = K.console_text(),
+        y = term.cursor_y,
+        x = term.cursor_x,
+        kept = K.cc.model.output.kept:count(),
+      }
+      if opts.notice then
+        K.screen()
+        assert.is_true(K.cc.input.model.error.seen)
+      end
+      if opts.how == "ctrl" then K.keys("lctrl", "pause") end
       K.frame()
       K.cc:suspend()
       K.frame(100)
@@ -336,25 +393,196 @@ describe("the console's channels #console", function()
       return before
     end
 
-    for _, case in ipairs({ { "pause", "Look here" },
-      { "ctrl", "BREAK into program" } }) do
-      it((case[1] == "pause" and "pause('Look here')" or "Ctrl+Pause")
-        .. " shows in the band, orange, the output untouched",
-        function()
-          --- the output's rows, the grid's height apart: it has
-          --- 17 rows while the program owns the input and 16 with
-          --- the field back (ruling 1.3)
-          local function rows(t) return (t:gsub("%s+$", "")) end
-          local before = paused_by(case[1])
-          assert.same({ case[2] }, band())
-          assert.same("notice", K.cc.input:message_kind())
-          assert.same(rows(before), rows(K.console_text()))
-          K.cc:get_project_env().continue()
-          K.frame(100)
-          assert.same(rows(before), rows(K.console_text()))
-          K.cc:get_project_env().love.update = nil
+    for _, draws in ipairs({ false, true }) do
+      local tag = draws and "drawing" or "text-only"
+      local suffix = draws and (" (" .. HINT .. ")") or ""
+
+      it("Ctrl+Pause prints BREAK into program in refusal color ("
+        .. tag .. ")", function()
+          start_and_pause({ how = "ctrl", draws = draws })
+          said("BREAK into program" .. suffix, colors().refusal)
+          no_band()
+          assert.is_nil(K.cc.input:message_kind())
+          K.keys("lctrl", "q")
+        end)
+
+      it("pause('Look here') prints its text in refusal color ("
+        .. tag .. ")", function()
+          start_and_pause({ how = "pause_text", draws = draws })
+          said("Look here" .. suffix, colors().refusal)
+          no_band()
+          assert.is_nil(K.cc.input:message_kind())
+          K.keys("lctrl", "q")
+        end)
+
+      it("bare pause() prints "
+        .. (draws and "the hint alone" or "nothing")
+        .. " (" .. tag .. ")", function()
+          local before = start_and_pause({
+            how = "pause_bare", draws = draws })
+          if draws then
+            said(HINT, colors().refusal)
+          else
+            local term = K.cc.model.output.terminal
+            assert.same(before.text:sub(1, -2), K.console_text())
+            assert.equal(before.y, term.cursor_y)
+            assert.equal(before.x, term.cursor_x)
+            assert.equal(before.kept, K.cc.model.output.kept:count())
+          end
+          no_band()
+          assert.is_nil(K.cc.input:message_kind())
+          K.keys("lctrl", "q")
+        end)
+
+      it("starts on a row of its own after output without a newline ("
+        .. tag .. ")", function()
+          start_and_pause({
+            how = "ctrl",
+            draws = draws,
+            io_write = true,
+            prefix = "io.write('partial')\n",
+          })
+          said("partial", colors().fg)
+          said("BREAK into program" .. suffix, colors().refusal)
+          no_band()
+          assert.is_nil(K.cc.input:message_kind())
+          K.keys("lctrl", "q")
         end)
     end
+
+    it("strips a trailing newline so pause('finished\\n') fits on one"
+      .. " row with the picture hint", function()
+        local before = start_and_pause({
+          how = "pause_text", draws = true, msg = "finished\n" })
+        local term = K.cc.model.output.terminal
+        said("finished (" .. HINT .. ")", colors().refusal)
+        assert.equal(before.y + 1, term.cursor_y)
+        assert.equal(1, term.cursor_x)
+        no_band()
+        K.keys("lctrl", "q")
+      end)
+
+    it("strips a trailing newline on pause('finished\\n') without"
+      .. " leaving an empty row after it (text-only)", function()
+        local before = start_and_pause({
+          how = "pause_text", draws = false, msg = "finished\n" })
+        local term = K.cc.model.output.terminal
+        said("finished", colors().refusal)
+        assert.equal(before.y + 1, term.cursor_y)
+        assert.equal(1, term.cursor_x)
+        no_band()
+        K.keys("lctrl", "q")
+      end)
+
+    it("prints nothing on pause('') for a text-only program",
+      function()
+        local before = start_and_pause({
+          how = "pause_text", draws = false, msg = "" })
+        local term = K.cc.model.output.terminal
+        assert.same(before.text:sub(1, -2), K.console_text())
+        assert.equal(before.y, term.cursor_y)
+        assert.equal(before.x, term.cursor_x)
+        assert.equal(before.kept, K.cc.model.output.kept:count())
+        no_band()
+        K.keys("lctrl", "q")
+      end)
+
+    it("prints the hint alone on pause('') for a drawing program",
+      function()
+        local before = start_and_pause({
+          how = "pause_text", draws = true, msg = "" })
+        local term = K.cc.model.output.terminal
+        said(HINT, colors().refusal)
+        assert.equal(before.y + 1, term.cursor_y)
+        assert.equal(1, term.cursor_x)
+        no_band()
+        K.keys("lctrl", "q")
+      end)
+
+    it("handler error on a drawing program prints the hint after the"
+      .. " red error and leaves the band empty", function()
+        start_and_pause({ how = "error", draws = true })
+        said("Execution error at L6:late", colors().error)
+        said(HINT, colors().refusal)
+        local t = K.console_text()
+        local at_error = t:find("Execution error at L6:late", 1, true)
+        local at_hint = t:find(HINT, 1, true)
+        assert.truthy(at_error and at_hint and at_error < at_hint, t)
+        no_band()
+        assert.is_nil(K.cc.input:message_kind())
+        K.keys("lctrl", "q")
+      end)
+
+    for _, how in ipairs({ "pause_text", "pause_bare", "error" }) do
+      for _, draws in ipairs({ false, true }) do
+        local tag = draws and "drawing" or "text-only"
+        it("keeps a drawn showNotice notice across " .. how .. " ("
+          .. tag .. ") until the first key at the prompt", function()
+            start_and_pause({
+              how = how,
+              draws = draws,
+              notice = "Keep this notice",
+            })
+            assert.same({ "Keep this notice" }, band())
+            assert.same("notice", K.cc.input:message_kind())
+            K.type("x")
+            no_band()
+            assert.is_nil(K.cc.input:message_kind())
+            assert.same("x", K.console_draft())
+            K.keys("lctrl", "q")
+          end)
+      end
+    end
+
+    it("dismisses a drawn showNotice notice on Ctrl+Pause in the text"
+      .. " view and leaves the band empty", function()
+        reset({ ["main.lua"] = "print('mine')\n"
+          .. "compy.screen.showNotice('Seen notice')\n"
+          .. "function love.update() end\n" })
+        run("run()")
+        assert.same("text", K.cc.model.screen:get())
+        K.screen()
+        assert.is_true(K.cc.input.model.error.seen)
+        K.keys("lctrl", "pause")
+        K.frame()
+        K.cc:suspend()
+        K.frame(100)
+        assert.same("inspect", K.app_state())
+        said("BREAK into program", colors().refusal)
+        no_band()
+        assert.is_nil(K.cc.input:message_kind())
+        K.keys("lctrl", "q")
+      end)
+
+    it("keeps an unseen showNotice notice across Ctrl+Pause from the"
+      .. " full picture until the first key at the prompt", function()
+        reset({ ["main.lua"] = DRAW
+          .. "compy.screen.show('text')\n"
+          .. "function love.update() end\n" })
+        stub_rectangle()
+        run("run()")
+        K.keys("f12")
+        K.keys("f12")
+        assert.same("picture", K.cc.model.screen:get())
+        K.cc:get_project_env().compy.screen.showNotice("Picture notice")
+        K.screen()
+        assert.is_falsy(K.cc.input.model.error.seen)
+        K.keys("lctrl", "pause")
+        K.frame()
+        K.cc:suspend()
+        K.frame(100)
+        assert.same("inspect", K.app_state())
+        said("BREAK into program (" .. HINT .. ")", colors().refusal)
+        assert.same({ "Picture notice" }, band())
+        assert.same("notice", K.cc.input:message_kind())
+        K.screen()
+        assert.is_true(K.cc.input.model.error.seen)
+        K.type("x")
+        no_band()
+        assert.is_nil(K.cc.input:message_kind())
+        assert.same("x", K.console_draft())
+        K.keys("lctrl", "q")
+      end)
   end)
 
   it("a line that does not parse is said in the band alone",

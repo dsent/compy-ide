@@ -93,9 +93,17 @@ function ConsoleView:draw(terminal, canvas, mode)
           and self.controller:running_status() or nil
       self.input:draw()
       --- the notice band over the output's last rows, on
-      --- the output's row grid (IS3.14)
-      local v = self.cfg.view
-      if not hidden then self.input:draw_notice(v.fh, Layout(v).top) end
+      --- the output's row grid (IS3.14), directly above the
+      --- visible status line (a shown program field's, or the
+      --- console's)
+      if self.input.controller:has_error() then
+        local v = self.cfg.view
+        local ui = love.state.app_state ~= 'inspect'
+            and love.state.user_input
+        local bottom = ui and ui.V:status_y(
+            ui.V:get_rows(ui.M:get_input()))
+        self.input:draw_notice(v.fh, Layout(v).top, bottom)
+      end
     end
   end
 

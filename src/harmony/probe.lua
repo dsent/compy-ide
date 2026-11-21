@@ -127,6 +127,13 @@ function Probe.console_message()
   return message_of(Probe.cc().input.model.error)
 end
 
+--- "notice" for a notice, "error" for a parser or load error,
+--- nil when none shows over the console's field
+--- @return string?
+function Probe.console_message_kind()
+  return Probe.cc().input:message_kind()
+end
+
 --- Whether a key card shows, the console's or the editor's
 --- @return boolean
 function Probe.card()

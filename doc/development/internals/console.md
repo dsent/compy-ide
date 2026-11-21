@@ -84,11 +84,105 @@ When Enter is pressed in the REPL (`ConsoleController:keypressed`, line 1009):
 2. The input text is validated via the `Evaluator` (LuaEval — parse via metalua)
 3. If parse succeeds: `codeload(code, run_env)` compiles the whole line, every statement in it, into one chunk whose `fenv` is the project's environment
 4. A line the parse refuses, or one Lua does not load, is not taken: its message shows in the notice band directly above the status line, as the file editor shows its messages, and the line stays in the field (`user_input.md`, "Error state"). A statement the parse continues takes Enter as its next line, and the band says so in orange (`UNFINISHED`, a notice).
-5. The line is accepted: it enters the history, and `CanvasModel:echo` writes it to the output in `colors.terminal.echo` (blue), on a row of its own, before it runs.
+5. The line is accepted: it enters the history, and while console echo is on
+   (`compy.terminal.setEcho`, on by default), `CanvasModel:echo` writes it to
+   the output in `colors.terminal.echo` (blue), on a row of its own, before it
+   runs.
 6. `run_user_code(f, self)` executes the chunk inside `use_canvas` — so any `gfx.*` calls go to the virtual canvas. Output from `print()` goes to the terminal via the `redirect_to` mechanism (set up in `src/main.lua`)
 7. The input is cleared (`clear_text`) whether the line ended well or in an error; it is in the history, and Up brings it back (the maintainer's ruling of November 16, 2026). On error, `CanvasModel:write_error` writes the error to the output after what the line printed. Any message shown before the line's Enter went with that key. Only a line that was not taken stays in the field: one that does not parse, does not load, or is unfinished.
 
-The console has two channels (the maintainer's ruling of November 15, 2026). The notice band is the field's: it says why a line was not taken, and in orange a hint that is no error or a pause's text. What a command does is said in the output, each on a row of its own: `CanvasModel:write_error` writes a run's error in `colors.terminal.error` (red, for errors alone), `CanvasModel:write_refusal` a command's refusal in `colors.terminal.refusal` (a burnt orange), and an answer, such as "Project x opened", is printed in the output's own colour. A run error that calls a global name that does not exist ("attempt to call global 'x' (a nil value)") gains a line, where exactly one name in the environment the code ran in can be called and differs from it only in case and underscores: "There is no listProjects. Did you mean list_projects?" (`src/util/name_hint.lua`; Beads `compy-ide-console-suggests-the-near-name`, the maintainer's ruling of November 17, 2026, kept or dropped after the team discusses it). `write_error` looks for it in the environment `name_source` gives; for a program's first lines that raised, `run_project` reads it before the flush that ends the program's globals, so that its own names count, and hands it to the write after the flush, the seam's order as it was. The hint never raises and runs none of the user's code: `NameHint.of` is protected, reads tables and metatables raw, counts a value as callable only when it is a function or its raw metatable's raw `__call` is one, and gives none where the environment falls back to a function or further than four tables. A field gets none: Lua's message names the field and not its table, which only the source says. Known limits: the suggestion is taken from the project's environment, so a chunk whose environment was changed with `setfenv` or a local of the same name can make it wrong; a program that raises an error in Lua's own wording gets the hint; the IDE's own globals reachable from the environment can be suggested (`CanvasModel` for `canvas_model()`) until the console has an environment of its own (Beads `compy-ide-resident-programs-in-the-console-context`); and a name with letters outside ASCII gets no hint, as Lua's message is matched for ASCII names alone. Through `write_error` go a typed line's run error and a program's load and run errors (`run_project`, and `user_error_handler` in `controller.lua`, which pauses the program without a message); through `write_refusal` every console command's refusal (`messages` in `consoleController.lua`, and `ProjectService.messages` for a file or a project; `ProjectService:run` says which of its errors are refusals). A project is always open: `ConsoleController:open_project` refuses a name that cannot be a project's (`ProjectService.valid_name`) before it closes anything, puts back the project that was open when another cannot be opened or made on the card, and `close_project` lands in `scratchpad`. Only a card that cannot hold `scratchpad` leaves none open; every command that needs a project asks `ConsoleController:open_or_refuse`, which then says so as a refusal. Each run starts from a fresh environment (the maintainer's ruling "A run starts from a clean environment"). The run seam in `run_project` is one thing: end a run that is live exactly as a stop does (`stop_project_run`: handlers, input hooks and shortcuts, `before_exit`, serial handlers, the widget, then the modules, `evacuate_required`); with nothing live there is nothing to end, and only the modules go. Then a new environment, as opening the project makes it (`_reset_executor_env`), then the graphics state a program set goes (`reset_graphics`: `love.graphics.reset`; the bound canvas is bound again, and `run_project` sets the IDE's font after), then start. A run that ends for good resets the graphics state too, so the IDE draws on under its own (`_stop_project_run`, and the error of a program's first lines); a pause does not, so `continue()` resumes with the program's. The IDE draws its own things in its own graphics state, through one helper (`src/view/ownState.lua`: `push('all')`, `love.graphics.reset`, the IDE's font, the drawing, `pop()`). Every place the IDE draws goes through it: `View.draw` (the console's output and the program's canvas over it, the status line, the band, the field, the key card and the editor, the output's cached canvas among them), `draw_field` in `controller.lua` (a program's input field), `UserInputView:render` (a field's cached canvas, which also renders from a program's `show()` or `set_text()` or a key, outside any draw) and `View.drawFPS` (the frame-rate overlay). `CanvasModel:clear_canvas` clears the program's own canvas, and puts aside the scissor and colour mask itself. A program's scissor, wireframe, colour, shader, blending or transform reaches none of the IDE's pixels, running, paused or stopped, and the pop gives the program its state back, so a paused program resumes with it. This costs a reset and a font call a frame, and four calls more while a program's field shows. A stop or a run a program asks for is made once its code has returned (see "A lifecycle call ends the code that made it" below), after the draw wrapper's `pop()`, with no push of the program's still to be popped: the reset pops what the program pushed and never popped (`gfx.getStackDepth`), and none of it while one of the IDE's own pushes is under way (`view.ownState` and the draw wrapper count theirs in `End.ide_pushes`), then resets. Opening another project has done the stop and the reset already, and Ctrl+R stops before it calls the seam, so each happens once. With nothing live, the seam also clears three slots every environment shares, which a new environment does not: `compy.before_exit` (removed, not called), the hooks and shortcuts of `compy.input`, and the program's serial handlers, as `reset()` does (round 21); a question `compy.ask` armed belongs to its widget, so none asked before reaches a later run's field (round 22). Known limit: the `compy` tables are shared by the console's lines and every run, so what a typed line overwrites in them (`compy.serial.send`, a field of its own in `compy.input.hooks`) stays until the IDE restarts; the console's own environment, Beads `compy-ide-resident-programs-in-the-console-context`, removes this. Known limit: a program that calls `compy.input.show` or `set_text` inside its own `love.graphics.stencil(function() … end)` has that stencil write cancelled by the IDE's reset as the field renders, and the `pop()` does not resume it. The modules forgotten are the project's own and those a program loaded first (`program_loaded`, through its `require`); one the IDE had loaded itself stays shared. A run that ends by itself leaves nothing in the environment: its end is a stop. `continue()` and `dofile()` run in the environment as it stands, and what a `dofile()` defines stays there.
+The console has two channels (the maintainer's ruling of November 15, 2026). The
+notice band is the field's: it says why a line was not taken, and in orange a
+hint that is no error. What a command or a pause does is said in the output,
+each on a row of its own: `CanvasModel:write_error` writes a run's error in
+`colors.terminal.error` (red, for errors alone), `CanvasModel:write_refusal` a
+command's refusal or a pause's message in `colors.terminal.refusal` (a burnt
+orange), and an answer, such as "Project x opened", is printed in the output's
+own colour. A run error that calls a global name that does not exist ("attempt
+to call global 'x' (a nil value)") gains a line, where exactly one name in the
+environment the code ran in can be called and differs from it only in case and
+underscores: "There is no listProjects. Did you mean list_projects?"
+(`src/util/name_hint.lua`; Beads `compy-ide-console-suggests-the-near-name`, the
+maintainer's ruling of November 17, 2026, kept or dropped after the team
+discusses it). `write_error` looks for it in the environment `name_source`
+gives; for a program's first lines that raised, `run_project` reads it before
+the flush that ends the program's globals, so that its own names count, and
+hands it to the write after the flush, the seam's order as it was. The hint
+never raises and runs none of the user's code: `NameHint.of` is protected, reads
+tables and metatables raw, counts a value as callable only when it is a function
+or its raw metatable's raw `__call` is one, and gives none where the environment
+falls back to a function or further than four tables. A field gets none: Lua's
+message names the field and not its table, which only the source says. Known
+limits: the suggestion is taken from the project's environment, so a chunk whose
+environment was changed with `setfenv` or a local of the same name can make it
+wrong; a program that raises an error in Lua's own wording gets the hint; the
+IDE's own globals reachable from the environment can be suggested (`CanvasModel`
+for `canvas_model()`) until the console has an environment of its own (Beads
+`compy-ide-resident-programs-in-the-console-context`); and a name with letters
+outside ASCII gets no hint, as Lua's message is matched for ASCII names alone.
+Through `write_error` go a typed line's run error and a program's load and run
+errors (`run_project`, and `user_error_handler` in `controller.lua`, which
+pauses the program without a message of its own); through `write_refusal` every
+console command's refusal (`messages` in `consoleController.lua`, and
+`ProjectService.messages` for a file or a project; `ProjectService:run` says
+which of its errors are refusals) and a pause's message
+(`ConsoleController:suspend`). A project is always open:
+`ConsoleController:open_project` refuses a name that cannot be a project's
+(`ProjectService.valid_name`) before it closes anything, puts back the project
+that was open when another cannot be opened or made on the card, and
+`close_project` lands in `scratchpad`. Only a card that cannot hold `scratchpad`
+leaves none open; every command that needs a project asks
+`ConsoleController:open_or_refuse`, which then says so as a refusal. Each run
+starts from a fresh environment (the maintainer's ruling "A run starts from a
+clean environment"). The run seam in `run_project` is one thing: end a run that
+is live exactly as a stop does (`stop_project_run`: handlers, input hooks and
+shortcuts, `before_exit`, serial handlers, the widget, then the modules,
+`evacuate_required`); with nothing live there is nothing to end, and only the
+modules go. Then a new environment, as opening the project makes it
+(`_reset_executor_env`), then the graphics state a program set goes
+(`reset_graphics`: `love.graphics.reset`; the bound canvas is bound again, and
+`run_project` sets the IDE's font after), then start. A run that ends for good
+resets the graphics state too, so the IDE draws on under its own
+(`_stop_project_run`, and the error of a program's first lines); a pause does
+not, so `continue()` resumes with the program's. The IDE draws its own things in
+its own graphics state, through one helper (`src/view/ownState.lua`:
+`push('all')`, `love.graphics.reset`, the IDE's font, the drawing, `pop()`).
+Every place the IDE draws goes through it: `View.draw` (the console's output and
+the program's canvas over it, the status line, the band, the field, the key card
+and the editor, the output's cached canvas among them), `draw_field` in
+`controller.lua` (a program's input field), `UserInputView:render` (a field's
+cached canvas, which also renders from a program's `show()` or `set_text()` or a
+key, outside any draw) and `View.drawFPS` (the frame-rate overlay).
+`CanvasModel:clear_canvas` clears the program's own canvas, and puts aside the
+scissor and colour mask itself. A program's scissor, wireframe, colour, shader,
+blending or transform reaches none of the IDE's pixels, running, paused or
+stopped, and the pop gives the program its state back, so a paused program
+resumes with it. This costs a reset and a font call a frame, and four calls more
+while a program's field shows. A stop or a run a program asks for is made once
+its code has returned (see "A lifecycle call ends the code that made it" below),
+after the draw wrapper's `pop()`, with no push of the program's still to be
+popped: the reset pops what the program pushed and never popped
+(`gfx.getStackDepth`), and none of it while one of the IDE's own pushes is under
+way (`view.ownState` and the draw wrapper count theirs in `End.ide_pushes`),
+then resets. Opening another project has done the stop and the reset already,
+and Ctrl+R stops before it calls the seam, so each happens once. With nothing
+live, the seam also clears three slots every environment shares, which a new
+environment does not: `compy.before_exit` (removed, not called), the hooks and
+shortcuts of `compy.input`, and the program's serial handlers, as `reset()` does
+(round 21); a question `compy.ask` armed belongs to its widget, so none asked
+before reaches a later run's field (round 22). Known limit: the `compy` tables
+are shared by the console's lines and every run, so what a typed line overwrites
+in them (`compy.serial.send`, a field of its own in `compy.input.hooks`) stays
+until the IDE restarts; the console's own environment, Beads
+`compy-ide-resident-programs-in-the-console-context`, removes this. Known limit:
+a program that calls `compy.input.show` or `set_text` inside its own
+`love.graphics.stencil(function() … end)` has that stencil write cancelled by
+the IDE's reset as the field renders, and the `pop()` does not resume it. The
+modules forgotten are the project's own and those a program loaded first
+(`program_loaded`, through its `require`); one the IDE had loaded itself stays
+shared. A run that ends by itself leaves nothing in the environment: its end is
+a stop. `continue()` and `dofile()` run in the environment as it stands, and
+what a `dofile()` defines stays there.
 
 | | natural end (a stop) | pause / handler error | `continue()` | stop, Ctrl+Q, close, first-lines error | run seam |
 | --- | --- | --- | --- | --- | --- |
@@ -98,7 +192,7 @@ The console has two channels (the maintainer's ruling of November 15, 2026). The
 | Graphics state, key repeat and text input | reset | kept | kept | reset | graphics reset |
 | Sounds playing | play to their end, a loop no longer repeats | kept | kept | play to their end, a loop no longer repeats (`reset()`: stopped) | as the stop |
 | The program's picture | kept, shown whole when the program drew | kept | kept | kept, the console shown (`reset()`: cleared) | cleared |
-| Output, kept rows, history, editor files | kept | kept | kept | kept | kept | A pause is the debugger's: `pause("text")`'s text and Ctrl+Pause's "BREAK into program" show in the band as an orange notice when the program pauses, and the program's screen is not touched (`ConsoleController:suspend`). `run("name")` opens and runs a project that exists and makes none: a name no project has is refused (`messages.no_such_project`), and `project("name")` makes one.
+| Output, kept rows, history, editor files | kept | kept | kept | kept | kept | A pause happened to the program, so `pause("text")`'s text and Ctrl+Pause's "BREAK into program" print on a row of their own in the output in `colors.terminal.refusal` (`CanvasModel:write_refusal`), while a bare `pause()` prints nothing unless the program drew; the band is untouched (`ConsoleController:suspend`, ruling of November 21, 2026). `run("name")` opens and runs a project that exists and makes none: a name no project has is refused (`messages.no_such_project`), and `project("name")` makes one.
 
 During `inspect` state too the REPL runs code in `project_env`, the paused project's, which `continue()` resumes as it stands.
 
@@ -229,7 +323,32 @@ The custom loader is stored in `self.loaders[name]` so it can be removed on clos
 
 ### A program that can act owns all input
 
-The maintainer's ruling of November 17, 2026: "hide the console when any program runs/all input is the program's while it runs". While the program whose route holds the input can still act (`can_act` in `controller.lua`: an update or a draw, a hook or a non-empty shortcut table on any channel, its own shown field, or a serial handler), every key, text, pointer and touch event is the program's, and what its chain leaves goes nowhere, with one exception below. The console's field and cursor are hidden meanwhile (`Controller.program_owns_input`, which `ConsoleView:draw` asks each frame; `UserInputView.field_hidden` renders the status line alone, the field's rows background, and the notice band is not drawn). While the field is hidden and the program shows none of its own, the output takes the field's row and the status line goes to the screen's bottom, naming the project, the file it runs from and "running" in yellow (see "The Output and Its Kept Rows" and "The status line's colours and words" above). A program that wants typing shows its own field, drawn over the console's. A program that can do none of these has ended at its last line: the first event after that releases the route (`release_keyboard_route`) and goes to the console, whose field shows again; a finished program whose picture stays (`run_live`) counts as ended, so a draw-once lesson goes on typing. A pause gives the input and the field back to the console, and `continue()` gives them back to the program. The predicate is asked as each event comes, before the program's chain; the hook table is the one record of a program's own handlers (they are seeded there when the run begins). The reserved chords are the gate's, untouched. The console's key card comes up only while F1 reaches the console, so behind a program only while it is paused. A key pressed while the input went back to the console during that press (the program could no longer act) is the console's: its repeats and release go there.
+The maintainer's ruling of November 17, 2026: "hide the console when any program
+runs/all input is the program's while it runs". While the program whose route
+holds the input can still act (`can_act` in `controller.lua`: an update or a
+draw, a hook or a non-empty shortcut table on any channel, its own shown field,
+or a serial handler), every key, text, pointer and touch event is the program's,
+and what its chain leaves goes nowhere, with one exception below. The console's
+field and cursor are hidden meanwhile (`Controller.program_owns_input`, which
+`ConsoleView:draw` asks each frame; `UserInputView.field_hidden` renders the
+status line alone and the field's rows background, while the notice band still
+draws above the visible status line in `text` and `combined` modes). While the
+field is hidden and the program shows none of its own, the output takes the
+field's row and the status line goes to the screen's bottom, naming the project,
+the file it runs from and "running" in yellow (see "The Output and Its Kept
+Rows" and "The status line's colours and words" above). A program that wants
+typing shows its own field, drawn over the console's. A program that can do none
+of these has ended at its last line: the first event after that releases the
+route (`release_keyboard_route`) and goes to the console, whose field shows
+again; a finished program whose picture stays (`run_live`) counts as ended, so a
+draw-once lesson goes on typing. A pause gives the input and the field back to
+the console, and `continue()` gives them back to the program. The predicate is
+asked as each event comes, before the program's chain; the hook table is the one
+record of a program's own handlers (they are seeded there when the run begins).
+The reserved chords are the gate's, untouched. The console's key card comes up
+only while F1 reaches the console, so behind a program only while it is paused.
+A key pressed while the input went back to the console during that press (the
+program could no longer act) is the console's: its repeats and release go there.
 
 The one exception, ruling 1.1: "the scrollback area is *visible* so it takes keys and mouse events that normally belong to it, if the program doesn't take these keys and events". A key press the program's chain leaves that is one of the output's scrolling keys (Ctrl+Up and Ctrl+Down, PgUp and PgDn, Home and End, Ctrl+PgUp and Ctrl+PgDn, as `consoleKeys.lua` names them; Home and End go to the oldest row and back, the field being hidden, as Ctrl+PgUp and Ctrl+PgDn do) scrolls the output (`ConsoleController:output_key`), and a wheel event it leaves scrolls it three rows a notch (`output_wheel`, which the console's own wheel uses too). "Takes" is per event: a key press is taken when a shortcut or a hook for it returns truthy, or a shown field takes it, and a program's own `love.keypressed`, seeded as a hook, takes every key press, so behind it only the wheel scrolls; a wheel event is taken the same way by a wheel shortcut or hook, its own `love.wheelmoved` among them. No other key of the console's acts behind a program.
 
@@ -241,7 +360,21 @@ F12 is a reservation (`src/model/input/reservedKeys.lua`, `screen_mode`): in the
 
 The full picture has no field, and when F12 brings it up with no running program (`not Controller.program_owns_input()`) it shows the status line (`picture`, `view>F12`, the console's dark ground at opacity `screen.combined.ground`) on the last row for two seconds from the first frame drawn (`ScreenModel.BANNER_SECONDS`, `ScreenModel:banner_drawn`, `ScreenModel:pass_time`, `ConsoleController:picture_status`, `ConsoleView:draw`). While it shows and no program that can act holds the input (`picture_only` in the gate, `controller.lua`: not a packaged build, which has no console, the mode is `picture`, the state is not `editor`, and `Controller.program_owns_input`, item 1's `can_act`, is false), any key but a modifier or a lock alone goes back to the text (`ScreenModel:back`), whatever showed before the picture, and is the IDE's for its whole press; a program that can act no more is found ended at the entry of every event the gate takes, keys, text, buttons, moves, the wheel and touches alike, before the reservations, the key card and the way back (`found_ended`, through the gate's `enter`, so that nothing that takes an event can do so ahead of it), and a picture on show stays on show through that end: the end itself sets the screen from what shows as it is made (`end_naturally`'s `shown`), at once or once the frame's update returns, where the click timer's derived clicks come, after the event that found it; a derived click may find the end and never goes back from the picture. Known limit: an end found inside a held `End` (which the event pump never does for a person's input) waits for the hold's close, and Ctrl+R in between still finds the run live and starts it again, so that a key or a click goes back and F12 steps from the picture; a reserved chord acts as well, so Ctrl+T leaves the picture for the editor and Ctrl+Escape quits. The key's text goes nowhere, by two rules that need no guess about whether a key or its text comes first: every text that comes while the full picture shows is dropped, which is the key's own text on a Compy, where text comes first; and after the key's press a text is dropped only if it is the key's own character, whatever its case, before the key's release and before any other key's press or repeat, which is the desktop's order (`swallow_for`, `own_char`, which knows a key's own character, the space's and the keypad's). Any other text is typed. A key held from before the picture repeats into nothing while the picture shows: a repeat goes to the console only while its draft can be seen. A shifted character other than a letter's, such as Shift+1's `!`, slips through on a desktop; a Compy, which sends the text first, never shows it. Between a pause's request and the pause (`snapshot`) neither F12 nor a key changes the mode, which the pause saves for `continue()`. A mouse button or a touch goes back the same way, and its release goes nowhere (`hold_press` records it in `receivers` as going to no receiver, as under a key card; a key that goes back is recorded there as the IDE's, as a reserved chord's key is), and a button's moves go nowhere until its release, also into a program resumed meanwhile (`back_buttons`), or until a move finds it up, the window loses focus or the same button is pressed again, any of which ends a release that was lost; the wheel, a move and the derived clicks do nothing there, so the hidden output does not scroll. A program that can act keeps every key and click on its picture, and F12 is its way back.
 
-The console's status line names the mode with the key that steps it, `text>F12`, `comb>F12` or `view>F12`, eight columns each (the maintainer's rulings of November 19, 2026; `UserInputModel.screen_source`, `Status.mode`, `Statusline:draw`'s `MODE_LABEL`), in its right block, packed to the right with the rest of it: two columns before what follows it, or at the edge on the bare line behind a running program (`ConsoleController:running_status`) or on F12 into the full picture (`ConsoleController:picture_status`) when nothing follows. The line under a key card names no mode, since the card holds F12 back (`KeyCardView:draw_cells`); the label is back once F1 is released. A program's own field names no mode on its line (the maintainer's ruling of November 17, 2026: "when the user creates their own input widget, drop 'text' and 'running'"), which round j1 had put there. A pause whose program has drawn adds `F12 shows the picture` to the pause's notice, in brackets after the pause's text on its row where both fit in the band's width, on a row of its own where they do not, so that the band covers no more of the output than it must; after a `pause()` with no text it shows alone (`ConsoleController:suspend`, `messages.picture_hint`).
+The console's status line names the mode with the key that steps it, `text>F12`,
+`comb>F12` or `view>F12`, eight columns each (the maintainer's rulings of
+November 19, 2026; `UserInputModel.screen_source`, `Status.mode`,
+`Statusline:draw`'s `MODE_LABEL`), in its right block, packed to the right with
+the rest of it: two columns before what follows it, or at the edge on the bare
+line behind a running program (`ConsoleController:running_status`) or on F12
+into the full picture (`ConsoleController:picture_status`) when nothing follows.
+The line under a key card names no mode, since the card holds F12 back
+(`KeyCardView:draw_cells`); the label is back once F1 is released. A program's
+own field names no mode on its line (the maintainer's ruling of November 17,
+2026: "when the user creates their own input widget, drop 'text' and
+'running'"), which round j1 had put there. A pause whose program has drawn
+appends ` (F12 shows the picture)` to the pause's message in the output, or
+prints `F12 shows the picture` alone after a bare `pause()` or a handler error's
+pause (`ConsoleController:suspend`, `messages.picture_hint`).
 
 ### A lifecycle call ends the code that made it
 
@@ -297,12 +430,51 @@ Projects receive a `compy` table with:
 | Field | Contents |
 |---|---|
 | `compy.audio` | Sound effects (`sfx.beep()`, `sfx.gameover()`, etc.) — `src/util/audio.lua` |
-| `compy.terminal` | VT-100 terminal control (`gotoxy`, `clear`); a `gotoxy` position outside the screen is taken to the nearest edge |
+| `compy.terminal` | VT-100 terminal control (`gotoxy`, `clear`, `setEcho`); a `gotoxy` position outside the screen is taken to the nearest edge |
+| `compy.screen` | Screen mode and notice band (`show(mode)`, `getMode()`, `showNotice(text)`) |
 | `compy.graphics` | Extended graphics (`shape2d`) — `src/util/graphics/shape2d.lua` |
 | `compy.fonts` | Font path constants (`mono`, `sans`, `serif`, etc.) — `src/util/namespace/fonts.lua` |
 | `compy.input` | Text input widget surface (`show`/`hide`/`configure`/`clear`/`set_text`) — see [`user_input.md`](user_input.md) |
 
-`compy.terminal` wraps the VT-100 terminal instance directly (the same terminal that renders the console output). Projects can use it for text-mode output within their run context.
+`compy.terminal` wraps the VT-100 terminal instance directly (the same terminal
+that renders the console output), and is also exposed as the shorthand `tty`.
+Projects can use it for text-mode output within their run context.
+
+`compy.terminal.setEcho(on)` (also `tty.setEcho(on)`) takes one boolean `on`,
+returns no values, and switches whether accepted console lines echo to the
+output (`CanvasModel:echo` in `ConsoleController:_evaluate_input`). Echo starts
+on, and a change takes effect on the next accepted line: turning echo off still
+echoes the line that called it, and turning echo back on is silent. History,
+printed output, refusals, and errors are unchanged. Every accepted run, stop (a
+natural end included), `reset()`, and restart restores echo to on
+(`ConsoleController:_restore_defaults`, called from `flush_program_state` and
+the run seam in `_run_project`); `pause()` and `continue()` keep the run's
+setting, and an idle console change holds until the next flush or run start.
+Passing anything other than one boolean raises
+`compy.terminal.setEcho: expects one boolean` at the calling line before
+changing anything.
+
+`compy.screen.showNotice(text)` takes one string `text`, returns no values, and
+displays `text` in the console's notice band (`UserInputController:notice`,
+orange on black, word-wrapped up to three rows with `…` on overflow), replacing
+any previous message; `""` clears the band. After a non-repeat key press other
+than a lone modifier or lock (`Key.is_lone`) acts in `handlers.keypressed`
+(`src/controller/controller.lua`), a notice that has been drawn goes unless a
+key card now shows (`UserInputController:dismiss_seen`); a notice created by the
+press itself, by its text, or while hidden in `picture` mode stays until drawn.
+A key or a character that reaches the console's own field still clears its
+message before it acts, drawn or not, as for the field's other messages
+(`ConsoleController:keypressed` and `:textinput`).
+During a run, `ConsoleView:draw` draws the band directly above whichever status
+line is visible — the program's own input field's status line when one is shown
+(`love.state.user_input` outside `inspect`), otherwise the console's (or bare)
+status line — in the `text` and `combined` modes; the `picture` mode draws no
+band, and a notice still current on return to `text` shows there. Every accepted
+run, stop (a natural end included), `reset()`, and restart clears the band
+through `ConsoleController:_restore_defaults`; a pause leaves the band
+untouched, and `continue()` keeps it. Passing anything other
+than one string raises `compy.screen.showNotice: expects one string` at the
+calling line before changing anything.
 
 ---
 

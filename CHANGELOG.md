@@ -250,21 +250,24 @@ Project-author guide: `doc/input_api.md`.
   after its output. A line that ran leaves the field, whether it ended well or in an
   error, and Up brings it back from the history. A line the syntax check refuses is not
   written and stays in the field, as does one Lua does not load or one not yet finished.
-- **The console says what a command did in its output, and what the line being typed
-  needs in a band above the status line.** A typed line's error and a program's error are
-  written to the output in red, which is for errors alone; a console command's refusal,
-  which is no error, in a burnt orange; answers such as "Project x opened" keep the
-  output's colour. A line the syntax refuses or Lua does not load shows its message in
-  the band, over the output's last rows, without the `Errors:` heading; the line stays
-  in the field with its cursor, red from a syntax failure, and the status line no longer
-  moves. The message blocks nothing: the next key dismisses it and does its work, so
-  Enter tries the line again, Escape clears it and Up recalls the history. Enter on a
-  statement that is not finished begins its next line, as before, and the band now says
-  so in orange: "Unfinished code: type the rest, then press Enter." A pause's text, from
-  `pause("text")` or Ctrl+Pause's "BREAK into program", shows in the band in orange too,
-  and the program's screen is left as it was. A program's own input field shows its
-  errors as before. `run()` while a project is paused now says "A project is
-  already running: Ctrl+Q stops it." in the output, where before its message was cleared
+- **The console says what a command did in its output, and what the line being
+  typed needs in a band above the status line.** A typed line's error and a
+  program's error are written to the output in red, which is for errors alone; a
+  console command's refusal, which is no error, in a burnt orange; answers such
+  as "Project x opened" keep the output's colour. A line the syntax refuses or
+  Lua does not load shows its message in the band, over the output's last rows,
+  without the `Errors:` heading; the line stays in the field with its cursor,
+  red from a syntax failure, and the status line no longer moves. The message
+  blocks nothing: the next key dismisses it and does its work, so Enter tries
+  the line again, Escape clears it and Up recalls the history. Enter on a
+  statement that is not finished begins its next line, as before, and the band
+  now says so in orange: "Unfinished code: type the rest, then press Enter." A
+  pause's message, from `pause("text")` or Ctrl+Pause's "BREAK into program",
+  prints on a line of its own in the output in the refusal's burnt orange, with
+  "(F12 shows the picture)" after it when the program drew; the band is left to
+  the field and a program's notice. A program's own input field shows its errors
+  as before. `run()` while a project is paused now says "A project is already
+  running: Ctrl+Q stops it." in the output, where before its message was cleared
   as it appeared.
 - **A program's graphics settings no longer reach the IDE's own drawing.** After a program
   that set a scissor, wireframe or a colour was stopped, or while it was paused, the key

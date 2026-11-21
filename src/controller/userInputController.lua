@@ -216,6 +216,14 @@ function UserInputController:clear_error()
   self.model:clear_error()
 end
 
+--- Clear the band message if a frame has drawn it.
+function UserInputController:dismiss_seen()
+  local err = self.model.error
+  if type(err) == 'table' and err.seen then
+    self:clear_error()
+  end
+end
+
 --- An error to show: in the notice band where this field has
 --- one (the file editor's and the console's, IS3.14), else in
 --- the field's place

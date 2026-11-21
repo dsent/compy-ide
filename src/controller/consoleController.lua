@@ -94,6 +94,7 @@ end
 --- @field run_live boolean? the run is not stopped
 --- @field collect_garbage function? --- collectgarbage, or a stand-in in tests
 --- @field state_left boolean? --- a typed line left state the flush has not ended
+--- @field echo_input boolean --- whether accepted console lines echo to the output
 --- @field entry string? --- the file the live run runs from, nil for main.lua
 --- methods
 --- @field edit function
@@ -147,6 +148,8 @@ function ConsoleController.new(M, main_ctrl)
     --- the keys whose press reached the console's own key
     --- handler, until their release (EditorController.pressed)
     pressed     = {},
+
+    echo_input  = true,
 
     view        = nil,
 
@@ -719,6 +722,7 @@ function ConsoleController:_run_project(name, stopped, entry)
         SerialPort:programEnded()
       end
     end
+    self:_restore_defaults()
     local runner_env = self:get_project_env()
     -- A run starts on a blank canvas, whatever the last one
     -- left there; a project that fails to load leaves the
@@ -936,6 +940,19 @@ local function screen_api(cc)
     getMode = function()
       return cc.model.screen:get()
     end,
+    --- Show `text` in the notice band, or clear it with "".
+    --- Expects one string.
+    showNotice = function(...)
+      local text = ...
+      if select('#', ...) ~= 1 or type(text) ~= 'string' then
+        error('compy.screen.showNotice: expects one string', 2)
+      end
+      if text == '' then
+        cc.input:clear_error()
+      else
+        cc.input:notice(text)
+      end
+    end,
   }
 end
 
@@ -961,13 +978,15 @@ end
 -- Builds the `compy.terminal` sub-namespace — the console
 -- OUTPUT surface. These wrap the live `terminal` (the
 -- REPL/console text grid): position the grid cursor
--- (gotoxy) and clear the screen. The grid's cursor is not
--- the program's to show (the maintainer's ruling "Programs
--- lose show_cursor and hide_cursor"). This is
--- where a project WRITES to the console; always present
--- while the project runs. Contrast with `compy.input`
--- below, the input solicitation surface.
-local get_compy_terminal = function(terminal)
+-- (gotoxy), clear the screen and toggle console line echo
+-- (setEcho). The grid's cursor is not the program's to show
+-- (the maintainer's ruling "Programs lose show_cursor and
+-- hide_cursor"). This is where a project WRITES to the
+-- console; always present while the project runs. Contrast
+-- with `compy.input` below, the input solicitation surface.
+--- @param terminal table
+--- @param cc ConsoleController?
+local get_compy_terminal = function(terminal, cc)
   return {
     --- What is not a number fails in the program's own call,
     --- on its line; a number written as text moves, as it
@@ -983,7 +1002,16 @@ local get_compy_terminal = function(terminal)
     clear = function()
       terminal:move_to(1, 1)
       return terminal:clear()
-    end
+    end,
+    --- Toggle whether accepted console lines echo to the output;
+    --- takes effect on the next line. Expects one boolean.
+    setEcho = function(...)
+      local on = ...
+      if select('#', ...) ~= 1 or type(on) ~= 'boolean' then
+        error('compy.terminal.setEcho: expects one boolean', 2)
+      end
+      if cc then cc.echo_input = on end
+    end,
   }
 end
 
@@ -1842,7 +1870,7 @@ local get_compy_namespace = function(terminal, with_input,
   -- reference, so every env talks to the platform port.
   local serial_surface = serial
   local ns = {
-    terminal = get_compy_terminal(terminal),
+    terminal = get_compy_terminal(terminal, cc),
     audio = compy_audio,
     graphics = cc and drawing_graphics(cc) or compy_graphics,
     screen = cc and screen_api(cc) or nil,
@@ -2168,7 +2196,7 @@ function ConsoleController.prepare_project_env(cc)
   end
   project_env.run              = project_env.run_project
 
-  --- @param msg string?
+  --- @param msg any? --- turned into text by suspend
   project_env.pause            = function(msg)
     if not cc.run_live then
       return cc.model.output:write_refusal(messages.nothing_running)
@@ -2418,7 +2446,9 @@ function ConsoleController:_evaluate_input()
         --- a scrolled view, so that its echo and what it prints
         --- are seen; typing it did not (CanvasModel:to_rest)
         self.model.output:to_rest()
-        self.model.output:echo(text)
+        if self.echo_input then
+          self.model.output:echo(text)
+        end
         --- a typed line leaves state for a flush to end, as a
         --- live run does
         self.state_left = true
@@ -2519,47 +2549,6 @@ function ConsoleController:_set_base_env(t)
   table.protect(t)
 end
 
---- A pause's text with how to see the picture behind it: on the
---- pause's own row, in brackets after its text, where both fit,
---- so that the band covers no more of the output; on a row of
---- its own where they do not (the ruling of November 17, 2026:
---- ASCII alone in the words the screen shows), the text
---- cut to the band's rows less the hint's, as the band cuts a
---- message, so that the hint is always seen; alone after a
---- pause with no text. The text is measured as the band shows
---- it: bytes that are not UTF-8 made shown first (k1).
---- @param text string?
---- @param visible VisibleContent?
---- @return string|string[]
-local function with_picture_hint(text, visible)
-  local hint = messages.picture_hint
-  if not text then return hint end
-  local w = visible and visible.wrap_w or 64
-  local plain = (string.scrub(text):gsub('\r\n?', '\n'))
-  local lines = string.lines(plain)
-  if #lines > 1 and lines[#lines] == '' then lines[#lines] = nil end
-  local rows = { }
-  for _, line in ipairs(lines) do
-    for _, row in ipairs(string.wrap_words(line, w)) do
-      rows[#rows + 1] = row
-    end
-  end
-  --- a word wider than a row is cut by characters, as the band
-  --- cuts it (k2)
-  rows = string.wrap_array(rows, w)
-  if #rows == 1
-      and string.ulen(rows[1]) + 3 + string.ulen(hint) <= w then
-    return rows[1] .. ' (' .. hint .. ')'
-  end
-  local room = UserInputView.NOTICE_ROWS - 1
-  if #rows > room then
-    for i = #rows, room + 1, -1 do rows[i] = nil end
-    rows[room] = string.usub(rows[room], 1, w - 1) .. '…'
-  end
-  rows[#rows + 1] = hint
-  return rows
-end
-
 function ConsoleController:suspend()
   if love.state.app_state ~= 'snapshot' then
     return
@@ -2571,16 +2560,21 @@ function ConsoleController:suspend()
   --- the console shows while the program waits; its picture
   --- stays on its canvas
   self.model.screen:pause()
-  --- a pause is the debugger's: what it says shows in the
-  --- band as a notice, and the program's screen is not touched
-  --- (the maintainer's ruling of November 16, 2026)
+  --- a pause happened to the program, so its message (of any
+  --- type, turned into text here) answers in the output in the
+  --- refusal color; one trailing "\n" goes, and empty text
+  --- counts as none. The band stays the field's own (the
+  --- maintainer's ruling of November 21, 2026).
   local msg = love.state.suspend_msg
   love.state.suspend_msg = nil
-  local says = msg ~= nil and tostring(msg) or nil
+  local says = msg ~= nil
+      and string.gsub(tostring(msg), '\n$', '') or nil
+  if says == '' then says = nil end
   if self.model.output:is_drawn() then
-    says = with_picture_hint(says, self.input.model.visible)
+    local hint = messages.picture_hint
+    says = says and (says .. ' (' .. hint .. ')') or hint
   end
-  if says then self.input:notice(says) end
+  if says then self.model.output:write_refusal(says) end
 
   self.model.output:invalidate_terminal()
 
@@ -2594,7 +2588,7 @@ function ConsoleController:suspend()
   self.main_ctrl.set_default_handlers(self, self.view)
 end
 
---- @param msg string?
+--- @param msg any? --- turned into text by suspend
 --- A program that runs, or one idle behind the console that
 --- can still act (its key handlers alone, say), pauses: the
 --- console and its field come back, and continue() gives the
@@ -2814,6 +2808,12 @@ local function end_looping()
   end
 end
 
+--- Restore console defaults: line echo on, notice band clear.
+function ConsoleController:_restore_defaults()
+  self.echo_input = true
+  if self.input then self.input:clear_error() end
+end
+
 --- The mouse as the console needs it (CONSOLE_MOUSE): the
 --- flush puts it back, and so do a run's start and a program
 --- that idles with nothing that answers the pointer, and
@@ -2910,6 +2910,7 @@ function ConsoleController:flush_program_state(call_exit)
   local kb = love.keyboard
   if kb and kb.setKeyRepeat then kb.setKeyRepeat(true) end
   if kb and kb.setTextInput then kb.setTextInput(true) end
+  self:_restore_defaults()
   self.run_live = false
   love.state.paused_from = nil
   --- the entry point lives with the run (the maintainer's

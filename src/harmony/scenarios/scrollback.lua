@@ -398,8 +398,7 @@ scenario('paused-output', function(wait)
   D.eq(t.height, 16, 'rows at the pause')
   local img = P.capture(wait)
   D.shot(wait, 'paused-output')
-  -- the notice band lies over the last row
-  D.eq(differ(screen_rows(img, t, 15), grid_picture(t, 15)), 0,
+  D.eq(differ(screen_rows(img, t, 16), grid_picture(t, 16)), 0,
     'pixels of the paused output that are not the grid\'s rows')
 
   D.key(wait, 'escape')

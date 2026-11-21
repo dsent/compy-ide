@@ -237,6 +237,71 @@ local function console()
       'eval error was not reported')
     hm_done()
   end)
+
+  -- tty.setEcho(on) switches echoing of accepted console lines
+  -- from the next line on, keeping history and printed output
+  scenario('set-echo', function(wait)
+    D.key(wait, 'escape')
+    D.key(wait, 'C-l')
+    D.enter(wait, 'tty.setEcho(false)')
+    D.enter(wait, 'print("quiet-out")')
+    D.enter(wait, 'tty.setEcho(true)')
+    D.enter(wait, 'print("loud-out")')
+    local out = P.console_text()
+    local function has_row(want)
+      for row in (out .. '\n'):gmatch('(.-)\n') do
+        if row:match('^%s*(.-)%s*$') == want then return true end
+      end
+      return false
+    end
+    assert(string.find(out, 'tty.setEcho(false)', 1, true),
+      'calling line was not echoed')
+    assert(not string.find(out, 'print("quiet-out")', 1, true),
+      'line while echo off was echoed')
+    assert(has_row('quiet-out'),
+      'printed output while echo off did not appear on its own row')
+    assert(not string.find(out, 'tty.setEcho(true)', 1, true),
+      'setEcho(true) was echoed')
+    assert(string.find(out, 'print("loud-out")', 1, true),
+      'line after echo on was not echoed')
+    assert(has_row('loud-out'),
+      'printed output after echo on did not appear on its own row')
+    D.key(wait, 'up')
+    D.eq(P.console_draft(), 'print("loud-out")', 'history kept last')
+    D.key(wait, 'up')
+    D.eq(P.console_draft(), 'tty.setEcho(true)', 'history kept setEcho(true)')
+    D.key(wait, 'up')
+    D.eq(P.console_draft(), 'print("quiet-out")', 'history kept quiet line')
+    D.key(wait, 'escape')
+    hm_done()
+  end)
+
+  -- compy.screen.showNotice(text) shows a notice in the band
+  -- above the status line; the next key dismisses it
+  scenario('show-notice', function(wait)
+    D.key(wait, 'escape')
+    D.key(wait, 'C-l')
+    D.enter(wait, 'compy.screen.showNotice("Press Space to jump")')
+    D.eq(P.console_message(), 'Press Space to jump',
+      'showNotice sets the console notice')
+    D.eq(P.console_message_kind(), 'notice',
+      'showNotice sets kind notice')
+    assert(P.shows(P.drawn(wait), 'Press Space to jump'),
+      'the band draws the notice')
+    D.key(wait, 'lshift')
+    D.eq(P.console_message(), 'Press Space to jump',
+      'a lone modifier keeps the notice')
+    --- x as a Compy sends it: its text, then its key press
+    D.type(wait, 'x')
+    D.key(wait, 'x')
+    D.eq(P.console_message(), nil,
+      'the next key dismisses the notice')
+    D.eq(P.console_draft(), 'x', 'and still acts')
+    assert(not P.shows(P.drawn(wait), 'Press Space to jump'),
+      'the band no longer draws the notice')
+    D.key(wait, 'escape')
+    hm_done()
+  end)
 end
 
 console()

@@ -127,7 +127,6 @@ end
 --- The rows a message may take in the band: one, or up to
 --- three when it is wider than the screen
 local NOTICE_ROWS = 3
-UserInputView.NOTICE_ROWS = NOTICE_ROWS
 
 --- The rows of the message the band shows, nil when none
 --- shows; one longer than the band ends in an ellipsis.
@@ -171,13 +170,16 @@ end
 --- after the field's draw, which places the status line.
 --- @param pitch number
 --- @param origin number
-function UserInputView:draw_notice(pitch, origin)
+--- @param bottom number? --- top of the visible status line; defaults to self.start_h
+function UserInputView:draw_notice(pitch, origin, bottom)
   local rows = self:notice_rows()
   if not rows then return end
+  local err = self.controller.model.error
+  if type(err) == 'table' then err.seen = true end
   local cf = self.cfg
   local fh = cf.fh
   local width = gfx.getWidth()
-  local bottom = self.start_h
+  bottom = bottom or self.start_h
   local top = bottom - #rows * fh
   local from = origin
       + math.floor((top - origin) / pitch) * pitch
