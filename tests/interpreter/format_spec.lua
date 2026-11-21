@@ -7,6 +7,7 @@ local parser = require("model.lang.lua.parser")()
 local display = require("conf.display")
 
 local W = display.columns
+local it_luajit = jit and it or pending
 
 --- @param path string
 --- @return string[]
@@ -365,7 +366,7 @@ describe('lua format #format', function()
     assert.same(text, out)
   end)
 
-  it('decodes \\u{...} escapes as LuaJIT does', function()
+  it_luajit('decodes \\u{...} escapes as LuaJIT does', function()
     for _, lit in ipairs({ '"\\u{48}"', '"\\u{10FFFF}"' }) do
       local src = 'return ' .. lit
       local out, ok = format.format({ src }, W)
@@ -397,7 +398,7 @@ describe('lua format #format', function()
     end
   end)
 
-  it('scans string escapes left to right as LuaJIT does', function()
+  it_luajit('scans string escapes left to right as LuaJIT does', function()
     for _, lit in ipairs({
       '"\\0\\z  1"',
       '"\\z  \\65"',
@@ -502,7 +503,7 @@ describe('lua format #format', function()
       assert.equal(run(text), run(out))
     end)
 
-  it('preserves LuaJIT bytecode across ast_inputs and bundled examples',
+  it_luajit('preserves LuaJIT bytecode across ast_inputs and bundled examples',
     function()
       local ast_inputs = require('tests.interpreter.ast_inputs')
       local allowed_diff = {
