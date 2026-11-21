@@ -735,6 +735,9 @@ paid, or turned out not to be debt.
 
 ### The console's terminal self-test is unreachable
 
+- **Superseded 2026-11-20.** The guard reads `app_state ~= 'ready'` alone
+  (`8ae555f1`), so Ctrl+Alt+T starts the test in a debug build, as
+  `DEVELOPMENT.md` says. The text below is the record.
 - **Where:** `src/controller/consoleController.lua` — `terminal_test`'s opening guard,
   `love.state.app_state ~= 'ready' or love.state.app_state ~= 'project_open'`. A state
   cannot be both, so the disjunction holds for every value and the function always returns
@@ -806,6 +809,11 @@ paid, or turned out not to be debt.
   ours rather than the rework author's.
 
 ## RETIRED
+
+**Note, 2026-11-20.** Entries below that name the editor's modes, its questions
+and checkpoints, or its keys of upstream PR #45 describe the editor before its
+rebuild on three states. `../../EDITOR.md` and `../internals/editor.md` describe
+the editor as it is.
 
 ### Editor submit raises when no buffer is open (RESOLVED, 2026-09-30)
 

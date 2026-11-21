@@ -201,6 +201,13 @@ widget's own test is `is_shown()`.
 
 ## D-WIDGET-AT-BOOT — a boot-provisioned widget per surface, not per-session construction
 
+**Note, 2026-11-20 — the editor has no search strip.** The editor was rebuilt
+on three states (browsing, inserting, replacing) with no search, so the
+boot-provisioned host surfaces are two: the console's line and the editor's
+field. The editor's field is one `always_shown` controller that shows the front
+file's own `UserInputModel` (`../internals/editor.md`). The rest of this entry
+stands.
+
 **AMENDED IN PART, 2026-08-27.** The **project** widget is created per project **run**, not at
 load. Everything else stands: the console's, the editor's and the search strip's widgets are still
 boot-provisioned, and within a run `show()`/`hide()` are still state flips on one instance, never
@@ -301,6 +308,11 @@ migrate to `compy.input.*`; the replacement mapping is documented in the usage g
 
 ## D-EDIT-CALLBACKS — the widget talks about the content being edited through callbacks
 
+**Note, 2026-11-20 — the editor's search widget is gone.** The Consequence
+below names the editor's search widget and its return contract; the rebuilt
+editor has no search (`../internals/editor.md`). The console's history walk on
+Up and Down at the field's first and last row is as stated.
+
 *(`EDIT` in this id and in `D-EDIT-LIFECYCLE` is the input widget's **content editing**, not the
 code editor of `internals/editor.md` — the two meet in this file, where `editor` means the latter.)*
 
@@ -355,6 +367,12 @@ unrelated return contract and is untouched (a discovered, pinned behaviour; see 
 
 
 ## D-EDIT-LIFECYCLE — submit and cancel are widget-owned callback-driven flows, not a framework tier
+
+**Note, 2026-11-20 — the editor has no `block_input()`.** "One path for every
+instance" below has the editor consume Enter and Escape through `block_input()`.
+The rebuilt editor's key table binds both to its own actions
+(`src/model/editor/editorKeys.lua`), so neither reaches its widget's flows, and
+it still seats no lifecycle flags. The rest of this entry stands.
 
 *(`EDIT` here is the input widget's content editing, not `internals/editor.md`'s editor — this
 entry's own body names both.)*
@@ -2082,6 +2100,12 @@ consumer all migrate a second time, and `PR-01-02` owes a justification row for 
 
 ## D-CONTENT-NORM — content is normalised so the cursor address is unambiguous
 
+**Note, 2026-11-21 — a carriage return is normalized too.** Since 2026-11-14
+(`f9f8e44e`) `entered_text` in `src/model/input/userInputModel.lua` turns CRLF
+and a lone CR into a newline before the split, in both spellings, so
+`set_text("a\r\nb")` yields `{"a", "b"}`. The parenthesis on `\r` below is the
+record; the rest of this entry stands.
+
 **Status: implemented** (owner, 2026-09-01; built at `BUG-02-01`). Ruled while weighing whether
 `set_text`'s list branch should split embedded newlines, and stated as the general rule rather than
 as that fix, because the rule already governed a behaviour nobody had written down.
@@ -2192,6 +2216,14 @@ measures the column on the wrong line"*.
 ---
 
 ## D-LIFECYCLE-FLAGS — four flags, one per (verb × outcome); they supersede `auto_hide`
+
+**Note, 2026-11-20 — the editor's modes and Shift+Esc are gone.** Acceptance
+criteria 1 and 2 below describe the editor's navigation and edit modes and its
+Shift+Esc. The rebuilt editor has three states (browsing, inserting, replacing),
+and its own key table binds Escape: while inserting it drops the typed text,
+while replacing it drops the edit, and while browsing it steps back from the
+file (`src/model/editor/editorKeys.lua`, `../../EDITOR.md`). Shift+Esc is bound
+nowhere. The flags stand as decided, and the editor still seats none.
 
 **Status: IMPLEMENTED, 2026-09-09 (`FLAGS-01`). The holistic pass RAN before it and the matrix
 survived — widened, not reshaped** (owner rulings, 2026-09-06/07).
@@ -2688,6 +2720,12 @@ they ever disagree, this entry is the one carrying a stakeholder's ratification 
 ---
 
 ## D-SIMPLE-SURFACE — two named surfaces; the simple one is a wrapper on `compy`, not a second API
+
+**Note, 2026-11-20 — the field's editing keys changed.** The first deviation
+below lists the keys the widget spent on editing as they were. The field now
+binds nothing to Ctrl+C, Ctrl+X, Ctrl+V or Ctrl+D, Ctrl+Y redoes, and the
+editor has no search (`src/model/input/fieldKeys.lua`). The deviation stands:
+no editing key ends a question.
 
 **Status: IMPLEMENTED, 2026-09-09 (`SIMPLE-01`)** (owner rulings, 2026-09-07, amended 2026-09-09).
 `T-SIMPLE-SURFACE` is paid. **Five amendments came out of building it, and each is an owner ruling

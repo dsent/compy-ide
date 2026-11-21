@@ -59,12 +59,14 @@ has is worse than none, because it passes.
 
 ## keyboard
 
-**Repository:** `src/examples/keyboard` (separate remote, own PR). **Last mechanism change:**
-2026-11-18, help shows while `F1` is held, in place of `Alt+H`. Before it, 2026-08-12, the way a
-typed character is accepted, and the teacher chord `Ctrl+Alt+H` becoming a registered shortcut
-instead of a hand-matched combo — see `internals/examples/keyboard.md`. Cases marked **[new]**
-exercise these mechanisms and have never been run by a human; the rest are regression checks
-against behaviour the example already had.
+**Repository:** <https://github.com/dsent/compy.keyboard>. **Last mechanism
+change:** 2026-11-18, help shows while `F1` is held, in place of `Alt+H`, and
+`Esc` goes back, in place of `Shift+Esc`, leaving the program from the menu.
+Before it, 2026-08-12, the way a typed character is accepted, and the teacher
+chord `Ctrl+Alt+H` becoming a registered shortcut instead of a hand-matched
+combo — see `internals/examples/keyboard.md`. Cases marked **[new]** exercise
+these mechanisms and have never been run by a human; the rest are regression
+checks against behavior the example already had.
 
 ### The four commits a result should be reported against
 
@@ -84,17 +86,23 @@ closed, and the tidy batch. **At this head the gesture-parity diff against upstr
 108 fresh-press stimuli and 108 repeats. The platform id is this pin's parent; the pin commit changes
 nothing but this table.)*
 
+The pins are the August pass's. D1 to D5, D5b and A4's way back need the
+keyboard repository's `dsent/dev` at `07ba846` or later.
+
 ### How to launch
 
-- **Desktop / nodejs:** from the repo root, `love src play src/examples/keyboard`.
+- **Desktop / nodejs:** from the repo root,
+  `love src play <the keyboard checkout>`.
 - **Device:** the assembled `.apk`.
-- **The exit rows (D9, G1) need the IDE, not play mode.** Under `love src play …` the console is
-  disabled (`consoleController.lua`, the `cfg.mode == 'play'` branches), so there is nothing to come
-  back to and neither row can be *observed* — the code under test runs either way. Start the
-  console with `love src`, launch the game from it (`run(<project>)`), and come back to it.
+- **The exit rows D5b and G1 need the IDE, not play mode.** Under
+  `love src play …` the console is disabled (`consoleController.lua`, the
+  `cfg.mode == 'play'` branches), so there is nothing to come back to, and the
+  gate's `Ctrl+Q` does nothing. Start the console with `love src`, launch the
+  game from it (`run(<project>)`), and come back to it.
 - The **menu** lists eight games in this order: **1** Press the key · **2** Find the key ·
   **3** Asteroids · **4** Alt characters · **5** Words & phrases · **6** Blow the bubble ·
-  **7** Hide and seek · **8** Load the train. Press the digit to enter; `Shift+Esc` returns.
+  **7** Hide and seek · **8** Load the train. Press the digit to enter; `Esc`
+  returns to the menu, and at the menu leaves the program.
 - A game's difficulty is `Ctrl+Alt+Up` / `Ctrl+Alt+Down` ("the notch"). **Alt characters** reaches
   its symbol and capital targets at the higher notches; **Words** adds capitals at rung 3 and
   punctuation at rung 4.
@@ -106,7 +114,7 @@ nothing but this table.)*
 | A1 | launch; while the intro is still typing, press a **letter** | the typewriter jumps to the end |
 | A2 | relaunch; while it types, press **Alt alone** (nothing else) | **[new]** it keeps typing — Alt does *not* skip it |
 | A3 | relaunch; while it types, press **Shift alone** | it *does* skip. Known asymmetry, deliberate: upstream behaves this way |
-| A4 | from the menu press `4` to enter Alt characters; `Shift+Esc` back; press `5` to enter Words | **[new]** neither entry knocks — the first target of each is untouched, and Words' first word keeps its gauge unit. *(The digit used to be judged by the game it opened.)* |
+| A4 | from the menu press `4` to enter Alt characters; `Esc` back; press `5` to enter Words | **[new]** neither entry knocks — the first target of each is untouched, and Words' first word keeps its gauge unit. *(The digit used to be judged by the game it opened.)* |
 
 ### B — Alt characters (game 4): the main judging scene
 
@@ -143,14 +151,15 @@ nothing but this table.)*
 |---|---|---|
 | D1 | in any game, while it is being played, **hold** `F1` | **[new]** the help overlay appears and the game freezes behind it; no knock, no miss, no IDE key card |
 | D2 | release `F1` | **[new]** the overlay disappears |
-| D3 | hold `Alt+H`, then release **Alt** first, keeping H down | **[new]** no help overlay at any point, **and** no stray `h` is typed into the game — no knock, no miss |
-| D4 | `Shift+Esc` | leaves the game for the menu |
-| D5 | `Alt+Shift+Esc` | **[new]** also leaves. *(It stopped working during the migration and was restored.)* |
+| D3 | hold `Alt+H`, then release **Alt** first, keeping H down | **[new]** no help overlay at any point: `Alt+H` is an Alt chord like any other. **And** no stray `h` is typed into the game — no knock, no miss |
+| D4 | `Esc` | **[new]** leaves the game for the menu; held, it goes no further |
+| D5 | `Alt+Shift+Esc` | **[new]** nothing happens: a chord with Esc is another key, and only a bare `Esc` goes back |
+| D5b | `Esc` at the menu | **[new]** the program stops and the console comes back (**IDE launch**, as G1) |
 | D6 | `Ctrl+Alt+Up`, `Ctrl+Alt+Down` | the notch moves one step per press — **not** repeatedly while held |
 | D7 | `Ctrl+Alt+Shift+Up` | **[new]** also moves the notch |
 | D8 | in a timed game, `Alt+P`, then `Alt+P` again | pause on, pause off — once per press, and the pause survives a held key |
 | D8b | in a timed game, `Alt+Shift+P`, then `Alt+Shift+P` again | **[new]** also pauses and resumes. *(It stopped working during the migration and was restored — the fifth gesture of that family.)* |
-| D9 | `Ctrl+Esc` | the IDE exits and starts again; the project is not stopped first and its `compy.before_exit` does not run. **Needs the IDE launch** — see "How to launch" |
+| D9 | `Ctrl+Esc` | the IDE exits |
 | D10 | in game 1 or 6 (no `onHint`), press `Ctrl+Alt+H` | **[new]** nothing happens: no knock, no miss, no sound |
 
 ### E — Caps Lock and the decals
@@ -173,12 +182,16 @@ nothing but this table.)*
 
 | | do | expect |
 |---|---|---|
-| G1 | leave the game with `Ctrl+Q` and use the console (**IDE launch**, as D9) | **[new]** the pointer behaves as it did before the game was started — the project puts relative mode back in `compy.before_exit`. *(The IDE now puts the mouse back itself when any run ends, so a pass here no longer tells the project's restore from the IDE's.)* |
+| G1 | leave the game with `Ctrl+Q` and use the console (**IDE launch**, as D5b) | the pointer behaves as it did before the game was started: the IDE puts the mouse back when any run ends, and the game has no restore of its own |
 
 ### What a failure here means
 
-- **A2, A4, B2, B6, B9, B10, B11, B12, B13, C2, C5, D3, D5, D7, D8b, D10, G1** are the new mechanism and its restorations. A failure is
-  a defect in the 2026-08-12 work — see the four commits named above.
+- **A2, A4, B2, B6, B9, B10, B11, B12, B13, C2, C5, D7, D8b, D10** are the new
+  mechanism and its restorations. A failure is a defect in the 2026-08-12 work —
+  see the four commits named above.
+- **D1 to D5 and D5b**, and A4's `Esc` back to the menu, are the help key and
+  the way back of 2026-11-18: commits `41ee98e`, `25b11af` and `07ba846` on the
+  keyboard repository's `dsent/dev`. A failure is a defect in that work.
 - **E3** is a question, not a test: either answer closes it.
 - Everything else is a regression check. A failure there means the migration changed behaviour it was
   not supposed to touch, which is the thing that ruling exists to prevent.
@@ -186,6 +199,13 @@ nothing but this table.)*
 ---
 
 ## maze (and draw)
+
+**A dated record.** This list checks the input migration of August and September
+2026 at the commits named below. maze and draw now ship from
+<https://github.com/dsent/compy.maze>, whose `README_maze.md` and
+`README_draw.md` describe the games and their `Esc` as they are. Section B
+presses keys the games no longer have, and its row B7 types a `<`, which no
+longer leaves draw.
 
 **Repository:** `src/examples/maze` (separate remote, own PR). **Last mechanism change:** 2026-09-08
 (`af7d8e8`) — the two channels still written as `love.*` became hooks, because a captured handler

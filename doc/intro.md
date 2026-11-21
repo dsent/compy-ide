@@ -39,10 +39,14 @@ Text files, including Lua sources can be edited using the built-in text editor
 that can be started by entering `edit("...")` in the console, with the name of 
 the file between the quotes. In its absence, `main.lua` will be edited.
 
-No changes to the edited file will occur unless the user presses **Enter** _and_ 
-the text in the edit area at the bottom of the screen is syntactically correct. 
-Pressing **Enter** takes immediate effect on the SD card, there is no need to 
-"save" the edited file separately.
+Text typed into the edit area at the bottom of the screen changes the file when
+the user submits it with **Enter**, or with **Shift+Insert**, which submits and
+keeps the text in the edit area. In a Lua file the text must be valid Lua, and a
+file that loads must still load after the change; a file that does not load
+takes changes, so it can be repaired one block at a time. Other key combinations
+cut or move a block, format the whole file, or undo or redo a change; the
+[editor](EDITOR.md) documentation lists them. Every change takes immediate
+effect on the SD card, there is no need to "save" the edited file separately.
 
 If there is no highlighted section in the edited file, the text inputed in the 
 console will be appended to the end of the file. If there is a bright white 

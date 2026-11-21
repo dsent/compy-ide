@@ -16,7 +16,10 @@ Assessment of `doc/` relative to the codebase and the knowledge base under `doc/
 
 **`doc/development/lib_deps.md`** — Full module dependency graph and utility tier breakdown. `overview.md` references it; consult directly when tracing load-order or dependency questions.
 
-**`doc/EDITOR.md` — Principles section** (lines 1–17) — The four editor design invariants are accurately stated, including the `loaded_is_sel` rule. Remains authoritative.
+**`doc/EDITOR.md`** — The editor's principles, its keys by state, and how a file
+is browsed, inserted into and replaced in. Authoritative for what a user meets;
+`internals/editor.md` has the mechanism, and `src/model/editor/editorKeys.lua`
+is the key table both follow.
 
 **`doc/AST.md`** — Metalua AST token reference table. Accurate. Useful when working on the parser, analyzer, or any code that walks the AST.
 
@@ -34,10 +37,16 @@ Assessment of `doc/` relative to the codebase and the knowledge base under `doc/
 
 **`doc/mermaid/input.md`** — Same pattern as eval.md. The "Planned refactor" describes the current `UserInputModel` structure; the diagram is now the ground truth, but the framing as "planned" is confusing.
 
-**`doc/EDITOR.md` — Keybindings table** — Several entries have drifted from the implementation:
-- `F9` listed for toggle edit/run; code and README both use `F8`
-- `Ctrl+Shift+Q` listed for quit project; code uses `Ctrl+Q`
-- Missing entries: reorder mode (`Ctrl+M`), follow-require (`Ctrl+O`), close-buffer vs stop-editor distinction
+**`doc/interface/*.apng`** — The animations `README.md` and `doc/EDITOR.md` show
+were recorded with an earlier editor and its status line, which names no state.
+`open_edit.apng` types `edit('README')`, where the turtle project's file is
+`README.md` now and `edit('README.md')` opens it. `hello.apng` (a line typed
+and added with Enter) shows gestures that still hold, under that status line.
+`hello_cap.apng` loads a block with Escape, where F2 loads it now;
+`quit_editor.apng` leaves with Ctrl+Shift+Q, where Escape while browsing or
+Ctrl+Q leaves now; `move_line.apng` and `move_block.apng` move a block with
+Ctrl+M, arrow presses and Enter, where Alt+Up and Alt+Down move it now. No
+script in this repository records them.
 
 ---
 
@@ -47,6 +56,5 @@ Assessment of `doc/` relative to the codebase and the knowledge base under `doc/
 - **Drawing system** — pen-and-paper vs real-time draw modes. Covered by `doc/development/drawing_system.md`.
 - **Project environments** — the three Lua environments (`main_env`, `base_env`, `project_env`). Covered by `internals/console.md`.
 - **The retired `user_input` polling API** — `input_text()`, `validated_input()`, `user_input()`. **Removed in 1.0.0-rc20260712**, no shim; `internals/console.md` records what it was, and [`input_api.md`](../input_api.md) documents `compy.input`, which replaced it.
-- **Editor modes** — reorder (`Ctrl+M`) mode not documented in `doc/`.
 - **Harmony testing mode** — covered by `doc/development/tests.md`, "Harmony scenarios".
 - **`doc/development/editor/buffer.md`** — file exists but is empty.
