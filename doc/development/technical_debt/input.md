@@ -191,6 +191,10 @@ per-run boundary) rather than as a phase of a lifecycle.
 
 ### T-BLOCK-AT-OPEN — the editor's opening selection moved, and no document says so
 
+- **Superseded 2026-11-20.** The rebuilt editor opens a file at its end
+  position, ready to append, and both `../../EDITOR.md` and
+  `../internals/editor.md` say so. The text below is the record of the opening
+  selection it describes.
 - **Where:** the editor's opening path — `src/model/editor/bufferModel.lua`, which our merge took
   from upstream PR #45 whole (`git diff f4cf338c HEAD -- src/model/editor/bufferModel.lua` →
   empty, so ours is byte-identical to theirs). Observable from
@@ -379,6 +383,8 @@ per-run boundary) rather than as a phase of a lifecycle.
 
 ### T-SPACE-GLYPH-WAIT-ENDS-AT-FRAME — a confirming Space's glyph is let through if it arrives a frame after its key
 
+- **Superseded 2026-11-20.** The rebuilt editor asks no questions, so no Space
+  answers one, and `CC.swallow_glyph` is gone. The text below is the record.
 - **Where:** `src/controller/controller.lua`: the update clears `CC.swallow_glyph` each frame.
 - **Scenario:** a Space answers an editor question with its key press, then a frame's update runs,
   and only then does its glyph arrive. Most answers leave the editor open in navigation (Shift+Esc's
@@ -391,6 +397,9 @@ per-run boundary) rather than as a phase of a lifecycle.
 
 ### T-REPLACE-NEEDS-POSIX-RENAME — a save renames over the file, which Windows' rename refuses
 
+- **Superseded 2026-11-20.** The editor keeps no checkpoints, so the checkpoint
+  overwrite and restore below are gone; every save still goes through
+  `FS.replace`, and the rest stands.
 - **Where:** `src/util/filesystem.lua`, `FS.replace` → `FS.rename` → `os.rename`.
 - **Scenario:** under Windows, saving a file that exists fails: the C runtime's rename refuses an
   existing target, so every save after the first, every checkpoint overwrite and every restore
@@ -400,6 +409,9 @@ per-run boundary) rather than as a phase of a lifecycle.
 
 ### T-GLYPH-ONLY-SPACE-ANSWERS-NOTHING — a keyboard that sends a Space as text alone cannot answer an editor question with it
 
+- **Superseded 2026-11-20.** The rebuilt editor asks no questions: a refused
+  action shows a notice, and `_dialog_textinput` is gone. The text below is the
+  record.
 - **Where:** `src/controller/editorController.lua`, `_dialog_textinput`: while a question is open a
   glyph neither answers nor cancels it; only a fresh key press does (`keypressed`).
 - **Scenario:** on an on-screen keyboard, which sends a Space as text with no key press, Ctrl+Q asks
@@ -410,6 +422,9 @@ per-run boundary) rather than as a phase of a lifecycle.
 
 ### T-MOUSE-LEAVES-QUESTION — with editor mouse input on, a click leaves a question on another block
 
+- **Superseded 2026-11-20.** The rebuilt editor asks no questions, and a click
+  goes to the field alone, where it places the cursor; a click on the file does
+  nothing (`EditorController:mousepressed`). The text below is the record.
 - **Where:** `src/controller/editorController.lua`, the mouse navigation that accepts an open block
   and leaves edit mode without dropping `pending_confirm`.
 - **Scenario, with `cfg.editor.mouse_enabled = true`:** change `x = 1` to `x = 2`, raise
@@ -420,6 +435,10 @@ per-run boundary) rather than as a phase of a lifecycle.
 
 ### T-PROGRAM-SWITCH-DROPS-DRAFT — a program that switches projects under the editor drops its draft
 
+- **Superseded 2026-11-20.** No program runs or idles behind a shown editor:
+  every way into it passes `ConsoleController:_enter_editor`, which stops a live
+  program first (`../internals/editor.md`), so no program's hook can switch
+  projects during an edit. The text below is the record.
 - **Where:** `src/controller/consoleController.lua`, `open_project` → `_close_project` →
   `stop_project_run` → `finish_edit`, reached from a program's own code; the editor's exit question
   (`EditorController:ask_to_leave`) sits on the gate's chords and is not consulted.
@@ -433,6 +452,11 @@ per-run boundary) rather than as a phase of a lifecycle.
 
 ### T-CTRL-ESC-DROPS-CHANGE — Ctrl+Esc exits the IDE with a changed block open, unasked
 
+- **Superseded 2026-11-20.** The rebuilt editor asks no questions, and Ctrl+Esc
+  exits the IDE from every state, an edit included, as `../../input_api.md`
+  states: no state of the editor holds it back, only a file on its way to the
+  micro:bit, and text that is only in the field goes with it. There is no
+  question to route it through. The text below is the record.
 - **Where:** `src/controller/controller.lua`, the `keyreleased` reservation
   `['ctrl+escape'] = Application.request_application_exit`, which no editor question guards;
   `love.quit` lets the exit through in `app_state == 'editor'`.
@@ -543,6 +567,13 @@ of nearest release … making it working in console is a separate design task wh
 
 ### T-CTRL-S-UNCLAIMED — the reason bare Ctrl+S stopped closing the buffer is not true
 
+**Superseded 2026-11-20.** A bare Escape while browsing closes the buffer: it
+steps back to the file it came from, or from the last file to the console
+(`EditorController:close_buffer`), and Ctrl+Q leaves the editor. Ctrl+S is
+reserved nowhere, a program receives it, and the editor's key table names
+neither `ctrl+s` nor `ctrl+shift+s` (`src/model/editor/editorKeys.lua`). The
+text below is the record.
+
 **RULED AND MOVED TO `BACKLOG`, 2026-09-07** (owner, at `MERGE-01-08`): *"we do not intervene, ship
 what was shipped by #45, mark unbound Ctrl+S a tech debt (backlog). maybe they will rebind it
 later."*
@@ -628,9 +659,12 @@ future author adding an editor branch meets the constraint at the site).
 ### T-EDITOR-SEAM-DEFAULT-OPEN — our widget acts on every editor key the editor does not block, and the block list is theirs
 
 - **Resolved 2026-11-14.** The editor looks each chord up in its state's table
-  (`src/model/editor/editorKeys.lua`) and hands the widget only the chords an entry gives it
-  (`act = 'field'`); a chord no entry names reaches nothing. The widget matches chords exactly too.
-  The text below is the record of the open seam.
+  (`src/model/editor/editorKeys.lua`) and hands the widget only the chords that
+  table leaves and the field's own table names (`fieldKeys.lua`,
+  `UserInputController:names`), and Up and Down, which the table's `vertical`
+  action passes to the widget while there is a draft; a chord neither table
+  names reaches nothing. The widget matches chords exactly too. The text below
+  is the record of the open seam.
 - **Where:** `src/controller/editorController.lua`, `_normal_mode_keys` — `passthrough` initialises
   to **`true`** and `block_input()` clears it; the tail reads `if passthrough then
   input:keypressed(k) end`. So `src/controller/userInputController.lua`'s `keypressed` runs on the
@@ -950,6 +984,11 @@ future author adding an editor branch meets the constraint at the site).
 
 ### Content normalisation treats `\n` but not `\r`
 
+- **Superseded 2026-11-14.** Text entering a field has its line breaks
+  normalized: `entered_text` in `src/model/input/userInputModel.lua` turns CRLF
+  and a lone CR into a newline, and `set_text` passes through it, so
+  `set_text("a\r\nb")` yields `{"a", "b"}`. The field pastes nothing
+  (`src/model/input/fieldKeys.lua`). The text below is the record.
 - **Where:** `src/util/string/string.lua` — `string.lines` splits on `'\n'`;
   nothing in `src/model/input/`, the string utilities or
   `userInputController.lua` mentions `'\r'` at all.
@@ -1592,6 +1631,10 @@ future author adding an editor branch meets the constraint at the site).
 
 ### Editor input buffer not cleared on Escape
 
+- **Superseded 2026-11-20.** Escape while inserting drops the typed text, and
+  while replacing drops the edit (`EditorController:cancel_edit`, which clears
+  the field); while browsing it steps back from the file. The text below is the
+  record.
 - **Where:** the editor input buffer.
 - **State:** After Escape in the editor, the buffer retains its content
   rather than emptying. A fix was believed to exist at one point but is not
@@ -1880,6 +1923,12 @@ future author adding an editor branch meets the constraint at the site).
 
 ### Examples are not onboarded onto the new input API
 
+- **Superseded 2026-11-20.** `keyboard` and `maze` left this repository and ship
+  from <https://github.com/dsent/compy.keyboard> and
+  <https://github.com/dsent/compy.maze>; both now bind a bare Esc as a shortcut,
+  and neither has the Shift+Escape quit the maze site below describes. The
+  `turtle` site stands, its `Key.shift()` test now in `actOnKey`, which turtle's
+  `compy.input.hooks.keypressed` calls.
 - **Where:** `src/examples/{maze,keyboard,turtle,clock}` — the sites listed
   below. The three detached repos (`keyboard`, `maze`, `balloons`) have
   their own remotes and no test suite; `balloons` reads no held state at
@@ -2007,6 +2056,11 @@ future author adding an editor branch meets the constraint at the site).
 
 ### Discovered, de-facto behaviours pinned during the un-fork (rationale note)
 
+**Superseded in part 2026-11-20.** Ctrl+Enter no longer submits: every chord is
+a key of its own, and only a bare Enter submits (`../decisions/input.md`,
+D-DEFACTO-KEPT). The first bullet below is the record of the earlier guard; the
+others stand.
+
 The un-fork's preservation tests froze several behaviours that are **not designed
 contracts** but were **discovered as existing behaviour with no mandate to alter**
 — treated as de-facto standards per the implementation and pinned so they can't
@@ -2131,6 +2185,11 @@ changes.
 
 ### Console and editor route handlers bind by hand-written modifier tests
 
+- **Superseded 2026-11-20.** The console's and the editor's keys are combo
+  tables now (`src/model/input/consoleKeys.lua`, `fieldKeys.lua` and
+  `src/model/editor/editorKeys.lua`), looked up by the exact chord, so
+  Alt+Escape loads nothing and only a bare Ctrl+L clears the output. The text
+  below is the record.
 - **Where:** `editorController.lua` (~33 tests) and
   `consoleController.lua` (4) — `if Key.ctrl() and not Key.shift() and not
   Key.alt() and Key.is_enter(k)`, and the same shape for Escape, paste, scroll
@@ -2191,6 +2250,12 @@ changes.
   anyway.
 
 ## RETIRED
+
+**Note, 2026-11-20.** Entries below that name the editor's navigation, edit,
+reorder and search modes, its questions and checkpoints, or Shift+Esc,
+Ctrl+Shift+S, Ctrl+M, Ctrl+F or the reserved Ctrl+S, Ctrl+Shift+R and Ctrl+Alt+R
+describe the editor before its rebuild on three states. `../../EDITOR.md` and
+`../internals/editor.md` describe the editor as it is.
 
 ### T-LEAVE-KEYS-LOSES-BLOCK — the editor's whole-editor exits do not write an open changed block (PAID, 2026-09-30)
 
