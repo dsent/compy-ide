@@ -501,7 +501,7 @@ treats `'ready'` **plus** interactivity the same as `'running'`, so the
 project's own quit (`love.event.quit`) stops it back to the console instead of
 quitting the app. An idle console in `'ready'`, with neither a widget nor a
 pointer hook, falls through and the app quits. `Ctrl+Esc` quits the app in
-every state, unless a file is on its way to the micro:bit.
+every state.
 
 `ProjectInputController` carries no per-event "am I still running?" guard: once
 `stop_project_run` re-points `love.keypressed` and friends at the console, the

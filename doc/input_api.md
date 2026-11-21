@@ -930,7 +930,7 @@ yourself.
 
 | Combo | What the platform does | When |
 |---|---|---|
-| `ctrl+escape` (on **release**) | exits the whole IDE at once: the run is not stopped first, and `compy.before_exit` does not run. A file going to the micro:bit is abandoned, and the board can be left without a program until the next upload | always |
+| `ctrl+escape` (on **release**) | exits the whole IDE at once: the run is not stopped first, and `compy.before_exit` does not run | always |
 | `ctrl+r` | restarts a program that runs, is paused or idles behind the console, from the file it runs from; does nothing when none does (a packaged build restarts always) | always |
 | `ctrl+t` | switches between running and the editor | development only |
 | `ctrl+q` | stops the run and returns to the console; the project stays open. From the editor, leaves it for the console | development only |
