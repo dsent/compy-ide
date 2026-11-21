@@ -186,7 +186,19 @@ return function(M)
     ------------------------------------------------------------------------
     -- assignments and calls: statements that don't start with a keyword
     ------------------------------------------------------------------------
+    local function parse_error_at (lx, pos, msg)
+        lx.lineinfo_consumed = {
+            first = { line = pos.line, column = pos.column, facing = pos },
+            last = pos,
+        }
+        gg.parse_error (lx, msg)
+    end
+
     local function assign_or_call_stat_parser (lx)
+        if lx:is_keyword(lx:peek(), "#") then
+            parse_error_at (lx, lx:peek().lineinfo.first,
+                "A comment starts with --, not #.")
+        end
         local e = annot_expr_list (lx)
         local a = lx:is_keyword(lx:peek())
         local op = a and M.assignments[a]

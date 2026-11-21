@@ -217,19 +217,17 @@ describe('a first line starting with # #parser', function()
     end
   end)
 
-  --- the parser takes `#x = 1` as an assignment, as it takes
-  --- any expression before `=`, which LuaJIT refuses: that is
-  --- no matter of the first line
+  --- a statement starting with `#` is refused, not stripped
+  --- as a shebang
   it('keeps a line #x = 1 where it is written', function()
     for _, code in ipairs({
       { '#speed = 5', 'speed = 10' },
       { '', '#x = 1', 'y = 2' },
       { ' #x = 1', 'y = 2' },
     }) do
-      local n = code[1] == '' and 2 or 1
-      local ok, ast = parser.parse(code)
-      assert.is_true(not ok or ast[1].lineinfo.first.line == n)
-      assert.same(string.match(code[n], '#.*'), gated(code)[n])
+      local ok = parser.parse(code)
+      assert.is_false(ok)
+      assert.same(code, gated(code))
     end
   end)
 

@@ -238,5 +238,9 @@ return {
   --- test
   invalid({ 'abc("xyz"' }, Cursor.inline(9)),
   invalid({ 'abc("' }, Cursor.inline(4)),
+  invalid({ '# note' }, Cursor(1, 1)),
   invalid({ 'print("hi")', '# say hi' }, Cursor(2, 1)),
+  invalid({ 'x = 1 # n' }, Cursor(1, 7)),
+  valid({ '#!/usr/bin/lua', 'print(1)' }),
+  invalid({ 'print(1)', '#!/usr/bin/lua' }, Cursor(2, 1)),
 }

@@ -90,6 +90,33 @@ describe('parse failure boundary #parser', function()
     lua.failure(lines, err)
     assert.same({ l, c }, { err.l, err.c })
   end)
+
+  it('tells a # statement to use -- and places it at #',
+    function()
+      local msg = 'A comment starts with --, not #.'
+      local cases = {
+        { { '# note' }, 1, 1 },
+        { { 'print("hi")', '# say hi' }, 2, 1 },
+        { { 'x = 1 # n' }, 1, 7 },
+        { { 'print(1)', '#!/usr/bin/lua' }, 2, 1 },
+        { { '#!/usr/bin/lua', '#!/usr/bin/lua' }, 2, 1 },
+      }
+      for _, case in ipairs(cases) do
+        local ok, err = parser.parse(case[1])
+        assert.is_false(ok)
+        assert.same({ case[2], case[3], msg },
+          { err.l, err.c, err.msg })
+        local f = lua.failure(case[1], err)
+        assert.same({ case[2], case[3], false, msg },
+          { f.l, f.c, f.at_end or false, f.msg })
+      end
+      assert.is_true(
+        lua.submission({ '#!/usr/bin/lua', 'print(1)' }, 64, 14).ok)
+      local v = lua.submission({ '# note' }, 64, 14)
+      assert.is_false(v.ok)
+      assert.same({ 1, 1, msg },
+        { v.failure.l, v.failure.c, v.failure.msg })
+    end)
 end)
 
 --- The editor's rules around the language layer's verdict
