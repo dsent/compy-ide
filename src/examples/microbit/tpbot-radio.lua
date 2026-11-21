@@ -590,8 +590,15 @@ do
     return edu, name
   end
 
-  -- The motors never start without the stop after them, and the stop goes
-  -- out even when the start or the wait failed, a Ctrl+C included
+  -- The motors never start without the stop after them, and bot.move
+  -- attempts the stop write even when the start or the wait fails. Ctrl+C
+  -- does not cancel a move in progress: on a USB prompt microbit.sleep does
+  -- not run serial events, so the prompt sees Ctrl+C only after the call
+  -- returns; under listen(), local USB Ctrl+C is read on the next loop
+  -- iteration, and a calling board's Ctrl+C must cross the radio and can be
+  -- lost while the robot is busy. Separately, a hardware reset (such as
+  -- Ctrl+M on a USB-attached board) restarts that board mid-wait and
+  -- bypasses cleanup.
   function bot.move(left, right, seconds)
     if type(seconds) ~= "number"
         or not (seconds >= 0 and seconds <= MAX_SECONDS) then
@@ -621,8 +628,12 @@ do
   end
 
   -- A TPBot Edu's own distance or turn, waited for: a word sent while the
-  -- one before still runs would cut it short. A Ctrl+C in the wait stops
-  -- the wheels.
+  -- one before still runs would cut it short. An error during the wait
+  -- still attempts to stop the wheels; Ctrl+C does not cancel the move
+  -- (handled after the call returns on USB, on the next listen() loop on
+  -- the robot's local USB port, or only after crossing the radio from a
+  -- calling board). Separately, a hardware reset (such as Ctrl+M on a
+  -- USB-attached board) restarts that board without running the cleanup.
   local function edu_move(word, command, amount)
     local bot, name = robot()
     if name ~= "TPBot Edu" then
