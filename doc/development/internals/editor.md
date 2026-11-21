@@ -97,6 +97,36 @@ Without a replacement target the new block(s) are inserted before the browsing p
 
 `Alt+F` in the browsing state (`format_file`) formats the whole file as the syntax's `format` does, at the window's width; during an edit it refuses with a notice that says why. In a Lua file that is the same `format` function as above. Every run of blank lines in the file becomes one, a run made one empty line at a time with Enter on an empty field (IS4.3) included: the one place blank lines outside a block change, because the user asked. When the syntax cannot format the text (`ok` false), the editor refuses with "The file" and the syntax's reason, such as "The file has nothing to format." in a text or Markdown file, and the file stays; a Lua file the editor cannot split into blocks (`invalid`) is refused with a notice that says so. A file the formatter leaves as it is changes nothing, and nothing is shown. The selection keeps its place among the blocks with text: on the block with as many blocks with text before it as before, and from an empty line on the next block with text. The REPL's `tidy(name)` formats a file through its syntax's `format` at a Compy's width (`src/conf/display.lua`) and writes it through a `BufferModel`, so it keeps what Alt+F keeps, a `#!` first line included, and writes LF line ends (see Line endings above). `util/compyfmt.lua --fix` formats at the same width and writes every line with a newline. compyfmt reports the gates and the lints (`src/model/lang/lua/lint.lua`); without `--fix` it changes nothing and also names each file formatting would change.
 
+### Known Defects of the Formatter
+
+Valid Lua the editor refuses. The first three are text the parser does not
+read: Enter refuses a block holding one with the parser's message, and a file
+holding one is `invalid`. The others parse, but the printer cannot write them
+without changing the program or losing a comment: Alt+F refuses with "cannot
+be tidied without changing what it does", and Enter keeps the block as typed.
+
+- `goto done` and `::done::`:
+  compy-ide-editor-refuses-goto-semicolon-ffi-literals
+- A lone `;`, as in `x = 1;;`:
+  compy-ide-editor-refuses-goto-semicolon-ffi-literals
+- The FFI literals `1LL` and `12i`:
+  compy-ide-editor-refuses-goto-semicolon-ffi-literals
+- `f();(g)()`, whose `;` the printer drops:
+  compy-ide-editor-refuses-semicolon-before-parenthesis
+- `a = 1, -- c` as a table's last field, and `-- c` alone in `do ... end`:
+  compy-ide-editor-refuses-comment-at-table-end-or-in-do-block
+- `x = #"..."` with a string too long for a line, or the same under `not` or
+  arithmetic; Enter refuses the line as too long:
+  compy-ide-editor-refuses-split-string-under-operator
+
+Text the formatter loses without refusing:
+
+- `a = 1, --` as a table's last field loses the empty comment, which the
+  comment check cannot see:
+  compy-ide-formatter-drops-empty-comment-after-table-field
+
+No valid Lua is known to run differently after formatting.
+
 ---
 
 ## Monster Blocks
