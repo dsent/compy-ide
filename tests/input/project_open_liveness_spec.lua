@@ -85,13 +85,15 @@ describe('input surface: inbound events — a project stays live'
       assert.is_not_true(aborted)
     end)
 
-  --- the micro:bit link: a quit lets the board go, closing
-  --- its connection, and waits while a file goes to the board
-  --- when the person asked for it
+  --- the micro:bit link: a quit that ends the IDE abandons
+  --- any transfer in progress and lets the board go
   describe('with a micro:bit', function()
-    local kept, keptSerial, port
+    local kept, keptSerial, keptSystem, keptWindow, keptEvent,
+      keptPrint, port
     before_each(function()
       kept, keptSerial = _G.SerialPort, _G.Serial
+      keptSystem, keptWindow = love.system, love.window
+      keptEvent, keptPrint = love.event, _G.print
       _G.Serial = _G.Serial or {}
       port = { flashing = false, stops = 0, abandons = 0 }
       function port:isFlashing() return self.flashing end
@@ -105,6 +107,10 @@ describe('input surface: inbound events — a project stays live'
     end)
     after_each(function()
       _G.SerialPort, _G.Serial = kept, keptSerial
+      love.system, love.window = keptSystem, keptWindow
+      love.event, _G.print = keptEvent, keptPrint
+      require('util.application')
+        .consume_application_exit_request()
     end)
 
     it('lets the board go as the app quits', function()
@@ -179,8 +185,8 @@ describe('input surface: inbound events — a project stays live'
       return pushed
     end
 
-    it('stays, and says so, when asked to quit while a file'
-      .. ' goes to the board', function()
+    it('abandons a transfer and quits when asked to quit'
+      .. ' while a file goes to the board', function()
         local calls = stub_stop()
         port.flashing = true
         local print_ = _G.print
@@ -188,13 +194,11 @@ describe('input surface: inbound events — a project stays live'
         _G.print = function(text) said = text end
         local aborted = asked_quit()
         _G.print = print_
-        assert.is_true(aborted)
-        assert.are.equal(0, port.stops)
-        assert.are.equal(0, port.abandons)
+        assert.is_not_true(aborted)
+        assert.are.equal(1, port.abandons)
+        assert.are.equal(1, port.stops)
         assert.are.equal(0, calls.n)
-        assert.truthy(said:find('while a file goes to the'
-          .. ' micro:bit', 1, true))
-        assert.truthy(said:find('you can quit', 1, true))
+        assert.is_nil(said)
       end)
 
     --- Android closing the IDE waits for it: refusing could
@@ -223,59 +227,58 @@ describe('input surface: inbound events — a project stays live'
         assert.are.equal(0, port.stops)
       end)
 
-    it('takes a project\'s push of quit as asked for', function()
-      stub_stop()
-      local event = love.event
-      local pushed = wrapped_event()
-      port.flashing = true
-      local print_ = _G.print
-      _G.print = function() end
-      love.event.push('quit')
-      local stay = love.quit(pushed[1])
-      _G.print = print_
-      love.event = event
-      assert.is_true(stay)
-      assert.are.equal(0, port.abandons)
-    end)
+    it('abandons a transfer on a project\'s push of quit when'
+      .. ' idle', function()
+        stub_stop()
+        local event = love.event
+        local pushed = wrapped_event()
+        port.flashing = true
+        love.event.push('quit')
+        local stay = love.quit(pushed[1])
+        love.event = event
+        assert.is_not_true(stay)
+        assert.are.equal(1, port.abandons)
+        assert.are.equal(1, port.stops)
+      end)
 
-    --- Ctrl+Esc refused during a flash must not close the IDE
-    --- on a later quit that only stops a project
-    it('forgets a refused Ctrl+Esc', function()
-      local calls = stub_stop()
-      port.flashing = true
-      local print_ = _G.print
-      _G.print = function() end
-      local event = love.event
-      local value
-      love.event = { quit = function(v) value = v end }
-      require('util.application').request_application_exit()
-      love.event = event
-      assert.is_true(love.quit(value))
-      _G.print = print_
-      port.flashing = false
-      love.state.app_state = 'running'
-      assert.is_true(love.quit())
-      assert.are.equal(1, calls.n)
-    end)
+    --- Ctrl+Esc ends the IDE during a flash, even with a
+    --- project running
+    it('Ctrl+Esc abandons a transfer and quits while a'
+      .. ' project runs', function()
+        local calls = stub_stop()
+        port.flashing = true
+        love.state.app_state = 'running'
+        local event = love.event
+        local value
+        love.event = { quit = function(v) value = v end }
+        require('util.application').request_application_exit()
+        love.event = event
+        assert.is_not_true(love.quit(value))
+        assert.are.equal(0, calls.n)
+        assert.are.equal(1, port.abandons)
+        assert.are.equal(1, port.stops)
+      end)
 
-    --- a project's own love.event.quit, as pong's Esc, is a
-    --- quit asked for from inside the app
-    it('takes a project\'s quit as asked for', function()
-      stub_stop()
-      local event = love.event
-      local pushed = wrapped_event()
-      port.flashing = true
-      local print_ = _G.print
-      local said
-      _G.print = function(text) said = text end
-      love.event.quit()
-      local stay = love.quit(pushed[1])
-      _G.print = print_
-      love.event = event
-      assert.is_true(stay)
-      assert.are.equal(0, port.abandons)
-      assert.truthy(said:find('you can quit', 1, true))
-    end)
+    --- a project's own love.event.quit, when idle, abandons a
+    --- transfer and quits
+    it('abandons a transfer on a project\'s quit when idle',
+      function()
+        stub_stop()
+        local event = love.event
+        local pushed = wrapped_event()
+        port.flashing = true
+        local print_ = _G.print
+        local said
+        _G.print = function(text) said = text end
+        love.event.quit()
+        local stay = love.quit(pushed[1])
+        _G.print = print_
+        love.event = event
+        assert.is_not_true(stay)
+        assert.are.equal(1, port.abandons)
+        assert.are.equal(1, port.stops)
+        assert.is_nil(said)
+      end)
 
     --- Android waits for its quit on its UI thread: an IDE
     --- that stayed would hold it for good
@@ -302,19 +305,21 @@ describe('input surface: inbound events — a project stays live'
       end)
 
     --- each quit asked for is one event: a second in the same
-    --- frame is asked for too
-    it('refuses both of two quits asked for at once', function()
+    --- frame is tagged as asked for too, so on Android neither
+    --- ends the IDE while a project runs
+    it('tags both of two quits asked for at once', function()
       stub_stop()
       local event = love.event
+      local system = love.system
       local pushed = wrapped_event()
       port.flashing = true
-      local print_ = _G.print
-      _G.print = function() end
+      love.state.app_state = 'running'
+      love.system = { getOS = function() return 'Android' end }
       love.event.quit()
       love.event.quit()
       local first = love.quit(pushed[1])
       local second = love.quit(pushed[2])
-      _G.print = print_
+      love.system = system
       love.event = event
       assert.is_true(first)
       assert.is_true(second)
@@ -331,6 +336,9 @@ describe('input surface: inbound events — a project stays live'
         love.event.quit()
         love.event = event
         port.flashing = true
+        love.state.app_state = 'running'
+        love.system = { getOS = function() return 'Android' end }
+        love.window = { minimize = function() end }
         local aborted = love.quit(nil)
         assert.is_not_true(aborted)
         assert.are.equal(1, port.abandons)
@@ -342,16 +350,17 @@ describe('input surface: inbound events — a project stays live'
       function()
         stub_stop()
         local event = love.event
+        local system = love.system
         local pushed = wrapped_event()
         port.flashing = true
-        local print_ = _G.print
-        _G.print = function() end
+        love.state.app_state = 'running'
+        love.system = { getOS = function() return 'Android' end }
         love.event.quit(0)
         love.event.quit('restart')
         love.event.push('quit', 3)
         local stays = { love.quit(pushed[1]), love.quit(pushed[2]),
           love.quit(pushed[3]) }
-        _G.print = print_
+        love.system = system
         love.event = event
         assert.same({ true, true, true }, stays)
         assert.are.equal(0, port.abandons)
@@ -420,13 +429,17 @@ describe('input surface: inbound events — a project stays live'
       end)
 
     it('asks once: the next quit is Android\'s', function()
-      stub_stop()
+      local calls = stub_stop()
       port.flashing = true
-      local print_ = _G.print
-      _G.print = function() end
-      asked_quit()
-      _G.print = print_
+      love.state.app_state = 'running'
+      local system, window = love.system, love.window
+      love.system = { getOS = function() return 'Android' end }
+      love.window = { minimize = function() end }
+      assert.is_true(asked_quit())
+      assert.are.equal(1, calls.n)
+      assert.are.equal(0, port.abandons)
       local aborted = love.quit()
+      love.system, love.window = system, window
       assert.is_not_true(aborted)
       assert.are.equal(1, port.abandons)
     end)
