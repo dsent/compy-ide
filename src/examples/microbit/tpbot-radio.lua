@@ -562,14 +562,13 @@ function connect(name, timeout, tries)
 end
 
 -- The robot lessons' words, as the Compy's robot chapter teaches them, over
--- each TPBot's own commands, in a table of their own, bot:
--- bot.move(left, right, seconds), bot.light(r, g, b), bot.distance(),
--- bot.turn(hours) and bot.straight(steps). They add to the firmware's
--- modules and replace none: tpbot, tpbot2 and robot stay as the firmware
--- gives them, and tpbot.info() says which robot answers. Each word asks which robot
--- answers, so a robot changed or switched off between two words is met as
--- it is; a switched-off TPBot Edu holds the bus, and the asking then takes
--- about 5 s before the word says the robot does not answer.
+-- each TPBot's own commands, as globals: move(left, right, seconds),
+-- light(r, g, b), distance(), turn(hours) and go(steps). They add to the
+-- firmware's modules and replace none: tpbot, tpbot2 and robot stay as the
+-- firmware gives them, and tpbot.info() says which robot answers. Each word
+-- asks which robot answers, so a robot changed or switched off between two
+-- words is met as it is; a switched-off TPBot Edu holds the bus, and the
+-- asking then takes about 5 s before the word says the robot does not answer.
 do
   local uBit = require("microbit")
   local classic = require("tpbot")
@@ -577,7 +576,6 @@ do
   local NO_ROBOT = "The robot does not answer. Check that it is "
       .. "switched on, or switch it off and on again."
   local MAX_SECONDS = 3600
-  bot = {}
 
   -- The module that drives the robot that answers, tpbot for a TPBot
   -- Classic and tpbot2 for a TPBot Edu, and its name
@@ -590,71 +588,86 @@ do
     return edu, name
   end
 
-  -- The motors never start without the stop after them, and the stop goes
-  -- out even when the start or the wait failed, a Ctrl+C included
-  function bot.move(left, right, seconds)
+  -- The motors never start without the stop after them, and move attempts
+  -- the stop write even when the start or the wait fails. Ctrl+C does not
+  -- cancel a move in progress: on a USB prompt microbit.sleep does not run
+  -- serial events, so the prompt sees Ctrl+C only after the call returns;
+  -- under listen(), local USB Ctrl+C is read on the next loop iteration,
+  -- and a calling board's Ctrl+C must cross the radio and can be lost while
+  -- the robot is busy. Separately, a hardware reset (such as Ctrl+M on a
+  -- USB-attached board) restarts that board mid-wait and bypasses cleanup.
+  function move(left, right, seconds)
     if type(seconds) ~= "number"
         or not (seconds >= 0 and seconds <= MAX_SECONDS) then
-      error("bot.move needs how many seconds to drive, from 0 to "
-            .. MAX_SECONDS .. ", such as bot.move(50, 50, 1).", 0)
+      error("move needs how many seconds to drive, from 0 to "
+            .. MAX_SECONDS .. ", such as move(50, 50, 1).", 0)
     end
-    local bot = robot()
-    local ok, err = pcall(bot.set_motors_speed, left, right)
+    local driver = robot()
+    local ok, err = pcall(driver.set_motors_speed, left, right)
     if ok then
       ok, err = pcall(uBit.sleep, math.floor(seconds * 1000))
     end
-    local stopped, stop_err = pcall(bot.set_motors_speed, 0, 0)
+    local stopped, stop_err = pcall(driver.set_motors_speed, 0, 0)
     if not ok then error(err, 0) end
     if not stopped then error(stop_err, 0) end
   end
 
   -- The headlights of whichever robot answers
-  function bot.light(r, g, b)
-    local bot = robot()
-    return bot.set_car_light(r, g, b)
+  function light(r, g, b)
+    local driver = robot()
+    return driver.set_car_light(r, g, b)
   end
 
   -- The sonar, which both robots have on the same pins: millimeters to the
   -- nearest obstacle, or nil when nothing is within about 4 m
-  function bot.distance()
+  function distance()
     return classic.get_distance()
   end
 
   -- A TPBot Edu's own distance or turn, waited for: a word sent while the
-  -- one before still runs would cut it short. A Ctrl+C in the wait stops
-  -- the wheels.
+  -- one before still runs would cut it short. Lights green while moving and
+  -- switches the headlights off when the move ends; an error while starting
+  -- or waiting still attempts to stop the wheels and switch the light off.
+  -- Ctrl+C does not cancel the move (handled after the call returns on USB,
+  -- on the next listen() loop on the robot's local USB port, or only after
+  -- crossing the radio from a calling board). Separately, a hardware reset
+  -- (such as Ctrl+M on a USB-attached board) restarts that board without
+  -- running the cleanup.
   local function edu_move(word, command, amount)
-    local bot, name = robot()
+    local driver, name = robot()
     if name ~= "TPBot Edu" then
       error(word .. " needs a TPBot Edu, which measures its moves; "
-            .. "this robot drives with bot.move.", 0)
+            .. "this robot drives with move.", 0)
     end
-    bot[command](amount)
     local ok, err = pcall(function()
-      while bot.busy() do uBit.sleep(20) end
+      driver.set_car_light(0, 255, 0)
+      driver[command](amount)
+      while driver.busy() do uBit.sleep(20) end
     end)
     if not ok then
-      pcall(bot.set_motors_speed, 0, 0)
+      pcall(driver.set_motors_speed, 0, 0)
+      pcall(driver.set_car_light, 0, 0, 0)
       error(err, 0)
     end
+    driver.set_car_light(0, 0, 0)
   end
 
-  -- bot.turn(h): h hours on a clock face, 30 degrees each, the shorter way
+  -- turn(h): h hours on a clock face, 30 degrees each, the shorter way
   -- round; a positive angle turns the Edu left, so 3 hours, to the right,
   -- is -90
-  function bot.turn(hours)
+  function turn(hours)
     local h = hours % 12
     if h > 6 then h = h - 12 end
     local degrees = -30 * h
     if math.abs(degrees) < 5 then return end
-    edu_move("bot.turn", "turn", degrees)
+    edu_move("turn", "turn", degrees)
   end
 
-  -- bot.straight(l): l steps of 14.5 cm, backward for a negative l
-  function bot.straight(steps)
+  -- go(l): l steps of 14.5 cm, backward for a negative l
+  function go(steps)
     local mm = 145 * steps
     if math.abs(mm) < 10 then return end
-    edu_move("bot.straight", "run_distance", mm)
+    edu_move("go", "run_distance", mm)
   end
 end
 

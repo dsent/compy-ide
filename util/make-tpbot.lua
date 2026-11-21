@@ -101,11 +101,10 @@ local CABLE = [[
 -- tpbot.lua: the micro:bit firmware for the Compy's robot lessons. It is
 -- the start-up script of the firmware the Compy ships (%s), prompt
 -- and radio link included, with the lessons' words added near its end:
--- bot.move(left, right, seconds), bot.light(r, g, b), bot.distance(),
--- bot.turn(hours) and bot.straight(steps). upload("tpbot.lua") puts it on
--- the board, which then runs it at every start. It belongs to that
--- firmware: when the Compy ships another, this file is made again from that
--- firmware's script.
+-- move(left, right, seconds), light(r, g, b), distance(), turn(hours)
+-- and go(steps). upload("tpbot.lua") puts it on the board, which then
+-- runs it at every start. It belongs to that firmware: when the Compy
+-- ships another, this file is made again from that firmware's script.
 
 ]]
 local RADIO = [[
