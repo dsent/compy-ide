@@ -53,16 +53,27 @@ describe('lua format #format', function()
 
   it('keeps a semicolon before a statement starting with (', function()
     for _, case in ipairs({
-      { { 'f();(g)()' }, { 'f();', '(g)()' } },
-      { { 'x = a; (t).k = 1' }, { 'x = a;', '(t).k = 1' } },
-      { { 'f(); (g):m()' }, { 'f();', '(g):m()' } },
-      { { 'f(); (t).m().k = 1' }, { 'f();', '(t).m().k = 1' } },
-      { { 'f(); "s":gsub()' }, { 'f();', '("s"):gsub()' } },
+      { { 'f();(g)()' }, { 'f(); (g)()' } },
+      { { 'x = a; (t).k = 1' }, { 'x = a; (t).k = 1' } },
+      { { 'f(); (g):m()' }, { 'f(); (g):m()' } },
+      { { 'f(); (t).m().k = 1' }, { 'f(); (t).m().k = 1' } },
+      { { 'f(); "s":gsub()' }, { 'f(); ("s"):gsub()' } },
     }) do
       local out, ok = format.format(case[1], W)
       assert.is_true(ok, table.concat(case[1], '\n'))
       assert.same(case[2], out)
       assert.same(out, (format.format(out, W)))
+    end
+    local with_comment = { 'f() -- c', ';(g)()' }
+    local out, ok = format.format(with_comment, W)
+    if ok then
+      assert.same(out, (format.format(out, W)))
+      assert.is_truthy(table.concat(out, '\n'):find('-- c', 1, true))
+      local before = assert(loadstring(table.concat(with_comment, '\n')))
+      local after = assert(loadstring(table.concat(out, '\n')))
+      assert.equal(string.dump(before, true), string.dump(after, true))
+    else
+      assert.equal(with_comment, out)
     end
   end)
 

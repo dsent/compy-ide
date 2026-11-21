@@ -799,9 +799,8 @@ function M:list(list, sep, start)
     self:node(list[i], stmts)
     if list[i + 1] then
       if stmts and starts_with_paren(list[i + 1]) then
-        self:acc(";")
-      end
-      if not sep then
+        self:acc("; ")
+      elseif not sep then
       elseif type(sep) == "function" then
         sep(self)
       elseif type(sep) == "string" then
