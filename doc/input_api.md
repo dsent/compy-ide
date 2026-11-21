@@ -796,25 +796,23 @@ key before the widget sees it, and the user cannot type — not even Enter
 to submit. A project with no widget is unaffected: nothing sits below the
 hook for it to shield, which is why plain LÖVE code keeps working.
 
-**A chord's own character is not typed.** With Ctrl or Alt held, a key
-makes a chord, and on a Compy its character still arrives on the
-`textinput` channel, before or after the key press. That character walks
-tiers ① and ② like any other text event, so `shortcuts.textinput['ctrl+j']`,
-`'alt+*'` and your `textinput` hook all see it with its modifiers. It stops
-there: the widget never types it, and it reaches no console's prompt
-either. The character of a reserved combo (the table below),
-such as Ctrl+R's `r`, reaches nothing at all. Shift alone composes text.
-The right Alt key depends on the platform. A Compy's own keyboard has one
-Alt, on the left, and no right Alt. On Android, which a Compy runs, a right
-Alt key of an attached keyboard is an Alt like the left one, so what it sends
-is a chord's character too, whatever the character. On a computer running the
-IDE (Linux, Windows), the right Alt
-key is AltGr and composes text in the keyboard layout set there: whatever
-it types reaches the widget, `@`, `ł`, `€` or a digit alike, since a
-computer sends no text for a chord. AltGr is no Ctrl and no Alt, so a key
-pressed under it makes no chord: no combo fires from it, and `Key.ctrl()` and
-`Key.alt()` answer false while it is held, even on Windows, which reports
-AltGr as left Ctrl plus right Alt.
+**A chord's own character is not typed.** With Ctrl or Alt held, a key makes a
+chord, and on a Compy its character still arrives on the `textinput` channel,
+before or after the key press. That character walks tiers ① and ② like any other
+text event, so `shortcuts.textinput['ctrl+j']`, `'alt+*'` and your `textinput`
+hook all see it with its modifiers. It stops there: the widget never types it,
+and it reaches no console's prompt either. The character of a reserved combo
+(the table below), such as Ctrl+R's `r`, reaches nothing at all. Shift alone
+composes text. On Android, which a Compy runs, no key is AltGr: every Alt makes
+a chord, so what arrives under it is a chord's character, whatever the
+character. On a computer running the IDE (Linux, Windows), the right Alt key is
+AltGr and composes text in the keyboard layout set there: whatever it types
+reaches the widget, `@`, `ł`, `€` or a digit alike, since a computer sends no
+text for a chord. With the left Alt or the right Ctrl held as well, or on Linux
+the left Ctrl, the right Alt makes a chord. AltGr is no Ctrl and no Alt: a key
+pressed under it is the key's combo without them, so AltGr+F12 is F12, and
+`Key.ctrl()` and `Key.alt()` answer false while it is held, even on Windows,
+which reports AltGr as left Ctrl plus right Alt.
 
 ### Why the widget sits at tier 3
 
@@ -932,7 +930,7 @@ yourself.
 
 | Combo | What the platform does | When |
 |---|---|---|
-| `ctrl+escape` (on **release**) | exits the whole IDE at once: the run is not stopped first, and `compy.before_exit` does not run | always |
+| `ctrl+escape` (on **release**) | exits the whole IDE at once: the run is not stopped first, and `compy.before_exit` does not run. While a file goes to the micro:bit, the IDE stays and prints why in the console | always |
 | `ctrl+r` | restarts a program that runs, is paused or idles behind the console, from the file it runs from; does nothing when none does (a packaged build restarts always) | always |
 | `ctrl+t` | switches between running and the editor | development only |
 | `ctrl+q` | stops the run and returns to the console; the project stays open. From the editor, leaves it for the console | development only |
@@ -944,13 +942,12 @@ yourself.
 "Development only" means the combo is inert in a packaged build, where the
 console it returns you to is not there to return to.
 
-`ctrl+s` and `ctrl+shift+r` were reserved until 2026-11-14 and are yours now:
-a project receives them like any other chord, so `ctrl+s` can save. No key
-closes the project; the console's `close_project()` does. `f10` and `f12` are
-the reservations with no modifier at all: bare F10 is the platform's in a
-profiling build, bare F12 is reserved in both development and packaged
-playback (cycling the screen in the console), and either with any modifier
-is yours.
+A chord the table does not name is yours, `ctrl+s` among them, so `ctrl+s`
+can save. No key closes the project; the console's `close_project()` does.
+`f10` and `f12` are the reservations with no modifier at all: bare F10 is the
+platform's in a profiling build, bare F12 is reserved in both development and
+packaged playback (cycling the screen in the console), and either with any
+modifier is yours; AltGr is no modifier here.
 
 **The full picture.** While your program draws, the IDE shows its picture on
 the whole screen, and F12 steps through the text, the text over the picture and
@@ -976,13 +973,14 @@ show your program's help for as long as F1 is held (ask
 `Key.any_pressed('f1')`, as in "Choosing the mechanism" below).
 
 Ctrl+Q leaves the editor for the console, with every file you had opened in
-it, and the project stays open. Ctrl+T while you browse the file leaves it to run
-`main.lua`. Ctrl+R and Ctrl+Shift+R do nothing in the editor. None of the exits asks a
+it, and the project stays open. Ctrl+T while you browse the file leaves it to
+run `main.lua`. Ctrl+R does nothing in the editor. None of the exits asks a
 question. While there is text in the editor's field, or a block is
 loaded to be replaced, each is refused with a notice: submit the text with
 Enter or drop it with Escape first, and the exit works. A text whose save
 failed stays in the field, so it holds the exit back the same way. Ctrl+Esc
-exits the IDE from anywhere and does not ask.
+exits the IDE from anywhere and does not ask; only a file on its way to the
+micro:bit holds it back.
 
 Ctrl+J opens the file the highlighted block names with `require` or `dofile`,
 and Escape steps back to the file you came from, at the place you left it.

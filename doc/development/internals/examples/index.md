@@ -2,7 +2,9 @@
 
 <!-- authored By LLM; human-approved NOT YET -->
 
-All examples live under `src/examples/`. Each is a self-contained project with a `main.lua`. They demonstrate different combinations of framework capabilities.
+The examples live under `src/examples/`, apart from balloons and keyboard, which
+have repositories of their own. Each is a self-contained project with a
+`main.lua`. They demonstrate different combinations of framework capabilities.
 
 Detailed docs for each are in this directory. For the project-author usage guide to the input API used throughout this table, see [Compy Input API](../../../input_api.md).
 

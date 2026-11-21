@@ -340,10 +340,9 @@ a session you are *not* re-activating is `compy.input.set_cursor`'s job.
 
 "Reset the widget" is four bespoke, mutually inconsistent mechanisms, not one shared primitive:
 
-- **console** — Escape empties the line, which the history does not keep (it holds only lines
-  that ran), and Ctrl+L clears the terminal and the rows it keeps, and nothing of the field
-  (Ctrl+Q no longer resets the console's content, and Ctrl+Shift+R, which wiped content and
-  history, is dropped: the reserved map of 2026-11-14);
+- **console** — Escape empties the line, which the history does not keep (it
+  holds only lines that ran), and Ctrl+L clears the terminal and the rows it
+  keeps, and nothing of the field;
 - **editor** — Escape during an edit (`cancel_edit`: the draft and the replacement target go),
   and `input:clear()` whenever a file is opened, stepped back to or closed;
 - **a project** — no single call. `compy.input.clear()` empties content and cursor and
@@ -421,11 +420,62 @@ consumed"*; the regression it pays is [`../technical_debt/input.md`](../technica
 
 `app_state == 'starting'` is never observed by any input path: `main.lua`'s `love.load()` sets it, then flips it to `'ready'` a few lines later — both synchronously, before LÖVE's event pump runs, so no `love.handlers.*` entry point can ever see the `'starting'` value.
 
-Global shortcuts are answered in `love.handlers.keypressed` before anything reaches the active route's controller. They live in `RESERVED` (`controller.lua`, in `setup_callback_handlers`): a **second, privileged combo table** keyed per event, structurally separate from a project's `compy.input.shortcuts` — same shape, consulted before any route exists, never overridable by one, and consuming its key for the whole press: the route sees neither its press, its repeats nor its release (`decisions/input.md`, D-RESERVE-TABLE's note of 2026-11-16). Every other key's repeats and release go to the receiver of its press, the route in force at the press, decided as the press is handed over (`receivers`, `hand_press`, `route_owner`; a mouse button and a touch by the same record and path), and to no one once it is gone. The receiver is recorded before the press's handler runs, so a release the handler raises itself finds it; the console replaces it only when the route handed the press itself to the console, which a per-press token (`handing`) marks and a nested event cannot. A release a paused program is owed comes at its `continue()` (`owed_releases`), until one of them asks for a stop or a run or leaves the program nothing to act with. A known limit: an error that escapes a console handler during a press's hand-over (a program's own error is caught inside the route) leaves `handing` set; the next hand-over saves and restores it without reading it, and the next call of the same event outside a hand-over takes it (a key repeat, which reaches the route through `follow`, takes a stale key press's). No wrong delivery follows from it: no record points at the stale token any more, so marking or taking it changes no receiver. Its keys are canonical combo strings: `ctrl+pause` suspends, `ctrl+q` stops the run and returns to the console with the project still open (from the file editor it leaves the editor; in the console with no run it does nothing), `ctrl+r` restarts a live program from its entry point (the predicate `program_live` Ctrl+Q's stop asks too; with none it does nothing, playback apart), `ctrl+t` quick-switches between run and edit, `ctrl+alt+p` / `ctrl+alt+shift+p` start and stop the profiler, and bare `f10` cycles the FPS-overlay corner. `ctrl+escape` (quit) is the one reservation living on the release side, in `RESERVED.keyreleased`, not keypressed: it is decided at Escape's press, with Ctrl held then, and acts on Escape's release whatever is held by then (`owed`). The glyph of a reserved chord, which the device sends as text before or after the press (`Ctrl+R`'s `r`), reaches no route: `handlers.textinput` drops it before the project's shortcuts and hooks are offered a chord's glyph. Each entry is a function that also checks the state it applies in — the project- and console-management ones no-op in playback (`cfg.mode == 'play'`), the profiler three are reserved only in a profiling build (`love.PROFILE`, which `conf.lua` sets before the gate is built), so elsewhere a program receives F10 and the two profiler chords — which is why the project guide's table carries a "when" column.
+Global shortcuts are answered in `love.handlers.keypressed` before anything
+reaches the active route's controller. They live in `RESERVED`
+(`controller.lua`, in `setup_callback_handlers`): a **second, privileged combo
+table** keyed per event, structurally separate from a project's
+`compy.input.shortcuts` — same shape, consulted before any route exists, never
+overridable by one, and consuming its key for the whole press: the route sees
+neither its press, its repeats nor its release (`decisions/input.md`,
+D-RESERVE-TABLE's note of 2026-11-16). Every other key's repeats and release go
+to the receiver of its press, the route in force at the press, decided as the
+press is handed over (`receivers`, `hand_press`, `route_owner`; a mouse button
+and a touch by the same record and path), and to no one once it is gone. The
+receiver is recorded before the press's handler runs, so a release the handler
+raises itself finds it; the console replaces it only when the route handed the
+press itself to the console, which a per-press token (`handing`) marks and a
+nested event cannot. A release a paused program is owed comes at its
+`continue()` (`owed_releases`), until one of them asks for a stop or a run or
+leaves the program nothing to act with. A known limit: an error that escapes a
+console handler during a press's hand-over (a program's own error is caught
+inside the route) leaves `handing` set; the next hand-over saves and restores it
+without reading it, and the next call of the same event outside a hand-over
+takes it (a key repeat, which reaches the route through `follow`, takes a stale
+key press's). No wrong delivery follows from it: no record points at the stale
+token any more, so marking or taking it changes no receiver. Its keys are
+canonical combo strings: `ctrl+pause` suspends, `ctrl+q` stops the run and
+returns to the console with the project still open (from the file editor it
+leaves the editor; in the console with no run it does nothing), `ctrl+r`
+restarts a live program from its entry point (the predicate `program_live`
+Ctrl+Q's stop asks too; with none it does nothing, playback apart), `ctrl+t`
+quick-switches between run and edit, `ctrl+alt+p` / `ctrl+alt+shift+p` start and
+stop the profiler, bare `f10` cycles the FPS-overlay corner, and bare `f12`
+shows the screen's next mode in the console, idle, running or paused; in the
+editor, in playback and between a pause's request and the pause (`snapshot`) the
+gate takes it and shows no mode. `ctrl+escape` (quit) is the one reservation
+living on the release side, in `RESERVED.keyreleased`, not keypressed: it is
+decided at Escape's press, with Ctrl held then, and acts on Escape's release
+whatever is held by then (`owed`). The glyph of a reserved chord, which the
+device sends as text before or after the press (`Ctrl+R`'s `r`), reaches no
+route: `handlers.textinput` drops it before the project's shortcuts and hooks
+are offered a chord's glyph. Each entry is a function that also checks the state
+it applies in — the project- and console-management ones no-op in playback
+(`cfg.mode == 'play'`), the profiler three are reserved only in a profiling
+build (`love.PROFILE`, which `conf.lua` sets before the gate is built), so
+elsewhere a program receives F10 and the two profiler chords — which is why the
+project guide's table carries a "when" column.
 
 Each of these matches its modifier set **exactly** — the modifiers it names held, and no other (`decisions/input.md`, D-EXACT-RESERVE). Since a reservation is looked up by the canonical combo string built for the event, that exactness is a property of the representation: a string equality cannot tolerate an unnamed modifier. "Intercepted" describes what the gate may *claim*, not what passes through it: every keypress enters here; one the gate does not claim is forwarded to the route unchanged, and a claimed one is not: its key, with its repeats and release, is the gate's for the whole press, Ctrl+Escape's Escape included.
 
-Ctrl+S in the **editor** shows both halves of that. The chord reaches the gate like any other; the gate holds no reservation for it — `ctrl+s` stopped being one on 2026-11-14 — and forwards it to the route, where `ConsoleController` hands it to the editor, whose key table (`src/model/editor/editorKeys.lua`) names neither `ctrl+s` nor `ctrl+shift+s`: **nothing acts on either**, so the key is **unclaimed** rather than reserved (`../decisions/input.md`, D-EXACT-RESERVE and its notes). Deciding that inside the route is the point: it is the editor's business, and the gate has no opinion on it. A reserved chord consumes its key; an unclaimed key reaches the active route.
+Ctrl+S in the **editor** shows both halves of that. The chord reaches the gate
+like any other; the gate holds no reservation for it and forwards it to the
+route, where `ConsoleController` hands it to the editor, whose key table
+(`src/model/editor/editorKeys.lua`) names neither `ctrl+s` nor `ctrl+shift+s`:
+**nothing acts on either**, so the key is **unclaimed** rather than reserved
+(`../decisions/input.md`, D-EXACT-RESERVE and its notes). Deciding that inside
+the route is the point: it is the editor's business, and the gate has no opinion
+on it. A reserved chord consumes its key; an unclaimed key reaches the active
+route.
 
 The gateway (`love.handlers.*`) routes on the **active route** and nothing else: widget presence is not a routing condition, so the active route's controller always receives the event. The project route runs the three-consumer walk above: the project's captured `love.*` handler auto-provisions as the seeded hook (once, at the run's activation, never again at `continue()`, which passes no handlers to seed — seen even while the widget is shown, only when the project set no explicit `hooks[event]`; an explicit hook always wins), **consuming its channel** where an explicit hook would fall through on falsey (D-HOOKS-SEEDED, *"a seeded handler consumes"*), so the widget below a captured handler receives nothing, and the widget is the terminal consumer with its hidden-check *internal* (`is_shown()` reads a strictly-internal `self.shown` flag; the widget no-ops while hidden, so a hidden widget mutates nothing without any external gate). The console route reaches its widget by a plainer path: each console channel forwards straight to `ConsoleController`, which calls its own widget instance (`consoleController.lua`, `textinput` / `keyreleased`) — it consults neither `love.state.user_input` nor the widget's shownness, because it owns that instance outright. The widget is never a routing destination of the gateway and never the active route.
 
@@ -451,7 +501,7 @@ treats `'ready'` **plus** interactivity the same as `'running'`, so the
 project's own quit (`love.event.quit`) stops it back to the console instead of
 quitting the app. An idle console in `'ready'`, with neither a widget nor a
 pointer hook, falls through and the app quits. `Ctrl+Esc` quits the app in
-every state.
+every state, unless a file is on its way to the micro:bit.
 
 `ProjectInputController` carries no per-event "am I still running?" guard: once
 `stop_project_run` re-points `love.keypressed` and friends at the console, the
@@ -477,29 +527,30 @@ desktop, where it surfaces, it comes after. `Key.chord_text(t)`
   stops: the widget does not type it and it does not fall through to the
   console.
 
-The rule reads the device, like every modifier read (D-ASK-THE-DEVICE): any
-Ctrl or the left Alt held makes the text a chord's. The right Alt key
-depends on the platform. On Android (`love.system.getOS() == 'Android'`),
-which a Compy runs, a right Alt key does too: it is an Alt like the left
-one, not AltGr. A Compy's own keyboard has no right Alt, so on a Compy this
-concerns an attached keyboard only. On a computer (Linux, Windows), where
-people run the IDE with their own keyboard layouts, AltGr composes text and
-is the right Alt key: `ralt` alone on Linux, left Ctrl plus `ralt` on
-Windows. A chord's
-stray glyph exists only on the device: a computer's SDL sends no text for a
-Ctrl or Alt chord, so every character that arrives under AltGr is typed,
-whatever it is (the French `us-alt` layout types `6` through AltGr).
-`altgr()` in `util/key.lua` is the one place that decides by platform. The
-text itself and the order of text and key press do not enter the rule,
-which is why it holds in both orders.
+The rule reads the device, like every modifier read (D-ASK-THE-DEVICE): Ctrl or
+Alt held makes the text a chord's, unless the keys held are AltGr. On Android
+(`love.system.getOS() == 'Android'`), which a Compy runs, no key is AltGr. On a
+computer (Linux, Windows), where people run the IDE with their own keyboard
+layouts, AltGr composes text and is the right Alt key: `ralt` alone, and on
+Windows, which reports AltGr as left Ctrl plus `ralt`, those two as well. With
+the left Alt or the right Ctrl held as well, or on Linux the left Ctrl, the keys
+are a chord. A chord's stray glyph
+exists only on the device: a computer's SDL sends no text for a Ctrl or Alt
+chord, so every character that arrives under AltGr is typed, whatever it is (the
+French `us-alt` layout types `6` through AltGr). `altgr()` in `util/key.lua` is
+the one place that decides by platform. The text itself and the order of text
+and key press do not enter the rule, which is why it holds in both orders.
 
-A key pressed under AltGr belongs to typing, so AltGr is no Ctrl and no
-Alt: on a computer `Key.ctrl()` and `Key.alt()` answer false while `altgr()`
-holds, and no chord fires from such a key press, not a reserved key, not the
-console's, the file editor's or a field's, and not a project's combo. A
-project's hooks still receive the key press. The simple API's `on_key`
-(`arrives_as_text`, `consoleController.lua`) reports every key pressed with
-Ctrl or Alt held; a printable pressed under AltGr is not one of them.
+A key pressed under AltGr belongs to typing, so AltGr is no Ctrl and no Alt: on
+a computer `Key.ctrl()` and `Key.alt()` answer false while `altgr()` holds, and
+the key's combo names neither. No Ctrl or Alt chord fires from such a key press,
+whether reserved, the console's, the file editor's, a field's or a project's; a
+combo without them does, so AltGr+F12 is F12, which the gate reserves. A key
+press under AltGr whose combo the gate does not reserve goes the project route's
+usual way: a project's shortcut for its combo can take it before the hooks see
+it. The simple API's `on_key` (`arrives_as_text`, `consoleController.lua`)
+reports every key pressed with Ctrl or Alt held; a printable pressed under AltGr
+is not one of them.
 
 One text source bypasses the gate: the web build's synthesised space
 (`UserInputController:keypressed`), which asks `Key.chord_text` itself.
@@ -645,7 +696,7 @@ keyboard/text — see "Mouse Input" below for the current routing and what chang
 ### Editor-specific keys
 
 See `editor.md` for full detail. Key differences from console mode:
-- No history navigation (PageUp/Down page through the file instead)
+- No history: PageUp and PageDown page through the file
 - Up/Down browse blocks while the input is empty; with text in it they move the cursor a row, and
   Ctrl+Up/Down browse in every state
 - F2 loads the viewed block's text into the input; Escape aborts an edit, and from the browsing
@@ -1014,15 +1065,16 @@ dispose(self, self.clear_on_cancel, self.hide_on_cancel)  -- the flags, BEFORE t
 run_callback(self, 'after_cancel', draft)              -- DEFAULT: no-op
 ```
 
-`before_cancel`'s return value is honoured the same way `before_submit`'s is: a truthy return
-vetoes the whole flow (content and widget state untouched, `after_cancel` does not fire). What
-Escape *does* is this instance's two cancel flags and nothing else: on the console it clears and
-stays (`clear_on_cancel`), and on **both** a project's widget and the **editor's** it does nothing
-at all — neither seats a cancel cell. On the project widget that is the least-destructive default
-and the outcome is the project's to ask for; on the editor it is what makes the bare-Escape
-fall-through harmless — the editor claims the key nowhere, the widget gets it and starts a cancel
-that is deliberately empty (`../decisions/input.md`, D-EDITOR-KEYS row 2, and D-LIFECYCLE-FLAGS
-statement 3).
+`before_cancel`'s return value is honored the same way `before_submit`'s is: a
+truthy return vetoes the whole flow (content and widget state untouched,
+`after_cancel` does not fire). What Escape *does* is this instance's two cancel
+flags and nothing else: on the console it clears and stays (`clear_on_cancel`),
+and on a project's widget it does nothing at all, since it seats no cancel cell:
+the least-destructive default, and the outcome is the project's to ask for. The
+editor's widget never receives Escape: the editor's key table binds it
+(`src/model/editor/editorKeys.lua`), and while browsing it steps back from the
+file (`EditorController:close_buffer`), otherwise it drops the typed text or the
+edit (`cancel_edit`).
 
 `run_callback(self, name, ...)` (`userInputController.lua:438-442`) looks up `self.callbacks[name]`;
 absent → no-op + debug-log. `self.callbacks` is the widget's own table, seeded at construction with

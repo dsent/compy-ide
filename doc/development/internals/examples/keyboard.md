@@ -5,7 +5,8 @@
 **Scope:** how the keyboard example decides that a character the player produced counts, and how it
 keeps one physical press from counting twice. Two of its subgames judge typed characters — the
 Alt-keys scene and Words — and this is the mechanism both use. The example's other subsystems
-(scenes, gauge, layout, sound) are not covered. `src/examples/keyboard` is a separate repository.
+(scenes, gauge, layout, sound) are not covered. The example ships from
+<https://github.com/dsent/compy.keyboard>.
 
 **Status: this describes the shipped code.** An earlier revision of this document described a
 *recommended* design that was never implemented and has been superseded — see "What changed, and
