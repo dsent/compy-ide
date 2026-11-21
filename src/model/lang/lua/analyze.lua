@@ -133,7 +133,7 @@ local function definition_extractor(node)
             if type(w) == 'table' and
                 type(w[1]) == 'table' and w[1][1] then
               local n = w[1][1]
-              if type(n) == 'string' then
+              if w[1].tag == 'String' and type(n) == 'string' then
                 table.insert(rets, {
                   name = tname .. '.' .. n,
                   line = get_line_number(w),
