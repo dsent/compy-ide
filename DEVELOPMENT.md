@@ -148,8 +148,10 @@ it's set):
 DEBUG=1 love src
 ```
 
-In this mode, a VT-100 terminal test can be activated with ^T
-(C-t, or Ctrl+t).
+In this mode, Ctrl+Alt+T at the console, with no program running
+or paused, drops the typed line and starts a VT-100 terminal test.
+Once the test waits, the next key other than a bare F1 that
+reaches the console ends it.
 
 ### HiDPI
 
