@@ -238,4 +238,5 @@ return {
   --- test
   invalid({ 'abc("xyz"' }, Cursor.inline(9)),
   invalid({ 'abc("' }, Cursor.inline(4)),
+  invalid({ 'print("hi")', '# say hi' }, Cursor(2, 1)),
 }

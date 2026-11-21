@@ -162,6 +162,13 @@ describe('a failed parse #parser', function()
     assert.is_true(ok)
     assert.is_nil(ast.token)
   end)
+
+  it('fails with words when # follows a call', function()
+    local ok, err = parser.parse({ 'print("hi")', '# say hi' })
+    assert.is_false(ok)
+    assert.same({ 2, 1 }, { err.l, err.c })
+    assert.is_true(string.is_non_empty_string(err.msg))
+  end)
 end)
 
 --- LuaJIT skips a first line starting with `#!`, the whole
