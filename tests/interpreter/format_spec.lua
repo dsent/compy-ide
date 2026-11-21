@@ -51,6 +51,21 @@ describe('lua format #format', function()
     end
   end)
 
+  it('keeps a semicolon before a statement starting with (', function()
+    for _, case in ipairs({
+      { { 'f();(g)()' }, { 'f();', '(g)()' } },
+      { { 'x = a; (t).k = 1' }, { 'x = a;', '(t).k = 1' } },
+      { { 'f(); (g):m()' }, { 'f();', '(g):m()' } },
+      { { 'f(); (t).m().k = 1' }, { 'f();', '(t).m().k = 1' } },
+      { { 'f(); "s":gsub()' }, { 'f();', '("s"):gsub()' } },
+    }) do
+      local out, ok = format.format(case[1], W)
+      assert.is_true(ok, table.concat(case[1], '\n'))
+      assert.same(case[2], out)
+      assert.same(out, (format.format(out, W)))
+    end
+  end)
+
   it('ends a return with no values at the keyword', function()
     local text = { 'function f(x)', '  if x then', '    return',
       '  end', 'end' }

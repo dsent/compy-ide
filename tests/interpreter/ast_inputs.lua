@@ -1546,6 +1546,12 @@ local canon = {
   prep('("string literal"):gsub()'),
   prep('x = 1;;', 'x = 1'),
   prep('; if x then ;; end', { 'if x then', '  ', 'end' }),
+  prep({ 'function h()', '  f();(g)()', 'end' }, {
+    'function h()',
+    '  f();',
+    '  (g)()',
+    'end',
+  }),
 }
 
 local full = {

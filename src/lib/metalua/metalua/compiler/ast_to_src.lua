@@ -760,6 +760,28 @@ function M:node(node, stmt)
   show_comments('last')
 end
 
+--- True when printing `node` as a statement starts with `(`,
+--- so the preceding statement needs a `;` to stay separate.
+--- @param node table
+--- @return boolean
+local function starts_with_paren(node)
+  while node do
+    local tag = node.tag
+    if tag == "Paren" then
+      return true
+    elseif tag == "Set" then
+      node = node[1] and node[1][1]
+    elseif tag == "Invoke" and node[1] and node[1].tag == "String" then
+      return true
+    elseif tag == "Call" or tag == "Invoke" or tag == "Index" then
+      node = node[1]
+    else
+      return false
+    end
+  end
+  return false
+end
+
 ----------------------------------------------------------------
 --- Convert every node in the AST list passed as 1st arg.
 --- @param list table
@@ -776,6 +798,9 @@ function M:list(list, sep, start)
   for i = start or 1, #list do
     self:node(list[i], stmts)
     if list[i + 1] then
+      if stmts and starts_with_paren(list[i + 1]) then
+        self:acc(";")
+      end
       if not sep then
       elseif type(sep) == "function" then
         sep(self)
