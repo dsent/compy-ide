@@ -115,7 +115,8 @@ local function user_error_handler(CC, msg)
   Log.debug('user error: ' .. msg)
   local err = LANG.get_call_error(msg) or ''
   local user_msg = messages.exec_error(err)
-  --- said once, in the output: the pause adds nothing
+  --- said once, in the output: the pause carries no message of
+  --- its own (with a picture drawn it prints the hint)
   CC:suspend_run()
   CC.model.output:write_error(user_msg)
 end

@@ -271,8 +271,10 @@ scenario('pause-shows-console', function(wait)
   D.in_state('inspect')
   assert(mode() == 'text', 'a pause shows the console, the mode '
     .. 'is ' .. mode())
-  D.eq(P.console_message(), 'look here (F12 shows the picture)',
-    'the pause\'s text, and how to see the picture')
+  local out = P.console_text()
+  assert(out:find('look here (F12 shows the picture)', 1, true),
+    'the pause\'s text and picture hint in the output: ' .. out)
+  D.eq(P.console_message(), nil, 'a pause leaves the band empty')
   local paused = P.capture(wait)
   D.shot(wait, 'paused')
   assert(P.near(at_picture(paused), ground), 'the console on its '

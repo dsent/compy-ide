@@ -2549,47 +2549,6 @@ function ConsoleController:_set_base_env(t)
   table.protect(t)
 end
 
---- A pause's text with how to see the picture behind it: on the
---- pause's own row, in brackets after its text, where both fit,
---- so that the band covers no more of the output; on a row of
---- its own where they do not (the ruling of November 17, 2026:
---- ASCII alone in the words the screen shows), the text
---- cut to the band's rows less the hint's, as the band cuts a
---- message, so that the hint is always seen; alone after a
---- pause with no text. The text is measured as the band shows
---- it: bytes that are not UTF-8 made shown first (k1).
---- @param text string?
---- @param visible VisibleContent?
---- @return string|string[]
-local function with_picture_hint(text, visible)
-  local hint = messages.picture_hint
-  if not text then return hint end
-  local w = visible and visible.wrap_w or 64
-  local plain = (string.scrub(text):gsub('\r\n?', '\n'))
-  local lines = string.lines(plain)
-  if #lines > 1 and lines[#lines] == '' then lines[#lines] = nil end
-  local rows = { }
-  for _, line in ipairs(lines) do
-    for _, row in ipairs(string.wrap_words(line, w)) do
-      rows[#rows + 1] = row
-    end
-  end
-  --- a word wider than a row is cut by characters, as the band
-  --- cuts it (k2)
-  rows = string.wrap_array(rows, w)
-  if #rows == 1
-      and string.ulen(rows[1]) + 3 + string.ulen(hint) <= w then
-    return rows[1] .. ' (' .. hint .. ')'
-  end
-  local room = UserInputView.NOTICE_ROWS - 1
-  if #rows > room then
-    for i = #rows, room + 1, -1 do rows[i] = nil end
-    rows[room] = string.usub(rows[room], 1, w - 1) .. '…'
-  end
-  rows[#rows + 1] = hint
-  return rows
-end
-
 function ConsoleController:suspend()
   if love.state.app_state ~= 'snapshot' then
     return
@@ -2601,16 +2560,17 @@ function ConsoleController:suspend()
   --- the console shows while the program waits; its picture
   --- stays on its canvas
   self.model.screen:pause()
-  --- a pause is the debugger's: what it says shows in the
-  --- band as a notice, and the program's screen is not touched
-  --- (the maintainer's ruling of November 16, 2026)
+  --- a pause happened to the program, so its message answers in
+  --- the output in the refusal color; the band stays the field's
+  --- own (the maintainer's ruling of November 21, 2026)
   local msg = love.state.suspend_msg
   love.state.suspend_msg = nil
   local says = msg ~= nil and tostring(msg) or nil
   if self.model.output:is_drawn() then
-    says = with_picture_hint(says, self.input.model.visible)
+    local hint = messages.picture_hint
+    says = says and (says .. ' (' .. hint .. ')') or hint
   end
-  if says then self.input:notice(says) end
+  if says then self.model.output:write_refusal(says) end
 
   self.model.output:invalidate_terminal()
 

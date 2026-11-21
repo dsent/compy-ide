@@ -1039,80 +1039,92 @@ describe("the screen modes' keys #canvas", function()
   describe("the pause's hint", function()
     local HINT = "F12 shows the picture"
 
-    --- the band's rows
-    local function rows()
-      return K.cc.input:get_wrapped_error() or { }
+    local function refusal_color()
+      return K.cc.cfg.view.colors.terminal.refusal
     end
 
-    it("shows when the paused program has a picture, on the"
-      .. " pause's row where both fit", function()
+    local function same_color(a, b)
+      return a and b and a[1] == b[1] and a[2] == b[2] and a[3] == b[3]
+    end
+
+    --- the output row that reads `text`, and its first cell's color
+    local function output_row(text)
+      local t = K.cc.model.output.terminal
+      for y, r in ipairs(t.buffer) do
+        local s = table.concat(r):gsub("%s+$", "")
+        if s == text then return s, t.state_buffer[y][1].color end
+      end
+    end
+
+    local function said_refusal(text)
+      local s, c = output_row(text)
+      assert.is_not_nil(s, text .. ": not on the screen:\n"
+        .. K.console_text())
+      assert.is_true(same_color(c, refusal_color()),
+        text .. ": not in the refusal color")
+    end
+
+    local function no_band()
+      assert.is_false(K.cc.input:has_error())
+      assert.is_nil(K.cc.input:message_kind())
+    end
+
+    it("prints in the output in brackets when the paused program has a"
+      .. " picture, leaving the band empty", function()
         K.reset({ ["main.lua"] = recorder(true) })
         K.start()
         K.keys("lctrl", "pause")
-        K.frame()
-        assert.same({ "BREAK into program (" .. HINT .. ")" }, rows())
+        K.frame(100)
+        said_refusal("BREAK into program (" .. HINT .. ")")
+        no_band()
       end)
 
-    it("takes a row of its own where the pause's text leaves no"
-      .. " room", function()
+    it("wraps a long pause message with its hint in the output"
+      .. " without cutting", function()
         local long = string.rep("x", 50)
         K.reset({ ["main.lua"] = DRAWS_ONCE
           .. "function love.update() pause('" .. long .. "') end\n" })
         K.start()
         K.frame()
+        K.frame(100)
         assert.same("inspect", K.app_state())
-        assert.same({ long, HINT }, rows())
+        local joined = K.console_text():gsub("\n", "")
+        assert.truthy(joined:find(long .. " (" .. HINT .. ")", 1, true),
+          K.console_text())
+        no_band()
       end)
 
-    it("does not show without one", function()
+    it("does not show without a picture", function()
       K.reset({ ["main.lua"] = recorder() })
       K.start()
       K.keys("lctrl", "pause")
-      K.frame()
-      local n = notice()
-      assert.truthy(n and n:find("BREAK into program", 1, true))
-      assert.is_nil(n:find(HINT, 1, true))
+      K.frame(100)
+      said_refusal("BREAK into program")
+      assert.is_nil(K.console_text():find(HINT, 1, true))
+      no_band()
     end)
 
-    --- k1's first finding
-    it("measures a pause text that is not UTF-8 as it shows",
-      function()
+    it("scrubs a pause text that is not UTF-8 before printing with"
+      .. " the hint", function()
         K.reset({ ["main.lua"] = DRAWS_ONCE
           .. "function love.update() pause(string.char(255)) end\n" })
         K.start()
         K.frame()
+        K.frame(100)
         assert.same("inspect", K.app_state())
-        local r = rows()
-        assert.same(1, #r)
-        assert.truthy(r[1]:find("(" .. HINT .. ")", 1, true))
+        said_refusal(string.REPLACEMENT .. " (" .. HINT .. ")")
+        no_band()
       end)
 
-    --- k1's fifth finding: the band shows three rows at most
-    for name, text in pairs({
-      ["three lines"] = "one\\ntwo\\nthree",
-      ["a text three rows wide"] = string.rep("word ", 40),
-      --- k2's second finding
-      ["a word wider than the band"] = string.rep("wordx", 40),
-    }) do
-      it("keeps the hint in sight after " .. name, function()
-        K.reset({ ["main.lua"] = DRAWS_ONCE
-          .. "function love.update() pause('" .. text .. "') end\n" })
-        K.start()
-        K.frame()
-        assert.same("inspect", K.app_state())
-        local shown = K.cc.view.input:notice_rows()
-        assert.same(HINT, shown[#shown])
-        assert.truthy(shown[1]:find("^one") or shown[1]:find("^word"))
-      end)
-    end
-
-    it("shows alone after pause() with no message", function()
+    it("prints alone after pause() with no message", function()
       K.reset({ ["main.lua"] = DRAWS_ONCE
         .. "function love.update() pause() end\n" })
       K.start()
       K.frame()
+      K.frame(100)
       assert.same("inspect", K.app_state())
-      assert.same(HINT, notice())
+      said_refusal(HINT)
+      no_band()
     end)
   end)
 
@@ -1437,8 +1449,8 @@ compy.screen.showNotice('Read this first')
         assert.same("notice", K.cc.input:message_kind())
       end)
 
-    it("keeps the notice on pause() without a message, replaces on"
-      .. " pause('text'), and keeps across continue()", function()
+    it("keeps the notice through pause(), pause('text'), and"
+      .. " continue() until the first key", function()
         K.reset({ ["main.lua"] = [[
 compy.screen.showNotice("Keep at pause")
 function love.update() end
@@ -1461,9 +1473,15 @@ function love.update() end
 pause("Newer pause")
 ]] })
         K.start()
-        K.frame()
+        K.frame(100)
         assert.same("inspect", K.app_state())
-        assert.same("Newer pause", notice())
+        assert.same("Old notice", notice())
+        assert.same("notice", K.cc.input:message_kind())
+        assert.truthy(K.console_text():find("Newer pause", 1, true))
+        K.screen()
+        K.type("x")
+        assert.is_false(K.cc.input:has_error())
+        assert.is_nil(K.cc.input:message_kind())
         K.keys("lctrl", "q")
       end)
 
