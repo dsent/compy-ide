@@ -82,6 +82,19 @@ describe("the key card #editor", function()
       end
     end)
 
+  it("lists Ctrl+A as select all, in every card", function()
+    local now, other = group("browsing", true)
+    assert.is_nil(now["Ctrl+A"])
+    assert.same("select all", other["Ctrl+A"])
+    for _, st in ipairs({ "inserting", "replacing" }) do
+      assert.same("select all", (group(st, false))["Ctrl+A"], st)
+    end
+    for _, live in ipairs({ true, false }) do
+      local n = group_of(KeyCard.console_cells(live))
+      assert.same("select all", n["Ctrl+A"])
+    end
+  end)
+
   -- not trivial for a child (the ruling of November 14, late)
   it("lists Ctrl+Home/End, the text's start and end, in every "
       .. "card", function()
@@ -153,7 +166,7 @@ describe("the key card #editor", function()
     -- the editor's own keys, the field's, and the reserved
     -- chords that act in the editor; in a draft without Up/Down
     -- and Home/End, which move its cursor there
-    local COUNT = { browsing = 27, inserting = 25, replacing = 25 }
+    local COUNT = { browsing = 28, inserting = 26, replacing = 26 }
     for _, state in ipairs({
       "browsing", "inserting", "replacing"
     }) do
@@ -243,7 +256,7 @@ describe("the key card #editor", function()
 
   it("takes one column where two do not fit", function()
     local lines = KeyCard.lines("browsing", true, 40, 40)
-    assert.same(29, #lines)
+    assert.same(30, #lines)
     assert.same(" Keys now, browsing:", lines[1])
   end)
 end)

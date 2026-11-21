@@ -46,8 +46,9 @@
 - A click in the field places the cursor, as in the console and
   in your program's input; a click on the file does nothing.
   <kbd>Shift</kbd> with a movement key, a drag of the mouse or
-  a click with <kbd>Shift</kbd> selects a part of the draft, and
-  a double click selects a word: typing replaces it, and
+  a click with <kbd>Shift</kbd> selects a part of the draft, a
+  double click selects a word, and <kbd>Ctrl</kbd>+<kbd>A</kbd>
+  selects the whole draft: typing replaces it, and
   <kbd>Backspace</kbd> or <kbd>Delete</kbd> removes it, which
   <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes back; after typing, the
   first <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes back what was typed
@@ -75,7 +76,8 @@
   <kbd>Ctrl</kbd>+<kbd>Insert</kbd> (each repeat would add a
   copy), <kbd>Ctrl</kbd>+<kbd>J</kbd> (rushing through files
   confuses), <kbd>Ctrl</kbd>+<kbd>T</kbd> and
-  <kbd>Ctrl</kbd>+<kbd>R</kbd>, and <kbd>Enter</kbd> in the
+  <kbd>Ctrl</kbd>+<kbd>R</kbd>, <kbd>Ctrl</kbd>+<kbd>A</kbd>,
+  and <kbd>Enter</kbd> in the
   console and in your program's input field.
 
 ### Keys
@@ -103,6 +105,7 @@
 | Move the cursor's line up / down                                  | <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>⇧</kbd>/<kbd>⇩</kbd> |
 | Place the cursor                                                  | click in the field                            |
 | Select a part of the draft; typing replaces it, Backspace or Delete removes it | <kbd>Shift</kbd>+movement, drag, or <kbd>Shift</kbd>+click; a word: double click |
+| Select the whole draft                                            | <kbd>Ctrl</kbd>+<kbd>A</kbd>                  |
 | Evaluate input                                                    | <kbd>Enter ⏎</kbd>                            |
 | **Editor**                                                        |                                               |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; _same as Input in the field, except for:_ |                                               |

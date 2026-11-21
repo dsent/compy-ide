@@ -223,6 +223,11 @@ local function draft_rows(d)
       D.type(wait, 'Z')
       D.eq(P.draft(), d:sub(1, -2) .. 'Z', 'typing replaced it')
     end },
+    ['Ctrl+A'] = { 'select all', function(wait)
+      D.key(wait, 'C-a')
+      D.type(wait, 'Z')
+      D.eq(P.draft(), 'Z', 'Ctrl+A selected the whole draft')
+    end },
     ['Ctrl+Home/End'] = { 'text start/end', function(wait)
       D.key(wait, 'S-return')
       D.type(wait, 'zz')
@@ -515,6 +520,11 @@ local CONSOLE = {
     D.type(wait, 'Z')
     D.eq(P.console_draft(), D0:sub(1, -2) .. 'Z',
       'typing replaced it')
+  end },
+  ['Ctrl+A'] = { 'select all', function(wait)
+    D.key(wait, 'C-a')
+    D.type(wait, 'Z')
+    D.eq(P.console_draft(), 'Z', 'Ctrl+A selected the whole draft')
   end },
   ['Ctrl+Home/End'] = { 'text start/end', function(wait)
     D.key(wait, 'S-return')

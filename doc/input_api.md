@@ -526,19 +526,19 @@ letters, digits and underscores; at a line's start, the line break and the word
 before it), Ctrl+K the rest of its line, and Alt+Shift+Up and Alt+Shift+Down
 move its line; Home and End go to
 the ends of the cursor's row, Ctrl+Home and Ctrl+End to the ends of the text. A
-click places the cursor. Shift with any of these movement keys selects from where
-the selection began to where the cursor lands, and so does a drag of the mouse
-from a press in the field; a click or a plain movement clears the selection.
-Shift+click selects from where the selection began, or from the cursor, to the
-click, and a drag from there goes on from the same place. A double click
-selects the word under it, a word as Ctrl+Left takes it, the cursor at its end.
-Backspace, Delete, Ctrl+Backspace, Ctrl+W and Ctrl+K remove the selected text,
-as one change Ctrl+Z takes back with the selection. Typing replaces it in two
-changes: the first Ctrl+Z takes back what was typed, the second the selection's
-removal.
-The widget has no clipboard: Ctrl+C, Ctrl+X, Ctrl+V, Ctrl+Insert and Shift+Insert
-change nothing in it. On a non-empty submission
-the order is:
+click places the cursor. Shift with any of these movement keys selects from
+where the selection began to where the cursor lands, and so does a drag of the
+mouse from a press in the field; a click or a plain movement clears the
+selection. Ctrl+A selects the whole text, the cursor at its end; with no text it
+does nothing. Shift+click selects from where the selection began, or from the
+cursor, to the click, and a drag from there goes on from the same place. A
+double click selects the word under it, a word as Ctrl+Left takes it, the cursor
+at its end. Backspace, Delete, Ctrl+Backspace, Ctrl+W and Ctrl+K remove the
+selected text, as one change Ctrl+Z takes back with the selection. Typing
+replaces it in two changes: the first Ctrl+Z takes back what was typed, the
+second the selection's removal. The widget has no clipboard: Ctrl+C, Ctrl+X,
+Ctrl+V, Ctrl+Insert and Shift+Insert change nothing in it. On a non-empty
+submission the order is:
 
 1. `before_submit(text)`, if assigned. A truthy return vetoes the
    submit: steps 2-4 do not run and the text stays.

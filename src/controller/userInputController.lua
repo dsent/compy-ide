@@ -723,6 +723,12 @@ end
 
 local ACT = {
   select = select,
+  --- Ctrl+A: the whole draft, as Ctrl+Home then Ctrl+Shift+End
+  select_all = function(_, input)
+    input:clear_selection()
+    input:jump_home()
+    input:select_by(function() input:jump_end() end)
+  end,
   char = horizontal(false),
   word = horizontal(true),
   edge = edge(false),

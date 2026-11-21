@@ -182,6 +182,115 @@ describe("selection in the draft #input", function()
     end)
   end)
 
+  describe("Ctrl+A", function()
+    in_every_field("selects the whole draft from the middle, cursor at the "
+        .. "end", function(owner)
+      local f = field_of(owner, nil, 1, 4)
+      K.keys("lctrl", "a")
+      assert.same("one two\nthree four", selected(f), owner)
+      assert.same({ 2, 11 }, cursor(f), owner)
+    end)
+
+    in_every_field("replaces an existing selection with the whole draft",
+      function(owner)
+        local f = field_of(owner, nil, 1, 5)
+        K.keys("lshift", "right")
+        K.keys("lshift", "right")
+        assert.same("tw", selected(f), owner)
+        K.keys("lctrl", "a")
+        assert.same("one two\nthree four", selected(f), owner)
+        assert.same({ 2, 11 }, cursor(f), owner)
+      end)
+
+    in_every_field("does nothing on an empty field", function(owner)
+      local f = field_of(owner, { "" }, 1, 1)
+      K.keys("lctrl", "a")
+      assert.is_nil(selected(f), owner)
+      assert.same("", text(f), owner)
+      assert.same({ 1, 1 }, cursor(f), owner)
+    end)
+
+    in_every_field("acts once when held", function(owner)
+      local f = field_of(owner, nil, 1, 4)
+      K.hold("lctrl")
+      K.hold("a")
+      assert.same("one two\nthree four", selected(f), owner)
+      assert.same({ 2, 11 }, cursor(f), owner)
+      -- keep 'a' held so the surface's pressed record stays set;
+      -- clear and move with plain Left, then repeat Ctrl+A
+      K.release("lctrl")
+      K.keys("left")
+      assert.is_nil(selected(f), owner)
+      assert.same({ 2, 10 }, cursor(f), owner)
+      K.hold("lctrl")
+      K.repeat_key("a")
+      K.repeat_key("a")
+      K.release("a")
+      K.release("lctrl")
+      assert.is_nil(selected(f), owner)
+      assert.same({ 2, 10 }, cursor(f), owner)
+    end)
+
+    in_every_field("lets typing replace the whole draft", function(owner)
+      local f = field_of(owner, nil, 1, 4)
+      K.keys("lctrl", "a")
+      K.type("X")
+      assert.same("X", text(f), owner)
+      assert.is_nil(selected(f), owner)
+      assert.same({ 1, 2 }, cursor(f), owner)
+    end)
+
+    in_every_field("types no letter", function(owner)
+      local f = field_of(owner, nil, 1, 4)
+      K.keys("lctrl", "a")
+      assert.same("one two\nthree four", text(f), owner)
+      -- as on a Compy, where the chord's letter also arrives as text
+      K.hold("lctrl")
+      F.session.press("a")
+      F.session.type("a")
+      F.session.release("a")
+      K.release("lctrl")
+      assert.same("one two\nthree four", text(f), owner)
+      assert.same("one two\nthree four", selected(f), owner)
+    end)
+
+    it("scrolls a short program field so the cursor at the end stays in view",
+      function()
+        local tall = {
+          "line 1",
+          "line 2",
+          "line 3",
+          string.rep("w", 70),
+          "line 5",
+          "line 6",
+        }
+        local whole_text = table.concat(tall, "\n")
+        for _, case in ipairs({
+          { "program, 1 row", 1 },
+          { "program, 3 rows", 3 },
+        }) do
+          local owner, max_rows = case[1], case[2]
+          local f = field_of(owner, tall, 1, 1)
+          local vis = f.model.visible
+          local last_row = vis:get_content_length()
+          -- 6 lines, line 4 wraps to 2 rows -> 7 wrapped rows
+          assert.same(7, last_row, owner)
+          local before = vis:get_range()
+          assert.same({ 1, max_rows }, { before.start, before.fin }, owner)
+          K.keys("lctrl", "a")
+          assert.same(whole_text, selected(f), owner)
+          assert.same({ 6, 7 }, cursor(f), owner)
+          local after = vis:get_range()
+          local cursor_row = vis.wrap_forward[6][1]
+          assert.same(last_row, cursor_row, owner)
+          assert.is_true(after.start <= cursor_row and cursor_row <= after.fin,
+            owner)
+          assert.same({ last_row - max_rows + 1, last_row },
+            { after.start, after.fin }, owner)
+        end
+      end)
+  end)
+
   describe("what replaces and removes it", function()
     in_every_field("typing replaces the selection, and Ctrl+Z takes "
         .. "it back with the selection", function(owner)

@@ -192,7 +192,7 @@ describe("every chord is its own key #input", function()
       { EditorKeys, { "shift+insert", "ctrl+insert", "escape",
         "ctrl+j", "f1", "f5" } },
       { ConsoleKeys, { "return", "kpenter", "f1" } },
-      { FieldKeys, { "return", "kpenter", "escape" } },
+      { FieldKeys, { "return", "kpenter", "escape", "ctrl+a" } },
     }
     local REPEATS = {
       { EditorKeys, { "up", "ctrl+down", "pagedown", "pageup",
