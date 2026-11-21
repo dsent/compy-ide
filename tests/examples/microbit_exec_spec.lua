@@ -1793,7 +1793,7 @@ describe('micro:bit exec #microbit', function()
           .. 'while true do\n  microbit.display.scroll("hi")\n'
           .. '  microbit.sleep(500)\nend\n',
         'require("tpbot")\n'
-          .. 'bot.move(50, 50, 1)\nbot.turn(3)\nbot.straight(2)\n',
+          .. 'move(50, 50, 1)\nturn(3)\ngo(2)\n',
         'require("microbit")\nrequire("microbit.display")\n'
           .. 'function on_event(source, value)\n'
           .. '  if source == microbit.DEVICE_ID_BUTTON_A then\n'
@@ -2352,5 +2352,196 @@ describe('micro:bit exec #microbit', function()
         board()
         assert.equal(2, sent())
       end)
+  end)
+
+  describe('tpbot classroom words', function()
+    --- Loads the words block from a classroom firmware file into an
+    --- isolated environment with stand-in firmware modules.
+    --- @param file string
+    --- @param model string|false
+    --- @param opts table?
+    --- @return table env, table calls
+    local function load_words(file, model, opts)
+      opts = opts or {}
+      local f = assert(io.open('src/examples/microbit/' .. file, 'rb'))
+      local text = assert(f:read('*a'))
+      f:close()
+      local start = assert(text:find("\n-- The robot lessons' words", 1, true))
+      local stop = assert(text:find('\n-- Script-level setup', start, true))
+      local block = text:sub(start + 1, stop - 1)
+
+      local calls = {}
+      local busy_left = opts.busy_polls or 1
+      local modules = {
+        microbit = {
+          sleep = function(ms)
+            calls[#calls + 1] = { 'sleep', ms }
+            if opts.sleep_error then error(opts.sleep_error, 0) end
+          end,
+        },
+        tpbot = {
+          info = function()
+            if not model then return false end
+            return true, model
+          end,
+          set_motors_speed = function(l, r)
+            calls[#calls + 1] = { 'classic.speed', l, r }
+          end,
+          set_car_light = function(r, g, b)
+            calls[#calls + 1] = { 'classic.light', r, g, b }
+          end,
+          get_distance = function()
+            return 123
+          end,
+        },
+        tpbot2 = {
+          set_motors_speed = function(l, r)
+            calls[#calls + 1] = { 'edu.speed', l, r }
+          end,
+          set_car_light = function(r, g, b)
+            calls[#calls + 1] = { 'edu.light', r, g, b }
+            if opts.light_error and g == 255 then
+              error(opts.light_error, 0)
+            end
+          end,
+          run_distance = function(mm)
+            calls[#calls + 1] = { 'edu.run_distance', mm }
+            if opts.move_error then error(opts.move_error, 0) end
+          end,
+          turn = function(deg)
+            calls[#calls + 1] = { 'edu.turn', deg }
+            if opts.move_error then error(opts.move_error, 0) end
+          end,
+          busy = function()
+            calls[#calls + 1] = { 'edu.busy' }
+            if opts.busy_error then error(opts.busy_error, 0) end
+            if busy_left > 0 then
+              busy_left = busy_left - 1
+              return true
+            end
+            return false
+          end,
+        },
+      }
+      local env = {
+        require = function(name) return assert(modules[name], name) end,
+        error = error,
+        pcall = pcall,
+        type = type,
+        math = math,
+      }
+      local chunk = assert(loadstring(block, file))
+      setfenv(chunk, env)
+      chunk()
+      return env, calls
+    end
+
+    for _, file in ipairs({ 'tpbot.lua', 'tpbot-radio.lua' }) do
+      it('defines global words and no bot table in ' .. file, function()
+        local env = load_words(file, 'TPBot Edu')
+        assert.is_nil(env.bot)
+        assert.is_function(env.move)
+        assert.is_function(env.light)
+        assert.is_function(env.distance)
+        assert.is_function(env.turn)
+        assert.is_function(env.go)
+      end)
+    end
+
+    it('go lights green while moving and switches off when done', function()
+      local env, calls = load_words('tpbot.lua', 'TPBot Edu')
+      env.go(2)
+      assert.same({
+        { 'edu.light', 0, 255, 0 },
+        { 'edu.run_distance', 290 },
+        { 'edu.busy' },
+        { 'sleep', 20 },
+        { 'edu.busy' },
+        { 'edu.light', 0, 0, 0 },
+      }, calls)
+    end)
+
+    it('turn lights green while turning and switches off when done', function()
+      local env, calls = load_words('tpbot.lua', 'TPBot Edu')
+      env.turn(3)
+      assert.same({
+        { 'edu.light', 0, 255, 0 },
+        { 'edu.turn', -90 },
+        { 'edu.busy' },
+        { 'sleep', 20 },
+        { 'edu.busy' },
+        { 'edu.light', 0, 0, 0 },
+      }, calls)
+    end)
+
+    it('go and turn attempt wheel stop and light off when starting or waiting fails',
+      function()
+        -- synthetic faults: busy(), move command, and green light raising
+        -- simulate I2C or argument failures at each step of edu_move
+        for _, case in ipairs({
+          { 'go', 2, { 'edu.run_distance', 290 } },
+          { 'turn', 3, { 'edu.turn', -90 } },
+        }) do
+          local env, calls = load_words('tpbot.lua', 'TPBot Edu', {
+            busy_error = 'bus lost',
+          })
+          local ok, err = pcall(env[case[1]], case[2])
+          assert.is_false(ok)
+          assert.equal('bus lost', err)
+          assert.same({
+            { 'edu.light', 0, 255, 0 },
+            case[3],
+            { 'edu.busy' },
+            { 'edu.speed', 0, 0 },
+            { 'edu.light', 0, 0, 0 },
+          }, calls)
+
+          env, calls = load_words('tpbot.lua', 'TPBot Edu', {
+            move_error = 'move failed',
+          })
+          ok, err = pcall(env[case[1]], case[2])
+          assert.is_false(ok)
+          assert.equal('move failed', err)
+          assert.same({
+            { 'edu.light', 0, 255, 0 },
+            case[3],
+            { 'edu.speed', 0, 0 },
+            { 'edu.light', 0, 0, 0 },
+          }, calls)
+
+          env, calls = load_words('tpbot.lua', 'TPBot Edu', {
+            light_error = 'light failed',
+          })
+          ok, err = pcall(env[case[1]], case[2])
+          assert.is_false(ok)
+          assert.equal('light failed', err)
+          assert.same({
+            { 'edu.light', 0, 255, 0 },
+            { 'edu.speed', 0, 0 },
+            { 'edu.light', 0, 0, 0 },
+          }, calls)
+        end
+      end)
+
+    it('move does not change the headlights', function()
+      local env, calls = load_words('tpbot.lua', 'TPBot Edu')
+      env.move(50, 50, 1)
+      assert.same({
+        { 'edu.speed', 50, 50 },
+        { 'sleep', 1000 },
+        { 'edu.speed', 0, 0 },
+      }, calls)
+    end)
+
+    it('go and turn tell a Classic user to drive with move', function()
+      local env, calls = load_words('tpbot.lua', 'TPBot Classic')
+      for _, case in ipairs({ { 'go', 2 }, { 'turn', 3 } }) do
+        local ok, err = pcall(env[case[1]], case[2])
+        assert.is_false(ok)
+        assert.truthy(err:find(case[1] .. ' needs a TPBot Edu', 1, true), err)
+        assert.truthy(err:find('drives with move.', 1, true), err)
+      end
+      assert.same({}, calls)
+    end)
   end)
 end)
