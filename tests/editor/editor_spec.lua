@@ -974,7 +974,6 @@ describe('Editor #editor', function()
             local file = string.unlines({
               'local colors = {',
               '  black = 0, -- #000000',
-              '  white = 1,',
               '}',
               '',
             })

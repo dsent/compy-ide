@@ -315,13 +315,48 @@ describe('lua format #format', function()
     local text = {
       'local colors = {',
       '  black = 0, -- #000000',
-      '  white = 1,',
       '}',
     }
     local out, ok = format.format(text, W)
     assert.is_false(ok)
     assert.equal(text, out)
   end)
+
+  it('keeps comments on keyed table fields and in empty bodies',
+    function()
+      for _, text in ipairs({
+        { 't = {', '  -- c', '  a = 1,', '}' },
+        { 't = {', '  a = 1, -- c', '  b = 2,', '}' },
+        { 'return { -- c', '  a = 1 }' },
+      }) do
+        local out, ok = format.format(text, W)
+        assert.is_true(ok, table.concat(text, '\n'))
+        assert.same(out, (format.format(out, W)))
+      end
+      for _, text in ipairs({
+        { 'if x then', '  -- c', 'end' },
+        { 'if x then', '  -- c1', '', '  -- c2', 'end' },
+        { 'if x then', '  -- c1', 'elseif y then', '  -- c2',
+          'else', '  -- c3', 'end' },
+        { 'while x do', '  -- c', 'end' },
+        { 'for i = 1, 2 do', '  -- c', 'end' },
+        { 'for k in pairs(t) do', '  -- c', 'end' },
+        { 'repeat', '  -- c', 'until x' },
+        { 'function f()', '  -- c', 'end' },
+        { 'local function f()', '  -- c', 'end' },
+        { 'function t:m()', '  -- c', 'end' },
+        { 'local f = function()', '  -- c', 'end' },
+      }) do
+        local out, ok = format.format(text, W)
+        assert.is_true(ok, table.concat(text, '\n'))
+        assert.same(text, out)
+        assert.same(out, (format.format(out, W)))
+      end
+      --- an empty body without comments keeps its indented line
+      local empty, ok = format.format({ 'function f() end' }, W)
+      assert.is_true(ok)
+      assert.same({ 'function f()', '  ', 'end' }, empty)
+    end)
 
   it('writes escapes as written, and settles on them', function()
     local text = { [[s = "a\r\nb\t\0\0001\27[0m\a\b\f\v\127"]] }

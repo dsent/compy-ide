@@ -610,7 +610,7 @@ function M:node(node, stmt)
   --- @param pos 'first'|'last'
   local function show_comments(pos)
     --- to avoid double dipping, only show corresponding
-    for _, co in pairs(comments) do
+    for i, co in ipairs(comments) do
       --- a comment between a callee and its arguments keeps the
       --- `(` on the callee's line: a `(` that starts a line would
       --- begin a new statement. A block comment on one line stays
@@ -707,8 +707,15 @@ function M:node(node, stmt)
             end
           end
         end
-        --- comes _before_ the next expression
-        if co.position == 'first' then self:nl() end
+        --- comes _before_ the next expression (or another leading
+        --- comment); omit the trailing newline at the end of a
+        --- comment-only block so nldedent adds no blank line
+        local empty_end = not node.tag and #node == 0
+            and not (comments[i + 1]
+              and comments[i + 1].position == 'first')
+        if co.position == 'first' and not empty_end then
+          self:nl()
+        end
         --- whatever follows a trailing one starts a line
         if co.position == 'last' then self._in_comment = true end
         --- advance non-empty source line tracker to this comment's last line
@@ -904,7 +911,7 @@ function M:Set(node)
     self:wrapped_list(params, ", ", 2, 'all')
     self:acc(")")
     self:nlindent()
-    self:list(body, self.nl)
+    self:node(body)
     self:nldedent()
     self:acc("end")
   elseif rhs[1].tag == "Function"
@@ -965,7 +972,7 @@ function M:While(_, cond, body)
   self:node(cond)
   self:acc(" do")
   self:nlindent()
-  self:list(body, self.nl)
+  self:node(body)
   self:nldedent()
   self:acc("end")
 end
@@ -973,7 +980,7 @@ end
 function M:Repeat(_, body, cond)
   self:acc("repeat")
   self:nlindent()
-  self:list(body, self.nl)
+  self:node(body)
   self:nldedent()
   self:acc("until ")
   self:node(cond)
@@ -994,14 +1001,14 @@ function M:If(node)
       self:acc(" then")
     end
     self:nlindent()
-    self:list(body, self.nl)
+    self:node(body)
     self:nldedent()
   end
   --- odd number of children --> last one is an `else' clause --
   if #node % 2 == 1 then
     self:acc("else")
     self:nlindent()
-    self:list(node[#node], self.nl)
+    self:node(node[#node])
     self:nldedent()
   end
   self:acc("end")
@@ -1022,7 +1029,7 @@ function M:Fornum(node, var, first, last)
   end
   self:acc(" do")
   self:nlindent()
-  self:list(body, self.nl)
+  self:node(body)
   self:nldedent()
   self:acc("end")
 end
@@ -1034,7 +1041,7 @@ function M:Forin(_, vars, generators, body)
   self:list(generators, ", ")
   self:acc(" do")
   self:nlindent()
-  self:list(body, self.nl)
+  self:node(body)
   self:nldedent()
   self:acc("end")
 end
@@ -1077,7 +1084,7 @@ function M:Localrec(_, lhs, rhs)
   self:wrapped_list(rhs[1][1], ", ", nil, 'all')
   self:acc(")")
   self:nlindent()
-  self:list(rhs[1][2], self.nl)
+  self:node(rhs[1][2])
   self:nldedent()
   self:acc("end")
   --
@@ -1305,9 +1312,24 @@ function M:Function(_, params, body, annots)
   end
   self:acc(")")
   self:nlindent()
-  self:list(body, self.nl)
+  self:node(body)
   self:nldedent()
   self:acc("end")
+end
+
+function M:Pair(_, k, v)
+  if k.tag == "String" and is_ident(k[1]) then
+    --- `Pair{ `String{ key }, value }
+    self:acc(k[1])
+    self:acc(" = ")
+    self:node(v)
+  else
+    --- `Pair{ key, value }
+    self:acc("[")
+    self:node(k)
+    self:acc("] = ")
+    self:node(v)
+  end
 end
 
 function M:Table(node)
@@ -1324,22 +1346,7 @@ function M:Table(node)
       self:acc(" ")
     end
     for i, elem in ipairs(node) do
-      if elem.tag == "Pair" then
-        if elem[1].tag == "String" and is_ident(elem[1][1]) then
-          --- `Pair{ `String{ key }, value }
-          self:acc(elem[1][1])
-          self:acc(" = ")
-          self:node(elem[2])
-        else
-          --- `Pair{ key, value }
-          self:acc("[")
-          self:node(elem[1])
-          self:acc("] = ")
-          self:node(elem[2])
-        end
-      else
-        self:node(elem)
-      end
+      self:node(elem)
       if node[i + 1] then
         self:acc(",")
         self:nl()

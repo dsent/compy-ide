@@ -504,6 +504,10 @@ local comments = {
     '  -- inline',
     '  ',
     'end',
+  }, {
+    'function fun()',
+    '  -- inline',
+    'end',
   }),
   prep({
     'love.draw = function()',
@@ -512,7 +516,6 @@ local comments = {
   }, {
     'function love.draw()',
     '  -- f',
-    '  ',
     'end',
   }),
 
