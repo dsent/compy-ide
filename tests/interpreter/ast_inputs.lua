@@ -1300,6 +1300,24 @@ local wrapping = {
       '  fashion',
       ')))))))',
     }),
+  prep('x = #"' .. string.rep('a', 96) .. '"', {
+    'x = #(',
+    '  "' .. string.rep('a', 57) .. '" ..',
+    '  "' .. string.rep('a', 39) .. '"',
+    '    )',
+  }),
+  prep('x = not "' .. string.rep('a', 96) .. '"', {
+    'x = not (',
+    '  "' .. string.rep('a', 57) .. '" ..',
+    '  "' .. string.rep('a', 39) .. '"',
+    '    )',
+  }),
+  prep('x = 1 + "' .. string.rep('1', 96) .. '"', {
+    'x = 1 + (',
+    '  "' .. string.rep('1', 57) .. '" ..',
+    '  "' .. string.rep('1', 39) .. '"',
+    '    )',
+  }),
 }
 
 local functions = {

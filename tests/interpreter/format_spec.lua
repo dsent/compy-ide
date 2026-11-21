@@ -490,6 +490,31 @@ describe('lua format #format', function()
     end
   end)
 
+  it('parenthesizes a split string under unary and arithmetic operators',
+    function()
+      local a96 = string.rep('a', 96)
+      local d96 = string.rep('1', 96)
+      for _, expr in ipairs({
+        '#"' .. a96 .. '"',
+        'not "' .. a96 .. '"',
+        '-"' .. d96 .. '"',
+        '1 + "' .. d96 .. '"',
+        '"' .. d96 .. '" + 1',
+        '2 * "' .. d96 .. '"',
+        '"' .. d96 .. '" ^ 1',
+      }) do
+        local src = 'return ' .. expr
+        local out, ok = format.format({ src }, W)
+        assert.is_true(ok, expr)
+        assert.same(out, (format.format(out, W)))
+        assert.equal(
+          assert(loadstring(src))(),
+          assert(loadstring(table.concat(out, '\n')))(),
+          expr
+        )
+      end
+    end)
+
   --- every byte, in a string long enough to be split into
   --- pieces: the printed literal holds the same bytes
   it('keeps the value of a string holding every byte', function()
@@ -526,6 +551,9 @@ describe('lua format #format', function()
       local allowed_diff = {
         ['wrap[3]'] = 'long string split into .. pieces',
         ['wrap[13]'] = 'long string split into .. pieces',
+        ['wrap[40]'] = 'long string split into .. pieces',
+        ['wrap[41]'] = 'long string split into .. pieces',
+        ['wrap[42]'] = 'long string split into .. pieces',
       }
       local expected_refused = {}
       local actual_diff, actual_refused = {}, {}

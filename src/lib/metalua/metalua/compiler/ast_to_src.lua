@@ -1381,7 +1381,7 @@ function M:Op(node, op, a, b)
         and not op_comm[a[1]]
     then
       left_paren = true
-    elseif op == "concat" and a.tag == "String"
+    elseif a.tag == "String" and op_prec[op] >= op_prec.concat
         and self:string_splits(a[1])
     then
       left_paren = true
@@ -1415,6 +1415,12 @@ function M:Op(node, op, a, b)
     end
     self:acc(op_symbol[op])
 
+    if not right_paren and b.tag == "String"
+        and op_prec[op] > op_prec.concat
+        and self:string_splits(b[1])
+    then
+      right_paren = true
+    end
     self:acc(right_paren and "(" or '')
     self:node(b)
     self:acc(right_paren and ")" or '')
@@ -1427,6 +1433,11 @@ function M:Op(node, op, a, b)
       paren = true
     end
     self:acc(op_symbol[op])
+    if not paren and a.tag == "String"
+        and self:string_splits(a[1])
+    then
+      paren = true
+    end
     self:acc(paren and "(" or '')
     self:node(a)
     self:acc(paren and ")" or '')
