@@ -386,7 +386,7 @@ end
 ----------------------------------------------------------------
 local op_preprec = {
   { "or",    "and" },
-  { "lt",    "le",    "eq",  "ne" },
+  { "lt",    "le",    "gt",  "ge",  "eq",  "ne" },
   { "concat" },
   { "add",   "sub" },
   { "mul",   "div",   "mod" },
@@ -421,6 +421,8 @@ local op_symbol = {
   ne = " ~= ",
   lt = " < ",
   le = " <= ",
+  gt = " > ",
+  ge = " >= ",
   ["and"] = " and ",
   ["or"] = " or ",
   ["not"] = "not ",

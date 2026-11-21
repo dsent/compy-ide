@@ -509,9 +509,6 @@ describe('lua format #format', function()
       local allowed_diff = {
         ['wrap[3]'] = 'long string split into .. pieces',
         ['wrap[13]'] = 'long string split into .. pieces',
-        ['operators[31]'] = '>= written as <= with sides swapped',
-        ['canon[1]'] = '> written as < with sides swapped',
-        ['full[2]'] = '> written as < with sides swapped',
       }
       local expected_refused = {}
       local actual_diff, actual_refused = {}, {}
