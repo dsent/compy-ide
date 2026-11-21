@@ -345,16 +345,15 @@ describe('lua format #format', function()
     end)
 
   it('refuses to drop a comment the printer cannot place', function()
-    local text = {
-      'function f(',
-      '  -- note',
-      ')',
-      '  return 1',
-      'end',
-    }
-    local out, ok = format.format(text, W)
-    assert.is_false(ok)
-    assert.equal(text, out)
+    for _, text in ipairs({
+      { 'function f(', '  -- note', ')', '  return 1', 'end' },
+      { 'f();--', ';' },
+      { 't = {a = 1, --[[last]] --', '}' },
+    }) do
+      local out, ok = format.format(text, W)
+      assert.is_false(ok, table.concat(text, '\n'))
+      assert.equal(text, out)
+    end
   end)
 
   it('keeps comments before a table closing brace', function()
