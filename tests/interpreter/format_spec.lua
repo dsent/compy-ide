@@ -34,6 +34,23 @@ describe('lua format #format', function()
     assert.same({ 'function f()', '  return 1', 'end' }, out)
   end)
 
+  it('accepts lone and repeated semicolons', function()
+    for _, case in ipairs({
+      { { ';' }, { '' } },
+      { { ';;;' }, { '' } },
+      { { 'x = 1;;' }, { 'x = 1' } },
+      { { '; x = 1; ; y = 2;;' }, { 'x = 1', 'y = 2' } },
+      { { 'if x then ; end' }, { 'if x then', '  ', 'end' } },
+      { { 'if x then', '  -- note', '  ;', 'end' },
+        { 'if x then', '  -- note', 'end' } },
+    }) do
+      local out, ok = format.format(case[1], W)
+      assert.is_true(ok, table.concat(case[1], '\n'))
+      assert.same(case[2], out)
+      assert.same(out, (format.format(out, W)))
+    end
+  end)
+
   it('ends a return with no values at the keyword', function()
     local text = { 'function f(x)', '  if x then', '    return',
       '  end', 'end' }

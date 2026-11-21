@@ -1526,6 +1526,8 @@ local canon = {
   --- invoking on string literals needs it to be enclosed
   prep('"string literal":gsub()', '("string literal"):gsub()'),
   prep('("string literal"):gsub()'),
+  prep('x = 1;;', 'x = 1'),
+  prep('; if x then ;; end', { 'if x then', '  ', 'end' }),
 }
 
 local full = {

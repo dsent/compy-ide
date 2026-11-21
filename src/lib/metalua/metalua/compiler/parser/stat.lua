@@ -56,9 +56,13 @@ return function(M)
         name        = "statements block",
         terminators = M.block_terminators,
         primary     = function (lx)
-            -- FIXME use gg.optkeyword()
+            while lx:is_keyword (lx:peek(), ";") do lx:next() end
+            local tok = lx:peek()
+            if tok.tag == "Eof" or lx:is_keyword (tok, unpack (M.block_terminators)) then
+                return nil
+            end
             local x = M.stat (lx)
-            if lx:is_keyword (lx:peek(), ";") then lx:next() end
+            while lx:is_keyword (lx:peek(), ";") do lx:next() end
             return x
         end }
 
