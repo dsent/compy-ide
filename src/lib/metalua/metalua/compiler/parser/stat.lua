@@ -251,7 +251,7 @@ return function(M)
     M.stat = gg.multisequence {
         name = "statement",
         { "do", _M.block, "end", builder =
-          function (x) return { tag="Do", unpack (x[1]) } end },
+          function (x) return { tag="Do", body=x[1], unpack (x[1]) } end },
         { "for", _M.for_header, "do", _M.block, "end", builder =
           function (x) x[1][#x[1]+1] = x[2]; return x[1] end },
         { "function", func_name, method_name, _M.func_val, builder=funcdef_builder },

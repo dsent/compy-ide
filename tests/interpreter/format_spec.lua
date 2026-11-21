@@ -397,6 +397,8 @@ describe('lua format #format', function()
         { 'for i = 1, 2 do', '  -- c', 'end' },
         { 'for k in pairs(t) do', '  -- c', 'end' },
         { 'repeat', '  -- c', 'until x' },
+        { 'do', '  -- c', 'end' },
+        { 'do', '  -- c1', '', '  -- c2', 'end' },
         { 'function f()', '  -- c', 'end' },
         { 'local function f()', '  -- c', 'end' },
         { 'function t:m()', '  -- c', 'end' },

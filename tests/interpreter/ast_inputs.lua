@@ -574,6 +574,12 @@ comments[#comments + 1] = prep({
   '}',
 })
 
+comments[#comments + 1] = prep({
+  'do',
+  '  -- note',
+  'end',
+})
+
 local emptylines = {
 
   -- standalone comment

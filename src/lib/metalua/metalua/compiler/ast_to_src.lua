@@ -902,7 +902,11 @@ end
 function M:Do(node)
   self:acc("do")
   self:nlindent()
-  self:list(node, self.nl)
+  if node.body then
+    self:node(node.body)
+  else
+    self:list(node, self.nl)
+  end
   self:nldedent()
   self:acc("end")
 end
