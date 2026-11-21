@@ -1338,11 +1338,10 @@ end
 function M:Op(node, op, a, b)
   --- Transform ``not (a == b)'' into ``a ~= b''. --
   if op == "not" then
-    if node[2][1] == "eq" then
+    if node[2].tag == "Op" and node[2][1] == "eq" then
       op, a, b = "ne", node[2][2], node[2][3]
-    end
-    if (node[2].tag == "Paren" and node[2][1][1] == "eq")
-    then
+    elseif node[2].tag == "Paren" and node[2][1].tag == "Op"
+        and node[2][1][1] == "eq" then
       op, a, b = "ne", node[2][1][2], node[2][1][3]
     end
   end

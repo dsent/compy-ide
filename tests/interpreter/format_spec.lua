@@ -375,6 +375,20 @@ describe('lua format #format', function()
     assert.same({ 'x = 1e999' }, out)
   end)
 
+  it('formats not eq and not "eq" without confusing them for ==',
+    function()
+      for _, text in ipairs({
+        { 'if not eq then', '  ', 'end' },
+        { 'x = not "eq"' },
+        { 'x = not (eq)' },
+        { 'x = not ("eq")' },
+      }) do
+        local out, ok = format.format(text, W)
+        assert.is_true(ok, table.concat(text, '\n'))
+        assert.same(text, out)
+      end
+    end)
+
   --- every byte, in a string long enough to be split into
   --- pieces: the printed literal holds the same bytes
   it('keeps the value of a string holding every byte', function()
