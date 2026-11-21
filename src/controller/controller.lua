@@ -986,14 +986,13 @@ Controller = {
     --- IDE that starts next, often in the same process,
     --- takes it without a tussle with Android.
     ---
-    --- While a file goes to the board, a quit the person
-    --- asked for waits, with words that say so. A quit
-    --- Android asks for (it is closing the IDE, and waits for
-    --- it) is never refused, and on Android the IDE always
-    --- leaves then, a project running or not: the flash stops,
-    --- its stream closed within a second, and says so. On a
-    --- computer, a quit that only stops a project leaves the
-    --- IDE, and its flash, going.
+    --- Any quit that ends the IDE — Ctrl+Esc, an idle quit,
+    --- or a quit Android sends — abandons a transfer in
+    --- progress and closes the link. A quit that only stops a
+    --- project leaves the IDE, and its flash, going, except
+    --- on Android when Android itself sends the quit (it
+    --- waits for the IDE on its UI thread), where the IDE
+    --- always leaves, a project running or not.
     --- A quit pushed from inside the app, by the IDE or a
     --- project, is one the person asked for: it goes out
     --- tagged, its exit status kept in the tag, and the IDE's
@@ -1004,17 +1003,6 @@ Controller = {
     love.quit = function(value)
       local asked = Application.untag(value)
       local port = Serial and SerialPort
-      if port and port:isFlashing() then
-        if asked then
-          -- the quit is not going ahead: Ctrl+Esc's request
-          -- must not carry over to a later quit
-          Application.consume_application_exit_request()
-          print('The Compy stays open while a file goes to the'
-            .. ' micro:bit. Once it says how it went, you can'
-            .. ' quit.')
-          return true
-        end
-      end
       -- whether the IDE stays is decided first: a flash goes on
       -- in an IDE that stays, and ends, with words, in one that
       -- does not
