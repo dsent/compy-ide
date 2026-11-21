@@ -38,7 +38,7 @@ The editor names no file type: what differs between kinds of file is the file's 
 | `references(lines)` | The files the text names, `{line, name, file}`, `file` being the file Ctrl+J opens |
 | `evaluator()` | The evaluator of the file's field |
 
-A `BufferModel` (`src/model/editor/bufferModel.lua`) is created with the syntax and immediately asks it for the file's blocks. A Lua file is read as its lines (`src/util/textfile.lua`), the final newline part of the last one; a file without one reads the same, and saving gives it one. **If the Lua text does not parse, the buffer is marked `invalid = true`** and its blocks are its lines, one block per line, each kept as it is. The editor's parser reads less than LuaJIT: a byte order mark, names outside ASCII, a lone `;`, a form feed, `goto` and labels, and `1LL` make a file `invalid` that LuaJIT runs, so the notices say the editor cannot split the file into blocks, not that it is not Lua. The file opens like any other: text can be inserted, and every other line is written back unchanged. Edit (`F2`) opens a line as it opens any block, formatted when the line parses alone and as it stands otherwise, and `Ctrl+Delete` cuts it into the input; either way the draft is judged at submission as any draft is, on its own (`check.gate`): it must parse by itself, and a line that is half a statement goes on to a new line in the draft (IS3.5) until it is whole. The check that refuses a change which would stop a Lua file loading or merge two blocks (`_reuse_refusal`) leaves such a file alone, since its blocks are lines (`_reads_whole`). A `#!` first line is the language layer's matter, and the editor has no code for it: the parser skips it as LuaJIT does and refuses any other line that starts with `#`, the chunker makes it a block of its own, and the formatter keeps it (the maintainer's ruling of November 14, 2026). Everything else follows from the rule that a change leaves the file loadable (`_reuse_refusal`): F2 loads the line and Enter takes it back, changed or not; cutting it is accepted and Ctrl+Z puts it back; moving it down, moving a block above it, entering text above it, and a `#!` line entered anywhere but first are refused, since Lua could not run the file after them. In a file that already does not load that rule does not apply, so a `#!` line lands anywhere there. An empty Lua file has no block (`blocks` in `src/model/syntax/lua.lua`). Each change re-chunks the file, so once the text parses the blocks are statements again and `invalid` is cleared (`file_blocks` in `bufferModel.lua`).
+A `BufferModel` (`src/model/editor/bufferModel.lua`) is created with the syntax and immediately asks it for the file's blocks. A Lua file is read as its lines (`src/util/textfile.lua`), the final newline part of the last one; a file without one reads the same, and saving gives it one. **If the Lua text does not parse, the buffer is marked `invalid = true`** and its blocks are its lines, one block per line, each kept as it is. The editor's parser reads less than LuaJIT: a byte order mark, names outside ASCII, a form feed, and `goto` and labels make a file `invalid` that LuaJIT runs, so the notices say the editor cannot split the file into blocks, not that it is not Lua. The file opens like any other: text can be inserted, and every other line is written back unchanged. Edit (`F2`) opens a line as it opens any block, formatted when the line parses alone and as it stands otherwise, and `Ctrl+Delete` cuts it into the input; either way the draft is judged at submission as any draft is, on its own (`check.gate`): it must parse by itself, and a line that is half a statement goes on to a new line in the draft (IS3.5) until it is whole. The check that refuses a change which would stop a Lua file loading or merge two blocks (`_reuse_refusal`) leaves such a file alone, since its blocks are lines (`_reads_whole`). A `#!` first line is the language layer's matter, and the editor has no code for it: the parser skips it as LuaJIT does and refuses any other line that starts with `#`, the chunker makes it a block of its own, and the formatter keeps it (the maintainer's ruling of November 14, 2026). Everything else follows from the rule that a change leaves the file loadable (`_reuse_refusal`): F2 loads the line and Enter takes it back, changed or not; cutting it is accepted and Ctrl+Z puts it back; moving it down, moving a block above it, entering text above it, and a `#!` line entered anywhere but first are refused, since Lua could not run the file after them. In a file that already does not load that rule does not apply, so a `#!` line lands anywhere there. An empty Lua file has no block (`blocks` in `src/model/syntax/lua.lua`). Each change re-chunks the file, so once the text parses the blocks are statements again and `invalid` is cleared (`file_blocks` in `bufferModel.lua`).
 
 **Every block is the file's own lines.** The chunker (`source_blocks` in `src/model/lang/lua/parser.lua`) takes the source lines each statement and each comment spans; spans that share a line are one block, a blank line is an `Empty` (one of spaces keeps them, as `Empty.text`), and a line nothing claims, such as a `#!` line, is a block of its own. A block's text is never re-rendered or wrapped: the view wraps long lines on screen only. `file_blocks` then checks that the blocks hold lines 1 to n, each once, in order and as read; when they do not, the file comes a line per block, as text that does not parse does, so that no line is lost on the next save.
 
@@ -99,31 +99,17 @@ Without a replacement target the new block(s) are inserted before the browsing p
 
 ### Known Defects of the Formatter
 
-Valid Lua the editor refuses. The first three are text the parser does not
-read: Enter refuses a block holding one with the parser's message, and a file
-holding one is `invalid`. The others parse, but the printer cannot write them
-without changing the program or losing a comment: Alt+F refuses with "cannot
-be tidied without changing what it does", and Enter keeps the block as typed.
+Valid Lua the editor refuses:
 
-- `goto done` and `::done::`:
+- `goto done` and `::done::`: the parser does not read `goto` or labels, so
+  Enter refuses a block holding one with the parser's message, and a file
+  holding one is `invalid`:
   compy-ide-editor-refuses-goto-semicolon-ffi-literals
-- A lone `;`, as in `x = 1;;`:
-  compy-ide-editor-refuses-goto-semicolon-ffi-literals
-- The FFI literals `1LL` and `12i`:
-  compy-ide-editor-refuses-goto-semicolon-ffi-literals
-- `f();(g)()`, whose `;` the printer drops:
+- `f(); --[[ c ]] (g)()`, or `f(); (g)()` too long for one line: the
+  formatter keeps the `;` but puts `(g)()` on the next line, so the two are
+  separate blocks; F2 on `f();` formats it alone, drops the `;`, and Enter is
+  refused because the file would read `f()(g)()`:
   compy-ide-editor-refuses-semicolon-before-parenthesis
-- `a = 1, -- c` as a table's last field, and `-- c` alone in `do ... end`:
-  compy-ide-editor-refuses-comment-at-table-end-or-in-do-block
-- `x = #"..."` with a string too long for a line, or the same under `not` or
-  arithmetic; Enter refuses the line as too long:
-  compy-ide-editor-refuses-split-string-under-operator
-
-Text the formatter loses without refusing:
-
-- `a = 1, --` as a table's last field loses the empty comment, which the
-  comment check cannot see:
-  compy-ide-formatter-drops-empty-comment-after-table-field
 
 No valid Lua is known to run differently after formatting.
 
