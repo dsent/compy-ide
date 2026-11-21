@@ -163,13 +163,31 @@ describe('lua format #format', function()
       assert.is_true(ok)
       assert.same({ 'return f(--[[ a', 'b ]]', '"abc")' }, out)
       assert(loadstring(table.concat(out, '\n')))
-      --- indented, such a comment never settles, so the text
-      --- comes back as it was
+      --- indented, such a comment settles as well
       local src = { 'function h()', '  return f --[[ a', 'b ]] "s"',
         'end' }
-      local kept, settled = format.format(src, W)
-      assert.is_false(settled)
-      assert.same(src, kept)
+      local out2, ok2 = format.format(src, W)
+      assert.is_true(ok2)
+      assert.same(
+        { 'function h()', '  return f(--[[ a', 'b ]]', '  "s")', 'end' },
+        out2
+      )
+      assert(loadstring(table.concat(out2, '\n')))
+    end)
+
+  it('settles on a multi-line block comment in an indented body',
+    function()
+      local text = {
+        'function f()',
+        '  --[[',
+        '  a',
+        '  ]]',
+        '  y = 2',
+        'end',
+      }
+      local out, ok = format.format(text, W)
+      assert.is_true(ok)
+      assert.same(text, out)
     end)
 
   it('opens the parenthesis before a line comment', function()

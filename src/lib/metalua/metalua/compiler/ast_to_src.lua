@@ -207,6 +207,15 @@ function M:nl()
   self._in_comment = false
 end
 
+--- Accumulate a newline with no added indentation, for the
+--- interior lines of a `--[[ ... ]]` block comment.
+function M:raw_nl()
+  self:acc("\n", true)
+  self._line_len = 0
+  self._lines = self._lines + 1
+  self._in_comment = false
+end
+
 ----------------------------------------------------------------
 --- Increase indentation and accumulate a new line.
 ----------------------------------------------------------------
@@ -626,7 +635,7 @@ function M:node(node, stmt)
             string.lines('--' .. open .. co.text .. close)
         for i, l in ipairs(lines) do
           self:acc(l, true)
-          if i ~= #lines then self:nl() end
+          if i ~= #lines then self:raw_nl() end
         end
         self:acc(' ', true)
         self:emptyline_gap_reset(co.last)
@@ -655,7 +664,7 @@ function M:node(node, stmt)
           local wrapped = string.wrap_array(lines, self.wrap)
           for i, l in ipairs(wrapped) do
             self:acc(l)
-            if i ~= #wrapped then self:nl() end
+            if i ~= #wrapped then self:raw_nl() end
           end
         else
           local ls = co.first.l
