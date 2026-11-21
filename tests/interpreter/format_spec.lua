@@ -346,13 +346,35 @@ describe('lua format #format', function()
 
   it('refuses to drop a comment the printer cannot place', function()
     local text = {
-      'local colors = {',
-      '  black = 0, -- #000000',
-      '}',
+      'function f(',
+      '  -- note',
+      ')',
+      '  return 1',
+      'end',
     }
     local out, ok = format.format(text, W)
     assert.is_false(ok)
     assert.equal(text, out)
+  end)
+
+  it('keeps comments before a table closing brace', function()
+    for _, case in ipairs({
+      { { 't = {', '  a = 1, -- last', '}' },
+        { 't = {', '  a = 1', '  -- last', '}' } },
+      { { 't = {', '  a = 1, --', '}' },
+        { 't = {', '  a = 1', '  --', '}' } },
+      { { 't = {', '  a = 1,', '', '  -- last', '}' },
+        { 't = {', '  a = 1', '', '  -- last', '}' } },
+      { { 't = {', '  -- only', '}' },
+        { 't = {', '  -- only', '}' } },
+      { { 't = {', '  --', '}' },
+        { 't = {', '  --', '}' } },
+    }) do
+      local out, ok = format.format(case[1], W)
+      assert.is_true(ok, table.concat(case[1], '\n'))
+      assert.same(case[2], out)
+      assert.same(out, (format.format(out, W)))
+    end
   end)
 
   it('keeps comments on keyed table fields and in empty bodies',

@@ -1361,11 +1361,22 @@ end
 
 function M:Table(node)
   if not node[1] then
-    self:acc("{ }")
+    if node.close_comments then
+      self:acc("{")
+      self:nlindent()
+      self:node({ lineinfo = {
+        first = { comments = node.close_comments },
+        last = {},
+      } })
+      self:nldedent()
+      self:acc("}")
+    else
+      self:acc("{ }")
+    end
   else
     self:acc("{")
     local newline =
-        #node > 1 or
+        #node > 1 or node.close_comments or
         (node[1].tag == "Pair" and node[1][2].tag == "Function")
     if newline then
       self:nlindent()
@@ -1378,6 +1389,12 @@ function M:Table(node)
         self:acc(",")
         self:nl()
       end
+    end
+    if node.close_comments then
+      self:node({ lineinfo = {
+        first = {},
+        last = { comments = node.close_comments },
+      } })
     end
     if newline then
       self:nldedent()

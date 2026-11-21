@@ -972,9 +972,11 @@ describe('Editor #editor', function()
         it("leaves a file it cannot format safely as it is",
           function()
             local file = string.unlines({
-              'local colors = {',
-              '  black = 0, -- #000000',
-              '}',
+              'function f(',
+              '  -- note',
+              ')',
+              '  return 1',
+              'end',
               '',
             })
             session:open(file, 1)

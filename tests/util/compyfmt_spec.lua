@@ -307,7 +307,7 @@ describe('compyfmt #compyfmt', function()
   end)
 
   it('leaves a file it cannot format byte for byte', function()
-    local text = 'local colors = {\n  black = 0, -- #000000\n}'
+    local text = 'function f(\n  -- note\n)\n  return 1\nend'
     local p = new_file(text)
     assert.equal(1, compyfmt.main({ '--fix', p }))
     assert.same(text, read(p))

@@ -546,6 +546,34 @@ comments[#comments + 1] = prep({
   '    + b',
 })
 
+comments[#comments + 1] = prep({
+  't = {',
+  '  a = 1, -- last',
+  '}',
+}, {
+  't = {',
+  '  a = 1',
+  '  -- last',
+  '}',
+})
+
+comments[#comments + 1] = prep({
+  't = {',
+  '  a = 1, --',
+  '}',
+}, {
+  't = {',
+  '  a = 1',
+  '  --',
+  '}',
+})
+
+comments[#comments + 1] = prep({
+  't = {',
+  '  -- only',
+  '}',
+})
+
 local emptylines = {
 
   -- standalone comment
