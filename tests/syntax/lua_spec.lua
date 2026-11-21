@@ -93,7 +93,7 @@ describe('parse failure boundary #parser', function()
 
   it('tells a # statement to use -- and places it at #',
     function()
-      local msg = 'A comment starts with --, not #.'
+      local msg = '# cannot go here. A comment starts with --.'
       local cases = {
         { { '# note' }, 1, 1 },
         { { 'print("hi")', '# say hi' }, 2, 1 },
@@ -120,7 +120,7 @@ describe('parse failure boundary #parser', function()
 
   it('refuses a non-target before = at the target itself',
     function()
-      local msg = 'Only a variable or a table field can go before =.'
+      local msg = 'Only a variable like score or scores[1] can go before =.'
       local bad = {
         { { 'x + 1 = 2' }, 1, 1 },
         { { 'f() = 1' }, 1, 1 },

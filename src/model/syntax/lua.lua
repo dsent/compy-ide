@@ -141,6 +141,9 @@ function M.failure(code, parse_err)
   --- whole, and the parser has read past it by then; every
   --- other failure is at the token the parser stopped at
   local msg = err.msg or ''
+  local misplaced = string.find(msg,
+    'statement was expected', 1, true)
+  local tok = not misplaced and parse_err.token
   --- an invalid assignment target already names the target's
   --- first character; the parser stopped at `=` after it
   if string.find(msg, 'can go before =', 1, true)
@@ -148,9 +151,6 @@ function M.failure(code, parse_err)
     err.c = char_col(lines[l], err.c)
     return err
   end
-  local misplaced = string.find(msg,
-    'statement was expected', 1, true)
-  local tok = not misplaced and parse_err.token
   --- these two the parser raises after reading the token
   --- that failed: it is the one before the current token
   local no_expr = string.find(msg,
