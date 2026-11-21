@@ -365,7 +365,7 @@ describe('lua format #format', function()
     assert.same(text, out)
   end)
 
-  it('decodes \\u{...} escapes and rejects unknown escapes', function()
+  it('decodes \\u{...} escapes as LuaJIT does', function()
     for _, lit in ipairs({ '"\\u{48}"', '"\\u{10FFFF}"' }) do
       local src = 'return ' .. lit
       local out, ok = format.format({ src }, W)
@@ -376,13 +376,24 @@ describe('lua format #format', function()
         lit
       )
     end
+  end)
+
+  it('reports line, column and message on invalid escapes', function()
     for _, bad in ipairs({
       's = "\\q"',
       's = "\\u{D800}"',
       's = "\\u{110000}"',
       's = "\\x4"',
+      's = "\\256"',
     }) do
-      assert.is_false((parser.parse({ bad })), bad)
+      local ok, err = parser.parse({ 'x = 1', bad })
+      assert.is_false(ok, bad)
+      assert.equal(2, err.l, bad)
+      assert.is_true(err.c >= 5 and err.c <= #bad, bad)
+      assert.is_truthy(
+        string.find(err.msg, 'invalid escape sequence', 1, true),
+        bad
+      )
     end
   end)
 

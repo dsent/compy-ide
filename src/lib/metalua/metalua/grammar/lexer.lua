@@ -314,7 +314,7 @@ local function unescape_string(s)
       elseif c == "x" then
          local hex = s:match("^(%x%x)", b + 2)
          if not hex then
-            error("Illegal escape sequence '\\x' in string")
+            return nil
          end
          out[#out + 1] = string.char(tonumber(hex, 16))
          i = b + 4
@@ -322,7 +322,7 @@ local function unescape_string(s)
          local hex, next_i = s:match("^{(%x+)}()", b + 2)
          local cp = hex and tonumber(hex, 16)
          if not cp or cp > 0x10FFFF or (cp >= 0xD800 and cp <= 0xDFFF) then
-            error("Illegal escape sequence '\\u' in string")
+            return nil
          end
          out[#out + 1] = encode_utf8(cp)
          i = next_i
@@ -330,12 +330,12 @@ local function unescape_string(s)
          local digits, next_i = s:match("^(%d%d?%d?)()", b + 1)
          local code = tonumber(digits)
          if code > 255 then
-            error("Illegal escape sequence '\\" .. digits .. "' in string: ASCII codes must be in [0..255]")
+            return nil
          end
          out[#out + 1] = string.char(code)
          i = next_i
       else
-         error("Illegal escape sequence '\\" .. c .. "' in string")
+         return nil
       end
    end
    return table.concat(out)
@@ -461,9 +461,17 @@ function lexer:extract_short_string()
          return nil, "Unterminated string"
       end
    end
+   local val = unescape_string(self.src:sub(i, j - 2))
+   if not val then
+      local pos = self.posfact:get_position(self.i)
+      error(string.format(
+         "line %i, char %i: invalid escape sequence\nfacing: line %i, char %i",
+         pos.line, pos.column, pos.line, pos.column
+      ))
+   end
    self.i = j
 
-   return "String", unescape_string(self.src:sub(i, j - 2))
+   return "String", val
 end
 
 -- Extract Id or Keyword.
