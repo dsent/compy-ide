@@ -225,18 +225,20 @@ scenario('modes', function(wait)
     --- the mark is never cut; with the right block packed to
     --- the edge, the names are whole
     bar(wait, 'editor-browsing-no-card', 'editor',
-      { '[no sd]', PROJECT, 'notes.lua', 'browsing', 'B3', 'L3',
-        '1:1' })
+      { '[no sd]', PROJECT, 'notes.lua', 'browsing', 'L3/2' },
+      { ':1' })
   end)
   D.with_card(wait, function()
     bar(wait, 'editor-card', 'editor', { 'Keys now, browsing:' })
   end)
   D.type(wait, 'c = 3')
-  bar(wait, 'editor-inserting', 'editor', { 'inserting' })
+  bar(wait, 'editor-inserting', 'editor',
+    { 'inserting', 'L3/2', ':6' })
   D.key(wait, 'escape')
   D.key(wait, 'C-up')
   D.key(wait, 'f2')
-  bar(wait, 'editor-replacing', 'editor', { 'replacing' })
+  bar(wait, 'editor-replacing', 'editor',
+    { 'replacing', 'L2/2', ':6' })
   D.leave(wait)
   --- the arrow toward the edit's target while no row of it is in
   --- view (the maintainer's ruling of November 18, 2026)

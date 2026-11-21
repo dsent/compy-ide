@@ -384,10 +384,9 @@ describe("status line, notice and key card drawn #editor",
     K.browse_to(5)
     assert.same("inserting", K.state())
     local f = field(K.screen())
-    -- 64 columns hold all of it beside `B5 L5-11`, the range
-    -- with no count after it
-    assert.truthy(f:find("L5-11", 1, true))
-    assert.is_nil(f:find("L5-11(", 1, true))
+    -- 64 columns hold all of it beside `L5/11 :2`
+    assert.truthy(f:find("L5/11", 1, true))
+    assert.truthy(f:find(":2", 1, true))
     assert.truthy(f:find("scratchpad", 1, true))
     assert.truthy(f:find("main.lua", 1, true))
     assert.truthy(f:find("inserting", 1, true))
@@ -464,5 +463,195 @@ describe("status line, notice and key card drawn #editor",
   it("the console's status line names the project", function()
     K.reset({ ["main.lua"] = "x = 1\n" })
     assert.truthy(field(K.screen()):find(K.PROJECT, 1, true))
+  end)
+
+  describe("file position on the editor status line", function()
+    local function status_items(s)
+      local by_text = { }
+      for _, t in ipairs(s.field) do
+        if t.y == 0 then by_text[t.text] = t end
+      end
+      return by_text
+    end
+
+    local function ed_colors()
+      return K.ed.view.cfg.colors.statusline.editor
+    end
+
+    local function state_color(c)
+      return c.state or c.fg2 or c.fg
+    end
+
+    local SPACED_LUA =
+        "a = 1\n\n\nfunction f()\n  return 1\nend\n\nb = 2\n"
+
+    it("shows L<line>/<total> without a column while browsing a "
+        .. "Lua file with blank lines, and uses the indicator "
+        .. "color at the end position", function()
+      K.reset({ ["main.lua"] = SPACED_LUA })
+      K.open()
+      local c = ed_colors()
+      -- opens at end position: 8 lines, so L9/8 in indicator color
+      local at_end = status_items(K.screen())
+      assert.is_not_nil(at_end["L9/8"])
+      assert.is_true(same_colour(c.indicator, at_end["L9/8"].colour))
+      assert.is_nil(at_end[":1"])
+      assert.is_nil(at_end["1:1"])
+      -- block 1 at line 1
+      K.browse_to(1)
+      local b1 = status_items(K.screen())
+      assert.is_not_nil(b1["L1/8"])
+      assert.is_true(same_colour(c.fg, b1["L1/8"].colour))
+      assert.is_nil(b1[":1"])
+      -- block 4 (`function f()`) starts on line 4 after 2 blanks
+      K.browse_to(4)
+      local b4 = status_items(K.screen())
+      assert.is_not_nil(b4["L4/8"])
+      assert.is_true(same_colour(c.fg, b4["L4/8"].colour))
+      assert.is_nil(b4[":1"])
+      -- block 6 (`b = 2`) is on line 8
+      K.browse_to(6)
+      local b6 = status_items(K.screen())
+      assert.is_not_nil(b6["L8/8"])
+      assert.is_true(same_colour(c.fg, b6["L8/8"].colour))
+    end)
+
+    it("shows the cursor's file line and column for a multi-row "
+        .. "draft while inserting", function()
+      K.reset({ ["main.lua"] = SPACED_LUA })
+      K.open()
+      local c = ed_colors()
+      local fw = K.ed.view.cfg.fw
+      -- insert before block 4 (line 4 of 8)
+      K.browse_to(4)
+      K.type_lines({ "x = 1", "y = 2" })
+      local s = status_items(K.screen())
+      assert.is_not_nil(s["L5/8"])
+      assert.is_not_nil(s[":6"])
+      assert.is_true(same_colour(c.fg, s["L5/8"].colour))
+      assert.is_true(same_colour(state_color(c), s[":6"].colour))
+      -- one space between L5/8 and :6
+      assert.same(s["L5/8"].x + (#"L5/8" + 1) * fw, s[":6"].x)
+      -- cursor on draft row 1 shows first line (4)
+      K.keys("up")
+      local row1 = status_items(K.screen())
+      assert.is_not_nil(row1["L4/8"])
+      assert.is_not_nil(row1[":6"])
+      -- browsing to end position while keeping draft shows end line
+      K.keys("lctrl", "pagedown")
+      local end1 = status_items(K.screen())
+      assert.is_not_nil(end1["L9/8"])
+      assert.is_true(same_colour(c.indicator, end1["L9/8"].colour))
+      assert.is_not_nil(end1[":6"])
+      K.keys("down")
+      local end2 = status_items(K.screen())
+      assert.is_not_nil(end2["L10/8"])
+      assert.is_true(same_colour(c.indicator, end2["L10/8"].colour))
+    end)
+
+    it("shows the target's file line plus draft row minus one "
+        .. "while replacing, even when browsed away", function()
+      K.reset({ ["main.lua"] = SPACED_LUA })
+      K.open()
+      local c = ed_colors()
+      -- block 4 (`function f() ... end`) spans lines 4-6
+      K.browse_to(4)
+      K.keys("f2")
+      -- cursor loads at end of row 3 (`end`, col 4) -> line 6
+      local s = status_items(K.screen())
+      assert.is_not_nil(s["L6/8"])
+      assert.is_not_nil(s[":4"])
+      assert.is_true(same_colour(c.fg, s["L6/8"].colour))
+      assert.is_true(same_colour(state_color(c), s[":4"].colour))
+      -- browsing away keeps the target's file line
+      K.browse_to(1)
+      local away = status_items(K.screen())
+      assert.is_not_nil(away["L6/8"])
+      assert.is_not_nil(away[":4"])
+      -- moving cursor to draft row 1 shows line 4
+      K.keys("up")
+      K.keys("up")
+      local top = status_items(K.screen())
+      assert.is_not_nil(top["L4/8"])
+      assert.is_not_nil(top[":4"])
+    end)
+
+    it("keeps the plain color while replacing the last line with "
+        .. "more rows than it had", function()
+      K.reset({ ["main.lua"] = "a = 1\nb = 2\n" })
+      K.open()
+      local c = ed_colors()
+      K.browse_to(2)
+      K.keys("f2")
+      K.keys("lshift", "return")
+      K.type("c = 3")
+      local s = status_items(K.screen())
+      assert.is_not_nil(s["L3/2"])
+      assert.is_true(same_colour(c.fg, s["L3/2"].colour))
+    end)
+
+    it("uses the same L<line>/<total> form in a text file",
+        function()
+      K.reset({ ["notes.txt"] = "one\ntwo\nthree\n" })
+      K.open("notes.txt")
+      local c = ed_colors()
+      local at_end = status_items(K.screen())
+      assert.is_not_nil(at_end["L4/3"])
+      assert.is_true(same_colour(c.indicator, at_end["L4/3"].colour))
+      assert.is_nil(at_end[":1"])
+      K.browse_to(2)
+      local b2 = status_items(K.screen())
+      assert.is_not_nil(b2["L2/3"])
+      assert.is_true(same_colour(c.fg, b2["L2/3"].colour))
+      assert.is_nil(b2[":1"])
+      K.type_lines({ "hi", "there" })
+      local ins = status_items(K.screen())
+      assert.is_not_nil(ins["L3/3"])
+      assert.is_not_nil(ins[":6"])
+    end)
+
+    it("shows L1/0 in the indicator color for an empty file",
+        function()
+      K.reset({ ["empty.lua"] = "" })
+      K.open("empty.lua")
+      local c = ed_colors()
+      local empty = status_items(K.screen())
+      assert.is_not_nil(empty["L1/0"])
+      assert.is_true(same_colour(c.indicator, empty["L1/0"].colour))
+      assert.is_nil(empty[":1"])
+      K.type("x = 1")
+      local typed = status_items(K.screen())
+      assert.is_not_nil(typed["L1/0"])
+      assert.is_true(same_colour(c.indicator, typed["L1/0"].colour))
+      assert.is_not_nil(typed[":6"])
+    end)
+
+    it("names the file line in editor parse errors and line-length "
+        .. "refusals while keeping the cursor draft-relative",
+        function()
+      K.reset({ ["main.lua"] = "a = 1\n\nb = 2\nc = 3\n" })
+      K.open()
+      -- end position is line 5: draft row 2 is file line 6
+      K.type_lines({ "x = 1", "y = = 2" })
+      K.keys("return")
+      assert.matches("^L6:5:", K.message())
+      assert.same({ 2, 5 }, { K.cursor() })
+      -- replacing block 3 (`b = 2` at line 3): draft row 2 is line 4
+      K.keys("escape")
+      K.browse_to(3)
+      K.keys("f2")
+      K.keys("lctrl", "home")
+      K.keys("lctrl", "k")
+      K.type_lines({ "x = 1", "y = = 2" })
+      K.keys("return")
+      assert.matches("^L4:5:", K.message())
+      assert.same({ 2, 5 }, { K.cursor() })
+      -- line-length refusal at end (line 5): draft row 2 is line 6
+      K.keys("escape")
+      K.browse_to_end()
+      K.type_lines({ "x = 1", string.rep("a", 70) .. " = 1" })
+      K.keys("return")
+      assert.matches("^Line 6 has 70 characters", K.message())
+    end)
   end)
 end)

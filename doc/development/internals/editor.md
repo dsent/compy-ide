@@ -29,9 +29,9 @@ The editor names no file type: what differs between kinds of file is the file's 
 | Member | What it answers |
 |---|---|
 | `name` | The syntax's name |
-| `spans_lines` | Whether a block may span lines; the status line then shows the browsed block's number and its lines, and otherwise its line alone |
+| `spans_lines` | Whether a block may span lines (the status line shows the file line and line count for every syntax alike) |
 | `blocks(lines)` | The file's blocks (`Chunk` and `Empty`, `src/model/editor/content.lua`), tiling lines 1 to n, as a `Dequeue`; nil when the syntax cannot split the text, and the file is then a block per line (`invalid`) |
-| `submit(lines, width, max_block)` | A draft's verdict, `{lines, formatted, blocks?, failure?, cursor?, refusal?}`: `blocks` accepts the draft as those blocks. Otherwise `failure` (an `Error` at the failing character) refuses it with the parser's message and the cursor there; any other verdict is shown as the syntax returns it: when `formatted` or `cursor` the field shows `lines` as one undoable change, the cursor at `cursor` (`{l, c}`) or, without one, following the text it stood at, under `refusal` (the notice's text) when there is one. A verdict with no failure and no refusal is a draft that goes on, such as Lua's unfinished draft (IS3.5) |
+| `submit(lines, width, max_block, first_line)` | A draft's verdict, `{lines, formatted, blocks?, failure?, cursor?, refusal?}`: `blocks` accepts the draft as those blocks. Otherwise `failure` (an `Error` at the failing character, in draft coordinates) refuses it with the parser's message (shifted to file lines by the controller) and the cursor there; any other verdict is shown as the syntax returns it: when `formatted` or `cursor` the field shows `lines` as one undoable change, the cursor at `cursor` (`{l, c}`) or, without one, following the text it stood at, under `refusal` (the notice's text, naming file lines using `first_line`, the file line of draft row 1) when there is one. A verdict with no failure and no refusal is a draft that goes on, such as Lua's unfinished draft (IS3.5) |
 | `format(lines, width)` | `text, ok, why`: the text formatted, whether the syntax could format it (a text already formatted comes back unchanged, `ok` true), and when not, a phrase the notices put after "The file" or after the file's name, such as "has nothing to format" |
 | `loads(lines)` | `ok, why, merges`: whether the file still holds together after a cut or a move, the notice's text when not, and whether the change merged two blocks |
 | `highlight(lines)` | The whole text's colors, line by line and column by column (`SyntaxColoring`), or nil; a character with no color takes the color of the one before it in its block |
@@ -135,7 +135,7 @@ Each block has **two position fields** tracking the first two spaces:
 - `pos` — the block's position in source lines (normal coords)
 - `app_pos` — the block's position in wrapped/apparent lines (what the view uses for rendering and scroll)
 
-These diverge whenever any block has lines longer than the screen width. Scrolling, selection visibility, and line number display all operate in apparent-line space; source queries (semantic info, revmap) operate in source-line space. The mapping between them is maintained in `VisibleStructuredContent.reverse_map` and recalculated in `recalc_range()`.
+These diverge whenever any block has lines longer than the screen width. Scrolling and selection visibility operate in apparent-line space; the status line and source queries (semantic info, revmap) operate in source-line space. The mapping between them is maintained in `VisibleStructuredContent.reverse_map` and recalculated in `recalc_range()`.
 
 The `WrappedText` base class (`src/util/wrapped_text.lua`) provides the three-table mapping structure: `wrap_forward` (source line → list of display lines), `wrap_reverse` (display line → source line), `wrap_rank` (display line → its offset within the wrap break sequence). These are used for cursor coordinate translation in the input and for highlight remapping in `VisibleBlock`.
 

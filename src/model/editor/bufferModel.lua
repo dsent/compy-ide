@@ -434,9 +434,7 @@ end
 function BufferModel:_get_selected_block()
   local sel = self.selection
   if sel == self:get_content_length() + 1 then
-    local last = self.content:last()
-    local ln = (last and last.pos.fin or 0) + 1
-    return Empty(ln)
+    return Empty(self:line_count() + 1)
   end
   return self.content[sel]
 end
@@ -617,16 +615,29 @@ function BufferModel.lines_of(t)
   return out
 end
 
+--- The file's line count, 0 for an empty file
+--- @return integer
+function BufferModel:line_count()
+  local last = self.content[self:get_content_length()]
+  return last and last.pos.fin or 0
+end
+
+--- The first file line of block `bn`, or the line after the
+--- last at the end position
+--- @param bn integer
+--- @return integer
+function BufferModel:block_line(bn)
+  return (self:_span_of(bn))
+end
+
 --- @param bn integer
 --- @return integer start --- the block's first line; for
 --- the end position, the line after the last
 --- @return integer len --- its lines, 0 at the end position
 function BufferModel:_span_of(bn)
-  local n = self:get_content_length()
   local b = self.content[bn]
   if b then return b.pos.start, b.pos:len() end
-  local last = self.content[n]
-  return (last and last.pos.fin or 0) + 1, 0
+  return self:line_count() + 1, 0
 end
 
 --- @private

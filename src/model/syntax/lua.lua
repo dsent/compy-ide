@@ -343,18 +343,20 @@ end
 --- @param lines string[]
 --- @param width integer
 --- @param max_block integer
+--- @param first_line integer? --- file line of the draft's first row
 --- @return SyntaxVerdict
-function M.submit(lines, width, max_block)
+function M.submit(lines, width, max_block, first_line)
   local v = M.submission(lines, width, max_block)
   if v.failure then return went_on(v.lines, v.failure) end
   local out = { lines = v.lines, formatted = v.formatted }
+  --- every error the gate gives sets long_line (M.submission)
   local long = v.long_line
-  if #v.errors > 0 then
-    out.refusal = long and string.format(
+  if long then
+    out.refusal = string.format(
       'Line %d has %d characters, the limit is %d.'
       .. ' Shorten or break it, then press Enter',
-      long.l, long.len, check.max_line_length)
-        or tostring(v.errors[1])
+      long.l + (first_line or 1) - 1, long.len,
+      check.max_line_length)
     return out
   end
   local first = v.oversized[1]

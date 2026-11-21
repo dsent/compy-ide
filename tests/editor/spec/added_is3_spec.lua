@@ -310,7 +310,7 @@ describe("IS3 input, added #editor #spec", function()
         K.keys("right")
       end
       K.keys("return")
-      assert.matches("^Line 3 has 66 characters", K.message())
+      assert.matches("^Line 5 has 66 characters", K.message())
       assert.same('s = "abc"', line_of(1))
       assert.same({
         1,
