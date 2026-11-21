@@ -50,8 +50,7 @@ local function examples()
     assert(love.state.app_state == 'inspect')
     h.screenshot('paused')
     wait(.2)
-    -- Ctrl+Q stops a paused project, and Enter clears the
-    -- pause message from the console
+    -- Ctrl+Q stops a paused project
     h.love_key('C-q')
     wait(.3)
     h.release_keys()

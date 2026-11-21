@@ -2196,7 +2196,7 @@ function ConsoleController.prepare_project_env(cc)
   end
   project_env.run              = project_env.run_project
 
-  --- @param msg string?
+  --- @param msg any? --- turned into text by suspend
   project_env.pause            = function(msg)
     if not cc.run_live then
       return cc.model.output:write_refusal(messages.nothing_running)
@@ -2560,12 +2560,16 @@ function ConsoleController:suspend()
   --- the console shows while the program waits; its picture
   --- stays on its canvas
   self.model.screen:pause()
-  --- a pause happened to the program, so its message answers in
-  --- the output in the refusal color; the band stays the field's
-  --- own (the maintainer's ruling of November 21, 2026)
+  --- a pause happened to the program, so its message (of any
+  --- type, turned into text here) answers in the output in the
+  --- refusal color; one trailing "\n" goes, and empty text
+  --- counts as none. The band stays the field's own (the
+  --- maintainer's ruling of November 21, 2026).
   local msg = love.state.suspend_msg
   love.state.suspend_msg = nil
-  local says = msg ~= nil and tostring(msg) or nil
+  local says = msg ~= nil
+      and string.gsub(tostring(msg), '\n$', '') or nil
+  if says == '' then says = nil end
   if self.model.output:is_drawn() then
     local hint = messages.picture_hint
     says = says and (says .. ' (' .. hint .. ')') or hint
@@ -2584,7 +2588,7 @@ function ConsoleController:suspend()
   self.main_ctrl.set_default_handlers(self, self.view)
 end
 
---- @param msg string?
+--- @param msg any? --- turned into text by suspend
 --- A program that runs, or one idle behind the console that
 --- can still act (its key handlers alone, say), pauses: the
 --- console and its field come back, and continue() gives the

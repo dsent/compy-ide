@@ -339,10 +339,6 @@ describe("the console's channels #console", function()
       end }
     end
 
-    local function trim(t)
-      return (t:gsub("%s+$", ""))
-    end
-
     local function start_and_pause(opts)
       local draw = opts.draws and DRAW or ""
       local notice_line = opts.notice
@@ -353,9 +349,11 @@ describe("the console's channels #console", function()
       if opts.how == "ctrl" then
         body = "function love.update() end\n"
       elseif opts.how == "pause_text" then
+        local arg = opts.msg ~= nil and string.format("%q", opts.msg)
+          or "'Look here'"
         body = "local n = 0\nfunction love.update()\n"
           .. "  n = n + 1\n"
-          .. "  if n == 3 then pause('Look here') end\n"
+          .. "  if n == 3 then pause(" .. arg .. ") end\n"
           .. "end\n"
       elseif opts.how == "pause_bare" then
         body = "local n = 0\nfunction love.update()\n"
@@ -376,7 +374,13 @@ describe("the console's channels #console", function()
       if opts.io_write then stub_io_write() end
       run("run()")
       assert.same("running", K.app_state())
-      local before = K.console_text()
+      local term = K.cc.model.output.terminal
+      local before = {
+        text = K.console_text(),
+        y = term.cursor_y,
+        x = term.cursor_x,
+        kept = K.cc.model.output.kept:count(),
+      }
       if opts.notice then
         K.screen()
         assert.is_true(K.cc.input.model.error.seen)
@@ -419,7 +423,11 @@ describe("the console's channels #console", function()
           if draws then
             said(HINT, colors().refusal)
           else
-            assert.same(trim(before), trim(K.console_text()))
+            local term = K.cc.model.output.terminal
+            assert.same(before.text:sub(1, -2), K.console_text())
+            assert.equal(before.y, term.cursor_y)
+            assert.equal(before.x, term.cursor_x)
+            assert.equal(before.kept, K.cc.model.output.kept:count())
           end
           no_band()
           assert.is_nil(K.cc.input:message_kind())
@@ -442,11 +450,64 @@ describe("the console's channels #console", function()
         end)
     end
 
+    it("strips a trailing newline so pause('finished\\n') fits on one"
+      .. " row with the picture hint", function()
+        local before = start_and_pause({
+          how = "pause_text", draws = true, msg = "finished\n" })
+        local term = K.cc.model.output.terminal
+        said("finished (" .. HINT .. ")", colors().refusal)
+        assert.equal(before.y + 1, term.cursor_y)
+        assert.equal(1, term.cursor_x)
+        no_band()
+        K.keys("lctrl", "q")
+      end)
+
+    it("strips a trailing newline on pause('finished\\n') without"
+      .. " leaving an empty row after it (text-only)", function()
+        local before = start_and_pause({
+          how = "pause_text", draws = false, msg = "finished\n" })
+        local term = K.cc.model.output.terminal
+        said("finished", colors().refusal)
+        assert.equal(before.y + 1, term.cursor_y)
+        assert.equal(1, term.cursor_x)
+        no_band()
+        K.keys("lctrl", "q")
+      end)
+
+    it("prints nothing on pause('') for a text-only program",
+      function()
+        local before = start_and_pause({
+          how = "pause_text", draws = false, msg = "" })
+        local term = K.cc.model.output.terminal
+        assert.same(before.text:sub(1, -2), K.console_text())
+        assert.equal(before.y, term.cursor_y)
+        assert.equal(before.x, term.cursor_x)
+        assert.equal(before.kept, K.cc.model.output.kept:count())
+        no_band()
+        K.keys("lctrl", "q")
+      end)
+
+    it("prints the hint alone on pause('') for a drawing program",
+      function()
+        local before = start_and_pause({
+          how = "pause_text", draws = true, msg = "" })
+        local term = K.cc.model.output.terminal
+        said(HINT, colors().refusal)
+        assert.equal(before.y + 1, term.cursor_y)
+        assert.equal(1, term.cursor_x)
+        no_band()
+        K.keys("lctrl", "q")
+      end)
+
     it("handler error on a drawing program prints the hint after the"
       .. " red error and leaves the band empty", function()
         start_and_pause({ how = "error", draws = true })
         said("Execution error at L6:late", colors().error)
         said(HINT, colors().refusal)
+        local t = K.console_text()
+        local at_error = t:find("Execution error at L6:late", 1, true)
+        local at_hint = t:find(HINT, 1, true)
+        assert.truthy(at_error and at_hint and at_error < at_hint, t)
         no_band()
         assert.is_nil(K.cc.input:message_kind())
         K.keys("lctrl", "q")
