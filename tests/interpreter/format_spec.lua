@@ -525,7 +525,10 @@ describe('lua format #format', function()
       )
       assert.equal(tostring(fn_before()), tostring(fn_after()), lit)
     end
-    for _, bad in ipairs({ '1.5LL', '1e2LL', '0x1.5LL', '0x1p2LL' }) do
+    for _, bad in ipairs({
+      '1.5LL', '1e2LL', '0x1.5LL', '0x1p2LL',
+      '1LL..2', '1ULL..2', '12i..2',
+    }) do
       local text = { 'x = ' .. bad }
       local out, ok = format.format(text, W)
       assert.is_false(ok, bad)

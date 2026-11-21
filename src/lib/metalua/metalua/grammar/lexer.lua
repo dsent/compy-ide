@@ -508,7 +508,7 @@ function lexer:extract_number()
    local suf_j = self.src:match("^[lL][lL][uU]()", j)
        or self.src:match("^[uU]?[lL][lL]()", j)
        or self.src:match("^[iI]()", j)
-   if suf_j and not self.src:match("^[%w_]", suf_j) then
+   if suf_j and not self.src:match("^[%w_%.]", suf_j) then
       local is_imag = suf_j == j + 1
       local is_float = str:find(is_hex and "[%.pP]" or "[%.eE]") ~= nil
       if is_imag or not is_float then
