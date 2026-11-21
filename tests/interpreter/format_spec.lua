@@ -353,6 +353,28 @@ describe('lua format #format', function()
     end
   end)
 
+  it('prints numbers so they read back as the same value', function()
+    for _, lit in ipairs({
+      '3.14159265358979',
+      '9007199254740993',
+      '0xffffffffffffffff',
+      '398492087598247598237529834759827345928375928734958729387459283787459837452987345982375',
+      '1e309',
+    }) do
+      local src = 'return ' .. lit
+      local out, ok = format.format({ src }, W)
+      assert.is_true(ok, lit)
+      assert.equal(
+        assert(loadstring(src))(),
+        assert(loadstring(table.concat(out, '\n')))(),
+        lit
+      )
+    end
+    local out, ok = format.format({ 'x = 1e309' }, W)
+    assert.is_true(ok)
+    assert.same({ 'x = 1e999' }, out)
+  end)
+
   --- every byte, in a string long enough to be split into
   --- pieces: the printed literal holds the same bytes
   it('keeps the value of a string holding every byte', function()

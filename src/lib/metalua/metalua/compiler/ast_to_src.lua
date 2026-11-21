@@ -1128,7 +1128,17 @@ M.True = "true"
 M.Dots = "..."
 
 function M:Number(_, n)
-  self:acc(tostring(n))
+  if n == math.huge then
+    self:acc("1e999")
+    return
+  end
+  for p = 14, 17 do
+    local s = string.format("%." .. p .. "g", n)
+    if p == 17 or tonumber(s) == n then
+      self:acc(s)
+      return
+    end
+  end
 end
 
 ----------------------------------------------------------------
