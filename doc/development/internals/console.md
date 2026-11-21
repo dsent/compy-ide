@@ -84,7 +84,10 @@ When Enter is pressed in the REPL (`ConsoleController:keypressed`, line 1009):
 2. The input text is validated via the `Evaluator` (LuaEval — parse via metalua)
 3. If parse succeeds: `codeload(code, run_env)` compiles the whole line, every statement in it, into one chunk whose `fenv` is the project's environment
 4. A line the parse refuses, or one Lua does not load, is not taken: its message shows in the notice band directly above the status line, as the file editor shows its messages, and the line stays in the field (`user_input.md`, "Error state"). A statement the parse continues takes Enter as its next line, and the band says so in orange (`UNFINISHED`, a notice).
-5. The line is accepted: it enters the history, and `CanvasModel:echo` writes it to the output in `colors.terminal.echo` (blue), on a row of its own, before it runs.
+5. The line is accepted: it enters the history, and while console echo is on
+   (`compy.terminal.setEcho`, on by default), `CanvasModel:echo` writes it to
+   the output in `colors.terminal.echo` (blue), on a row of its own, before it
+   runs.
 6. `run_user_code(f, self)` executes the chunk inside `use_canvas` — so any `gfx.*` calls go to the virtual canvas. Output from `print()` goes to the terminal via the `redirect_to` mechanism (set up in `src/main.lua`)
 7. The input is cleared (`clear_text`) whether the line ended well or in an error; it is in the history, and Up brings it back (the maintainer's ruling of November 16, 2026). On error, `CanvasModel:write_error` writes the error to the output after what the line printed. Any message shown before the line's Enter went with that key. Only a line that was not taken stays in the field: one that does not parse, does not load, or is unfinished.
 
@@ -297,12 +300,28 @@ Projects receive a `compy` table with:
 | Field | Contents |
 |---|---|
 | `compy.audio` | Sound effects (`sfx.beep()`, `sfx.gameover()`, etc.) — `src/util/audio.lua` |
-| `compy.terminal` | VT-100 terminal control (`gotoxy`, `clear`); a `gotoxy` position outside the screen is taken to the nearest edge |
+| `compy.terminal` | VT-100 terminal control (`gotoxy`, `clear`, `setEcho`); a `gotoxy` position outside the screen is taken to the nearest edge |
 | `compy.graphics` | Extended graphics (`shape2d`) — `src/util/graphics/shape2d.lua` |
 | `compy.fonts` | Font path constants (`mono`, `sans`, `serif`, etc.) — `src/util/namespace/fonts.lua` |
 | `compy.input` | Text input widget surface (`show`/`hide`/`configure`/`clear`/`set_text`) — see [`user_input.md`](user_input.md) |
 
-`compy.terminal` wraps the VT-100 terminal instance directly (the same terminal that renders the console output). Projects can use it for text-mode output within their run context.
+`compy.terminal` wraps the VT-100 terminal instance directly (the same terminal
+that renders the console output), and is also exposed as the shorthand `tty`.
+Projects can use it for text-mode output within their run context.
+
+`compy.terminal.setEcho(on)` (also `tty.setEcho(on)`) takes one boolean `on`,
+returns no values, and switches whether accepted console lines echo to the
+output (`CanvasModel:echo` in `ConsoleController:_evaluate_input`). Echo starts
+on, and a change takes effect on the next accepted line: turning echo off still
+echoes the line that called it, and turning echo back on is silent. History,
+printed output, refusals, and errors are unchanged. Every accepted run, stop (a
+natural end included), `reset()`, and restart restores echo to on
+(`ConsoleController:_restore_echo`, called from `flush_program_state` and the
+run seam in `_run_project`); `pause()` and `continue()` keep the run's setting,
+and an idle console change holds until the next flush or run start. Passing
+anything other than one boolean raises
+`compy.terminal.setEcho: expects one boolean` at the calling line before
+changing anything.
 
 ---
 

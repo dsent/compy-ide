@@ -94,6 +94,7 @@ end
 --- @field run_live boolean? the run is not stopped
 --- @field collect_garbage function? --- collectgarbage, or a stand-in in tests
 --- @field state_left boolean? --- a typed line left state the flush has not ended
+--- @field echo_input boolean --- whether accepted console lines echo to the output
 --- @field entry string? --- the file the live run runs from, nil for main.lua
 --- methods
 --- @field edit function
@@ -147,6 +148,8 @@ function ConsoleController.new(M, main_ctrl)
     --- the keys whose press reached the console's own key
     --- handler, until their release (EditorController.pressed)
     pressed     = {},
+
+    echo_input  = true,
 
     view        = nil,
 
@@ -719,6 +722,7 @@ function ConsoleController:_run_project(name, stopped, entry)
         SerialPort:programEnded()
       end
     end
+    self:_restore_echo()
     local runner_env = self:get_project_env()
     -- A run starts on a blank canvas, whatever the last one
     -- left there; a project that fails to load leaves the
@@ -961,13 +965,15 @@ end
 -- Builds the `compy.terminal` sub-namespace — the console
 -- OUTPUT surface. These wrap the live `terminal` (the
 -- REPL/console text grid): position the grid cursor
--- (gotoxy) and clear the screen. The grid's cursor is not
--- the program's to show (the maintainer's ruling "Programs
--- lose show_cursor and hide_cursor"). This is
--- where a project WRITES to the console; always present
--- while the project runs. Contrast with `compy.input`
--- below, the input solicitation surface.
-local get_compy_terminal = function(terminal)
+-- (gotoxy), clear the screen and toggle console line echo
+-- (setEcho). The grid's cursor is not the program's to show
+-- (the maintainer's ruling "Programs lose show_cursor and
+-- hide_cursor"). This is where a project WRITES to the
+-- console; always present while the project runs. Contrast
+-- with `compy.input` below, the input solicitation surface.
+--- @param terminal table
+--- @param cc ConsoleController?
+local get_compy_terminal = function(terminal, cc)
   return {
     --- What is not a number fails in the program's own call,
     --- on its line; a number written as text moves, as it
@@ -983,7 +989,16 @@ local get_compy_terminal = function(terminal)
     clear = function()
       terminal:move_to(1, 1)
       return terminal:clear()
-    end
+    end,
+    --- Toggle whether accepted console lines echo to the output;
+    --- takes effect on the next line. Expects one boolean.
+    setEcho = function(...)
+      local on = ...
+      if select('#', ...) ~= 1 or type(on) ~= 'boolean' then
+        error('compy.terminal.setEcho: expects one boolean', 2)
+      end
+      if cc then cc.echo_input = on end
+    end,
   }
 end
 
@@ -1842,7 +1857,7 @@ local get_compy_namespace = function(terminal, with_input,
   -- reference, so every env talks to the platform port.
   local serial_surface = serial
   local ns = {
-    terminal = get_compy_terminal(terminal),
+    terminal = get_compy_terminal(terminal, cc),
     audio = compy_audio,
     graphics = cc and drawing_graphics(cc) or compy_graphics,
     screen = cc and screen_api(cc) or nil,
@@ -2418,7 +2433,9 @@ function ConsoleController:_evaluate_input()
         --- a scrolled view, so that its echo and what it prints
         --- are seen; typing it did not (CanvasModel:to_rest)
         self.model.output:to_rest()
-        self.model.output:echo(text)
+        if self.echo_input then
+          self.model.output:echo(text)
+        end
         --- a typed line leaves state for a flush to end, as a
         --- live run does
         self.state_left = true
@@ -2814,6 +2831,11 @@ local function end_looping()
   end
 end
 
+--- Restore console line echo to its default (on).
+function ConsoleController:_restore_echo()
+  self.echo_input = true
+end
+
 --- The mouse as the console needs it (CONSOLE_MOUSE): the
 --- flush puts it back, and so do a run's start and a program
 --- that idles with nothing that answers the pointer, and
@@ -2910,6 +2932,7 @@ function ConsoleController:flush_program_state(call_exit)
   local kb = love.keyboard
   if kb and kb.setKeyRepeat then kb.setKeyRepeat(true) end
   if kb and kb.setTextInput then kb.setTextInput(true) end
+  self:_restore_echo()
   self.run_live = false
   love.state.paused_from = nil
   --- the entry point lives with the run (the maintainer's
