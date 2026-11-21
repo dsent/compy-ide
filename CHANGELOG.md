@@ -171,8 +171,11 @@ Project-author guide: `doc/input_api.md`.
 - **Ctrl+G goes back to the block being replaced.** While replacing, it brings the
   highlight back to the block loaded with F2 and shows it; the field's text stays. In
   the other states it does nothing.
-- **The status line shows a block's lines as `L2-21`**, without the count that
-  followed in brackets.
+- **The editor's status line shows the line in the file and the file's line
+  count**: `L1080/1200` while browsing, `L1082/1200 :32` with the cursor's
+  column while typing, `L1201/1200` at the end of the file. An error in the
+  draft names the same line. A Lua file that does not load shows `[broken]`
+  after its name.
 - **The status line is 37 pixels high**: its text sits in a row's 33 at the line's top,
   four pixels lie under it, and a strip of two pixels stays under the field at the
   screen's bottom.

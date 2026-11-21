@@ -2568,12 +2568,11 @@ describe("the status line's mode #console", function()
     return string.rep(c, n)
   end
 
-  --- The widest right block (the maintainer's rulings of
-  --- November 18, 2026): a draft's cursor of nine characters,
-  --- 9999:9999, numbers above 9999 being written in thousands
-  --- (10K); the editor's block and lines, B9999 L9999-9999; and
-  --- the output scrolled back the kept rows' limit, L-1000.
-  local WIDE_RANGE = { ln_label = function() return "L9999-9999" end }
+  --- The widest right block: a draft's cursor of nine characters
+  --- in the console and a program's field, 9999:9999 (numbers
+  --- above 9999 being written in thousands, 10K); the editor's
+  --- file line, line count and column in full, L9999/9999 :9999;
+  --- and the output scrolled back the kept rows' limit, L-1000.
   local WIDE_CURSOR = { l = 9999, c = 9999 }
   local WIDE_BACK = 1000
 
@@ -2609,21 +2608,17 @@ describe("the status line's mode #console", function()
       function(p, f, caps)
         return { custom = { project = p, name = f, state = word,
           arrow = arrow ~= "" and arrow or nil,
-          spans_lines = true, selection = 9999, buflen = 9999,
-          range = WIDE_RANGE },
+          line = 9999, total = 9999 },
           cursor = WIDE_CURSOR, caps = caps }
       end }
   end
 
-  --- the editor with numbers in thousands and its block's lines
-  --- too wide for half the line, which leave it
-  STATES[#STATES + 1] = { "the editor, its lines left out", "editor",
+  --- the editor with numbers past 9999 written in full
+  STATES[#STATES + 1] = { "the editor, numbers past 9999", "editor",
     "inserting", function(p, f, caps)
       return { custom = { project = p, name = f, state = "inserting",
-        spans_lines = true, selection = 123456, buflen = 999999,
-        range = { ln_label = function()
-          return "L123456789-123456" end } },
-        cursor = { l = 123456, c = 123456 }, caps = caps }
+        line = 123456, total = 999999 },
+        cursor = { l = 1, c = 123456 }, caps = caps }
     end }
 
   --- the forms a part may be drawn in: whole, or cut to `n`
@@ -2771,8 +2766,8 @@ describe("the status line's mode #console", function()
       end)
   end
 
-  --- review e6, by name: no card, Caps Lock, inserting before
-  --- B9999 L9999-10000, the draft's cursor at 10:9999
+  --- review e6, by name: no card, Caps Lock, inserting at
+  --- L9999/10000, the draft's cursor at column 9999
   it("keeps the right block whole and the left side before it, "
     .. "e6's widest editor line", function()
       local sl = K.cc.view.input.statusline
@@ -2781,9 +2776,8 @@ describe("the status line's mode #console", function()
       local clash
       without_card(function()
         clash = inked(sl, { custom = { project = "demo",
-          name = "notes.lua", state = "inserting", spans_lines = true,
-          selection = 9999, buflen = 9999,
-          range = { ln_label = function() return "L9999-10000" end } },
+          name = "notes.lua", state = "inserting",
+          line = 9999, total = 10000 },
           cursor = { l = 10, c = 9999 }, caps = "CAPS" })
       end)
       love.state.app_state = was
@@ -2791,11 +2785,8 @@ describe("the status line's mode #console", function()
     end)
 
   --- where even the floors do not fit, the left side is cut off
-  --- at its clip, before the right block (review e6). No status
-  --- the IDE makes gets there: the widest right block, Caps Lock
-  --- and a position of half the line in the editor, leaves the
-  --- mark and three floors exactly their room. A Caps Lock word
-  --- twenty columns long makes it get there.
+  --- at its clip, before the right block (review e6). A Caps Lock
+  --- word twenty-five columns long makes it get there.
   it("clips the left side before the right block where even its "
     .. "floors do not fit", function()
       local sl = K.cc.view.input.statusline
@@ -2805,9 +2796,9 @@ describe("the status line's mode #console", function()
       without_card(function()
         clash, cells, info = inked(sl, { custom = {
           project = string.rep("p", 30), name = string.rep("f", 30),
-          state = "replacing", arrow = "↑", spans_lines = true,
-          selection = 9999, buflen = 9999, range = WIDE_RANGE },
-          cursor = { l = 9999, c = 9999 }, caps = string.rep("C", 20) })
+          state = "replacing", arrow = "↑",
+          line = 9999, total = 9999 },
+          cursor = { l = 9999, c = 9999 }, caps = string.rep("C", 25) })
       end)
       love.state.app_state = was
       assert.is_nil(clash)
@@ -2987,10 +2978,9 @@ describe("the status line's mode #console", function()
       local was = love.state.app_state
       love.state.app_state = "editor"
       local texts = placed(sl, { custom = {
-        project = string.rep("p", 30), name = "notes.lua",
-        state = "replacing", arrow = "↑", spans_lines = true,
-        selection = 3, buflen = 9,
-        range = { ln_label = function() return "L3" end } },
+        project = string.rep("p", 35), name = "notes.lua",
+        state = "replacing", arrow = "↑",
+        line = 3, total = 9 },
         cursor = { l = 1, c = 1 } })
       love.state.app_state = was
       local word
@@ -3003,118 +2993,95 @@ describe("the status line's mode #console", function()
       assert.same(colors().editor.fg2, word.colour)
     end)
 
-  --- the maintainer's ruling of November 18, 2026: a number
-  --- above 9999 in the draft's cursor and in the block's number
-  --- is written in thousands with a K
+  --- In the console and a program's field, a number above 9999 in
+  --- the draft's cursor is written in thousands with a K; in the
+  --- editor every number in the position is written in full.
   for _, case in ipairs({ { 9999, "9999" }, { 10000, "10K" },
     { 10999, "10K" }, { 11000, "11K" }, { 123456, "123K" } }) do
     it("writes " .. case[1] .. " as " .. case[2]
-      .. " in the cursor and the block", function()
+      .. " in the console cursor and in full in the editor",
+      function()
         local sl = K.cc.view.input.statusline
         local was = love.state.app_state
         love.state.app_state = "editor"
         local texts = placed(sl, { custom = { project = "p",
-          name = "f.lua", state = "browsing", spans_lines = true,
-          selection = case[1], buflen = case[1] + 1,
-          range = { ln_label = function() return "L1" end } },
-          cursor = { l = case[1], c = 2 } })
+          name = "f.lua", state = "inserting",
+          line = case[1], total = case[1] + 1 },
+          cursor = { l = 1, c = case[1] } })
         love.state.app_state = "ready"
         local console = placed(sl, { label = "", project = "p",
-          state = "console", cursor = { l = 2, c = case[1] },
+          state = "console", cursor = { l = case[1], c = case[1] },
           n_lines = 1 })
+        local program = placed(sl, { label = "Ask?",
+          cursor = { l = 2, c = case[1] }, n_lines = 1 })
         love.state.app_state = was
-        local said = { }
-        for _, t in ipairs(texts) do said[t.text] = true end
-        for _, t in ipairs(console) do said[t.text] = true end
-        assert.is_true(said["B" .. case[2]], "B" .. case[2])
-        assert.is_true(said[case[2] .. ":2"], case[2] .. ":2")
-        assert.is_true(said["2:" .. case[2]], "2:" .. case[2])
+        local ed_said, con_said, pro_said = { }, { }, { }
+        for _, t in ipairs(texts) do ed_said[t.text] = true end
+        for _, t in ipairs(console) do con_said[t.text] = true end
+        for _, t in ipairs(program) do pro_said[t.text] = true end
+        local want_l = "L" .. case[1] .. "/" .. (case[1] + 1)
+        assert.is_true(ed_said[want_l], want_l)
+        assert.is_true(ed_said[":" .. case[1]], ":" .. case[1])
+        local both = case[2] .. ":" .. case[2]
+        assert.is_true(con_said[both], both)
+        assert.is_true(pro_said["2:" .. case[2]], "2:" .. case[2])
       end)
   end
 
-  --- the position's width: from its first part to the cursor's end
-  local function position_width(texts)
-    local first, last
-    for _, t in ipairs(texts) do
-      if t.text:match("^B") or t.text:match("^L") then
-        first = first and math.min(first, t.from) or t.from
-      end
-      if t.text:match("^[%dK]+:[%dK]+$") then last = t.to end
-    end
-    return (last - first) / K.cc.cfg.view.fw
-  end
-
-  --- the block's lines go exactly when the position would be
-  --- wider than half the line, 32 of 64 columns, and not before:
-  --- B9999, a gap of one, the lines, a gap of two and 9999:9999
-  --- take 17 columns and the lines'
-  for _, case in ipairs({ { 15, true }, { 16, false } }) do
-    it("keeps the block's lines of " .. case[1] .. " columns "
-      .. (case[2] and "within" or "past") .. " half the line "
-      .. (case[2] and "" or "out"), function()
-        local sl = K.cc.view.input.statusline
-        local lines = "L" .. string.rep("1", case[1] - 1)
-        local was = love.state.app_state
-        love.state.app_state = "editor"
-        local texts = placed(sl, { custom = { project = "p",
-          name = "f.lua", state = "browsing", spans_lines = true,
-          selection = 9999, buflen = 10000,
-          range = { ln_label = function() return lines end } },
-          cursor = { l = 9999, c = 9999 } })
-        love.state.app_state = was
-        local kept = false
-        for _, t in ipairs(texts) do
-          if t.text == lines then kept = true end
-        end
-        assert.equal(case[2], kept)
-        assert.is_true(position_width(texts) <= 32)
-        assert.equal(case[2] and 32 or 16, position_width(texts))
-      end)
-  end
-
-  --- with the numbers in thousands above 9999 the rest of the
-  --- position always fits in half the line: the widest numbers,
-  --- the block's lines from none to 40 columns
-  it("keeps the position within half the line for the widest "
-    .. "numbers", function()
+  --- the editor's position is never cut or dropped, even for large
+  --- numbers: the left side gives way through fit_left
+  it("keeps the editor's full position whole for large numbers",
+    function()
       local sl = K.cc.view.input.statusline
       local was = love.state.app_state
-      local over
+      love.state.app_state = "editor"
+      local clash, cells = inked(sl, { custom = { project = "demo",
+        name = "notes.lua", state = "replacing",
+        line = 123456, total = 999999 },
+        cursor = { l = 2, c = 12345 }, caps = "CAPS" })
+      love.state.app_state = was
+      assert.is_nil(clash)
+      local inks = { }
+      for _, t in pairs(cells) do inks[t] = true end
+      assert.is_true(inks["L123456/999999"])
+      assert.is_true(inks[":12345"])
+      assert.is_true(inks["CAPS"])
+    end)
+
+  --- the console's position (`L-N` and shortened `line:column`)
+  --- fits cleanly for the widest numbers
+  it("keeps the console's position within half the line for the "
+    .. "widest numbers", function()
+      local sl = K.cc.view.input.statusline
+      local fw = K.cc.cfg.view.fw
+      local was = love.state.app_state
+      love.state.app_state = "inspect"
       for _, n in ipairs({ 9999, 10000, 99999, 999999, 9999999 }) do
-        for l = 0, 40 do
-          local lines = l > 0 and ("L" .. string.rep("9", l - 1)) or nil
-          love.state.app_state = "editor"
-          local w = position_width(placed(sl, { custom = {
-            project = "p", name = "f.lua", state = "replacing",
-            spans_lines = true, selection = n, buflen = n + 1,
-            range = { ln_label = function() return lines end } },
-            cursor = { l = n, c = n } }))
-          love.state.app_state = "inspect"
-          local wc = position_width(placed(sl, { label = "",
-            project = "p", name = "f.lua", state = "paused", back = 1000,
-            cursor = { l = n, c = n }, n_lines = 1 }))
-          if (w > 32 or wc > 32) and not over then
-            over = string.format("%d, lines %d: %d, %d", n, l, w, wc)
-          end
+        local texts = placed(sl, { label = "", project = "p",
+          name = "f.lua", state = "paused", back = 1000,
+          cursor = { l = n, c = n }, n_lines = 1 })
+        local first, last
+        for _, t in ipairs(texts) do
+          if t.text:match("^L%-") then first = t.from end
+          if t.text:match("^[%dK]+:[%dK]+$") then last = t.to end
         end
+        assert.is_true((last - first) / fw <= 32)
       end
       love.state.app_state = was
-      assert.is_nil(over)
     end)
 
   --- e5's Major, by name: project demo, notes.lua, no card, Caps
-  --- Lock, inserting before block B10 L10-23
-  it("inserting before B10 L10-23 without a card, with Caps Lock, "
-    .. "leaves B10 whole", function()
+  --- Lock, inserting at L10/30 :1
+  it("inserting at L10/30 without a card, with Caps Lock, "
+    .. "leaves the position whole", function()
       local sl = K.cc.view.input.statusline
       local was = love.state.app_state
       love.state.app_state = "editor"
       local clash, cells
       without_card(function()
         clash, cells = inked(sl, { custom = { project = "demo",
-          name = "notes.lua", state = "inserting", spans_lines = true,
-          selection = 10, buflen = 30,
-          range = { ln_label = function() return "L10-23" end } },
+          name = "notes.lua", state = "inserting",
+          line = 10, total = 30 },
           cursor = { l = 1, c = 1 }, caps = "CAPS" })
       end)
       love.state.app_state = was
@@ -3122,7 +3089,7 @@ describe("the status line's mode #console", function()
       local inks = { }
       for _, t in pairs(cells) do inks[t] = true end
       for _, t in ipairs({ "[no sd]", "inserting", "CAPS",
-        "B10", "L10-23" }) do
+        "L10/30", ":1" }) do
         assert.is_true(inks[t], t)
       end
     end)

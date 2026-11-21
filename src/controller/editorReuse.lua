@@ -531,7 +531,7 @@ end
 --- @return boolean
 function EditorController:_reads_whole()
   local buf = self:get_active_buffer()
-  return not buf.invalid and buf:loads()
+  return not buf.invalid and not buf.broken
 end
 
 --- @private

@@ -378,19 +378,32 @@ function EditorController:get_active_buffer()
   return self.model.buffers:first()
 end
 
+--- The file line that draft row `row` (the cursor's row when
+--- omitted) stands for: the replacement target's first line
+--- while replacing, else the browsed block's (or one past the
+--- last line at the end position), plus `row - 1`.
 --- @private
---- @param sel integer
+--- @param row integer?
+--- @return integer
+function EditorController:_file_line(row)
+  local buffer = self:get_active_buffer()
+  local bn = buffer.loaded or buffer:get_selection()
+  if not row then row = self.input.model.cursor.l end
+  return buffer:block_line(bn) + row - 1
+end
+
+--- @private
 --- @return CustomStatus
-function EditorController:_generate_status(sel)
+function EditorController:_generate_status()
   --- @type BufferModel
   local buffer = self:get_active_buffer()
-  local len = buffer:get_content_length() + 1
   local bufview = self.view:get_buffer(buffer:get_id())
-  --- a block's rows are named where a block may span lines
-  local spans = buffer.syntax.spans_lines
-  local range = spans and bufview.content:get_block_app_pos(sel)
-  local cs = CustomStatus(buffer.name, spans, len, sel,
-    range or nil)
+  local cs = CustomStatus(buffer.name, self:_file_line(),
+    buffer:line_count())
+  --- no block under the position: the end position
+  cs.end_position = not buffer.content[buffer.loaded
+    or buffer:get_selection()]
+  cs.broken = buffer.broken
   --- the state and the open project, always shown (FR4.6)
   cs.state = self:state_name()
   --- while replacing, an arrow after the state word toward the
@@ -421,12 +434,11 @@ function EditorController:_live_status()
   if not (buffer and self.view) then return nil end
   local bufview = self.view:get_buffer(buffer:get_id())
   if not (bufview and bufview.content) then return nil end
-  return self:_generate_status(buffer:get_selection())
+  return self:_generate_status()
 end
 
 function EditorController:update_status()
-  local sel = self:get_active_buffer():get_selection()
-  local cs = self:_generate_status(sel)
+  local cs = self:_generate_status()
   self.input:set_custom_status(cs)
   local model = self.input.model
   if not model.status_source then
@@ -501,7 +513,8 @@ function EditorController:_handle_submit(go)
   local raw = inter:get_text()
   local buf = self:get_active_buffer()
   local verdict = buf.syntax.submit(raw,
-    self.model.cfg.view.drawableChars, self:_size_limit())
+    self.model.cfg.view.drawableChars, self:_size_limit(),
+    self:_file_line(1))
   --- an accepted draft goes as the syntax's blocks; one that
   --- fails to land (a write refused) stays as typed
   if verdict.blocks then return go(verdict.blocks) end
@@ -509,8 +522,14 @@ function EditorController:_handle_submit(go)
   if failure then
     --- IS3.4: the cursor goes before the failing character,
     --- where the red text starts, and the parser's message
-    --- shows (NFR4.3)
-    self:refuse({ tostring(failure) }, 'error')
+    --- shows (NFR4.3), naming the file line
+    local shown = failure
+    if failure.l then
+      shown = Error(failure.msg, failure.c,
+        self:_file_line(failure.l))
+      shown.c = failure.c
+    end
+    self:refuse({ tostring(shown) }, 'error')
     inter.model:move_cursor(failure.l, failure.c or 1)
     inter:update_view()
     return false

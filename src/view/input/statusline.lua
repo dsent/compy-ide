@@ -22,11 +22,10 @@ local function len(text)
   return text and string.ulen(text) or 0
 end
 
---- A line's, a column's or a block's number as the line shows
---- it: whole up to 9999, in thousands with a K above, 10K for
---- 10000 to 10999 (the maintainer's ruling of November 18, 2026:
---- "Shorten the position in the draft to 10K after 9999 ...
---- shorten B to 10K after 9999")
+--- A line's or a column's number in the console's and a
+--- program's cursor: whole up to 9999, in thousands with a K
+--- above, 10K for 10000 to 10999. The editor's file position
+--- writes every number in full and does not use this.
 --- @param n integer
 --- @return string
 local function count(n)
@@ -116,6 +115,12 @@ end
 --- ruling of November 17, 2026: "[no sd card] stays in front";
 --- and of November 18: "shorten [no sd card] to [no sd]").
 local NO_CARD = '[no sd]'
+
+--- After the open file's name on the editor's line while the
+--- file does not load, in the theme's `mark` tone; never cut
+--- (rulings.md, "A file that does not load is marked on the
+--- status line").
+local BROKEN = '[broken]'
 
 --- The screen's mode as the line prints it, with the key that
 --- shows the next (the maintainer's rulings of November 19,
@@ -272,17 +277,19 @@ function Statusline:draw(status, start_y, last_row)
       label_color = colors[tone]
     end
 
-    --- The right block, packed to the right edge (the
-    --- maintainer's ruling of November 18, 2026: "Move B and L
-    --- to the right and only move them to the left when there's
-    --- no space ... block, line and draft position are never
-    --- cut"), left to right: the screen's mode, Caps Lock, and
-    --- the position: the file's block and its lines in the
-    --- editor, or how far the output is scrolled back, `L-N`,
-    --- elsewhere; and the draft's cursor, `line:column`, in the
-    --- state's yellow, at the edge. Each stands next to the one
-    --- to its right, moving left only as that grows; none is
-    --- cut, and no room is kept for a wider one.
+    --- The right block, packed to the right edge, left to right:
+    --- the screen's mode, Caps Lock, and the position. In the
+    --- editor, the position is the file line and the file's line
+    --- count (`L1080/1200`, in `colors.indicator` at the end
+    --- position), and while inserting or replacing the cursor's
+    --- column (`:32`) one column to its right in the state's
+    --- yellow, with every number written in full. Elsewhere, it
+    --- is how far the output is scrolled back (`L-N`) and the
+    --- draft's cursor (`line:column`) in the state's yellow, with
+    --- numbers above 9999 in thousands (`10K`). Each part stands
+    --- next to the one to its right, moving left only as that
+    --- grows; none is cut or dropped, and no room is kept for a
+    --- wider one.
     local right = { }
     --- @param list table[]
     --- @param t string?
@@ -304,63 +311,44 @@ function Statusline:draw(status, start_y, last_row)
     end
     add(right, MODE_LABEL[status.mode], colors.fg2 or colors.fg)
     add(right, status.caps, colors.indicator)
-    --- The position, never wider than half the line (the
-    --- maintainer's ruling of November 18, 2026: "the position
-    --- indicator is never more than half the status line"):
-    --- where it would be, the block's lines are left out, the
-    --- one part of the line that may go, and only for this. With
-    --- its numbers in thousands above 9999 the rest always fits.
-    local pos = { }
     local c = type(status.cursor) == 'table' and status.cursor or nil
-    local editor = custom ~= nil and c ~= nil
-    local lines
+    local editor = custom ~= nil and custom.line ~= nil and c ~= nil
     if editor then
-      local sel = custom.selection
-      if custom.spans_lines then
-        local last = sel == custom.buflen
-        add(pos, 'B' .. count(sel),
-          last and colors.indicator or colors.fg)
-        lines = custom.range and custom.range:ln_label() or nil
-        add(pos, lines, colors.fg, 1)
-      else
-        add(pos, 'L' .. count(sel), colors.fg)
+      add(right, 'L' .. custom.line .. '/' .. (custom.total or 0),
+        custom.end_position and colors.indicator or colors.fg)
+      if custom.state ~= 'browsing' then
+        add(right, ':' .. c.c,
+          colors.state or colors.fg2 or colors.fg, 1)
       end
-    elseif status.back then
-      --- how far the output is scrolled back from rest (the
-      --- maintainer's ruling of November 18, 2026: "when we
-      --- scroll, we can show L-4"); nothing at rest
-      add(pos, 'L-' .. status.back, colors.fg)
-    end
-    if c then
-      local ln = c.l
-      if custom and not editor then ln = custom.line or c.l end
-      add(pos, count(ln) .. ':' .. count(c.c),
-        colors.state or colors.fg2 or colors.fg)
-    end
-    local half = math.floor(w / fw / 2)
-    if lines and width_of(pos) > half then
-      for i, p in ipairs(pos) do
-        if p.t == lines then
-          table.remove(pos, i)
-          break
-        end
+    else
+      if status.back then
+        --- how far the output is scrolled back from rest (the
+        --- maintainer's ruling of November 18, 2026: "when we
+        --- scroll, we can show L-4"); nothing at rest
+        add(right, 'L-' .. status.back, colors.fg)
+      end
+      if c then
+        add(right, count(c.l) .. ':' .. count(c.c),
+          colors.state or colors.fg2 or colors.fg)
       end
     end
-    for _, p in ipairs(pos) do right[#right + 1] = p end
     local width = width_of(right)
     local right_x = endTextX - width * fw
 
     --- The left side: the no-card mark, never cut; the input's
-    --- label (a program's prompt), the project, the file and the
-    --- state word, in the state's yellow. Short of room the
-    --- label is cut first, then the state word, then the
-    --- project, the file the last (the maintainer's ruling of
-    --- November 18, 2026: "the project name gets cut next, and
-    --- the file name only if nothing more can"); see fit_left.
+    --- label (a program's prompt), the project, the file with
+    --- `[broken]` after it (one space between, never cut) when
+    --- the file does not load, and the state word, in the state's
+    --- yellow. Short of room the label is cut first, then the
+    --- state word, then the project, the file the last (the
+    --- maintainer's ruling of November 18, 2026: "the project name
+    --- gets cut next, and the file name only if nothing more
+    --- can"); see fit_left.
     local project = shown(custom and custom.project or status.project)
     local name = shown(custom and custom.name or status.name)
     local word = custom and custom.state or status.state
     local mark = word and removable == false and NO_CARD or nil
+    local broken = custom and custom.broken and BROKEN or nil
     local p_label = { t = label }
     --- the arrow toward the edit's target, after the word, in
     --- its tone, and never cut: a cut word's ellipsis comes
@@ -371,6 +359,7 @@ function Statusline:draw(status, start_y, last_row)
     local p_name = { t = name }
     local room = math.floor((right_x - left_x) / fw)
         - (mark and len(mark) + GAP or 0)
+        - (broken and len(broken) + 1 or 0)
     fit_left(room, { p_label, p_state, p_project, p_name })
 
     --- drawn inside a clip that ends a gap before the right
@@ -389,16 +378,24 @@ function Statusline:draw(status, start_y, last_row)
       end
     end
     local x = left_x
-    local function put(t, color)
+    local function put(t, color, after, after_color)
       if not t then return end
       gfx.setColor(color)
       gfx.print(t, x, y)
-      x = x + (len(t) + GAP) * fw
+      x = x + len(t) * fw
+      if after then
+        x = x + fw
+        gfx.setColor(after_color)
+        gfx.print(after, x, y)
+        x = x + len(after) * fw
+      end
+      x = x + GAP * fw
     end
-    put(mark, colors.mark or colors.warning)
+    local mark_color = colors.mark or colors.warning
+    put(mark, mark_color)
     put(p_label.t, label_color)
     put(p_project.t, colors.fg)
-    put(p_name.t, colors.fg)
+    put(p_name.t, colors.fg, broken, mark_color)
     put(p_state.t and p_state.t .. (p_state.tail or ''),
       colors.state or colors.fg2 or colors.fg)
     gfx.pop()
