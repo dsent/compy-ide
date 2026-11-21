@@ -100,6 +100,90 @@ describe('parse failure boundary #parser', function()
     lua.failure(lines, err)
     assert.same({ l, c }, { err.l, err.c })
   end)
+
+  it('tells a # statement to use -- and places it at #',
+    function()
+      local msg = '# cannot go here. A comment starts with --.'
+      local cases = {
+        { { '# note' }, 1, 1 },
+        { { 'print("hi")', '# say hi' }, 2, 1 },
+        { { 'x = 1 # n' }, 1, 7 },
+        { { 'print(1)', '#!/usr/bin/lua' }, 2, 1 },
+        { { '#!/usr/bin/lua', '#!/usr/bin/lua' }, 2, 1 },
+      }
+      for _, case in ipairs(cases) do
+        local ok, err = parser.parse(case[1])
+        assert.is_false(ok)
+        assert.same({ case[2], case[3], msg },
+          { err.l, err.c, err.msg })
+        local f = lua.failure(case[1], err)
+        assert.same({ case[2], case[3], false, msg },
+          { f.l, f.c, f.at_end or false, f.msg })
+      end
+      assert.is_true(
+        lua.submission({ '#!/usr/bin/lua', 'print(1)' }, 64, 14).ok)
+      local v = lua.submission({ '# note' }, 64, 14)
+      assert.is_false(v.ok)
+      assert.same({ 1, 1, msg },
+        { v.failure.l, v.failure.c, v.failure.msg })
+    end)
+
+  it('refuses a non-target before = at the target itself',
+    function()
+      local msg = 'Only a variable like score or scores[1] can go before =.'
+      local bad = {
+        { { 'x + 1 = 2' }, 1, 1 },
+        { { 'f() = 1' }, 1, 1 },
+        { { '(x) = 1' }, 1, 1 },
+        { { '1 = 2' }, 1, 1 },
+        { { 'a, f() = 1, 2' }, 1, 4 },
+      }
+      for _, case in ipairs(bad) do
+        local ok, err = parser.parse(case[1])
+        assert.is_false(ok)
+        assert.same({ case[2], case[3], msg },
+          { err.l, err.c, err.msg })
+        local f = lua.failure(case[1], err)
+        assert.same({ case[2], case[3], false, msg },
+          { f.l, f.c, f.at_end or false, f.msg })
+      end
+      assert.same({ 1, 9, false }, failure({ 't["é"], f() = 1, 2' }))
+      for _, code in ipairs({
+        'x = 1', 't.a = 1', 't[1] = 2', 'a, b = 1, 2',
+        't.a.b = 1', 'f().x = 1', 'f()[1] = 1',
+      }) do
+        assert.is_true((parser.parse({ code })), code)
+        assert.is_true(lua.submission({ code }, 64, 14).ok, code)
+      end
+    end)
+
+  it('refuses a method name with no arguments', function()
+    local msg = 'A name after a colon needs () right after it.'
+      .. ' For a value like player.x, use a dot.'
+    for _, case in ipairs({
+      { { 't:m.x = 1' }, 1, 4, false },
+      { { 't:x = 1' }, 1, 5, false },
+      { { 't:m+{1}' }, 1, 4, false },
+      { { 'player:jump', 'x = 1' }, 2, 1, false },
+      { { 't:m' }, 1, 4, true },
+    }) do
+      local ok, err = parser.parse(case[1])
+      assert.is_false(ok)
+      assert.same(msg, err.msg)
+      assert.same({ l = case[2], c = case[3], eof = case[4] },
+        err.token)
+      local f = lua.failure(case[1], err)
+      assert.same({ case[2], case[3], case[4], msg },
+        { f.l, f.c, f.at_end or false, f.msg })
+    end
+    for _, code in ipairs({
+      { 't:m()' }, { 't:m"s"' }, { 't:m{1}' }, { 't:m(1, 2)' },
+      { 't:m "s"', 'y = 1' }, { 's = ("a"):upper()' },
+    }) do
+      assert.is_true((parser.parse(code)), code[1])
+      assert.is_true(lua.submission(code, 64, 14).ok, code[1])
+    end
+  end)
 end)
 
 --- The editor's rules around the language layer's verdict

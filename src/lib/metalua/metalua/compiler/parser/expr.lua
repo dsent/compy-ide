@@ -49,9 +49,14 @@ return function(M)
         name = "function argument(s)",
         { "{",  _table.content, "}" },
         { "(",  _M.func_args_content, ")", builder = unpack },
-        { "+{", _meta.quote_content, "}" },
         -- TODO lineinfo?
-        function(lx) local r = M.opt_string(lx); return r and {r} or { } end }
+        function(lx)
+            local r = M.opt_string(lx)
+            if r then return {r} end
+            gg.parse_error(lx,
+                "A name after a colon needs () right after it. " ..
+                "For a value like player.x, use a dot.")
+        end }
 
     --------------------------------------------------------------------------------
     -- [func_val] parses a function, from opening parameters parenthese to

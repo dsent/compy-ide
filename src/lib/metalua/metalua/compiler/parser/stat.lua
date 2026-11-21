@@ -190,13 +190,33 @@ return function(M)
     ------------------------------------------------------------------------
     -- assignments and calls: statements that don't start with a keyword
     ------------------------------------------------------------------------
+    -- gg.parse_error takes its place from the consumed lineinfo, choosing
+    -- between its ends and what it faces; make all of them pos.
+    local function parse_error_at (lx, pos, msg)
+        lx.lineinfo_consumed = {
+            first = { line = pos.line, column = pos.column, facing = pos },
+            last = pos,
+        }
+        gg.parse_error (lx, msg)
+    end
+
     local function assign_or_call_stat_parser (lx)
+        if lx:is_keyword(lx:peek(), "#") then
+            parse_error_at (lx, lx:peek().lineinfo.first,
+                "# cannot go here. A comment starts with --.")
+        end
         local e = annot_expr_list (lx)
         local a = lx:is_keyword(lx:peek())
         local op = a and M.assignments[a]
         -- TODO: refactor annotations
         if op then
-            --FIXME: check that [e] is a LHS
+            for _, lhs in ipairs(e) do
+                if lhs.tag ~= "Id" and lhs.tag ~= "Index" then
+                    parse_error_at (lx, lhs.lineinfo.first,
+                        "Only a variable like score or scores[1] "..
+                        "can go before =.")
+                end
+            end
             lx :next()
             local annots
             e, annots = annot.split(e)

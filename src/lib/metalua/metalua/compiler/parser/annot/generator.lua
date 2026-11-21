@@ -16,13 +16,7 @@ local M  = { }
 
 function M.opt(mlc, primary, a_type)
     checks('table', 'table|function', 'string')
-    return gg.sequence{
-        primary,
-        gg.onkeyword{ "#", function() return assert(mlc.annot[a_type]) end },
-        builder = function(x)
-            local t, annot = unpack(x)
-            return annot and { tag='Annot', t, annot } or t
-        end }
+    return primary
 end
 
 -- split a list of "foo" and "`Annot{foo, annot}" into a list of "foo"
