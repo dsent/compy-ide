@@ -117,6 +117,35 @@ describe('parse failure boundary #parser', function()
       assert.same({ 1, 1, msg },
         { v.failure.l, v.failure.c, v.failure.msg })
     end)
+
+  it('refuses a non-target before = at the target itself',
+    function()
+      local msg = 'Only a variable or a table field can go before =.'
+      local bad = {
+        { { 'x + 1 = 2' }, 1, 1 },
+        { { 'f() = 1' }, 1, 1 },
+        { { '(x) = 1' }, 1, 1 },
+        { { '1 = 2' }, 1, 1 },
+        { { 'a, f() = 1, 2' }, 1, 4 },
+      }
+      for _, case in ipairs(bad) do
+        local ok, err = parser.parse(case[1])
+        assert.is_false(ok)
+        assert.same({ case[2], case[3], msg },
+          { err.l, err.c, err.msg })
+        local f = lua.failure(case[1], err)
+        assert.same({ case[2], case[3], false, msg },
+          { f.l, f.c, f.at_end or false, f.msg })
+      end
+      assert.same({ 1, 9, false }, failure({ 't["é"], f() = 1, 2' }))
+      for _, code in ipairs({
+        'x = 1', 't.a = 1', 't[1] = 2', 'a, b = 1, 2',
+        't.a.b = 1', 'f().x = 1', 'f()[1] = 1',
+      }) do
+        assert.is_true((parser.parse({ code })), code)
+        assert.is_true(lua.submission({ code }, 64, 14).ok, code)
+      end
+    end)
 end)
 
 --- The editor's rules around the language layer's verdict

@@ -204,7 +204,12 @@ return function(M)
         local op = a and M.assignments[a]
         -- TODO: refactor annotations
         if op then
-            --FIXME: check that [e] is a LHS
+            for _, lhs in ipairs(e) do
+                if lhs.tag ~= "Id" and lhs.tag ~= "Index" then
+                    parse_error_at (lx, lhs.lineinfo.first,
+                        "Only a variable or a table field can go before =.")
+                end
+            end
             lx :next()
             local annots
             e, annots = annot.split(e)
