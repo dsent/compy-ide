@@ -207,6 +207,15 @@ function M:nl()
   self._in_comment = false
 end
 
+--- Accumulate a newline with no added indentation, for the
+--- interior lines of a `--[[ ... ]]` block comment.
+function M:raw_nl()
+  self:acc("\n", true)
+  self._line_len = 0
+  self._lines = self._lines + 1
+  self._in_comment = false
+end
+
 ----------------------------------------------------------------
 --- Increase indentation and accumulate a new line.
 ----------------------------------------------------------------
@@ -377,7 +386,7 @@ end
 ----------------------------------------------------------------
 local op_preprec = {
   { "or",    "and" },
-  { "lt",    "le",    "eq",  "ne" },
+  { "lt",    "le",    "gt",  "ge",  "eq",  "ne" },
   { "concat" },
   { "add",   "sub" },
   { "mul",   "div",   "mod" },
@@ -412,6 +421,8 @@ local op_symbol = {
   ne = " ~= ",
   lt = " < ",
   le = " <= ",
+  gt = " > ",
+  ge = " >= ",
   ["and"] = " and ",
   ["or"] = " or ",
   ["not"] = "not ",
@@ -601,7 +612,7 @@ function M:node(node, stmt)
   --- @param pos 'first'|'last'
   local function show_comments(pos)
     --- to avoid double dipping, only show corresponding
-    for _, co in pairs(comments) do
+    for i, co in ipairs(comments) do
       --- a comment between a callee and its arguments keeps the
       --- `(` on the callee's line: a `(` that starts a line would
       --- begin a new statement. A block comment on one line stays
@@ -626,7 +637,7 @@ function M:node(node, stmt)
             string.lines('--' .. open .. co.text .. close)
         for i, l in ipairs(lines) do
           self:acc(l, true)
-          if i ~= #lines then self:nl() end
+          if i ~= #lines then self:raw_nl() end
         end
         self:acc(' ', true)
         self:emptyline_gap_reset(co.last)
@@ -655,7 +666,7 @@ function M:node(node, stmt)
           local wrapped = string.wrap_array(lines, self.wrap)
           for i, l in ipairs(wrapped) do
             self:acc(l)
-            if i ~= #wrapped then self:nl() end
+            if i ~= #wrapped then self:raw_nl() end
           end
         else
           local ls = co.first.l
@@ -698,8 +709,15 @@ function M:node(node, stmt)
             end
           end
         end
-        --- comes _before_ the next expression
-        if co.position == 'first' then self:nl() end
+        --- comes _before_ the next expression (or another leading
+        --- comment); omit the trailing newline at the end of a
+        --- comment-only block so nldedent adds no blank line
+        local empty_end = not node.tag and #node == 0
+            and not (comments[i + 1]
+              and comments[i + 1].position == 'first')
+        if co.position == 'first' and not empty_end then
+          self:nl()
+        end
         --- whatever follows a trailing one starts a line
         if co.position == 'last' then self._in_comment = true end
         --- advance non-empty source line tracker to this comment's last line
@@ -742,6 +760,28 @@ function M:node(node, stmt)
   show_comments('last')
 end
 
+--- True when printing `node` as a statement starts with `(`,
+--- so the preceding statement needs a `;` to stay separate.
+--- @param node table
+--- @return boolean
+local function starts_with_paren(node)
+  while node do
+    local tag = node.tag
+    if tag == "Paren" then
+      return true
+    elseif tag == "Set" then
+      node = node[1] and node[1][1]
+    elseif tag == "Invoke" and node[1] and node[1].tag == "String" then
+      return true
+    elseif tag == "Call" or tag == "Invoke" or tag == "Index" then
+      node = node[1]
+    else
+      return false
+    end
+  end
+  return false
+end
+
 ----------------------------------------------------------------
 --- Convert every node in the AST list passed as 1st arg.
 --- @param list table
@@ -758,7 +798,9 @@ function M:list(list, sep, start)
   for i = start or 1, #list do
     self:node(list[i], stmts)
     if list[i + 1] then
-      if not sep then
+      if stmts and starts_with_paren(list[i + 1]) then
+        self:acc("; ")
+      elseif not sep then
       elseif type(sep) == "function" then
         sep(self)
       elseif type(sep) == "string" then
@@ -859,7 +901,11 @@ end
 function M:Do(node)
   self:acc("do")
   self:nlindent()
-  self:list(node, self.nl)
+  if node.body then
+    self:node(node.body)
+  else
+    self:list(node, self.nl)
+  end
   self:nldedent()
   self:acc("end")
 end
@@ -895,7 +941,7 @@ function M:Set(node)
     self:wrapped_list(params, ", ", 2, 'all')
     self:acc(")")
     self:nlindent()
-    self:list(body, self.nl)
+    self:node(body)
     self:nldedent()
     self:acc("end")
   elseif rhs[1].tag == "Function"
@@ -956,7 +1002,7 @@ function M:While(_, cond, body)
   self:node(cond)
   self:acc(" do")
   self:nlindent()
-  self:list(body, self.nl)
+  self:node(body)
   self:nldedent()
   self:acc("end")
 end
@@ -964,7 +1010,7 @@ end
 function M:Repeat(_, body, cond)
   self:acc("repeat")
   self:nlindent()
-  self:list(body, self.nl)
+  self:node(body)
   self:nldedent()
   self:acc("until ")
   self:node(cond)
@@ -985,14 +1031,14 @@ function M:If(node)
       self:acc(" then")
     end
     self:nlindent()
-    self:list(body, self.nl)
+    self:node(body)
     self:nldedent()
   end
   --- odd number of children --> last one is an `else' clause --
   if #node % 2 == 1 then
     self:acc("else")
     self:nlindent()
-    self:list(node[#node], self.nl)
+    self:node(node[#node])
     self:nldedent()
   end
   self:acc("end")
@@ -1013,7 +1059,7 @@ function M:Fornum(node, var, first, last)
   end
   self:acc(" do")
   self:nlindent()
-  self:list(body, self.nl)
+  self:node(body)
   self:nldedent()
   self:acc("end")
 end
@@ -1025,7 +1071,7 @@ function M:Forin(_, vars, generators, body)
   self:list(generators, ", ")
   self:acc(" do")
   self:nlindent()
-  self:list(body, self.nl)
+  self:node(body)
   self:nldedent()
   self:acc("end")
 end
@@ -1068,7 +1114,7 @@ function M:Localrec(_, lhs, rhs)
   self:wrapped_list(rhs[1][1], ", ", nil, 'all')
   self:acc(")")
   self:nlindent()
-  self:list(rhs[1][2], self.nl)
+  self:node(rhs[1][2])
   self:nldedent()
   self:acc("end")
   --
@@ -1128,7 +1174,21 @@ M.True = "true"
 M.Dots = "..."
 
 function M:Number(_, n)
-  self:acc(tostring(n))
+  if type(n) == "string" then
+    self:acc(n)
+    return
+  end
+  if n == math.huge then
+    self:acc("1e999")
+    return
+  end
+  for p = 14, 17 do
+    local s = string.format("%." .. p .. "g", n)
+    if p == 17 or tonumber(s) == n then
+      self:acc(s)
+      return
+    end
+  end
 end
 
 ----------------------------------------------------------------
@@ -1223,13 +1283,23 @@ function M:string_fits(str)
   return self._line_len + l <= self.wrap
 end
 
+--- A string literal that M:String will split into concatenated
+--- pieces
+--- @param str string
+--- @return boolean
+function M:string_splits(str)
+  local fl = string.len('"" ..' .. self.indent_step)
+  local wl = self.wrap - fl
+  return not self:string_fits(str)
+      and (string.ulen(str) or string.len(str)) > wl
+end
+
 function M:String(_, str)
   local fl        = string.len('"" ..' .. self.indent_step)
   local wl        = self.wrap - fl
   --- bytes that are not UTF-8 have no length in characters;
   --- a literal that fits its line is never cut
-  local multiline = not self:string_fits(str)
-      and (string.ulen(str) or string.len(str)) > wl
+  local multiline = self:string_splits(str)
   local rendered  = ''
   if multiline then
     --- a piece per line of the text, cut to the width
@@ -1276,18 +1346,44 @@ function M:Function(_, params, body, annots)
   end
   self:acc(")")
   self:nlindent()
-  self:list(body, self.nl)
+  self:node(body)
   self:nldedent()
   self:acc("end")
 end
 
+function M:Pair(_, k, v)
+  if k.tag == "String" and is_ident(k[1]) then
+    --- `Pair{ `String{ key }, value }
+    self:acc(k[1])
+    self:acc(" = ")
+    self:node(v)
+  else
+    --- `Pair{ key, value }
+    self:acc("[")
+    self:node(k)
+    self:acc("] = ")
+    self:node(v)
+  end
+end
+
 function M:Table(node)
   if not node[1] then
-    self:acc("{ }")
+    if node.close_comments then
+      self:acc("{")
+      self:nlindent()
+      self:node({ lineinfo = {
+        first = { comments = node.close_comments },
+        last = {},
+      } })
+      self:nldedent()
+      self:acc("}")
+    else
+      self:acc("{ }")
+    end
   else
     self:acc("{")
     local newline =
-        #node > 1 or
+        #node > 1 or node.close_comments or
         (node[1].tag == "Pair" and node[1][2].tag == "Function")
     if newline then
       self:nlindent()
@@ -1295,26 +1391,17 @@ function M:Table(node)
       self:acc(" ")
     end
     for i, elem in ipairs(node) do
-      if elem.tag == "Pair" then
-        if elem[1].tag == "String" and is_ident(elem[1][1]) then
-          --- `Pair{ `String{ key }, value }
-          self:acc(elem[1][1])
-          self:acc(" = ")
-          self:node(elem[2])
-        else
-          --- `Pair{ key, value }
-          self:acc("[")
-          self:node(elem[1])
-          self:acc("] = ")
-          self:node(elem[2])
-        end
-      else
-        self:node(elem)
-      end
+      self:node(elem)
       if node[i + 1] then
         self:acc(",")
         self:nl()
       end
+    end
+    if node.close_comments then
+      self:node({ lineinfo = {
+        first = {},
+        last = { comments = node.close_comments },
+      } })
     end
     if newline then
       self:nldedent()
@@ -1328,11 +1415,10 @@ end
 function M:Op(node, op, a, b)
   --- Transform ``not (a == b)'' into ``a ~= b''. --
   if op == "not" then
-    if node[2][1] == "eq" then
+    if node[2].tag == "Op" and node[2][1] == "eq" then
       op, a, b = "ne", node[2][2], node[2][3]
-    end
-    if (node[2].tag == "Paren" and node[2][1][1] == "eq")
-    then
+    elseif node[2].tag == "Paren" and node[2][1].tag == "Op"
+        and node[2][1][1] == "eq" then
       op, a, b = "ne", node[2][1][2], node[2][1][3]
     end
   end
@@ -1342,6 +1428,10 @@ function M:Op(node, op, a, b)
     if a.tag == "Op"
         and op_prec[op] >= op_prec[a[1]]
         and not op_comm[a[1]]
+    then
+      left_paren = true
+    elseif a.tag == "String" and op_prec[op] >= op_prec.concat
+        and self:string_splits(a[1])
     then
       left_paren = true
     end
@@ -1374,6 +1464,12 @@ function M:Op(node, op, a, b)
     end
     self:acc(op_symbol[op])
 
+    if not right_paren and b.tag == "String"
+        and op_prec[op] > op_prec.concat
+        and self:string_splits(b[1])
+    then
+      right_paren = true
+    end
     self:acc(right_paren and "(" or '')
     self:node(b)
     self:acc(right_paren and ")" or '')
@@ -1386,6 +1482,11 @@ function M:Op(node, op, a, b)
       paren = true
     end
     self:acc(op_symbol[op])
+    if not paren and a.tag == "String"
+        and self:string_splits(a[1])
+    then
+      paren = true
+    end
     self:acc(paren and "(" or '')
     self:node(a)
     self:acc(paren and ")" or '')

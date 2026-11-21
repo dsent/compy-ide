@@ -150,4 +150,14 @@ describe('analyzer requires #analyzer', function()
       { name = 'a', line = 1 },
     }), si)
   end)
+
+  it('ignores non-string table keys such as FFI number literals',
+    function()
+      local ok, si = analyzed({ 't = { [1LL] = true, a = 1 }' })
+      assert.is_true(ok, si)
+      assert.same(SemanticInfo({
+        { name = 't', line = 1, type = 'global' },
+        { name = 't.a', line = 1, type = 'field' },
+      }, {}), si)
+    end)
 end)

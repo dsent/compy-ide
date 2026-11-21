@@ -119,10 +119,6 @@ return function(M)
     local function opf2 (op) return
         function (a,_,b) return { tag="Op", op, a, b } end end
 
-    -- opf2r = |op| |a,_,b| `Op{ op, b, a } -- (args reversed)
-    local function opf2r (op) return
-        function (a,_,b) return { tag="Op", op, b, a } end end
-
     local function op_ne(a, _, b)
         -- This version allows to remove the "ne" operator from the AST definition.
         -- However, it doesn't always produce the exact same bytecode as Lua 5.1.
@@ -167,8 +163,11 @@ return function(M)
             { "~=", prec = 30, builder = op_ne  },
             { "<",  prec = 30, builder = opf2 "lt"  },
             { "<=", prec = 30, builder = opf2 "le"  },
-            { ">",  prec = 30, builder = opf2r "lt"  },
-            { ">=", prec = 30, builder = opf2r "le"  },
+            -- Keep > and >= with operands in typed order rather than
+            -- reversing into lt/le, so formatting preserves the operator
+            -- and operand evaluation order.
+            { ">",  prec = 30, builder = opf2 "gt"  },
+            { ">=", prec = 30, builder = opf2 "ge"  },
             { "and",prec = 20, builder = opf2 "and" },
             { "or", prec = 10, builder = opf2 "or"  } },
 

@@ -173,7 +173,7 @@ local meta_res = {
   '        first = cfirst,',
   '        last = clast,',
   '        text = comment_text,',
-  '        multiline = (4 < d),',
+  '        multiline = (d > 4),',
   '        position = pos,',
   '        prepend_newline = newline',
   '      }',
@@ -239,8 +239,7 @@ local clock_res = {
   'function love.update(dt)',
   '  t = t + dt',
   '  s = math.floor(t)',
-  -- canonized compare order
-  '  if midnight < s then',
+  '  if s > midnight then',
   '    s = 0',
   '  end',
   'end',
@@ -249,8 +248,7 @@ local clock_res = {
   -- 'cycle = function(c)',
   --- syntax sugar
   'function cycle(c)',
-  -- canonized compare order
-  '  if 7 < c then',
+  '  if c > 7 then',
   '    return 1',
   '  end',
   '  return c + 1',
@@ -288,6 +286,11 @@ local basics = {
   prep([[quoted = "say \"hi\" \\ back"]]),
   prep([[del = "\127"]]),
   prep([[decimal = "\116\101\120\116"]], { [[decimal = "text"]] }),
+  prep('x = 1LL'),
+  prep('x = 1ULL'),
+  prep('x = 12i'),
+  prep('x = 0x1000000000000000ULL'),
+  prep('x = 1.5i'),
 }
 
 local operators = {
@@ -322,7 +325,7 @@ local operators = {
     'len = #(V:get_input():get_text())'),
   prep('len = # "asd" .. "vfds"', 'len = #"asd" .. "vfds"'),
   prep('len = # ("asd" .. "vfds")', 'len = #("asd" .. "vfds")'),
-  prep('bool = 2 >= 3 ~= 4 < 5', 'bool = (3 <= 2) ~= 4 < 5'),
+  prep('bool = 2 >= 3 ~= 4 < 5', 'bool = (2 >= 3) ~= 4 < 5'),
 }
 
 local comments = {
@@ -504,6 +507,10 @@ local comments = {
     '  -- inline',
     '  ',
     'end',
+  }, {
+    'function fun()',
+    '  -- inline',
+    'end',
   }),
   prep({
     'love.draw = function()',
@@ -512,7 +519,6 @@ local comments = {
   }, {
     'function love.draw()',
     '  -- f',
-    '  ',
     'end',
   }),
 
@@ -543,6 +549,40 @@ comments[#comments + 1] = prep({
   'x = a',
   '-- why',
   '    + b',
+})
+
+comments[#comments + 1] = prep({
+  't = {',
+  '  a = 1, -- last',
+  '}',
+}, {
+  't = {',
+  '  a = 1',
+  '  -- last',
+  '}',
+})
+
+comments[#comments + 1] = prep({
+  't = {',
+  '  a = 1, --',
+  '}',
+}, {
+  't = {',
+  '  a = 1',
+  '  --',
+  '}',
+})
+
+comments[#comments + 1] = prep({
+  't = {',
+  '  -- only',
+  '}',
+})
+
+comments[#comments + 1] = prep({
+  'do',
+  '  -- note',
+  'end',
 })
 
 local emptylines = {
@@ -1096,7 +1136,7 @@ local wrapping = {
   --- Very Large Numbers
   prep(
     'N = 398492087598247598237529834759827345928375928734958729387459283787459837452987345982375',
-    'N = 3.9849208759825e+86'
+    'N = 3.984920875982476e+86'
   ),
 
 
@@ -1299,6 +1339,24 @@ local wrapping = {
       '  fashion',
       ')))))))',
     }),
+  prep('x = #"' .. string.rep('a', 96) .. '"', {
+    'x = #(',
+    '  "' .. string.rep('a', 57) .. '" ..',
+    '  "' .. string.rep('a', 39) .. '"',
+    '    )',
+  }),
+  prep('x = not "' .. string.rep('a', 96) .. '"', {
+    'x = not (',
+    '  "' .. string.rep('a', 57) .. '" ..',
+    '  "' .. string.rep('a', 39) .. '"',
+    '    )',
+  }),
+  prep('x = 1 + "' .. string.rep('1', 96) .. '"', {
+    'x = 1 + (',
+    '  "' .. string.rep('1', 57) .. '" ..',
+    '  "' .. string.rep('1', 39) .. '"',
+    '    )',
+  }),
 }
 
 local functions = {
@@ -1486,7 +1544,7 @@ local self = {
 
 local canon = {
   prep('if a > b then     return a else return b end', {
-    'if b < a then',
+    'if a > b then',
     '  return a',
     'else',
     '  return b',
@@ -1525,6 +1583,13 @@ local canon = {
   --- invoking on string literals needs it to be enclosed
   prep('"string literal":gsub()', '("string literal"):gsub()'),
   prep('("string literal"):gsub()'),
+  prep('x = 1;;', 'x = 1'),
+  prep('; if x then ;; end', { 'if x then', '  ', 'end' }),
+  prep({ 'function h()', '  f();(g)()', 'end' }, {
+    'function h()',
+    '  f(); (g)()',
+    'end',
+  }),
 }
 
 local full = {

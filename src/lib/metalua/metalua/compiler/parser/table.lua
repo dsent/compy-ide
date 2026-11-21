@@ -53,12 +53,21 @@ return function(M)
     -----------------------------------------------------------------------------
     -- table constructor, without enclosing braces; returns a full table object
     -----------------------------------------------------------------------------
-    M.table.content  = gg.list {
+    local content = gg.list {
         -- eta expansion to allow patching the element definition
         primary     =  _table.element,
         separators  = { ",", ";" },
         terminators = "}",
         builder     = "Table" }
+
+    function M.table.content (lx)
+        local t = content (lx)
+        local close = lx:lineinfo_right()
+        if close and close.comments then
+            t.close_comments = close.comments
+        end
+        return t
+    end
 
     --------------------------------------------------------------------------------
     -- complete table constructor including [{...}]

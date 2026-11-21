@@ -83,6 +83,16 @@ describe('parse failure boundary #parser', function()
     assert.same({ 1, 8, true }, failure({ 'x = 1 +' }))
   end)
 
+  it('is the opening quote of a string with an invalid escape',
+    function()
+      assert.same({ 1, 5, false }, failure({ 's = "\\q"' }))
+      assert.same({ 1, 5, false }, failure({ 's = "abc\\q"' }))
+      assert.same({ 2, 5, false },
+        failure({ '-- a comment', 's = "\\q"' }))
+      assert.same({ 2, 5, false },
+        failure({ 'x = 1 -- a comment', 's = "abc\\q"' }))
+    end)
+
   it('leaves the error parse returned as it was', function()
     local lines = { 'z = = 1' }
     local _, err = parser.parse(lines)

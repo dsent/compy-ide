@@ -56,9 +56,13 @@ return function(M)
         name        = "statements block",
         terminators = M.block_terminators,
         primary     = function (lx)
-            -- FIXME use gg.optkeyword()
+            while lx:is_keyword (lx:peek(), ";") do lx:next() end
+            local tok = lx:peek()
+            if tok.tag == "Eof" or lx:is_keyword (tok, unpack (M.block_terminators)) then
+                return nil
+            end
             local x = M.stat (lx)
-            if lx:is_keyword (lx:peek(), ";") then lx:next() end
+            while lx:is_keyword (lx:peek(), ";") do lx:next() end
             return x
         end }
 
@@ -247,7 +251,7 @@ return function(M)
     M.stat = gg.multisequence {
         name = "statement",
         { "do", _M.block, "end", builder =
-          function (x) return { tag="Do", unpack (x[1]) } end },
+          function (x) return { tag="Do", body=x[1], unpack (x[1]) } end },
         { "for", _M.for_header, "do", _M.block, "end", builder =
           function (x) x[1][#x[1]+1] = x[2]; return x[1] end },
         { "function", func_name, method_name, _M.func_val, builder=funcdef_builder },

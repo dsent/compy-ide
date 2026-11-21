@@ -71,13 +71,18 @@ local function same_program(a, b)
 end
 
 --- The printer re-wraps comments, so their text is compared
---- with the whitespace taken out
+--- with the whitespace taken out, plus the count of empty
+--- (whitespace-only) comments so a dropped `--` is caught
 --- @param code string[]
 --- @return string?
 local function comment_text(code)
   local texts = get_parser().comments(code)
   if not texts then return end
-  return (string.gsub(table.concat(texts), '%s', ''))
+  local empty = 0
+  for _, t in ipairs(texts) do
+    if not string.find(t, '%S') then empty = empty + 1 end
+  end
+  return empty .. '\0' .. string.gsub(table.concat(texts), '%s', '')
 end
 
 --- The printer does not always settle in one pass (a string it
