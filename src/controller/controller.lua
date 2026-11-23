@@ -792,8 +792,13 @@ Controller = {
           return SerialPort:update(dt)
         end)
         for _, f in ipairs(faults or { }) do
-          print('serial fault [' .. f.env .. ']: ' ..
-            tostring(f.err))
+          local text = Serial.formatFault(f)
+          if f.plain then
+            local term = CC.model.output.terminal
+            term:fresh_row()
+            text = ConsoleController.wrapped(text, term.width)
+          end
+          print(text)
         end
       end
       if click_pos then

@@ -226,6 +226,38 @@ describe('Serial backend faults', function()
     assert.same(1, #s:update())
     assert.same(0, #s:update())
   end)
+
+  it('formats a plain fault without the serial fault prefix,'
+    .. ' and keeps the prefix on other faults', function()
+      local b = FakeBackend.new()
+      local s = Serial.new(b)
+      local msg = 'The Compy cannot talk to this micro:bit.'
+        .. ' Unplug it and plug it back in.'
+      local polls = 0
+      b.poll = function()
+        polls = polls + 1
+        if polls == 1 then return msg, true end
+        if polls == 2 then return 'extra micro:bit ignored' end
+      end
+
+      local first = s:update()
+      assert.same(1, #first)
+      assert.is_true(first[1].plain)
+      assert.same(msg, Serial.formatFault(first[1]))
+
+      local second = s:update()
+      assert.same(1, #second)
+      assert.is_nil(second[1].plain)
+      assert.same('serial fault [serial]: extra micro:bit ignored',
+        Serial.formatFault(second[1]))
+
+      s:table_for('program').onTick = function() error('boom') end
+      local third = s:update(0.1)
+      assert.same(1, #third)
+      assert.is_nil(third[1].plain)
+      assert.truthy(Serial.formatFault(third[1]):find(
+        '^serial fault %[program%]: '))
+    end)
 end)
 
 --- What was sent and has not left yet would reach the board

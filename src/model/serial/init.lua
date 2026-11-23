@@ -7,9 +7,10 @@ require('model.serial.dap_prepare')
 --- Backend contract:
 ---   backend:start(sink)  sink.attach(info), sink.detach(),
 ---                        sink.bytes(chunk)
----   backend:poll(busy) -> nil | fault, one step per
----                        update; busy while a file goes
----                        to the board
+---   backend:poll(busy) -> nil | fault[, plain], one step per
+---                        update; busy while a file goes to
+---                        the board; plain means a sentence
+---                        for people, printed without prefix
 ---   backend:send(data) -> true | nil, err
 ---   backend:drop()       what send queued and has not
 ---                        written yet goes
@@ -27,6 +28,7 @@ require('model.serial.dap_prepare')
 --- @class Serial
 --- @field new function
 --- @field fault function
+--- @field formatFault function
 --- @field table_for function
 --- @field send function
 --- @field drop function
@@ -106,11 +108,25 @@ function Serial:sink()
   }
 end
 
---- Record something that failed outside a handler
+--- Record something that failed outside a handler. A plain
+--- fault is a sentence for people, printed without prefix.
 --- @param err string?
-function Serial:fault(err)
+--- @param plain boolean?
+function Serial:fault(err, plain)
   if not err then return end
-  self.faults[#self.faults + 1] = { env = 'serial', err = err }
+  self.faults[#self.faults + 1] = {
+    env = 'serial', err = err, plain = plain or nil,
+  }
+end
+
+--- How a fault from update() is printed in the console: a
+--- plain sentence as it is, every other fault with its
+--- prefix
+--- @param f table
+--- @return string
+function Serial.formatFault(f)
+  if f.plain then return tostring(f.err) end
+  return 'serial fault [' .. f.env .. ']: ' .. tostring(f.err)
 end
 
 --- Raw chunk first, then the lines it completed

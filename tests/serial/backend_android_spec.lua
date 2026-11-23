@@ -316,14 +316,163 @@ describe('AndroidBackend drive hold', function()
       assert.same('maintenance mode', b:absence())
       assert.same(0, b.attached)
       local first = b.due
-      b.dev = { dev = 'dev', name = 'same board' }
+      b.dev = { dev = 'dev', name = '/dev/bus/usb/001/002' }
       assert.is_nil(b:openReady())
       -- refused again for the same reason: tried less often
       assert.is_true(b.due - first >= 3)
-      b.dev = { dev = 'dev', name = 'again' }
+      b.dev = { dev = 'dev', name = '/dev/bus/usb/001/002' }
       b.openDevice = function() return p end
       b:openReady()
       assert.is_nil(b:absence())
+    end)
+
+  it('tells a refused board once in plain words, and logs the'
+    .. ' reason once', function()
+      local logged = {}
+      Dap.log = function(msg) logged[#logged + 1] = msg end
+      local b = backend(port())
+      b.scan = function()
+        return { { dev = 'dev', name = '/dev/bus/usb/001/002' } }
+      end
+      b.hasPermission = function() return true end
+      b.openDevice = function()
+        return nil, 'control interface refused'
+      end
+      b.due = 0
+      local fault, plain = b:poll()
+      assert.same(
+        'The Compy cannot talk to this micro:bit.'
+        .. ' Unplug it and plug it back in.',
+        fault)
+      assert.is_true(plain)
+      assert.same('control interface refused', b:absence())
+      assert.same(1, #logged)
+      assert.truthy(
+        logged[1]:find('control interface refused', 1, true))
+      local firstDue = b.due
+      b.due = 0
+      local retry, retryPlain = b:poll()
+      assert.is_nil(retry)
+      assert.is_nil(retryPlain)
+      assert.is_true(b.due - firstDue >= 3)
+      assert.same(1, #logged)
+      b.due = 0
+      assert.is_nil(b:poll())
+      assert.same(1, #logged)
+    end)
+
+  it('stays quiet on retries for any reason, and tells again'
+    .. ' when the reason changes or after an unplug', function()
+      local logged = {}
+      Dap.log = function(msg) logged[#logged + 1] = msg end
+      local b = backend(port())
+      local plugged = true
+      local reason = 'openDevice returned null'
+      b.scan = function()
+        if not plugged then return {} end
+        return { { dev = 'dev', name = '/dev/bus/usb/001/002' } }
+      end
+      b.hasPermission = function() return true end
+      b.openDevice = function() return nil, reason end
+      local expected = 'The Compy cannot talk to this micro:bit.'
+        .. ' Unplug it and plug it back in.'
+
+      b.due = 0
+      local fault, plain = b:poll()
+      assert.same(expected, fault)
+      assert.is_true(plain)
+      assert.same(1, #logged)
+      assert.truthy(
+        logged[1]:find('openDevice returned null', 1, true))
+
+      b.due = 0
+      assert.is_nil(b:poll())
+      assert.same(1, #logged)
+
+      reason = 'CDC interface set incomplete'
+      b.due = 0
+      fault, plain = b:poll()
+      assert.same(expected, fault)
+      assert.is_true(plain)
+      assert.same(2, #logged)
+      assert.truthy(
+        logged[2]:find('CDC interface set incomplete', 1, true))
+
+      b.due = 0
+      assert.is_nil(b:poll())
+      assert.same(2, #logged)
+
+      plugged = false
+      b.due = 0
+      assert.is_nil(b:poll())
+      assert.is_nil(b:absence())
+
+      plugged = true
+      b.due = 0
+      fault, plain = b:poll()
+      assert.same(expected, fault)
+      assert.is_true(plain)
+      assert.same(3, #logged)
+      assert.truthy(
+        logged[3]:find('CDC interface set incomplete', 1, true))
+
+      b.due = 0
+      assert.is_nil(b:poll())
+      assert.same(3, #logged)
+
+      reason = 'maintenance mode'
+      b.due = 0
+      assert.is_nil(b:poll())
+      assert.same('maintenance mode', b:absence())
+      assert.same(4, #logged)
+      assert.same('board in maintenance mode', logged[4])
+
+      b.due = 0
+      assert.is_nil(b:poll())
+      assert.same(4, #logged)
+    end)
+
+  it('tells again when a new USB name fails for the same reason',
+    function()
+      local logged = {}
+      Dap.log = function(msg) logged[#logged + 1] = msg end
+      local b = backend(port())
+      local name = '/dev/bus/usb/001/002'
+      b.scan = function()
+        return { { dev = 'dev', name = name } }
+      end
+      b.hasPermission = function() return true end
+      b.openDevice = function()
+        return nil, 'control interface refused'
+      end
+      local expected = 'The Compy cannot talk to this micro:bit.'
+        .. ' Unplug it and plug it back in.'
+
+      b.due = 0
+      local fault, plain = b:poll()
+      assert.same(expected, fault)
+      assert.is_true(plain)
+      assert.same(1, #logged)
+
+      b.due = 0
+      assert.is_nil(b:poll())
+      assert.same(1, #logged)
+
+      -- replugged before the next scan (new USB device name),
+      -- or a second board becomes first candidate
+      name = '/dev/bus/usb/001/003'
+      b.due = 0
+      fault, plain = b:poll()
+      assert.same(expected, fault)
+      assert.is_true(plain)
+      assert.same('control interface refused', b:absence())
+      assert.same(2, #logged)
+      assert.truthy(
+        logged[2]:find('control interface refused', 1, true))
+
+      b.due = 0
+      assert.is_nil(b:poll())
+      assert.same(2, #logged)
     end)
 
   it('refuses the link while Android keeps the drive',

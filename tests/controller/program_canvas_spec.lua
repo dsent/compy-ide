@@ -753,6 +753,79 @@ describe('a program\'s canvas after it stops #canvas', function()
       assert.is_nil(target)
     end)
 
+  it('word-wraps a plain serial fault to the console width and'
+    .. ' leaves prefixed faults as they are', function()
+      local width = F.cc.model.output.terminal.width
+      local plain = 'The Compy cannot talk to this micro:bit.'
+        .. ' Unplug it and plug it back in.'
+      local raw = ('x'):rep(width) .. ' tail'
+      local update = SerialPort.update
+      local orig_print = _G.print
+      local said = { }
+      SerialPort.update = function()
+        return {
+          { env = 'serial', err = plain, plain = true },
+          { env = 'serial', err = raw },
+        }
+      end
+      _G.print = function(t) said[#said + 1] = t end
+      finally(function()
+        SerialPort.update = update
+        _G.print = orig_print
+      end)
+      F.love_update(0.1)
+      assert.same({
+        ConsoleController.wrapped(plain, width),
+        'serial fault [serial]: ' .. raw,
+      }, said)
+    end)
+
+  it('starts a plain serial fault on a fresh console row, and'
+    .. ' leaves prefixed faults on the current row', function()
+      local term = F.cc.model.output.terminal
+      local plain = 'The Compy cannot talk to this micro:bit.'
+        .. ' Unplug it and plug it back in.'
+      local partial = string.rep('x', 59)
+      local function row(n)
+        return (table.concat(term.buffer[n]):gsub('%s+$', ''))
+      end
+      local update = SerialPort.update
+      local orig_print = _G.print
+      local faults
+      SerialPort.update = function() return faults end
+      _G.print = function(t)
+        F.cc.model.output:write(tostring(t) .. '\n')
+      end
+      finally(function()
+        SerialPort.update = update
+        _G.print = orig_print
+      end)
+
+      term:clear()
+      term:move_to(1, 1)
+      F.cc.model.output:write(partial)
+      faults = { { env = 'serial', err = plain, plain = true } }
+      F.love_update(0.1)
+      term:update(1000)
+      assert.same(partial, row(1))
+      assert.same(
+        'The Compy cannot talk to this micro:bit.'
+        .. ' Unplug it and plug it',
+        row(2))
+      assert.same('back in.', row(3))
+
+      term:clear()
+      term:move_to(1, 1)
+      F.cc.model.output:write('abc')
+      faults = {
+        { env = 'serial', err = 'extra micro:bit ignored' },
+      }
+      F.love_update(0.1)
+      term:update(1000)
+      assert.same('abcserial fault [serial]: extra micro:bit ignored',
+        row(1))
+    end)
+
   --- c3's second finding: a program's reset() makes no canvas
   --- active under LÖVE, which for a program is its own
   it('a program\'s reset() leaves its canvas the target', function()
