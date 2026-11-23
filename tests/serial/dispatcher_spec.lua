@@ -124,6 +124,37 @@ describe('Dispatcher', function()
     assert.has_error(function() d:push('noise') end)
     assert.has_error(function() d:table_for('kernel') end)
   end)
+
+  it('reports whether an active environment has a live handler',
+    function()
+      local d = Dispatcher.new()
+      assert.is_false(d:has_handler('line'))
+
+      d:table_for('program').onLine = true
+      assert.is_false(d:has_handler('line'))
+      d:table_for('program').onLine = {}
+      assert.is_false(d:has_handler('line'))
+
+      d:table_for('program').onLine = function() end
+      assert.is_true(d:has_handler('line'))
+
+      d:suspend_env('program')
+      assert.is_false(d:has_handler('line'))
+
+      d:table_for('console').onLine = function() end
+      assert.is_true(d:has_handler('line'))
+
+      d:suspend_env('console')
+      assert.is_false(d:has_handler('line'))
+
+      d:resume_env('program')
+      assert.is_true(d:has_handler('line'))
+
+      d:clear_env('program')
+      assert.is_false(d:has_handler('line'))
+
+      assert.has_error(function() d:has_handler('noise') end)
+    end)
 end)
 
 describe('Dispatcher env checks', function()

@@ -197,15 +197,101 @@ describe('Serial', function()
 end)
 
 describe('Serial faults', function()
-  it('reports overlong input through update', function()
-    local b = FakeBackend.new()
-    local s = Serial.new(b, 4)
-    b:attach()
-    b:rx('TOOLONG\n')
-    local errors = s:update()
-    assert.same(1, #errors)
-    assert.same('serial', errors[1].env)
-  end)
+  local OVERLONG_MSG = 'A line from the micro:bit was too long, so'
+    .. ' serial.onLine did not get it. Send shorter lines, or'
+    .. ' read them with serial.onBytes.'
+
+  it('reports an overlong line in plain words when a live'
+    .. ' onLine handler exists', function()
+      local b = FakeBackend.new()
+      local s = Serial.new(b, 4)
+      s:table_for('program').onLine = function() end
+      b:attach()
+      b:rx('TOOLONG\n')
+      local errors = s:update()
+      assert.same(1, #errors)
+      assert.same('serial', errors[1].env)
+      assert.is_true(errors[1].plain)
+      assert.same(OVERLONG_MSG, Serial.formatFault(errors[1]))
+
+      s:table_for('program').onLine = nil
+      s:table_for('console').onLine = function() end
+      b:rx('TOOLONG\n')
+      errors = s:update()
+      assert.same(1, #errors)
+      assert.is_true(errors[1].plain)
+      assert.same(OVERLONG_MSG, Serial.formatFault(errors[1]))
+    end)
+
+  it('reports nothing for an overlong line without a live'
+    .. ' onLine handler', function()
+      local s, b = make()
+      b:attach()
+
+      -- no handlers at all
+      b:rx(string.rep('a', 257) .. '\n')
+      assert.same({}, s:update())
+
+      -- only onBytes (like the terminal project)
+      local got = {}
+      s:table_for('program').onBytes = function(c)
+        got[#got + 1] = c
+      end
+      local long = string.rep('x', 257) .. '\n'
+      b:rx(long)
+      assert.same({}, s:update())
+      assert.same({ long }, got)
+
+      -- non-function in onLine
+      s:table_for('program').onLine = true
+      b:rx(long)
+      assert.same({}, s:update())
+      s:table_for('program').onLine = {}
+      b:rx(long)
+      assert.same({}, s:update())
+
+      -- live handler only in a suspended environment
+      s:table_for('program').onLine = function() end
+      s:programPaused()
+      b:rx(long)
+      assert.same({}, s:update())
+
+      s:programEnded()
+      s:table_for('console').onLine = function() end
+      s:programStarted()
+      got = {}
+      s:table_for('program').onBytes = function(c)
+        got[#got + 1] = c
+      end
+      b:rx(long)
+      assert.same({}, s:update())
+      assert.same({ long }, got)
+    end)
+
+  it('keeps the 256-character limit and full onBytes delivery'
+    .. ' when onLine is live', function()
+      local s, b = make()
+      local bytes, lines = {}, {}
+      local t = s:table_for('program')
+      t.onBytes = function(c) bytes[#bytes + 1] = c end
+      t.onLine = function(l) lines[#lines + 1] = l end
+      b:attach()
+
+      local at_limit = string.rep('a', 256)
+      b:rx(at_limit .. '\n')
+      assert.same({}, s:update())
+      assert.same({ at_limit }, lines)
+      assert.same({ at_limit .. '\n' }, bytes)
+
+      local over = string.rep('b', 257) .. '\n'
+      b:rx(over)
+      local errors = s:update()
+      assert.same(1, #errors)
+      assert.is_true(errors[1].plain)
+      assert.same(OVERLONG_MSG, Serial.formatFault(errors[1]))
+      assert.same({ at_limit }, lines)
+      assert.same({ at_limit .. '\n', over }, bytes)
+    end)
 end)
 
 describe('Serial backend faults', function()

@@ -129,6 +129,10 @@ function Serial.formatFault(f)
   return 'serial fault [' .. f.env .. ']: ' .. tostring(f.err)
 end
 
+local OVERLONG = 'A line from the micro:bit was too long, so'
+    .. ' serial.onLine did not get it. Send shorter lines, or'
+    .. ' read them with serial.onBytes.'
+
 --- Raw chunk first, then the lines it completed
 --- @param chunk string
 function Serial:receive(chunk)
@@ -137,7 +141,9 @@ function Serial:receive(chunk)
   for _, l in ipairs(lines) do
     self.dispatcher:push('line', l)
   end
-  self:fault(err)
+  if err and self.dispatcher:has_handler('line') then
+    self:fault(OVERLONG, true)
+  end
 end
 
 --- The environment's compy.serial table. Handlers are its
