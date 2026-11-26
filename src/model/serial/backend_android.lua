@@ -824,6 +824,7 @@ function AndroidBackend:pollIdle()
   local found = self:scan()
   if #found == 0 then
     self.refused = nil
+    self.refusedName = nil
     self.surveyed = nil
     return
   end
@@ -843,23 +844,32 @@ function AndroidBackend:pollIdle()
   return self:openReady()
 end
 
+local CANNOT_OPEN = 'The Compy cannot talk to this micro:bit.'
+    .. ' Unplug it and plug it back in.'
+
 --- Permission is in hand; open and announce
 --- @return string? fault
+--- @return boolean? plain
 function AndroidBackend:openReady()
   local port, fault = self:openDevice(self.dev)
+  local name = self.dev.name
   local again = fault == self.refused
+    and name == self.refusedName
   self.refused = fault
+  self.refusedName = fault and name or nil
   if not port then
     jniDropGlobal(self.env, self.dev.dev)
     self:dropDevice()
     self.due = now() + (again and REFUSED_S or SCAN_S)
+    if again then return end
     -- upload() says what to do about maintenance mode; the
-    -- console is not told every SCAN_S
+    -- console is not told
     if fault == 'maintenance mode' then
-      if not again then log('board in maintenance mode') end
+      log('board in maintenance mode')
       return
     end
-    return fault
+    log('board open refused: ' .. tostring(fault))
+    return CANNOT_OPEN, true
   end
   self.port = port
   self.state = 'open'

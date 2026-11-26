@@ -14,6 +14,7 @@
 --- @field suspend_env function
 --- @field resume_env function
 --- @field clear_env function
+--- @field has_handler function
 --- @field push function
 --- @field pump function
 Dispatcher = {}
@@ -109,6 +110,33 @@ local function failed(t, field, fn, e)
   return tostring(e) .. ' (onTick is taken off)'
 end
 
+--- The handler that would receive field in env right now, or
+--- nil when env is suspended or holds no function there
+--- @param self Dispatcher
+--- @param env SerialEnv
+--- @param field string
+--- @return function?
+local function live(self, env, field)
+  if self.suspended[env] then return nil end
+  local fn = self.tables[env][field]
+  if type(fn) == 'function' then return fn end
+  return nil
+end
+
+--- Whether any active environment has a live handler for event
+--- @param event SerialEvent
+--- @return boolean
+function Dispatcher:has_handler(event)
+  local field = FIELDS[event]
+  if not field then
+    error('no such event: ' .. tostring(event))
+  end
+  for _, env in ipairs(ORDER) do
+    if live(self, env, field) then return true end
+  end
+  return false
+end
+
 --- Run queued events through the current field values, in
 --- order. Anything pushed from a handler waits for the next
 --- pump.
@@ -120,17 +148,16 @@ function Dispatcher:pump()
   for _, ev in ipairs(batch) do
     local field = FIELDS[ev.event]
     for _, env in ipairs(ORDER) do
-      local t = self.tables[env]
-      if not self.suspended[env] then
-        local fn = t[field]
-        if type(fn) == 'function' then
-          --- a stop the handler asks for ends it, no fault, and
-          --- is made once the frame's update returns
-          local ok, e = End.call(fn, ev.arg)
-          if not ok then
-            errors[#errors + 1] =
-                { env = env, err = failed(t, field, fn, e) }
-          end
+      local fn = live(self, env, field)
+      if fn then
+        --- a stop the handler asks for ends it, no fault, and
+        --- is made once the frame's update returns
+        local ok, e = End.call(fn, ev.arg)
+        if not ok then
+          errors[#errors + 1] = {
+            env = env,
+            err = failed(self.tables[env], field, fn, e),
+          }
         end
       end
     end
