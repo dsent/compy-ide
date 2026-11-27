@@ -1809,7 +1809,7 @@ describe("the output's rows with no field under it #console",
           function(s) s.custom.state = "paused" end,
           function(s) s.custom.state = nil end,
           function(s) s.mode = "combined" end,
-          function(s) s.caps = "CAPS" end,
+          function(s) s.caps = "󰘲" end,
           function(s) s.cursor = { l = 1, c = 1 } end,
           function(s) s.custom.added = false end,
           --- a text that looks like two fields is one
@@ -2285,13 +2285,10 @@ describe("the status line's mode #console", function()
       starts_with("console")
     end)
 
-  --- the no-card mark (the maintainer's rulings of November 17,
-  --- 2026: "[no sd card] stays in front", and on every line of
-  --- the IDE's own, the editor's too), read from
-  --- love.state.has_removable at each draw
-  local function without_card(f)
+  --- Exercise the Android write check's result for this draw.
+  local function with_card_state(card, f)
     local was = love.state.has_removable
-    love.state.has_removable = false
+    love.state.has_removable = card
     local ok, e = pcall(f)
     love.state.has_removable = was
     assert(ok, e)
@@ -2303,7 +2300,7 @@ describe("the status line's mode #console", function()
   local function marked(texts, theme, word, file, card)
     local project = K.cc.model.projects.current.name
     local want = file and { project, file, word } or { project, word }
-    if not card then table.insert(want, 1, "[no sd]") end
+    if not card then table.insert(want, 1, "󱙃") end
     local got = { }
     for i = 1, #want do got[i] = texts[i] and texts[i].text end
     if card then
@@ -2323,12 +2320,9 @@ describe("the status line's mode #console", function()
   for _, card in ipairs({ true, false }) do
     local with = card and "with an SD card, no mark" or
         "without an SD card, the mark in front"
-    local function maybe(f)
-      if card then f() else without_card(f) end
-    end
 
     it("starts the console's line " .. with, function()
-      maybe(function()
+      with_card_state(card, function()
         marked(head(), "console", "console", nil, card)
       end)
     end)
@@ -2337,7 +2331,7 @@ describe("the status line's mode #console", function()
       reset({ ["main.lua"] = "function love.update() end\n" })
       run("run()")
       K.frame()
-      maybe(function()
+      with_card_state(card, function()
         marked(head(), "console", "running", "main.lua", card)
       end)
       K.keys("lctrl", "q")
@@ -2352,7 +2346,7 @@ describe("the status line's mode #console", function()
       K.frame()
       if K.app_state() == "snapshot" then K.cc:suspend() end
       assert.same("inspect", K.app_state())
-      maybe(function()
+      with_card_state(card, function()
         marked(head(), "inspect", "paused", "main.lua", card)
       end)
       K.keys("lctrl", "q")
@@ -2362,18 +2356,18 @@ describe("the status line's mode #console", function()
     it("starts the editor's line in each state " .. with, function()
       reset({ ["notes.lua"] = "a = 1\nb = 2\n" })
       K.open("notes.lua")
-      maybe(function()
+      with_card_state(card, function()
         marked(editor_line(), "editor", "browsing", "notes.lua", card)
       end)
       K.type("c = 3")
-      maybe(function()
+      with_card_state(card, function()
         marked(editor_line(), "editor", "inserting", "notes.lua", card)
       end)
       K.keys("escape")
       K.keys("lctrl", "up")
       K.keys("f2")
       assert.same("replacing", K.state())
-      maybe(function()
+      with_card_state(card, function()
         marked(editor_line(), "editor", "replacing", "notes.lua", card)
       end)
     end)
@@ -2384,12 +2378,12 @@ describe("the status line's mode #console", function()
       reset({ ["main.lua"] = "compy.ask('Your name?', function() end)\n" })
       run("run()")
       K.frame()
-      without_card(function()
+      with_card_state(false, function()
         local ui = love.state.user_input
         local texts = placed(ui.V.statusline, ui.M:get_status())
         assert.same("Your name?", texts[1].text)
         for _, t in ipairs(texts) do
-          assert.is_nil(t.text:find("sd card", 1, true))
+          assert.is_not.equal("󱙃", t.text)
         end
       end)
       K.keys("lctrl", "q")
@@ -2400,11 +2394,11 @@ describe("the status line's mode #console", function()
   it("keeps the mark whole beside a long project name", function()
     local sl = K.cc.view.input.statusline
     local w = K.cc.cfg.view.w
-    without_card(function()
+    with_card_state(false, function()
       local texts = placed(sl, { label = "", state = "console",
         project = string.rep("p", 60), name = "main.lua",
         cursor = { l = 1, c = 1 }, n_lines = 1, mode = "text" })
-      assert.same("[no sd]", texts[1].text)
+      assert.same("󱙃", texts[1].text)
       assert.equal("…", texts[2].text:sub(-#"…"))
       for i, t in ipairs(texts) do
         assert.is_true(t.to <= w, t.text)
@@ -2437,9 +2431,9 @@ describe("the status line's mode #console", function()
     .. "without a card", function()
       reset({ ["my-first-program.lua"] = "a = 1\n" })
       K.open("my-first-program.lua")
-      without_card(function()
+      with_card_state(false, function()
         local texts = editor_line()
-        assert.same("[no sd]", texts[1].text)
+        assert.same("󱙃", texts[1].text)
         both_named(texts, K.cc.model.projects.current.name,
           "my-first-program.lua")
       end)
@@ -2486,7 +2480,7 @@ describe("the status line's mode #console", function()
         if card then
           assert.equal(file, draw(), "the file whole with a card")
         else
-          without_card(draw)
+          with_card_state(false, draw)
         end
       end)
   end
@@ -2571,7 +2565,7 @@ describe("the status line's mode #console", function()
   --- The widest right block: a draft's cursor of nine characters
   --- in the console and a program's field, 9999:9999 (numbers
   --- above 9999 being written in thousands, 10K); the editor's
-  --- file line, line count and column in full, L9999/9999 :9999;
+  --- file line, line count and column in full, L9999/9999:9999;
   --- and the output scrolled back the kept rows' limit, L-1000.
   local WIDE_CURSOR = { l = 9999, c = 9999 }
   local WIDE_BACK = 1000
@@ -2662,7 +2656,7 @@ describe("the status line's mode #console", function()
         local clash
         for _, card in ipairs({ true, false }) do
           love.state.has_removable = card and true or false
-          for _, caps in ipairs({ false, "CAPS" }) do
+          for _, caps in ipairs({ false, "󰘲" }) do
             for lp = 0, 70 do
               for lf = 0, 70 do
                 love.state.app_state = case[2]
@@ -2709,7 +2703,7 @@ describe("the status line's mode #console", function()
         local removable = love.state.has_removable
         --- the line's texts and places, the mode's label as `M`
         local function line(mode, p, f)
-          local status = case[4](p, f, "CAPS")
+          local status = case[4](p, f, "󰘲")
           status.mode = mode
           local out = { }
           for _, t in ipairs(placed(sl, status)) do
@@ -2746,11 +2740,11 @@ describe("the status line's mode #console", function()
         local sl = K.cc.view.input.statusline
         local was = love.state.app_state
         local clash
-        without_card(function()
+        with_card_state(false, function()
           for back = 1, WIDE_BACK do
             love.state.app_state = case[2]
             local status = case[4](string.rep("p", 70),
-              string.rep("f", 66) .. ".lua", "CAPS")
+              string.rep("f", 66) .. ".lua", "󰘲")
             status.back = back
             local c, cells = inked(sl, status)
             local seen = false
@@ -2774,11 +2768,11 @@ describe("the status line's mode #console", function()
       local was = love.state.app_state
       love.state.app_state = "editor"
       local clash
-      without_card(function()
+      with_card_state(false, function()
         clash = inked(sl, { custom = { project = "demo",
           name = "notes.lua", state = "inserting",
           line = 9999, total = 10000 },
-          cursor = { l = 10, c = 9999 }, caps = "CAPS" })
+          cursor = { l = 10, c = 9999 }, caps = "󰘲" })
       end)
       love.state.app_state = was
       assert.is_nil(clash)
@@ -2793,7 +2787,7 @@ describe("the status line's mode #console", function()
       local was = love.state.app_state
       love.state.app_state = "editor"
       local clash, cells, info
-      without_card(function()
+      with_card_state(false, function()
         clash, cells, info = inked(sl, { custom = {
           project = string.rep("p", 30), name = string.rep("f", 30),
           state = "replacing", arrow = "↑",
@@ -3038,14 +3032,14 @@ describe("the status line's mode #console", function()
       local clash, cells = inked(sl, { custom = { project = "demo",
         name = "notes.lua", state = "replacing",
         line = 123456, total = 999999 },
-        cursor = { l = 2, c = 12345 }, caps = "CAPS" })
+        cursor = { l = 2, c = 12345 }, caps = "󰘲" })
       love.state.app_state = was
       assert.is_nil(clash)
       local inks = { }
       for _, t in pairs(cells) do inks[t] = true end
       assert.is_true(inks["L123456/999999"])
       assert.is_true(inks[":12345"])
-      assert.is_true(inks["CAPS"])
+      assert.is_true(inks["󰘲"])
     end)
 
   --- the console's position (`L-N` and shortened `line:column`)
@@ -3071,24 +3065,24 @@ describe("the status line's mode #console", function()
     end)
 
   --- e5's Major, by name: project demo, notes.lua, no card, Caps
-  --- Lock, inserting at L10/30 :1
+  --- Lock, inserting at L10/30:1
   it("inserting at L10/30 without a card, with Caps Lock, "
     .. "leaves the position whole", function()
       local sl = K.cc.view.input.statusline
       local was = love.state.app_state
       love.state.app_state = "editor"
       local clash, cells
-      without_card(function()
+      with_card_state(false, function()
         clash, cells = inked(sl, { custom = { project = "demo",
           name = "notes.lua", state = "inserting",
           line = 10, total = 30 },
-          cursor = { l = 1, c = 1 }, caps = "CAPS" })
+          cursor = { l = 1, c = 1 }, caps = "󰘲" })
       end)
       love.state.app_state = was
       assert.is_nil(clash)
       local inks = { }
       for _, t in pairs(cells) do inks[t] = true end
-      for _, t in ipairs({ "[no sd]", "inserting", "CAPS",
+      for _, t in ipairs({ "󱙃", "inserting", "󰘲",
         "L10/30", ":1" }) do
         assert.is_true(inks[t], t)
       end
@@ -3104,11 +3098,11 @@ describe("the status line's mode #console", function()
       local was = love.state.app_state
       love.state.app_state = "inspect"
       local texts
-      without_card(function()
+      with_card_state(false, function()
         texts = placed(sl, { label = "", project = "demo",
           name = "notes.lua", state = "paused",
           cursor = { l = 1, c = 1 }, n_lines = 1, mode = "combined",
-          caps = "CAPS" })
+          caps = "󰘲" })
       end)
       love.state.app_state = was
       contained(texts, K.cc.cfg.view.w)
@@ -3117,12 +3111,16 @@ describe("the status line's mode #console", function()
       assert.is_not_nil(at.demo)
       assert.is_not_nil(at["notes.lua"])
       assert.is_not_nil(at.paused)
+      assert.equal(fw, at["󱙃"].from)
+      assert.equal(3 * fw, at.demo.from)
+      assert.equal(at.demo.to + fw, at["notes.lua"].from)
+      assert.equal(at["notes.lua"].to + fw, at.paused.from)
       -- right to left from the edge: the cursor, Caps, the mode,
-      -- each two columns apart
+      -- each one column apart
       local edge = K.cc.cfg.view.w - fw
       assert.equal(edge, at["1:1"].to)
-      assert.equal(at["1:1"].from - 2 * fw, at.CAPS.to)
-      assert.equal(at.CAPS.from - 2 * fw, at["comb>F12"].to)
+      assert.equal(at["1:1"].from - fw, at["󰘲"].to)
+      assert.equal(at["󰘲"].from - fw, at["comb>F12"].to)
     end)
 
   --- the kept render's key holds whether a card is in
@@ -3132,7 +3130,7 @@ describe("the status line's mode #console", function()
       state = "running" }, mode = "text" }
     local with = sl:key(status)
     local without
-    without_card(function() without = sl:key(status) end)
+    with_card_state(false, function() without = sl:key(status) end)
     assert.are_not.equal(with, without)
   end)
 

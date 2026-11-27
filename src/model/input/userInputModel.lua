@@ -1095,7 +1095,7 @@ function UserInputModel:get_status()
     cursor = self.cursor,
     n_lines = self:get_n_text_lines(),
     custom = src and src() or self.custom_status,
-    caps = caps_lock() and 'CAPS' or nil,
+    caps = caps_lock() and '󰘲' or nil,
     project = project and project() or nil,
     name = name and name() or nil,
     state = state and state() or nil,

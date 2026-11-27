@@ -9,7 +9,7 @@ end)
 
 
 --- The columns between two parts of the line
-local GAP = 2
+local GAP = 1
 
 --- A part's columns, a column for each character: a character
 --- wider than its column is the fonts' defect, and overruns
@@ -96,25 +96,22 @@ end
 
 --- What a status line's picture takes from the IDE beside its
 --- status: the state, which picks the colours, the debug
---- marks, and whether the Compy runs without an SD card. A draw
+--- marks, and whether the Compy runs without a writable SD card. A draw
 --- reads them here and nowhere else, and Statusline:key
 --- compares by the same four.
 --- @return string? state
 --- @return any testing
 --- @return any debug
---- @return any removable --- false: no SD card
+--- @return any removable --- false: no writable SD card
 local function ide_state()
   return love.state.app_state, love.state.testing, love.DEBUG,
       love.state.has_removable
 end
 
---- In front of every line of the IDE's own, the console's, a
---- running program's, a pause's and the editor's, while the
---- Compy runs without an SD card, in the theme's `mark` tone;
---- never cut. A program's own field has none (the maintainer's
---- ruling of November 17, 2026: "[no sd card] stays in front";
---- and of November 18: "shorten [no sd card] to [no sd]").
-local NO_CARD = '[no sd]'
+--- Material md-content_save_off (U+F1643), one cell in the bundled font.
+--- The IDE shows it in orange when the SD card write check fails or
+--- the card is absent. A program's own input field omits it.
+local NO_CARD = '󱙃'
 
 --- After the open file's name on the editor's line while the
 --- file does not load, in the theme's `mark` tone; never cut
@@ -282,7 +279,7 @@ function Statusline:draw(status, start_y, last_row)
     --- editor, the position is the file line and the file's line
     --- count (`L1080/1200`, in `colors.indicator` at the end
     --- position), and while inserting or replacing the cursor's
-    --- column (`:32`) one column to its right in the state's
+    --- column (`:32`) directly after it in the state's
     --- yellow, with every number written in full. Elsewhere, it
     --- is how far the output is scrolled back (`L-N`) and the
     --- draft's cursor (`line:column`) in the state's yellow, with
@@ -291,48 +288,40 @@ function Statusline:draw(status, start_y, last_row)
     --- grows; none is cut or dropped, and no room is kept for a
     --- wider one.
     local right = { }
-    --- @param list table[]
+    local width = 0
     --- @param t string?
     --- @param color table
-    --- @param sep integer? --- the columns before it, GAP if nil
-    local function add(list, t, color, sep)
+    --- @param gap integer? --- cells before this text, zero within a field
+    local function add(t, color, gap)
       if t and t ~= '' then
-        list[#list + 1] = { t = t, color = color, sep = sep or GAP }
+        gap = #right == 0 and 0 or gap or GAP
+        right[#right + 1] = { t = t, color = color, gap = gap }
+        width = width + gap + len(t)
       end
     end
-    --- @param list table[]
-    --- @return integer
-    local function width_of(list)
-      local n = 0
-      for i, p in ipairs(list) do
-        n = n + len(p.t) + (i > 1 and p.sep or 0)
-      end
-      return n
-    end
-    add(right, MODE_LABEL[status.mode], colors.fg2 or colors.fg)
-    add(right, status.caps, colors.indicator)
+    add(MODE_LABEL[status.mode], colors.fg2 or colors.fg)
+    add(status.caps, colors.indicator)
     local c = type(status.cursor) == 'table' and status.cursor or nil
     local editor = custom ~= nil and custom.line ~= nil and c ~= nil
     if editor then
-      add(right, 'L' .. custom.line .. '/' .. (custom.total or 0),
+      add('L' .. custom.line .. '/' .. (custom.total or 0),
         custom.end_position and colors.indicator or colors.fg)
       if custom.state ~= 'browsing' then
-        add(right, ':' .. c.c,
-          colors.state or colors.fg2 or colors.fg, 1)
+        add(':' .. c.c,
+          colors.state or colors.fg2 or colors.fg, 0)
       end
     else
       if status.back then
         --- how far the output is scrolled back from rest (the
         --- maintainer's ruling of November 18, 2026: "when we
         --- scroll, we can show L-4"); nothing at rest
-        add(right, 'L-' .. status.back, colors.fg)
+        add('L-' .. status.back, colors.fg)
       end
       if c then
-        add(right, count(c.l) .. ':' .. count(c.c),
+        add(count(c.l) .. ':' .. count(c.c),
           colors.state or colors.fg2 or colors.fg)
       end
     end
-    local width = width_of(right)
     local right_x = endTextX - width * fw
 
     --- The left side: the no-card mark, never cut; the input's
@@ -401,8 +390,8 @@ function Statusline:draw(status, start_y, last_row)
     gfx.pop()
 
     x = right_x
-    for i, p in ipairs(right) do
-      if i > 1 then x = x + p.sep * fw end
+    for _, p in ipairs(right) do
+      x = x + p.gap * fw
       gfx.setColor(p.color)
       gfx.print(p.t, x, y)
       x = x + len(p.t) * fw

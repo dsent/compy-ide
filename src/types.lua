@@ -87,7 +87,7 @@
 --- @field cursor Cursor?
 --- @field n_lines integer
 --- @field custom CustomStatus?
---- @field caps string? --- 'CAPS' while Caps Lock is on
+--- @field caps string? --- Caps Lock key symbol (U+F0632) while on
 --- @field project string? --- the open project's name
 --- @field name string? --- the console's: the project's entry file
 --- @field state string? --- the console's: what it is doing, "console" or "paused"

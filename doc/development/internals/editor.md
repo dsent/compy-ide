@@ -75,8 +75,8 @@ frame, is black and writes an error in red and a notice in orange
 (`colors.input.notice`: `bg`, `error`, `warning`, kept apart from a program's
 own `error_bg` and `error`, which hold the same colours); it stands apart from
 the console's status line, which is a near-black gray, #181818
-(`colors.statusline.console`; its `[no sd]` mark is the bright orange of every
-status line's `mark`), as is the console's key card, which takes its surface's
+(`colors.statusline.console`; its crossed-out save icon uses the bright orange
+of every status line's `mark`), as is the console's key card, which takes its surface's
 status-line colours; `EditorController:message_kind()` tells the view which it
 is. The next key press dismisses the message and does its ordinary work, `Esc`
 included; a modifier or a lock key alone leaves it showing. `F1`, while held,

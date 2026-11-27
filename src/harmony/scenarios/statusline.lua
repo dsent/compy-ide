@@ -74,15 +74,15 @@ end
 
 --- the state word on the screen's pixels in yellow: after the
 --- margin, the project's name and, but in the console's own
---- line, the file's, each with its gap of two columns, on the
+--- line, the file's, each with its one-column gap, on the
 --- bar of `mode`'s colours
 --- @param img love.ImageData
 --- @param word string
 --- @param mode string
 local function word_yellow(img, word, mode)
   local v = P.cc().cfg.view
-  local col = 1 + #PROJECT + 2
-  if word ~= 'console' then col = col + #'main.lua' + 2 end
+  local col = 1 + #PROJECT + 1
+  if word ~= 'console' then col = col + #'main.lua' + 1 end
   local first, last = P.band(img, theme()[mode].bg)
   assert(first, word .. ': no bar')
   local _, fg = P.colors(img, col * v.fw, first, #word * v.fw,
@@ -107,7 +107,7 @@ local function without_card(wait, mode, f)
   local img = P.capture(wait)
   local first, last = P.band(img, theme()[mode].bg)
   assert(first, 'no bar')
-  local _, fg = P.colors(img, v.fw, first, #'[no sd]' * v.fw,
+  local _, fg = P.colors(img, v.fw, first, v.fw,
     last - first + 1)
   local ok, e = pcall(function()
     assert(P.near(fg, theme()[mode].mark), 'the mark in '
@@ -195,7 +195,7 @@ scenario('modes', function(wait)
     'console-idle')
   without_card(wait, 'console', function()
     bar(wait, 'console-idle-no-card', 'console',
-      { '[no sd]', PROJECT, 'console' }, { 'main.lua' })
+      { '󱙃', PROJECT, 'console' }, { 'main.lua' })
   end)
   --- the line under a card names no mode: the card holds F12
   --- back (review r1)
@@ -225,7 +225,7 @@ scenario('modes', function(wait)
     --- the mark is never cut; with the right block packed to
     --- the edge, the names are whole
     bar(wait, 'editor-browsing-no-card', 'editor',
-      { '[no sd]', PROJECT, 'notes.lua', 'browsing', 'L3/2' },
+      { '󱙃', PROJECT, 'notes.lua', 'browsing', 'L3/2' },
       { ':1' })
   end)
   D.with_card(wait, function()

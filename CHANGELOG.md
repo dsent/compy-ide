@@ -172,7 +172,7 @@ Project-author guide: `doc/input_api.md`.
   highlight back to the block loaded with F2 and shows it; the field's text stays. In
   the other states it does nothing.
 - **The editor's status line shows the line in the file and the file's line
-  count**: `L1080/1200` while browsing, `L1082/1200 :32` with the cursor's
+  count**: `L1080/1200` while browsing, `L1082/1200:32` with the cursor's
   column while typing, `L1201/1200` at the end of the file. An error in the
   draft names the same line. A Lua file that does not load shows `[broken]`
   after its name.

@@ -200,8 +200,8 @@ after every key that may write it:
   with its own field and with `compy.ask`, a 43-character question and one longer than the line;
   a pause and its card; a program that ended by itself), its ground read from the pixels as one
   theme's and no other's, the IDE's own line's project, entry file and state word ("console",
-  "running", "paused"), the word read in yellow from the pixels, the `[no sd]` mark in front of
-  the console's and the editor's line, read in orange, and the words where the line is drawn anew,
+  "running", "paused"), the word read in yellow from the pixels, the crossed-out save icon
+  on the console and editor lines, read in orange, and the words where the line is drawn anew,
   each state shot under its name. A program's field keeps its line's render, which `P.drawn` does not record: its words and
   their fit are the unit tests' (`console_scrollback_spec.lua`, "the status line's mode").
 
