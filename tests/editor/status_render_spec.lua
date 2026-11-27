@@ -159,11 +159,11 @@ describe("status line, notice and key card drawn #editor",
 
   it("the status line shows Caps Lock while it is on",
       function()
-    assert.is_nil(field(K.screen()):find("CAPS", 1, true))
+    assert.is_nil(field(K.screen()):find("󰘲", 1, true))
     K.keys("capslock")
-    assert.truthy(field(K.screen()):find("CAPS", 1, true))
+    assert.truthy(field(K.screen()):find("󰘲", 1, true))
     K.keys("capslock")
-    assert.is_nil(field(K.screen()):find("CAPS", 1, true))
+    assert.is_nil(field(K.screen()):find("󰘲", 1, true))
   end)
 
   describe("a message, in the band above the status line",
@@ -384,7 +384,7 @@ describe("status line, notice and key card drawn #editor",
     K.browse_to(5)
     assert.same("inserting", K.state())
     local f = field(K.screen())
-    -- 64 columns hold all of it beside `L5/11 :2`
+    -- 64 columns hold all of it beside `L5/11:2`
     assert.truthy(f:find("L5/11", 1, true))
     assert.truthy(f:find(":2", 1, true))
     assert.truthy(f:find("scratchpad", 1, true))
@@ -393,12 +393,12 @@ describe("status line, notice and key card drawn #editor",
     -- a name too long for the line: the state word is cut first,
     -- then the project, the file only if nothing more can (the
     -- maintainer's ruling of November 18, 2026)
-    K.cc.model.projects.current.name = string.rep("p", 40)
+    K.cc.model.projects.current.name = string.rep("p", 48)
     f = field(K.screen())
     assert.truthy(f:find("in…", 1, true))
     assert.is_nil(f:find("inserting", 1, true))
     assert.truthy(f:find("pp…", 1, true))
-    assert.is_nil(f:find(string.rep("p", 40), 1, true))
+    assert.is_nil(f:find(string.rep("p", 48), 1, true))
     assert.truthy(f:find("main.lua", 1, true))
   end)
 
@@ -530,8 +530,7 @@ describe("status line, notice and key card drawn #editor",
       assert.is_not_nil(s[":6"])
       assert.is_true(same_colour(c.fg, s["L5/8"].colour))
       assert.is_true(same_colour(state_color(c), s[":6"].colour))
-      -- one space between L5/8 and :6
-      assert.same(s["L5/8"].x + (#"L5/8" + 1) * fw, s[":6"].x)
+      assert.same(s["L5/8"].x + #"L5/8" * fw, s[":6"].x)
       -- cursor on draft row 1 shows first line (4)
       K.keys("up")
       local row1 = status_items(K.screen())
@@ -563,6 +562,7 @@ describe("status line, notice and key card drawn #editor",
       assert.is_not_nil(s[":4"])
       assert.is_true(same_colour(c.fg, s["L6/8"].colour))
       assert.is_true(same_colour(state_color(c), s[":4"].colour))
+      assert.same(s["L6/8"].x + #"L6/8" * K.ed.view.cfg.fw, s[":4"].x)
       -- browsing away keeps the target's file line
       K.browse_to(1)
       local away = status_items(K.screen())
@@ -795,7 +795,7 @@ describe("status line, notice and key card drawn #editor",
         .. "then project, then file name", function()
       local fw = K.ed.view.cfg.fw
       -- 1) State word cut first; project, file and [broken] whole
-      local p1 = string.rep("p", 16)
+      local p1 = string.rep("p", 20)
       local f1 = "long_file1.lua"
       local by1 = draw_editor_status({
         custom = {
@@ -811,7 +811,7 @@ describe("status line, notice and key card drawn #editor",
       assert.is_not_nil(by1["inserti…"])
 
       -- 2) State word at floor, project cut, file and [broken] whole
-      local p2 = string.rep("p", 25)
+      local p2 = string.rep("p", 26)
       local by2, list2 = draw_editor_status({
         custom = {
           project = p2, name = f1, state = "inserting",
@@ -856,7 +856,7 @@ describe("status line, notice and key card drawn #editor",
       assert.is_true(by3["[broken]"].x + #"[broken]" * fw <= clip3)
       assert.is_true(by3["in…"].x + string.ulen("in…") * fw <= clip3)
       assert.is_true(
-        by3["in…"].x + (string.ulen("in…") + 2) * fw
+        by3["in…"].x + (string.ulen("in…") + 1) * fw
           <= by3["L10/30"].x)
     end)
   end)

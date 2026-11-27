@@ -1072,8 +1072,16 @@ end
 --- letters, so the status line shows it (H-NFR4.4).
 --- @return boolean
 local function caps_lock()
+  if love._os == 'Android' then
+    return require('util.androidCapsLock')()
+  end
   local active = love.keyboard.isModifierActive
   return active ~= nil and active('capslock') == true
+end
+
+--- @return string? the status symbol when Caps Lock is on
+function UserInputModel:get_caps()
+  return caps_lock() and '󰘲' or nil
 end
 
 --- A host that sets status_source (the file editor) has its
@@ -1095,7 +1103,7 @@ function UserInputModel:get_status()
     cursor = self.cursor,
     n_lines = self:get_n_text_lines(),
     custom = src and src() or self.custom_status,
-    caps = caps_lock() and 'CAPS' or nil,
+    caps = self:get_caps(),
     project = project and project() or nil,
     name = name and name() or nil,
     state = state and state() or nil,

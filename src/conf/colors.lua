@@ -69,12 +69,12 @@ require("util.color")
 --- @field warning RGB
 --- @field error RGB
 --- @field state RGB? --- a program's state word ("running"), where it is not fg2
---- @field mark RGB? --- the "[no sd card]" mark in front of the line
+--- @field mark RGB? --- the crossed-out save icon in front of the line
 
 local indicator = Color[Color.cyan + Color.bright]
 local special = Color[Color.cyan]
 local warning = Color[Color.orange]
---- the "[no sd card]" mark in front of the IDE's status lines:
+--- the crossed-out save icon in front of the IDE's status lines:
 --- the same orange at full brightness, 9.0:1 on the console's
 --- gray, 6.1:1 on the editor's blue and 4.3:1 on the pause's
 --- red, where the warning orange gives 5.2, 3.5 and 2.4:1; a
@@ -194,7 +194,7 @@ return {
   },
   statusline = {
     --- a near-black gray, #181818, so that the black notice
-    --- band above it stands apart while '[no sd card]' keeps
+    --- band above it stands apart while the save icon keeps
     --- the orange of the other status lines (the maintainer's
     --- ruling of November 15, 2026); the palette has no such
     --- gray, so it is given as it is. A running program's line

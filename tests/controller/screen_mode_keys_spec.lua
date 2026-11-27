@@ -901,10 +901,10 @@ describe("the screen modes' keys #canvas", function()
       end)
 
     --- the right block is packed to the right (the maintainer's
-    --- ruling of November 18, 2026): the mode's word stands two
-    --- columns before the cursor's place, and moves left as that
+    --- ruling of November 18, 2026): the mode's word stands one
+    --- column before the cursor's place, and moves left as that
     --- grows; with no position, at the line's right edge
-    it("stands two columns before the cursor's place, or at the"
+    it("stands one column before the cursor's place, or at the"
       .. " edge", function()
         K.reset()
         local fw = F.cfg.view.fw
@@ -922,7 +922,7 @@ describe("the screen modes' keys #canvas", function()
           local _, mode_end = at("^" .. word .. "$")
           local pos_start, pos_end = at("^%d+:%d+$")
           assert.equal(edge, pos_end)
-          assert.equal(pos_start - 2 * fw, mode_end)
+          assert.equal(pos_start - fw, mode_end)
           return mode_end
         end
         local short = packed("text>F12")

@@ -197,6 +197,11 @@ revisited"*. Words is that stage, and it arrived from upstream.
 
 ## Caps Lock
 
+On Compy, the IDE status line reads the Android activity's Caps Lock state.
+Hardware key events carry the latch. At startup, on focus gain, and after
+input devices change, the activity can request the keyboard LED state from
+the rooted system, including before the first keypress.
+
 The **key** arrives normally as `keypressed('capslock', …)`. Three things do not:
 
 - **the lock state** — LÖVE 11.5 has no API to query it, so `CAPS_STATE.on` is an estimate the

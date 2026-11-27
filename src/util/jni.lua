@@ -34,7 +34,8 @@ struct JNIFns {
   void* _pad24[6];                                      /* 24-29 */
   void* (*NewObjectA)(void* env, void* cls, void* mid,
                       jvalue* args);                       /* 30 */
-  void* _pad31[2];                                      /* 31-32 */
+  void* (*GetObjectClass)(void* env, void* obj);            /* 31 */
+  void* _pad32[1];
   void* (*GetMethodID)(void* env, void* cls,
                        const char* name, const char* sig); /* 33 */
   void* _pad34[2];                                      /* 34-35 */
@@ -85,7 +86,7 @@ function jniSelfCheck()
   local spots = {
     FindClass = 6, ExceptionOccurred = 15, ExceptionClear = 17,
     NewGlobalRef = 21, DeleteGlobalRef = 22, DeleteLocalRef = 23,
-    NewObjectA = 30, GetMethodID = 33, CallObjectMethodA = 36,
+    NewObjectA = 30, GetObjectClass = 31, GetMethodID = 33, CallObjectMethodA = 36,
     CallBooleanMethodA = 39, CallIntMethodA = 51,
     CallVoidMethodA = 63, GetStaticMethodID = 113,
     CallStaticObjectMethodA = 116, NewStringUTF = 167,

@@ -10,7 +10,7 @@ env:
   PRODUCT_NAME_ANSI: ${{ vars.PRODUCT_NAME_ANSI }}
   PRODUCT_NAME_SC: ${{ vars.PRODUCT_NAME_SC }}
   BUNDLE_ID: com.example.${{ vars.PRODUCT_NAME_SC }}
-  BUILD_TYPE: ${{ fromJSON('["dev", "release"]')[startsWith(github.ref, 'refs/tags/v')] }}
+  BUILD_TYPE: ${{ startsWith(github.ref, 'refs/tags/v') && 'release' || 'dev' }}
   OUTPUT_FOLDER: dist
   ARTIFACT_FOLDER: artifact
   LOVE_ARTIFACT_NAME: ${{ vars.PRODUCT_NAME_SC }}.love
@@ -243,8 +243,8 @@ jobs:
           java-version: "17"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          repository: compy-toys/love-android
-          ref: 58026890267dfddbda77bcd0b50543f9990d990d
+          repository: dsent/compy-android
+          ref: cdcbbc8c08cb6e8176ef784b64dc0eccb2a68773
           path: love-android
           submodules: recursive
       - name: Install Android SDK packages

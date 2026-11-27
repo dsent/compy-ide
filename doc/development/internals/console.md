@@ -41,12 +41,65 @@ The status line says what has the screen, by its colours and in words (the maint
 | the console, a program that ended by itself included | `console` | dark gray, white text | the project and "console" (`state_source`) | the screen's mode, Caps Lock, `L-N`, the draft's cursor |
 | a live program that can act and shows no field: the bare line (`ConsoleController:running_status`) | `console` | dark gray, white text | the project, the entry file and "running" | the screen's mode, `L-N` |
 | a pause (`inspect`), an error's included | `inspect` | #A00000, white text | the project, the entry file (`name_source`) and "paused" | as the console's |
-| the editor (`editor`) | `editor` | blue, white text | the project, the file (followed by `[broken]` in the mark tone, one space between and never cut, while the file does not load) and the editor's state; while replacing, an arrow after it toward the edit's target while no row of the target is in view, `replacing↑` above the view, `replacing↓` below (`arrow` in `EditorController:_generate_status`, from `BufferView:target_side`, which reads the rows the view draws the target's yellow highlight on, its wrapped rows included; it answers whether a row of the target lies within the view's rows, and a notice band or the held key card lying over those rows for a moment does not change it) | Caps Lock, the file line and the file's line count (`L1080/1200`, or `L1201/1200` in the indicator tone at the end position), and while inserting or replacing the cursor's column in yellow (`L1082/1200 :32`) |
+| the editor (`editor`) | `editor` | blue, white text | the project, the file (followed by `[broken]` in the mark tone, one space between and never cut, while the file does not load) and the editor's state; while replacing, an arrow after it toward the edit's target while no row of the target is in view, `replacing↑` above the view, `replacing↓` below (`arrow` in `EditorController:_generate_status`, from `BufferView:target_side`, which reads the rows the view draws the target's yellow highlight on, its wrapped rows included; it answers whether a row of the target lies within the view's rows, and a notice band or the held key card lying over those rows for a moment does not change it) | Caps Lock, the file line and the file's line count (`L1080/1200`, or `L1201/1200` in the indicator tone at the end position), and while inserting or replacing the cursor's column in yellow (`L1082/1200:32`) |
 | a program's own field (`compy.input.show`, `compy.ask`) | `console` | dark gray, white text | the program's prompt | Caps Lock, the draft's cursor |
 
-The draft's cursor reads `line:column` in the console and in a program's field (`1:6`), in the state's yellow; in the editor the right end shows the file line and the file's line count (`L1080/1200`, or `L1201/1200` at the end position in `colors.indicator`) and, while inserting or replacing, the cursor's column (`:32`) one column to its right in yellow, with every number written in full. `L-N` says how far the output is scrolled back from rest, N rows, up to the kept rows' limit (`CanvasModel:scrolled_back`, the console's `scroll_source`, the bare line's `back`; "when we scroll, we can show L-4"); at rest, and on a program's own field, there is none. The state word's yellow is the theme's `state` (the editor's `fg2`). The console's own label is empty, so that its line starts with the project. While the Compy runs without an SD card (`love.state.has_removable` false, read at each draw), every line of the IDE's own, the console's, a running program's, a pause's and the editor's, has `[no sd]` in front, in the bright orange of the theme's `mark` (#FFA500), never cut (`NO_CARD` in `statusline.lua`; "[no sd card] stays in front", and on the editor's line too; "shorten [no sd card] to [no sd]"); a program's own field has none. On Android without a card the IDE keeps its projects in the Compy's internal storage (`setup_storage` in `main.lua`), and projects run and pause there, so the mark stands on every bar: it reads 9.0:1 on the console's gray, 6.1:1 on the editor's blue and 4.3:1 on the pause's red, where the warning orange that toned labels keep gives 5.2, 3.5 and 2.4:1. The pause's ground is outside the palette, as the console's is: on #A00000 white is 8.4:1, the yellow 7.8:1 and the cyan of Caps Lock 6.7:1, where the palette's red gives white 6.5:1, and a red darker still comes too close to the console's gray for a protanope. The words come from the status (the console's `state_source`, the bare line's `running_status`) and the colours from the IDE's state, and the bare line's kept render compares both (`Statusline:key`); a program's field that keeps its render is rendered again when the IDE's state changes, so that a line rendered during a pause does not keep its red (`Statusline:ide_key`, `UserInputView:draw`).
+The draft's cursor reads `line:column` in the console and in a program's field
+(`1:6`), in the state's yellow; in the editor the right end shows the file line
+and the file's line count (`L1080/1200`, or `L1201/1200` at the end position in
+`colors.indicator`) and, while inserting or replacing, the cursor's column
+(`:32`) immediately after it in yellow, with every number written in full.
+`L-N` says how far the output is scrolled back from rest, N rows, up to the kept
+rows' limit (`CanvasModel:scrolled_back`, the console's `scroll_source`, the
+bare line's `back`; "when we scroll, we can show L-4"); at rest, and on a
+program's own field, there is none. The state word's yellow is the theme's
+`state` (the editor's `fg2`). The console's own label is empty, so that its line
+starts with the project. When Android finds no writable SD card
+(`love.state.has_removable == false`), the console, running, paused and editor
+lines start with an orange crossed-out save icon (Material
+`md-content_save_off`, U+F1643). It occupies one cell in the bundled font and
+uses the theme's `mark` color (#FFA500). A program's own input field omits it.
+The pause's ground is outside the palette, as the console's is: on #A00000 white
+is 8.4:1, the yellow 7.8:1 and the cyan of Caps Lock 6.7:1, where the palette's
+red gives white 6.5:1, and a red darker still comes too close to the console's
+gray for a protanope. The words come from the status (the console's
+`state_source`, the bare line's `running_status`) and the colours from the IDE's
+state, and the bare line's kept render compares both (`Statusline:key`); a
+program's field that keeps its render is rendered again when the IDE's state
+changes, so that a line rendered during a pause does not keep its red
+(`Statusline:ide_key`, `UserInputView:draw`).
 
-The line's text starts one cell from the left edge and ends one cell from the right ("Have just one space on each side"). The draft's rows out of view are shown by the field's own continuation cue, and the line has no more-rows mark ("Drop the ↕↕"). The right block is packed to the right edge: in the editor, the file line and line count (`L1080/1200`) with the cursor's column (`:32`, one column apart) while inserting or replacing, and Caps Lock two columns to the left; elsewhere, the draft's cursor at the edge, and left of it `L-N`, Caps Lock and the screen's mode, two columns apart. Each part stands next to the one on its right and moves left only as that grows; none is cut or dropped, and no room is kept for a longer one. In the console's and a program's cursor `line:column`, a number above 9999 is written in thousands, `10K` for 10000 to 10999; the editor writes its numbers in full. The left side takes what is left: the `[no sd]` mark, never cut, then a field's label (a program's prompt), the project, the file with `[broken]` one space after it while the open file does not load (also never cut), and the state word, two columns apart. Short of room the label is cut first, then the state word, then the project, the file the last ("the project name gets cut next, and the file name only if nothing more can"), each down to three columns, two characters and the ellipsis; an arrow after the state word is never cut, and the ellipsis comes before it, `repl…↑` ("nothing should be dropped fully, only cut"; `fit_left`). The left side is drawn inside a clip that ends two columns before the right block (`intersectScissor`; review e6), so that were even the floors not to fit, it would be cut off there and cover nothing of the right block. The debug build's marks, the state's name and `testing` at the line's middle, take no room in the fit. The fitting counts cells, a character to a cell; a character wider than its cell, as the CJK fallback draws, overruns until the fonts are fixed (Beads `compy-ide-fonts-characters-wider-than-a-cell`; the maintainer's ruling of November 18, 2026). What a program or a name supplies for the line is drawn on its one row: a control character, a line break, a carriage return or a tab among them, is a space before the fitting (`shown`; review e3: a line break printed a prompt's second line under the bar).
+The line's text starts one cell from the left edge and ends one cell from the
+right ("Have just one space on each side"). The draft's rows out of view are
+shown by the field's own continuation cue, and the line has no more-rows mark
+("Drop the ↕↕"). The right block is packed to the right edge: in the editor, the
+file line and line count (`L1080/1200`) with the cursor's column attached while
+inserting or replacing. The cyan Caps Lock key symbol (U+F0632) sits one cell
+to the left of the position; elsewhere, the draft's cursor at the edge, and left of it `L-N`, Caps Lock
+and the screen's mode, one column apart. Each part stands next to the one on its
+right and moves left only as that grows; none is cut or dropped, and no room is
+kept for a longer one. In the console's and a program's cursor `line:column`, a
+number above 9999 is written in thousands, `10K` for 10000 to 10999; the editor
+writes its numbers in full. The left side takes what is left: the crossed-out
+save icon, never cut, then a field's label (a program's prompt), the project,
+the file with `[broken]` one space after it while the open file does not load
+(also never cut), and the state word, one column apart. Short of room the label
+is cut first, then the state word, then the project, the file the last ("the
+project name gets cut next, and the file name only if nothing more can"), each
+down to three columns, two characters and the ellipsis; an arrow after the state
+word is never cut, and the ellipsis comes before it, `repl…↑` ("nothing should
+be dropped fully, only cut"; `fit_left`). The left side is drawn inside a clip
+that ends one column before the right block (`intersectScissor`; review e6), so
+that were even the floors not to fit, it would be cut off there and cover
+nothing of the right block. The debug build's marks, the state's name and
+`testing` at the line's middle, take no room in the fit. The fitting counts
+cells, a character to a cell; a character wider than its cell, as the CJK
+fallback draws, overruns until the fonts are fixed (Beads
+`compy-ide-fonts-characters-wider-than-a-cell`; the maintainer's ruling of
+November 18, 2026). What a program or a name supplies for the line is drawn on
+its one row: a control character, a line break, a carriage return or a tab among
+them, is a space before the fitting (`shown`; review e3: a line break printed a
+prompt's second line under the bar).
 
 ---
 
@@ -364,7 +417,7 @@ The console's status line names the mode with the key that steps it, `text>F12`,
 `comb>F12` or `view>F12`, eight columns each (the maintainer's rulings of
 November 19, 2026; `UserInputModel.screen_source`, `Status.mode`,
 `Statusline:draw`'s `MODE_LABEL`), in its right block, packed to the right with
-the rest of it: two columns before what follows it, or at the edge on the bare
+the rest of it: one column before what follows it, or at the edge on the bare
 line behind a running program (`ConsoleController:running_status`) or on F12
 into the full picture (`ConsoleController:picture_status`) when nothing follows.
 The line under a key card names no mode, since the card holds F12 back
