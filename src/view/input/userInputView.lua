@@ -503,6 +503,7 @@ function UserInputView:render(input, status, time)
   --- IDE's state its status line was drawn in
   self.cursor_shown = Blink.shown(self.cfg.blink)
   self.ide_shown = self.statusline:ide_key()
+  self.caps_shown = status and status.caps
   --- what the canvas holds from this render on
   self.bare_drawn = self:_bare_key()
   --- @diagnostic disable-next-line: undefined-field
@@ -553,7 +554,8 @@ function UserInputView:draw()
   local key = self:_bare_key()
   local kept = key ~= nil and key == self.bare_drawn
   if not kept
-      and (self.controller ~= project or turned or ided)
+      and (self.controller ~= project or turned or ided
+        or self.caps_shown ~= self.controller.model:get_caps())
   then
     self.controller:update_view()
   end

@@ -2132,13 +2132,16 @@ describe("the status line's mode #console", function()
 
   --- a field rendered in one state of the IDE is rendered again
   --- in the next: its line's colours and a pause's word go by it
-  it("renders a program's field again when the IDE's state "
-    .. "changes", function()
+  for _, field in ipairs({ "ide_shown", "caps_shown" }) do
+    it("refreshes a program's idle field when " .. field .. " changes", function()
       reset({ ["main.lua"] = "compy.input.show { }\n" })
       run("run()")
       K.frame()
       local V = love.state.user_input.V
-      V.ide_shown = "a state from before"
+      V.ide_shown = V.statusline:ide_key()
+      V.caps_shown = V.controller.model:get_caps()
+      V.cursor_shown = require('view.input.cursorBlink').shown(V.cfg.blink)
+      V[field] = "a state from before"
       --- the draw's calls the fixture's graphics lack
       local gfx = love.graphics
       local blend, draw = gfx.setBlendMode, gfx.draw
@@ -2148,9 +2151,11 @@ describe("the status line's mode #console", function()
       gfx.setBlendMode, gfx.draw = blend, draw
       assert(ok, e)
       assert.equal(V.statusline:ide_key(), V.ide_shown)
+      assert.equal(V.controller.model:get_caps(), V.caps_shown)
       K.keys("lctrl", "q")
       forget()
     end)
+  end
 
   --- review e2: a program's prompt is its field's label, and
   --- however long it is, it is cut to fit, and never covers or
